@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,7 +26,7 @@ func main() {
 	cfg, err := config.Load(".env", "config.yaml")
 	if err != nil {
 		// 如果配置文件不存在或读取失败，则使用默认配置值
-		fmt.Printf("加载配置失败，使用默认配置: %v\n", err)
+		log.Printf("加载配置失败，使用默认配置: %v\n", err)
 		cfg = &config.Config{}
 		cfg.Server.Port = 8080      // 默认运行在 8080 端口
 		cfg.Log.Level = "info"      // 默认日志级别为 info
@@ -33,7 +34,7 @@ func main() {
 
 	// 2. 初始化日志系统 - 根据配置的日志级别设置日志记录器
 	if err := logger.Init(cfg.Log.Level); err != nil {
-		fmt.Printf("初始化日志系统失败: %v\n", err)
+		log.Printf("初始化日志系统失败: %v\n", err)
 		os.Exit(1)
 	}
 	// 程序结束前确保所有日志都被写入到输出

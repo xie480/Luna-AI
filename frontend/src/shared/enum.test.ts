@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ErrorCode } from './constants';
+import { ErrorCode } from './enum';
 
 describe('Constants', () => {
   it('should have correct ErrorCode values', () => {

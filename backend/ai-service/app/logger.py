@@ -24,7 +24,14 @@ class JSONFormatter(logging.Formatter):
         return json.dumps(log_record)
 
 def setup_logger(level: str = "INFO") -> logging.Logger:
-    """初始化全局日志"""
+    """
+    初始化全局日志
+    做什么：配置并返回一个带有 JSONFormatter 的全局 logging.Logger 实例。
+    为什么这样做：统一 Python 服务的日志格式，确保所有日志都以 JSON 格式输出，并包含 trace_id。
+    输入输出：输入日志级别字符串（如 "INFO"），输出配置好的 logging.Logger 对象。
+    边界条件：如果 logger 已经配置过 handler，则不会重复添加。
+    异常行为：如果传入的 level 字符串不合法，logging.setLevel 可能会抛出 ValueError。
+    """
     logger = logging.getLogger("luna_ai")
     logger.setLevel(level.upper())
     
