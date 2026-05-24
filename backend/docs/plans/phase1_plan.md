@@ -125,10 +125,12 @@ service CommunicationService {
 - **配置**: 在 `.env` 中配置 Redis 和 PostgreSQL 的连接字符串，由 Go Runtime 统一解析并验证连接。
 
 ## 7. 退出标准检查清单
-- [ ] 定义并提交 `shared/proto/communication.proto`。
-- [ ] 定义并提交 WebSocket 消息 JSON Schema。
-- [ ] Go Runtime 实现 WebSocket 服务端和 gRPC 客户端。
-- [ ] Python AI Service 实现 gRPC 服务端。
-- [ ] Electron 前端实现 WebSocket 客户端和简单的 Ping/Pong UI。
-- [ ] 成功演示：前端点击 Ping -> Go 转发 -> Python 响应 -> Go 推送 -> 前端显示 Pong。
-- [ ] 所有请求日志中包含完整的 `trace_id`。
+- [x] 定义并提交 `shared/proto/communication.proto`。
+- [x] 定义并提交 WebSocket 消息 JSON Schema。
+- [x] Go Runtime 实现 WebSocket 服务端和 gRPC 客户端。
+- [x] Python AI Service 实现 gRPC 服务端。
+- [x] Electron 前端实现 WebSocket 客户端和简单的 Ping/Pong UI。
+- [x] 成功演示：前端点击 Ping -> Go 转发 -> Python 响应 -> Go 推送 -> 前端显示 Pong。
+- [x] 所有请求日志中包含完整的 `trace_id`。
+- [x] 本地 Redis、PostgreSQL 完成基础可用部署及连接验证。
+- [x] 三层都能健康检查联调，确保前后端与智能层的连通性。

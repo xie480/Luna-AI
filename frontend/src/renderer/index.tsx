@@ -14,6 +14,7 @@ import { WSMessage, PingPayload, PongPayload, ErrorPayload } from '../shared/typ
 const App: React.FC = () => {
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
   const [messages, setMessages] = useState<string[]>([]);
+  const [healthData, setHealthData] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -86,28 +87,69 @@ const App: React.FC = () => {
     }
   };
 
+  const checkHealth = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/health', {
+        headers: {
+          'X-Trace-ID': `req-${Date.now()}`
+        }
+      });
+      const data = await response.json();
+      setHealthData(data);
+      addMessage(`健康检查结果: ${data.data.status}`);
+    } catch (error) {
+      addMessage(`健康检查失败: ${error}`);
+    }
+  };
+
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1>Luna AI - Phase 1</h1>
-      <p>状态: {wsStatus}</p>
-      <button 
-        onClick={handlePing} 
-        disabled={wsStatus !== 'connected'}
-        style={{ padding: '8px 16px', marginBottom: '20px' }}
-      >
-        发送 Ping
-      </button>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', display: 'flex', gap: '20px' }}>
+      <div style={{ flex: 1 }}>
+        <h1>Luna AI - Phase 1</h1>
+        <p>状态: {wsStatus}</p>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+          <button
+            onClick={handlePing}
+            disabled={wsStatus !== 'connected'}
+            style={{ padding: '8px 16px' }}
+          >
+            发送 Ping
+          </button>
+          <button
+            onClick={checkHealth}
+            style={{ padding: '8px 16px' }}
+          >
+            检查健康状态
+          </button>
+        </div>
+        
+        <div style={{
+          border: '1px solid #ccc',
+          padding: '10px',
+          height: '300px',
+          overflowY: 'auto',
+          backgroundColor: '#f9f9f9'
+        }}>
+          {messages.map((msg, index) => (
+            <div key={index} style={{ marginBottom: '4px', fontSize: '14px' }}>{msg}</div>
+          ))}
+        </div>
+      </div>
       
-      <div style={{ 
-        border: '1px solid #ccc', 
-        padding: '10px', 
-        height: '300px', 
-        overflowY: 'auto',
-        backgroundColor: '#f9f9f9'
-      }}>
-        {messages.map((msg, index) => (
-          <div key={index} style={{ marginBottom: '4px', fontSize: '14px' }}>{msg}</div>
-        ))}
+      <div style={{ flex: 1 }}>
+        <h2>健康状态详情</h2>
+        {healthData ? (
+          <pre style={{
+            backgroundColor: '#f0f0f0',
+            padding: '15px',
+            borderRadius: '5px',
+            overflowX: 'auto'
+          }}>
+            {JSON.stringify(healthData, null, 2)}
+          </pre>
+        ) : (
+          <p>点击"检查健康状态"获取详情</p>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 /*
  * 启动服务
- * 该程序负责启动 Luna 运行时服务，包括配置加载、日志初始化、HTTP服务器启动和优雅关闭等功能
+ * 该程序负责启动 Luna 运行时服务，包括配置加载、日志初始化、基础设施连接、HTTP服务器启动和优雅关闭等功能
  */
 package main
 
@@ -16,6 +16,7 @@ import (
 
 	"luna-ai/backend/runtime/internal/api"
 	"luna-ai/backend/runtime/internal/config"
+	"luna-ai/backend/runtime/internal/infrastructure"
 	"luna-ai/backend/runtime/internal/logger"
 
 	"go.uber.org/zap"
@@ -31,6 +32,17 @@ func main() {
 		cfg.Server.Port = 8080      // 默认运行在 8080 端口
 		cfg.Log.Level = "info"      // 默认日志级别为 info
 		cfg.AIService.Address = "localhost:50051"
+		// Redis 默认配置
+		cfg.Redis.Host = "localhost"
+		cfg.Redis.Port = 6379
+		cfg.Redis.Password = ""
+		cfg.Redis.DB = 0
+		// PostgreSQL 默认配置
+		cfg.Postgres.Host = "localhost"
+		cfg.Postgres.Port = 5432
+		cfg.Postgres.User = "postgres"
+		cfg.Postgres.Password = "postgres"
+		cfg.Postgres.Database = "luna"
 	}
 
 	// 2. 初始化日志系统 - 根据配置的日志级别设置日志记录器
@@ -45,7 +57,27 @@ func main() {
 	// 记录服务启动日志，包含监听的端口号
 	logger.Info(ctx, "正在启动 Luna 运行时服务", zap.Int("port", cfg.Server.Port))
 
-	// 3. 初始化 AI 客户端
+	// 3. 初始化 Redis 连接 - 用于 DAG 工作流状态同步与 Event Bus
+	redisClient, err := infrastructure.NewRedisClient(cfg.RedisAddr(), cfg.Redis.Password, cfg.Redis.DB)
+	if err != nil {
+		logger.Warn(ctx, "Redis 连接失败，将使用降级模式运行", zap.Error(err))
+		// Redis 连接失败不阻止服务启动，后续可降级处理
+	} else {
+		defer redisClient.Close()
+		logger.Info(ctx, "Redis 连接成功", zap.String("addr", cfg.RedisAddr()))
+	}
+
+	// 4. 初始化 PostgreSQL 连接 - 用于配置、记忆、状态持久化
+	postgresClient, err := infrastructure.NewPostgresClient(cfg.PostgresConnStr())
+	if err != nil {
+		logger.Warn(ctx, "PostgreSQL 连接失败，将使用降级模式运行", zap.Error(err))
+		// PostgreSQL 连接失败不阻止服务启动，后续可降级处理
+	} else {
+		defer postgresClient.Close()
+		logger.Info(ctx, "PostgreSQL 连接成功", zap.String("database", cfg.Postgres.Database))
+	}
+
+	// 5. 初始化 AI 客户端 - 连接 Python AI 服务
 	aiClient, err := api.NewAIClient(cfg.AIService.Address)
 	if err != nil {
 		logger.Error(ctx, "初始化 AI 客户端失败", zap.Error(err))
@@ -53,16 +85,18 @@ func main() {
 	}
 	defer aiClient.Close()
 
-	// 4. 注册路由 - 设置 HTTP 路由处理器
+	// 6. 注册路由 - 设置 HTTP 路由处理器
 	mux := http.NewServeMux()
-	// 健康检查端点，用于确认服务是否正常运行
-	mux.HandleFunc("/health", api.HealthCheckHandler)
 
-	// WebSocket 端点
+	// 健康检查端点 - 包含三层健康状态检查
+	healthHandler := api.NewHealthHandler(aiClient, redisClient, postgresClient)
+	mux.HandleFunc("/health", healthHandler.HandleHealthCheck)
+
+	// WebSocket 端点 - 前端通信入口
 	wsServer := api.NewWSServer(aiClient)
 	mux.HandleFunc("/ws", wsServer.HandleWS)
 
-	// 5. 启动 HTTP 服务 - 创建并启动 HTTP 服务器
+	// 7. 启动 HTTP 服务 - 创建并启动 HTTP 服务器
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),  // 监听地址
 		Handler: mux,                                   // 请求处理器
@@ -76,7 +110,7 @@ func main() {
 		}
 	}()
 
-	// 6. 实现优雅退出 - 监听系统信号以实现平滑关闭
+	// 8. 实现优雅退出 - 监听系统信号以实现平滑关闭
 	quit := make(chan os.Signal, 1)
 	// 监听 SIGINT (Ctrl+C) 和 SIGTERM (系统终止) 信号
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
