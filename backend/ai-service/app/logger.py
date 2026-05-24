@@ -3,7 +3,7 @@ import sys
 from contextvars import ContextVar
 from typing import Any
 
-# Context variable for trace_id
+# 创建一个上下文变量，用于存储 trace_id
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
 
 class JSONFormatter(logging.Formatter):
