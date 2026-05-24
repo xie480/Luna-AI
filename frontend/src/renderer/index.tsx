@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { WSMessage, PingPayload, PongPayload, ErrorPayload, ChatRequestPayload, ChatStreamPayload } from '../shared/types';
+import { WS_MSG_TYPE } from '../shared/enum';
 
 interface ChatMessage {
   id: string;
@@ -52,13 +53,13 @@ const App: React.FC = () => {
     ws.onmessage = (event) => {
       try {
         const msg: WSMessage = JSON.parse(event.data);
-        if (msg.type === 'PONG') {
+        if (msg.type === WS_MSG_TYPE.PONG) {
           const payload = msg.payload as PongPayload;
           addSystemLog(`收到 PONG: trace_id=${msg.trace_id}, source=${payload.source}, timestamp=${payload.timestamp}`);
-        } else if (msg.type === 'ERROR') {
+        } else if (msg.type === WS_MSG_TYPE.ERROR) {
           const payload = msg.payload as ErrorPayload;
           addSystemLog(`收到 ERROR: trace_id=${msg.trace_id}, code=${payload.code}, message=${payload.message}`);
-        } else if (msg.type === 'CHAT_STREAM') {
+        } else if (msg.type === WS_MSG_TYPE.CHAT_STREAM) {
           const payload = msg.payload as ChatStreamPayload;
           handleChatStream(payload);
         } else {
@@ -131,8 +132,8 @@ const App: React.FC = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const traceId = `req-${Date.now()}`;
       const payload: PingPayload = { timestamp: Date.now() };
-      const msg: WSMessage = {
-        type: 'PING',
+      const msg: WSMessage<PingPayload> = {
+        type: WS_MSG_TYPE.PING,
         trace_id: traceId,
         payload: payload,
       };
@@ -149,8 +150,8 @@ const App: React.FC = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       const traceId = `chat-${Date.now()}`;
       const payload: ChatRequestPayload = { message: inputValue };
-      const msg: WSMessage = {
-        type: 'CHAT_REQUEST',
+      const msg: WSMessage<ChatRequestPayload> = {
+        type: WS_MSG_TYPE.CHAT_REQUEST,
         trace_id: traceId,
         payload: payload,
       };

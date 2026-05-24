@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/types"
 	pb "luna-ai/backend/runtime/shared/proto"
 )
 
@@ -139,9 +140,9 @@ func (s *WSServer) handleMessage(ctx context.Context, conn *WSConnection, msg WS
 	logger.Info(ctx, "收到 WebSocket 消息", zap.String("type", msg.Type), zap.String("trace_id", msg.TraceID))
 
 	switch msg.Type {
-	case "PING":
+	case types.WSMsgTypePing:
 		s.handlePing(ctx, conn, msg)
-	case "CHAT_REQUEST":
+	case types.WSMsgTypeChatRequest:
 		// 异步处理聊天请求，避免阻塞读循环
 		go s.handleChatRequest(ctx, conn, msg)
 	default:
@@ -174,7 +175,7 @@ func (s *WSServer) handlePing(ctx context.Context, conn *WSConnection, msg WSMes
 	payloadBytes, _ := json.Marshal(pongPayload)
 
 	pongMsg := WSMessage{
-		Type:    "PONG",
+		Type:    types.WSMsgTypePong,
 		TraceID: msg.TraceID,
 		Payload: payloadBytes,
 	}
@@ -238,7 +239,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		payloadBytes, _ := json.Marshal(chatPayload)
 
 		streamMsg := WSMessage{
-			Type:    "CHAT_STREAM",
+			Type:    types.WSMsgTypeChatStream,
 			TraceID: msg.TraceID,
 			Payload: payloadBytes,
 		}
@@ -265,7 +266,7 @@ func (s *WSServer) sendChatStreamError(conn *WSConnection, traceID string, nodeI
 	payloadBytes, _ := json.Marshal(chatPayload)
 
 	streamMsg := WSMessage{
-		Type:    "CHAT_STREAM",
+		Type:    types.WSMsgTypeChatStream,
 		TraceID: traceID,
 		Payload: payloadBytes,
 	}
@@ -281,7 +282,7 @@ func (s *WSServer) sendError(conn *WSConnection, traceID string, code int, messa
 	payloadBytes, _ := json.Marshal(errPayload)
 
 	errMsg := WSMessage{
-		Type:    "ERROR",
+		Type:    types.WSMsgTypeError,
 		TraceID: traceID,
 		Payload: payloadBytes,
 	}

@@ -117,7 +117,7 @@ func (h *HealthHandler) checkComponents(ctx context.Context) []ComponentHealth {
 	// 1. 检查 Go Runtime 自身（始终健康）
 	components = append(components, ComponentHealth{
 		Name:      "go-runtime",
-		Status:    "healthy",
+		Status:    types.HealthStatusHealthy,
 		LatencyMs: 0,
 	})
 
@@ -132,7 +132,7 @@ func (h *HealthHandler) checkComponents(ctx context.Context) []ComponentHealth {
 	} else {
 		components = append(components, ComponentHealth{
 			Name:    "redis",
-			Status:  "degraded",
+			Status:  types.HealthStatusDegraded,
 			Message: "Redis 客户端未初始化",
 		})
 	}
@@ -144,7 +144,7 @@ func (h *HealthHandler) checkComponents(ctx context.Context) []ComponentHealth {
 	} else {
 		components = append(components, ComponentHealth{
 			Name:    "postgres",
-			Status:  "degraded",
+			Status:  types.HealthStatusDegraded,
 			Message: "PostgreSQL 客户端未初始化",
 		})
 	}
@@ -170,7 +170,7 @@ func (h *HealthHandler) checkAIService(ctx context.Context) ComponentHealth {
 		logger.Warn(ctx, "AI 服务健康检查失败", zap.Error(err))
 		return ComponentHealth{
 			Name:      "ai-service",
-			Status:    "unhealthy",
+			Status:    types.HealthStatusUnhealthy,
 			Message:   err.Error(),
 			LatencyMs: latency,
 		}
@@ -178,7 +178,7 @@ func (h *HealthHandler) checkAIService(ctx context.Context) ComponentHealth {
 
 	return ComponentHealth{
 		Name:      "ai-service",
-		Status:    "healthy",
+		Status:    types.HealthStatusHealthy,
 		LatencyMs: latency,
 	}
 }
@@ -198,7 +198,7 @@ func (h *HealthHandler) checkRedis(ctx context.Context) ComponentHealth {
 	if !isHealthy {
 		return ComponentHealth{
 			Name:      "redis",
-			Status:    "unhealthy",
+			Status:    types.HealthStatusUnhealthy,
 			Message:   "Redis Ping 失败",
 			LatencyMs: latency,
 		}
@@ -206,7 +206,7 @@ func (h *HealthHandler) checkRedis(ctx context.Context) ComponentHealth {
 
 	return ComponentHealth{
 		Name:      "redis",
-		Status:    "healthy",
+		Status:    types.HealthStatusHealthy,
 		LatencyMs: latency,
 	}
 }
@@ -226,7 +226,7 @@ func (h *HealthHandler) checkPostgres(ctx context.Context) ComponentHealth {
 	if !isHealthy {
 		return ComponentHealth{
 			Name:      "postgres",
-			Status:    "unhealthy",
+			Status:    types.HealthStatusUnhealthy,
 			Message:   "PostgreSQL Ping 失败",
 			LatencyMs: latency,
 		}
@@ -234,7 +234,7 @@ func (h *HealthHandler) checkPostgres(ctx context.Context) ComponentHealth {
 
 	return ComponentHealth{
 		Name:      "postgres",
-		Status:    "healthy",
+		Status:    types.HealthStatusHealthy,
 		LatencyMs: latency,
 	}
 }
@@ -249,21 +249,21 @@ func (h *HealthHandler) calculateOverallStatus(components []ComponentHealth) str
 	hasDegraded := false
 
 	for _, comp := range components {
-		if comp.Status == "unhealthy" {
+		if comp.Status == types.HealthStatusUnhealthy {
 			hasUnhealthy = true
 		}
-		if comp.Status == "degraded" {
+		if comp.Status == types.HealthStatusDegraded {
 			hasDegraded = true
 		}
 	}
 
 	if hasUnhealthy {
-		return "unhealthy"
+		return types.HealthStatusUnhealthy
 	}
 	if hasDegraded {
-		return "degraded"
+		return types.HealthStatusDegraded
 	}
-	return "healthy"
+	return types.HealthStatusHealthy
 }
 
 // HealthCheckHandler 处理健康检查请求（为兼容现有路由而保留的独立函数）

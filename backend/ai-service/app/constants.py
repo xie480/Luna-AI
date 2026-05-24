@@ -23,6 +23,21 @@ class ErrorCode(IntEnum):
     LLM_CALL_FAILED = 3001
     TOOL_EXECUTE_FAILED = 3002
 
+
+# WebSocket 消息类型常量
+WS_MSG_TYPE_PING = "PING"
+WS_MSG_TYPE_PONG = "PONG"
+WS_MSG_TYPE_CHAT_REQUEST = "CHAT_REQUEST"
+WS_MSG_TYPE_CHAT_STREAM = "CHAT_STREAM"
+WS_MSG_TYPE_ERROR = "ERROR"
+
+
+# 健康检查状态常量
+HEALTH_STATUS_HEALTHY = "healthy"
+HEALTH_STATUS_UNHEALTHY = "unhealthy"
+HEALTH_STATUS_DEGRADED = "degraded"
+
+
 class ResponseModel(BaseModel):
     """标准 JSON 响应结构"""
     code: int
@@ -30,7 +45,9 @@ class ResponseModel(BaseModel):
     data: Any = None
     trace_id: str
 
+
 def create_success_response(data: Any, trace_id: str) -> ResponseModel:
+    """创建成功响应"""
     return ResponseModel(
         code=ErrorCode.SUCCESS.value,
         msg="success",
@@ -38,7 +55,9 @@ def create_success_response(data: Any, trace_id: str) -> ResponseModel:
         trace_id=trace_id
     )
 
+
 def create_error_response(code: ErrorCode, msg: str, trace_id: str) -> ResponseModel:
+    """创建错误响应"""
     return ResponseModel(
         code=code.value,
         msg=msg,

@@ -26,6 +26,36 @@ export enum ErrorCode {
 }
 
 /**
+ * WebSocket 消息类型常量
+ * 做什么：定义前后端统一的 WebSocket 消息类型常量。
+ * 为什么这样做：避免代码中出现魔法字符串，统一消息类型处理逻辑。
+ * 输入输出：无。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export const WS_MSG_TYPE = {
+  PING: "PING",
+  PONG: "PONG",
+  CHAT_REQUEST: "CHAT_REQUEST",
+  CHAT_STREAM: "CHAT_STREAM",
+  ERROR: "ERROR",
+} as const;
+
+/**
+ * 健康检查状态常量
+ * 做什么：定义前后端统一的健康检查状态常量。
+ * 为什么这样做：避免代码中出现魔法字符串，统一健康状态处理逻辑。
+ * 输入输出：无。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export const HEALTH_STATUS = {
+  HEALTHY: "healthy",
+  UNHEALTHY: "unhealthy",
+  DEGRADED: "degraded",
+} as const;
+
+/**
  * 标准 JSON 响应结构
  * 做什么：定义前后端统一的 API 响应数据结构。
  * 为什么这样做：规范化接口返回格式，方便前端统一拦截和处理。
