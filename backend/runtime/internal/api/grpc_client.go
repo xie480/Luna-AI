@@ -70,3 +70,16 @@ func (c *AIClient) Ping(ctx context.Context, traceID string) (*pb.PongResponse, 
 	logger.Info(ctx, "收到 AI 服务的 Pong 响应", zap.String("trace_id", traceID), zap.Int64("timestamp", resp.Timestamp), zap.String("source", resp.Source))
 	return resp, nil
 }
+
+// ChatStream 发送流式对话请求到 AI 服务
+func (c *AIClient) ChatStream(ctx context.Context, req *pb.ChatRequest) (pb.CommunicationService_ChatStreamClient, error) {
+	logger.Info(ctx, "发送 ChatStream 请求到 AI 服务", zap.String("trace_id", req.TraceId))
+
+	stream, err := c.client.ChatStream(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "ChatStream 请求失败", zap.String("trace_id", req.TraceId), zap.Error(err))
+		return nil, fmt.Errorf("chat stream failed: %w", err)
+	}
+
+	return stream, nil
+}

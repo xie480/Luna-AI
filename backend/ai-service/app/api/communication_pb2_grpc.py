@@ -26,7 +26,8 @@ if _version_not_supported:
 
 
 class CommunicationServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """通信服务定义
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -39,13 +40,27 @@ class CommunicationServiceStub(object):
                 request_serializer=communication__pb2.PingRequest.SerializeToString,
                 response_deserializer=communication__pb2.PongResponse.FromString,
                 _registered_method=True)
+        self.ChatStream = channel.unary_stream(
+                '/communication.CommunicationService/ChatStream',
+                request_serializer=communication__pb2.ChatRequest.SerializeToString,
+                response_deserializer=communication__pb2.ChatStreamResponse.FromString,
+                _registered_method=True)
 
 
 class CommunicationServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """通信服务定义
+    """
 
     def Ping(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Ping 方法，用于健康检查和连接测试
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ChatStream(self, request, context):
+        """ChatStream 方法，用于流式对话
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -58,6 +73,11 @@ def add_CommunicationServiceServicer_to_server(servicer, server):
                     request_deserializer=communication__pb2.PingRequest.FromString,
                     response_serializer=communication__pb2.PongResponse.SerializeToString,
             ),
+            'ChatStream': grpc.unary_stream_rpc_method_handler(
+                    servicer.ChatStream,
+                    request_deserializer=communication__pb2.ChatRequest.FromString,
+                    response_serializer=communication__pb2.ChatStreamResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'communication.CommunicationService', rpc_method_handlers)
@@ -67,7 +87,8 @@ def add_CommunicationServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class CommunicationService(object):
-    """Missing associated documentation comment in .proto file."""
+    """通信服务定义
+    """
 
     @staticmethod
     def Ping(request,
@@ -86,6 +107,33 @@ class CommunicationService(object):
             '/communication.CommunicationService/Ping',
             communication__pb2.PingRequest.SerializeToString,
             communication__pb2.PongResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ChatStream(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/communication.CommunicationService/ChatStream',
+            communication__pb2.ChatRequest.SerializeToString,
+            communication__pb2.ChatStreamResponse.FromString,
             options,
             channel_credentials,
             insecure,

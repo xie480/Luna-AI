@@ -2,7 +2,7 @@ syntax = "proto3";
 
 // 通信模块的协议定义
 package communication;
-option go_package = "luna/shared/proto/communication";
+option go_package = "luna-ai/backend/runtime/shared/proto/communication";
 
 // Ping 请求消息
 message PingRequest {
@@ -22,8 +22,33 @@ message PongResponse {
   string source = 3;
 }
 
+// Chat 请求消息
+message ChatRequest {
+  // 跟踪ID，用于请求追踪
+  string trace_id = 1;
+  // 用户输入的消息内容
+  string message = 2;
+}
+
+// Chat 流式响应消息
+message ChatStreamResponse {
+  // 跟踪ID，用于请求追踪
+  string trace_id = 1;
+  // 文本块
+  string chunk = 2;
+  // 是否结束
+  bool is_finished = 3;
+  // 结束原因 (如 stop, length 等)
+  string finish_reason = 4;
+  // 错误信息，如果发生错误
+  string error = 5;
+}
+
 // 通信服务定义
 service CommunicationService {
   // Ping 方法，用于健康检查和连接测试
   rpc Ping(PingRequest) returns (PongResponse);
+  
+  // ChatStream 方法，用于流式对话
+  rpc ChatStream(ChatRequest) returns (stream ChatStreamResponse);
 }

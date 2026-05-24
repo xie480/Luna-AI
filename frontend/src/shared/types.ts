@@ -1,6 +1,7 @@
 export interface WSMessage {
   type: string;
   trace_id: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload: any;
 }
 
@@ -16,4 +17,15 @@ export interface PongPayload {
 export interface ErrorPayload {
   code: number;
   message: string;
+}
+
+export interface ChatRequestPayload {
+  message: string;
+}
+
+export interface ChatStreamPayload {
+  chunk: string;
+  is_finished: boolean;
+  node_id: string;
+  error?: string;
 }

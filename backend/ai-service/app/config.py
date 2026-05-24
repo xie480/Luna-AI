@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     grpc_port: int = 50051
     log_level: str = "INFO"
     
+    # LLM Configuration
+    openai_api_key: str = ""
+    openai_api_base: str = "https://api.openai.com/v1"
+    model_name: str = "gpt-3.5-turbo"
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
