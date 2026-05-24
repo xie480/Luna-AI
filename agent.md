@@ -176,6 +176,8 @@ Luna 面向**普通个人本地使用，而不是企业使用**。
 18. **日志语言规范**
     * 所有日志必须使用 `log.Logger`，禁止使用 `fmt.Println` 或 `console.log`。
     * 所有日志msg必须使用简体中文，禁止使用英文。
+19. **参考系统设计文档**
+    编码时请参考 `backend/docs/system` 和 `frontend/docs/system`。
 
 ### 6.2 职责与边界约束
 
