@@ -1,4 +1,4 @@
-.PHONY: all init check test clean
+.PHONY: all init check test clean run run-go run-py run-fe
 
 # 默认目标
 all: check test
@@ -38,6 +38,18 @@ test-py:
 
 test-fe:
 	cd frontend && npm run test
+
+# 一键启动本地最小开发环境（三个服务并行运行）
+run: run-go run-py run-fe
+
+run-go:
+	cd backend/runtime && go run ./cmd/main.go
+
+run-py:
+	cd backend/ai-service && python -m app.main
+
+run-fe:
+	cd frontend && npm run dev
 
 # 清理缓存和构建产物
 clean:

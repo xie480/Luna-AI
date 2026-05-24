@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
@@ -11,4 +11,10 @@ export default defineConfig({
     },
   },
   base: './',
+  test: {
+    // 使用 jsdom 模拟浏览器环境
+    environment: 'jsdom',
+    // 包含测试文件的 glob 模式
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+  },
 })
