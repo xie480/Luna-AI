@@ -30,6 +30,7 @@ func main() {
 		cfg = &config.Config{}
 		cfg.Server.Port = 8080      // 默认运行在 8080 端口
 		cfg.Log.Level = "info"      // 默认日志级别为 info
+		cfg.AIService.Address = "localhost:50051"
 	}
 
 	// 2. 初始化日志系统 - 根据配置的日志级别设置日志记录器
@@ -44,12 +45,24 @@ func main() {
 	// 记录服务启动日志，包含监听的端口号
 	logger.Info(ctx, "正在启动 Luna 运行时服务", zap.Int("port", cfg.Server.Port))
 
-	// 3. 注册路由 - 设置 HTTP 路由处理器
+	// 3. 初始化 AI 客户端
+	aiClient, err := api.NewAIClient(cfg.AIService.Address)
+	if err != nil {
+		logger.Error(ctx, "初始化 AI 客户端失败", zap.Error(err))
+		os.Exit(1)
+	}
+	defer aiClient.Close()
+
+	// 4. 注册路由 - 设置 HTTP 路由处理器
 	mux := http.NewServeMux()
 	// 健康检查端点，用于确认服务是否正常运行
 	mux.HandleFunc("/health", api.HealthCheckHandler)
 
-	// 4. 启动 HTTP 服务 - 创建并启动 HTTP 服务器
+	// WebSocket 端点
+	wsServer := api.NewWSServer(aiClient)
+	mux.HandleFunc("/ws", wsServer.HandleWS)
+
+	// 5. 启动 HTTP 服务 - 创建并启动 HTTP 服务器
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),  // 监听地址
 		Handler: mux,                                   // 请求处理器
@@ -63,7 +76,7 @@ func main() {
 		}
 	}()
 
-	// 5. 实现优雅退出 - 监听系统信号以实现平滑关闭
+	// 6. 实现优雅退出 - 监听系统信号以实现平滑关闭
 	quit := make(chan os.Signal, 1)
 	// 监听 SIGINT (Ctrl+C) 和 SIGTERM (系统终止) 信号
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

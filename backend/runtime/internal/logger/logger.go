@@ -55,6 +55,11 @@ func Info(ctx context.Context, msg string, fields ...zap.Field) {
 	WithContext(ctx).Info(msg, fields...)
 }
 
+// Warn 记录 Warn 级别日志
+func Warn(ctx context.Context, msg string, fields ...zap.Field) {
+	WithContext(ctx).Warn(msg, fields...)
+}
+
 // Error 记录 Error 级别日志
 func Error(ctx context.Context, msg string, fields ...zap.Field) {
 	WithContext(ctx).Error(msg, fields...)

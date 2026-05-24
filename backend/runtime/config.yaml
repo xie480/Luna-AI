@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+log:
+  level: "info"
+
+ai_service:
+  address: "localhost:50051"

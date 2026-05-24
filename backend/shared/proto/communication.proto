@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+// 通信模块的协议定义
+package communication;
+option go_package = "luna/shared/proto/communication";
+
+// Ping 请求消息
+message PingRequest {
+  // 跟踪ID，用于请求追踪
+  string trace_id = 1;
+  // 时间戳，记录请求发起的时间
+  int64 timestamp = 2;
+}
+
+// Pong 响应消息
+message PongResponse {
+  // 跟踪ID，用于请求追踪
+  string trace_id = 1;
+  // 时间戳，记录响应返回的时间
+  int64 timestamp = 2;
+  // 源信息，表示响应来源
+  string source = 3;
+}
+
+// 通信服务定义
+service CommunicationService {
+  // Ping 方法，用于健康检查和连接测试
+  rpc Ping(PingRequest) returns (PongResponse);
+}

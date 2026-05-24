@@ -1,4 +1,4 @@
-.PHONY: all init check test clean run run-go run-py run-fe
+.PHONY: all init check test clean run run-go run-py run-fe proto proto-go proto-py
 
 # 默认目标
 all: check test
@@ -56,3 +56,33 @@ clean:
 	cd backend/runtime && go clean
 	cd backend/ai-service && rm -rf .pytest_cache .ruff_cache .mypy_cache *.egg-info
 	cd frontend && rm -rf node_modules dist
+
+# ============================================
+# Protobuf 编译相关命令
+# ============================================
+
+# 编译所有 Protobuf 文件（Go + Python）
+proto: proto-go proto-py
+
+# 编译 Go 侧 Protobuf 文件
+# 输出目录: backend/runtime/shared/proto
+# 注意: .proto 源文件位于 backend/shared/proto，作为跨语言契约的 SSOT
+proto-go:
+	cd backend/runtime && ./protoc/bin/protoc.exe \
+		-I=./protoc/include \
+		-I=../shared/proto \
+		--go_out=./shared/proto \
+		--go_opt=module=luna-ai/backend/runtime/shared/proto \
+		--go-grpc_out=./shared/proto \
+		--go-grpc_opt=module=luna-ai/backend/runtime/shared/proto \
+		../shared/proto/communication.proto
+
+# 编译 Python 侧 Protobuf 文件
+# 输出目录: backend/ai-service/app/api
+proto-py:
+	cd backend/runtime && ./protoc/bin/protoc.exe \
+		-I=./protoc/include \
+		-I=../shared/proto \
+		--python_out=../ai-service/app/api \
+		--grpc_python_out=../ai-service/app/api \
+		../shared/proto/communication.proto

@@ -15,6 +15,9 @@ type Config struct {
 	Log struct {
 		Level string `yaml:"level"`
 	} `yaml:"log"`
+	AIService struct {
+		Address string `yaml:"address"`
+	} `yaml:"ai_service"`
 }
 
 // Load 加载配置

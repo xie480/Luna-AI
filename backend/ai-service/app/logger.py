@@ -45,3 +45,12 @@ def setup_logger(level: str = "INFO") -> logging.Logger:
     return logger
 
 logger = setup_logger()
+
+def get_logger(name: str = "luna_ai") -> logging.Logger:
+    """
+    获取日志记录器
+    做什么：返回指定名称的日志记录器。
+    为什么这样做：提供统一的日志获取接口，方便各模块使用。
+    输入输出：输入模块名称，输出 logging.Logger 对象。
+    """
+    return logging.getLogger(name)
