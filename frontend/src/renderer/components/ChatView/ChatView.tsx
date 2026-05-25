@@ -146,8 +146,9 @@ export const ChatView: React.FC = () => {
             发送
           </button>
         </div>
-        <Live2DView />
       </div>
+
+      <Live2DView />
 
       {/* 连接状态指示器 */}
       <div className={`connection-indicator ${connectionStatus}`}>

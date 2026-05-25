@@ -123,41 +123,55 @@ export const Live2DView: React.FC = () => {
   // 1. 拖拽
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
-  const onPointerDown = (e: PIXI.InteractionEvent) => {
-    // @ts-ignore
-    if ((e.data.originalEvent as MouseEvent).button !== 0) return;
-    dragging.current = true;
-    const pt = e.data.global;
-    lastPos.current = { x: pt.x, y: pt.y };
-  };
-  const onPointerMove = (e: PIXI.InteractionEvent) => {
-    if (!dragging.current) return;
-    const pt = e.data.global;
-    const dx = pt.x - lastPos.current.x;
-    const dy = pt.y - lastPos.current.y;
-    lastPos.current = { x: pt.x, y: pt.y };
-    if (container) {
+
+  useEffect(() => {
+    if (!model || !container || !app) return;
+
+    const onWindowPointerDown = (e: PointerEvent) => {
+      // 只允许左键拖拽或触摸拖拽
+      if (e.button !== undefined && e.button !== 0) return;
+      
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const point = new PIXI.Point(e.clientX - rect.left, e.clientY - rect.top);
+      
+      // 手动进行碰撞检测：使用模型的包围盒
+      // 这样可以避免 hitTest 依赖 Live2D 内部定义的特定 hitArea
+      const bounds = model.getBounds();
+      if (bounds.contains(point.x, point.y)) {
+        dragging.current = true;
+        lastPos.current = { x: e.clientX, y: e.clientY };
+        // 阻止事件向下传播，防止触发底层 UI 的点击事件
+        e.stopPropagation();
+      }
+    };
+
+    const onWindowPointerMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - lastPos.current.x;
+      const dy = e.clientY - lastPos.current.y;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+      
       container.x += dx;
       container.y += dy;
-    }
-  };
-  const onPointerUp = () => {
-    dragging.current = false;
-  };
-  useEffect(() => {
-    if (!model) return;
-    model.interactive = true;
-    model.on("pointerdown", onPointerDown as any);
-    model.on("pointermove", onPointerMove as any);
-    model.on("pointerup", onPointerUp as any);
-    model.on("pointerupoutside", onPointerUp as any);
-    return () => {
-      model.off("pointerdown", onPointerDown as any);
-      model.off("pointermove", onPointerMove as any);
-      model.off("pointerup", onPointerUp as any);
-      model.off("pointerupoutside", onPointerUp as any);
     };
-  }, [model]);
+
+    const onWindowPointerUp = () => {
+      dragging.current = false;
+    };
+
+    // 使用 capture: true 在捕获阶段拦截事件
+    window.addEventListener("pointerdown", onWindowPointerDown, { capture: true });
+    window.addEventListener("pointermove", onWindowPointerMove);
+    window.addEventListener("pointerup", onWindowPointerUp);
+    window.addEventListener("pointercancel", onWindowPointerUp);
+
+    return () => {
+      window.removeEventListener("pointerdown", onWindowPointerDown, { capture: true });
+      window.removeEventListener("pointermove", onWindowPointerMove);
+      window.removeEventListener("pointerup", onWindowPointerUp);
+      window.removeEventListener("pointercancel", onWindowPointerUp);
+    };
+  }, [model, container, app]);
 
   // 2. 滚轮缩放
   useEffect(() => {
@@ -165,7 +179,14 @@ export const Live2DView: React.FC = () => {
       if (!model || !app || !container) return;
       const rect = canvasRef.current!.getBoundingClientRect();
       const globalPoint = new PIXI.Point(ev.clientX - rect.left, ev.clientY - rect.top);
+      
+      // 只有鼠标在模型上时才允许缩放，避免影响消息列表滚动
+      const bounds = model.getBounds();
+      if (!bounds.contains(globalPoint.x, globalPoint.y)) return;
+
       ev.preventDefault();
+      ev.stopPropagation();
+      
       const factor = ev.deltaY > 0 ? 0.95 : 1.05;
       const newScale = Math.min(10, Math.max(0.05, container.scale.x * factor));
       const local = container.toLocal(globalPoint, app.stage);
@@ -174,8 +195,9 @@ export const Live2DView: React.FC = () => {
       container.position.x += globalPoint.x - newGlobal.x;
       container.position.y += globalPoint.y - newGlobal.y;
     };
-    window.addEventListener("wheel", onWheel, { passive: false });
-    return () => window.removeEventListener("wheel", onWheel);
+    // 使用 capture: true 优先拦截滚轮事件
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => window.removeEventListener("wheel", onWheel, { capture: true } as any);
   }, [model, app, container]);
 
   // 3. 视线追踪（全局 pointermove）
@@ -197,7 +219,12 @@ export const Live2DView: React.FC = () => {
 
   return (
     <div id="live2d-wrapper">
-      <canvas ref={canvasRef} id="live2d-canvas" className="live2d-canvas" />
+      <canvas
+        ref={canvasRef}
+        id="live2d-canvas"
+        className="live2d-canvas"
+        onContextMenu={(e) => e.preventDefault()}
+      />
     </div>
   );
 };

@@ -131,6 +131,7 @@
   box-sizing: border-box;
   background-color: transparent; /* 移除背景色，避免遮挡模型 */
   margin-top: auto;
+  position: relative; /* 为内部绝对定位元素提供参考 */
 }
 
 .input-container {
@@ -141,6 +142,8 @@
   border-radius: 12px;
   padding: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 10; /* 确保输入框在 Live2D 之上 */
 }
 
 .chat-input {
