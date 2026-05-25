@@ -4,7 +4,7 @@
   "description": "Luna AI Desktop Assistant Frontend",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node dev.js",
     "build": "electron-vite build && electron-builder",
     "build:dir": "electron-vite build && electron-builder --dir",
     "preview": "electron-vite preview",
@@ -24,7 +24,8 @@
     "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/ui": "^3.0.0",
-    "electron": "^30.5.1",
+    "cross-env": "^10.1.0",
+    "electron": "^28.0.0",
     "electron-builder": "^24.13.3",
     "electron-vite": "^5.0.0",
     "eslint": "^8.57.0",

@@ -145,9 +145,27 @@ func (s *WSServer) handleMessage(ctx context.Context, conn *WSConnection, msg WS
 	case types.WSMsgTypeChatRequest:
 		// 异步处理聊天请求，避免阻塞读循环
 		go s.handleChatRequest(ctx, conn, msg)
+	case types.WSMsgTypeCmdSyncInitState:
+		s.handleSyncInitState(ctx, conn, msg)
 	default:
 		logger.Warn(ctx, "未知的消息类型", zap.String("type", msg.Type))
 		s.sendError(conn, msg.TraceID, 4001, "Unknown message type")
+	}
+}
+
+func (s *WSServer) handleSyncInitState(ctx context.Context, conn *WSConnection, msg WSMessage) {
+	// 构造初始状态响应
+	// 暂时返回一个空的初始状态
+	payloadBytes := []byte(`{"sessionId": "default-session", "messages": [], "activePlan": null, "memory": null}`)
+
+	respMsg := WSMessage{
+		Type:    types.WSMsgTypeEvtInitState,
+		TraceID: msg.TraceID,
+		Payload: payloadBytes,
+	}
+
+	if err := conn.WriteJSON(respMsg); err != nil {
+		logger.Error(ctx, "发送 EVT_INIT_STATE 消息失败", zap.Error(err))
 	}
 }
 

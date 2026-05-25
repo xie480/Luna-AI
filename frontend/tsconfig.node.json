@@ -9,5 +9,5 @@
     "esModuleInterop": true,
     "outDir": "dist/main"
   },
-  "include": ["vite.config.ts", "src/main/**/*.ts"]
+  "include": ["electron.vite.config.ts", "src/main/**/*.ts"]
 }

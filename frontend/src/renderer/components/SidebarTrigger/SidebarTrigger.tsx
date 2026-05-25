@@ -13,44 +13,56 @@ import './SidebarTrigger.css';
 export const SidebarTrigger: React.FC = () => {
   const openSidebar = useSystemStore.getState().openSidebar;
   const isSidebarOpen = useSystemStore((state) => state.isSidebarOpen);
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
   /**
    * 呼出指定面板的侧边栏
    */
   const handleOpenPanel = (panel: SidebarPanelType): void => {
     openSidebar(panel);
+    setIsMenuOpen(false);
   };
 
   return (
-    <div className={`sidebar-trigger ${isSidebarOpen ? 'hidden' : ''}`}>
+    <div className={`sidebar-trigger-container ${isSidebarOpen ? 'hidden' : ''}`}>
       <button
-        className="trigger-button"
-        onClick={() => handleOpenPanel('dag')}
-        title="任务流"
+        className={`main-trigger-button ${isMenuOpen ? 'active' : ''}`}
+        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        title="菜单"
       >
-        📊
+        {'>'}
       </button>
-      <button
-        className="trigger-button"
-        onClick={() => handleOpenPanel('memory')}
-        title="记忆"
-      >
-        🧠
-      </button>
-      <button
-        className="trigger-button"
-        onClick={() => handleOpenPanel('settings')}
-        title="设置"
-      >
-        ⚙️
-      </button>
-      <button
-        className="trigger-button"
-        onClick={() => handleOpenPanel('logs')}
-        title="日志"
-      >
-        📋
-      </button>
+      
+      <div className={`sidebar-menu ${isMenuOpen ? 'open' : ''}`}>
+        <button
+          className="menu-button"
+          onClick={() => handleOpenPanel('dag')}
+          title="任务流"
+        >
+          📊
+        </button>
+        <button
+          className="menu-button"
+          onClick={() => handleOpenPanel('memory')}
+          title="记忆"
+        >
+          🧠
+        </button>
+        <button
+          className="menu-button"
+          onClick={() => handleOpenPanel('settings')}
+          title="设置"
+        >
+          ⚙️
+        </button>
+        <button
+          className="menu-button"
+          onClick={() => handleOpenPanel('logs')}
+          title="日志"
+        >
+          📋
+        </button>
+      </div>
     </div>
   );
 };

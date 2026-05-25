@@ -125,24 +125,26 @@ export const ChatView: React.FC = () => {
       </div>
 
       {/* 输入区域 */}
-      <div className="input-container">
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={connectionStatus === 'connected' ? '输入消息...' : '等待连接...'}
-          disabled={connectionStatus !== 'connected' || isGenerating}
-          className="chat-input"
-        />
-        <button
-          onClick={handleSendMessage}
-          disabled={connectionStatus !== 'connected' || isGenerating || !inputValue.trim()}
-          className="send-button"
-        >
-          发送
-        </button>
+      <div className="input-container-wrapper">
+        <div className="input-container">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={connectionStatus === 'connected' ? '输入消息...' : '等待连接...'}
+            disabled={connectionStatus !== 'connected' || isGenerating}
+            className="chat-input"
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={connectionStatus !== 'connected' || isGenerating || !inputValue.trim()}
+            className="send-button"
+          >
+            发送
+          </button>
+        </div>
       </div>
 
       {/* 连接状态指示器 */}
