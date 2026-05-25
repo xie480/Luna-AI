@@ -30,13 +30,17 @@ import { useSystemStore } from './stores/systemStore';
  */
 // eslint-disable-next-line react-refresh/only-export-components
 const App: React.FC = () => {
-  // 初始化会话 ID
-  const setSessionId = useSessionStore.getState().setSessionId;
-  const addSystemLog = useSystemStore.getState().addSystemLog;
+  // 使用 Zustand hook 方式获取函数，确保引用稳定
+  // 注意：Zustand 的 selector 返回的函数引用是稳定的，不会导致 useEffect 重复执行
+  const setSessionId = useSessionStore((state) => state.setSessionId);
+  const addSystemLog = useSystemStore((state) => state.addSystemLog);
 
   /**
    * 应用启动时建立 WebSocket 连接
    * 并初始化默认会话
+   *
+   * 依赖数组为空数组，因为我们只需要在组件挂载时执行一次
+   * setSessionId 和 addSystemLog 是 Zustand store 的 action，引用稳定
    */
   useEffect(() => {
     // 初始化默认会话 ID
@@ -50,7 +54,8 @@ const App: React.FC = () => {
     return () => {
       wsManager.disconnect();
     };
-  }, [setSessionId, addSystemLog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="app-container">

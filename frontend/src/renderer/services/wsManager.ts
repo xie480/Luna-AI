@@ -24,6 +24,7 @@ class WSManager {
   private maxReconnectDelay: number = 10000; // 最大重连延迟 10 秒
   private baseReconnectDelay: number = 1000; // 基础重连延迟 1 秒
   private port: number = 8080; // Go Runtime 默认端口
+  private isManualDisconnect: boolean = false; // 标记是否为主动断开
 
   /**
    * 建立 WebSocket 连接
@@ -31,7 +32,11 @@ class WSManager {
    */
   public connect(port: number = 8080): void {
     this.port = port;
+    // 先标记为主动断开，防止 cleanup() 触发 onclose 重连
+    this.isManualDisconnect = true;
     this.cleanup();
+    // 重置标志，允许新连接断开时重连
+    this.isManualDisconnect = false;
     useSystemStore.getState().setConnectionStatus('connecting');
 
     try {
@@ -75,7 +80,10 @@ class WSManager {
       useSystemStore.getState().addSystemLog(
         `WebSocket 已断开连接 (code: ${event.code}, reason: ${event.reason})`
       );
-      this.scheduleReconnect();
+      // 只有非主动断开时才触发重连
+      if (!this.isManualDisconnect) {
+        this.scheduleReconnect();
+      }
     };
 
     this.ws.onerror = () => {
@@ -301,9 +309,16 @@ class WSManager {
 
   /**
    * 清理 WebSocket 连接和定时器
+   * 注意：先移除事件处理器再关闭连接，防止 onclose 触发重连
    */
   private cleanup(): void {
     if (this.ws) {
+      // 先移除所有事件处理器，防止 onclose 触发 scheduleReconnect
+      this.ws.onopen = null;
+      this.ws.onmessage = null;
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      // 然后关闭连接
       this.ws.close();
       this.ws = null;
     }
@@ -317,6 +332,7 @@ class WSManager {
    * 关闭 WebSocket 连接
    */
   public disconnect(): void {
+    this.isManualDisconnect = true; // 标记为主动断开，防止触发重连
     this.cleanup();
     useSystemStore.getState().setConnectionStatus('disconnected');
     useSystemStore.getState().addSystemLog('WebSocket 已主动断开');
