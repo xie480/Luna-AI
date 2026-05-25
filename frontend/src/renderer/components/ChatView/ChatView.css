@@ -8,6 +8,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   background-color: #1a1a2e;
 }
 
@@ -115,6 +116,7 @@
   padding: 0 30px 30px 30px;
   box-sizing: border-box;
   background-color: #1a1a2e;
+  margin-top: auto;
 }
 
 .input-container {
