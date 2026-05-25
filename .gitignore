@@ -21,6 +21,9 @@ frontend/release/
 frontend/.npm/
 frontend/coverage/
 
+# Public Assets
+public/
+
 # Python (AI Service)
 backend/ai-service/__pycache__/
 backend/ai-service/.pytest_cache/
