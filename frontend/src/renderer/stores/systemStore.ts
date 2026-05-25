@@ -16,6 +16,12 @@ export type ModalPanelType = 'dag' | 'memory' | 'settings' | 'logs';
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
 
 /**
+ * 情绪状态 (ESM)
+ * 用于驱动 Live2D 表情与动作
+ */
+export type EmotionState = 'neutral' | 'happy' | 'sad' | 'angry' | 'thinking' | 'surprised';
+
+/**
  * 系统状态切片
  */
 interface SystemState {
@@ -31,6 +37,8 @@ interface SystemState {
   systemLogs: string[];
   // 是否显示调试面板
   isDebugPanelOpen: boolean;
+  // 当前情绪状态
+  currentEmotion: EmotionState;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -42,6 +50,7 @@ interface SystemState {
   addSystemLog: (log: string) => void;
   clearSystemLogs: () => void;
   setDebugPanelOpen: (isOpen: boolean) => void;
+  setEmotion: (emotion: EmotionState) => void;
 }
 
 /**
@@ -54,6 +63,7 @@ export const useSystemStore = create<SystemState>((set) => ({
   activeModalPanel: null,
   systemLogs: [],
   isDebugPanelOpen: false,
+  currentEmotion: 'neutral',
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
@@ -84,4 +94,7 @@ export const useSystemStore = create<SystemState>((set) => ({
 
   // 设置调试面板开关
   setDebugPanelOpen: (isOpen) => set({ isDebugPanelOpen: isOpen }),
+
+  // 设置情绪状态
+  setEmotion: (emotion) => set({ currentEmotion: emotion }),
 }));

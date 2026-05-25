@@ -10,6 +10,7 @@
  */
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+import * as PIXI from 'pixi.js';
 
 // 导入全局样式
 import './styles/global.css';
@@ -24,6 +25,10 @@ import { Modal } from './components/Modal/Modal';
 import { wsManager } from './services/wsManager';
 import { useSessionStore } from './stores/sessionStore';
 import { useSystemStore } from './stores/systemStore';
+
+// 挂载全局 PIXI，必须在任何 pixi-live2d-display 导入前完成
+// @ts-ignore
+window.PIXI = PIXI;
 
 /**
  * Luna AI 主应用组件
