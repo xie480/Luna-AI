@@ -1,0 +1,301 @@
+/**
+ * Luna AI 模态窗口样式
+ * 居中弹窗，带有半透明遮罩层
+ */
+
+/* 模态窗口遮罩层 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 模态窗口容器 */
+.modal-container {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  border: 1px solid #2d2d44;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 模态窗口头部 */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2d2d44;
+}
+
+.modal-title {
+  color: #e5e7eb;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #6b7280;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: #ef4444;
+  background-color: #2d2d44;
+}
+
+/* 模态窗口内容区 */
+.modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.modal-content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 面板通用样式 */
+.panel {
+  height: 100%;
+}
+
+.empty-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #6b7280;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 14px;
+}
+
+/* DAG 任务树面板 */
+.dag-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.plan-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-header h3 {
+  color: #e5e7eb;
+  font-size: 16px;
+  margin: 0;
+}
+
+.plan-id {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.nodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.node-item {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: #16162a;
+  border: 1px solid #2d2d44;
+}
+
+.node-item.running {
+  border-color: #f59e0b;
+}
+
+.node-item.completed {
+  border-color: #22c55e;
+}
+
+.node-item.failed {
+  border-color: #ef4444;
+}
+
+.node-item.waiting_user_auth {
+  border-color: #8b5cf6;
+}
+
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.node-name {
+  color: #e5e7eb;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.node-status {
+  color: #6b7280;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: #2d2d44;
+}
+
+.node-description {
+  color: #9ca3af;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.node-progress {
+  height: 4px;
+  background-color: #2d2d44;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: #4f46e5;
+  transition: width 0.3s;
+}
+
+.node-error {
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* 记忆面板 */
+.memory-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.memory-section h4 {
+  color: #e5e7eb;
+  font-size: 14px;
+  margin: 0 0 12px 0;
+}
+
+.memory-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.memory-list li {
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 8px 12px;
+  background-color: #16162a;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+/* 设置面板 */
+.settings-view h3 {
+  color: #e5e7eb;
+  font-size: 16px;
+  margin: 0 0 16px 0;
+}
+
+.settings-placeholder {
+  color: #6b7280;
+  font-size: 14px;
+  padding: 20px;
+  background-color: #16162a;
+  border-radius: 8px;
+}
+
+/* 日志面板 */
+.logs-view h3 {
+  color: #e5e7eb;
+  font-size: 16px;
+  margin: 0 0 16px 0;
+}
+
+.logs-container {
+  background-color: #0d0d1a;
+  border-radius: 8px;
+  padding: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.logs-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.log-item {
+  color: #00ff00;
+  font-family: monospace;
+  font-size: 12px;
+  margin-bottom: 4px;
+}

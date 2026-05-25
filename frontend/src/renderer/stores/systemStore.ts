@@ -1,13 +1,14 @@
 /**
  * Luna AI 系统状态管理
- * 管理连接状态、侧边栏状态等系统级配置
+ * 管理连接状态、左侧边栏状态、模态窗口状态等系统级配置
  */
 import { create } from 'zustand';
 
 /**
- * 侧边栏面板类型
+ * 模态窗口面板类型
+ * 用于标识当前模态窗口展示的内容
  */
-export type SidebarPanelType = 'dag' | 'memory' | 'settings' | 'logs';
+export type ModalPanelType = 'dag' | 'memory' | 'settings' | 'logs';
 
 /**
  * WebSocket 连接状态
@@ -20,10 +21,12 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 're
 interface SystemState {
   // WebSocket 连接状态
   connectionStatus: ConnectionStatus;
-  // 侧边栏是否展开
-  isSidebarOpen: boolean;
-  // 当前激活的侧边栏面板
-  activeSidebarPanel: SidebarPanelType;
+  // 左侧边栏是否展开
+  isLeftSidebarOpen: boolean;
+  // 模态窗口是否打开
+  isModalOpen: boolean;
+  // 当前模态窗口展示的面板类型
+  activeModalPanel: ModalPanelType | null;
   // 系统日志（用于调试面板）
   systemLogs: string[];
   // 是否显示调试面板
@@ -31,9 +34,11 @@ interface SystemState {
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
-  openSidebar: (panel: SidebarPanelType) => void;
-  closeSidebar: () => void;
-  toggleSidebar: () => void;
+  toggleLeftSidebar: () => void;
+  openLeftSidebar: () => void;
+  closeLeftSidebar: () => void;
+  openModal: (panel: ModalPanelType) => void;
+  closeModal: () => void;
   addSystemLog: (log: string) => void;
   clearSystemLogs: () => void;
   setDebugPanelOpen: (isOpen: boolean) => void;
@@ -44,22 +49,29 @@ interface SystemState {
  */
 export const useSystemStore = create<SystemState>((set) => ({
   connectionStatus: 'disconnected',
-  isSidebarOpen: false,
-  activeSidebarPanel: 'dag',
+  isLeftSidebarOpen: false,
+  isModalOpen: false,
+  activeModalPanel: null,
   systemLogs: [],
   isDebugPanelOpen: false,
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
-  // 打开侧边栏并切换到指定面板
-  openSidebar: (panel) => set({ isSidebarOpen: true, activeSidebarPanel: panel }),
+  // 切换左侧边栏展开状态
+  toggleLeftSidebar: () => set((state) => ({ isLeftSidebarOpen: !state.isLeftSidebarOpen })),
 
-  // 关闭侧边栏
-  closeSidebar: () => set({ isSidebarOpen: false }),
+  // 打开左侧边栏
+  openLeftSidebar: () => set({ isLeftSidebarOpen: true }),
 
-  // 切换侧边栏展开状态
-  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+  // 关闭左侧边栏
+  closeLeftSidebar: () => set({ isLeftSidebarOpen: false }),
+
+  // 打开模态窗口并展示指定面板
+  openModal: (panel) => set({ isModalOpen: true, activeModalPanel: panel }),
+
+  // 关闭模态窗口
+  closeModal: () => set({ isModalOpen: false, activeModalPanel: null }),
 
   // 添加系统日志
   addSystemLog: (log) =>

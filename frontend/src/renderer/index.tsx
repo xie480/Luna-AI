@@ -2,10 +2,10 @@
  * Luna AI 渲染进程入口
  * 负责：UI 渲染、Live2D 展示、状态展示、WebSocket 监听
  * 注意：渲染进程禁止直接访问本地 DB、Redis、Python 服务
- * 
+ *
  * 架构原则：
  * 1. 主界面仅展示聊天界面，保持极简
- * 2. 其他界面（DAG 任务树、记忆面板、设置）通过侧边栏呼出
+ * 2. 左侧边栏提供导航菜单，点击菜单项打开居中模态窗口
  * 3. 所有状态来自 Go Runtime 推送，前端仅为状态投影
  */
 import React, { useEffect } from 'react';
@@ -18,6 +18,7 @@ import './styles/global.css';
 import { ChatView } from './components/ChatView/ChatView';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { SidebarTrigger } from './components/SidebarTrigger/SidebarTrigger';
+import { Modal } from './components/Modal/Modal';
 
 // 导入服务和 Store
 import { wsManager } from './services/wsManager';
@@ -26,7 +27,7 @@ import { useSystemStore } from './stores/systemStore';
 
 /**
  * Luna AI 主应用组件
- * 采用极简布局：主界面为纯聊天区，侧边栏呼出其他功能
+ * 采用极简布局：主界面为纯聊天区，左侧边栏提供导航，模态窗口展示功能面板
  */
 // eslint-disable-next-line react-refresh/only-export-components
 const App: React.FC = () => {
@@ -34,6 +35,7 @@ const App: React.FC = () => {
   // 注意：Zustand 的 selector 返回的函数引用是稳定的，不会导致 useEffect 重复执行
   const setSessionId = useSessionStore((state) => state.setSessionId);
   const addSystemLog = useSystemStore((state) => state.addSystemLog);
+  const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
 
   /**
    * 应用启动时建立 WebSocket 连接
@@ -60,15 +62,24 @@ const App: React.FC = () => {
   return (
     <div className="app-container">
       {/* 主界面：纯聊天界面，占据全部空间 */}
-      <main className="main-content">
+      <main
+        className="main-content"
+        style={{
+          marginLeft: isLeftSidebarOpen ? '260px' : '0',
+          transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
         <ChatView />
       </main>
 
-      {/* 侧边栏呼出按钮：悬浮在右上角 */}
+      {/* 左侧边栏开关按钮：固定在左上角 */}
       <SidebarTrigger />
 
-      {/* 侧边栏：用于展示 DAG 任务树、记忆面板、设置等 */}
+      {/* 左侧边栏：提供导航菜单 */}
       <Sidebar />
+
+      {/* 模态窗口：居中展示功能面板 */}
+      <Modal />
     </div>
   );
 };
