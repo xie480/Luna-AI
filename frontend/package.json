@@ -2,10 +2,12 @@
   "name": "luna-frontend",
   "version": "0.1.0",
   "description": "Luna AI Desktop Assistant Frontend",
-  "main": "src/main/index.js",
+  "main": "out/main/index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build && electron-builder",
+    "build:dir": "electron-vite build && electron-builder --dir",
+    "preview": "electron-vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "test": "vitest run"
@@ -22,8 +24,9 @@
     "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react": "^4.2.1",
     "@vitest/ui": "^3.0.0",
-    "electron": "^30.0.0",
+    "electron": "^30.5.1",
     "electron-builder": "^24.13.3",
+    "electron-vite": "^5.0.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.6",
@@ -31,6 +34,7 @@
     "prettier": "^3.2.5",
     "typescript": "^5.2.2",
     "vite": "^5.2.0",
+    "vite-plugin-electron": "^0.28.8",
     "vitest": "^3.0.0"
   }
 }
