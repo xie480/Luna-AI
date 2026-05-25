@@ -9,7 +9,21 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  background-color: transparent; /* 移除背景色，让底层背景透出 */
+  position: relative;
+  z-index: 0; /* 创建层叠上下文 */
+}
+
+/* 为整个应用添加底层背景 */
+.chat-view::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-color: #1a1a2e;
+  z-index: -2; /* 确保背景在最底层，低于 Live2D 的 -1 */
 }
 
 /* 消息列表容器 */
@@ -115,7 +129,7 @@
   width: 100%;
   padding: 0 30px 30px 30px;
   box-sizing: border-box;
-  background-color: #1a1a2e;
+  background-color: transparent; /* 移除背景色，避免遮挡模型 */
   margin-top: auto;
 }
 

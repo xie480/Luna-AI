@@ -11,6 +11,7 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react()],
+    publicDir: path.resolve(__dirname, 'public'),
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

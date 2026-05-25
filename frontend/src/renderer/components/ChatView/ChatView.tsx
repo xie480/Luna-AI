@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { wsManager } from '../../services/wsManager';
+import { Live2DView } from '../Live2DView/Live2DView';
 import './ChatView.css';
 
 /**
@@ -82,14 +83,14 @@ export const ChatView: React.FC = () => {
     content: string;
     status: string;
     error?: string;
-  }): React.ReactNode => {
+  }, index: number): React.ReactNode => {
     const isUser = msg.role === 'user';
     const isStreaming = msg.status === 'streaming';
     const hasError = msg.status === 'error';
 
     return (
       <div
-        key={msg.messageId}
+        key={msg.messageId || `msg-${index}`}
         className={`chat-message ${isUser ? 'user-message' : 'assistant-message'}`}
       >
         <div className={`message-bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
@@ -119,7 +120,7 @@ export const ChatView: React.FC = () => {
             <div className="empty-text">开始与 Luna 对话吧...</div>
           </div>
         ) : (
-          messages.map(renderMessage)
+          messages.map((msg, index) => renderMessage(msg, index))
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -145,6 +146,7 @@ export const ChatView: React.FC = () => {
             发送
           </button>
         </div>
+        <Live2DView />
       </div>
 
       {/* 连接状态指示器 */}
