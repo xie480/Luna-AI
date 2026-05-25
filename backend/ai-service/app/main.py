@@ -28,7 +28,8 @@ async def serve_grpc():
     communication_pb2_grpc.add_CommunicationServiceServicer_to_server(
         CommunicationServiceServicer(), server
     )
-    listen_addr = f"[::]:{settings.grpc_port}"
+    # 使用 0.0.0.0 绑定 IPv4 地址，确保 Windows 下 Go 客户端能正常连接
+    listen_addr = f"0.0.0.0:{settings.grpc_port}"
     server.add_insecure_port(listen_addr)
     logger.info(f"gRPC 服务启动，监听地址: {listen_addr}")
     await server.start()

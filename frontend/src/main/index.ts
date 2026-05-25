@@ -15,10 +15,7 @@ let mainWindow: BrowserWindow | null = null;
  */
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
+    show: false, // 先隐藏窗口，等待最大化后再显示，避免视觉闪烁
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -26,6 +23,10 @@ function createWindow(): void {
     },
     title: 'Luna AI',
   });
+
+  // 推荐使用最大化（保留 Windows/macOS 任务栏）
+  mainWindow.maximize();
+  mainWindow.show();
 
   // 开发环境加载 Vite 开发服务器，生产环境加载打包后的文件
   if (process.env.NODE_ENV === 'development') {

@@ -96,10 +96,24 @@ func main() {
 	wsServer := api.NewWSServer(aiClient)
 	mux.HandleFunc("/ws", wsServer.HandleWS)
 
+	// 定义 CORS 中间件，允许前端跨域请求 HTTP 接口
+	corsMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	// 7. 启动 HTTP 服务 - 创建并启动 HTTP 服务器
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),  // 监听地址
-		Handler: mux,                                   // 请求处理器
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port), // 监听地址
+		Handler: corsMiddleware(mux),                  // 包装 CORS 中间件
 	}
 
 	// 在独立的 goroutine 中启动服务器，避免阻塞主程序流程
