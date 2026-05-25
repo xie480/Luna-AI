@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const setSessionId = useSessionStore((state) => state.setSessionId);
   const addSystemLog = useSystemStore((state) => state.addSystemLog);
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
+  const globalMessage = useSystemStore((state) => state.globalMessage);
 
   /**
    * 应用启动时建立 WebSocket 连接
@@ -85,6 +86,13 @@ const App: React.FC = () => {
 
       {/* 模态窗口：居中展示功能面板 */}
       <Modal />
+
+      {/* 全局消息提示 */}
+      {globalMessage && (
+        <div className="global-message-toast">
+          {globalMessage}
+        </div>
+      )}
     </div>
   );
 };

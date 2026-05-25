@@ -3,7 +3,7 @@
  * 提供类似 ChatGPT 的左侧导航菜单
  * 点击菜单项时打开居中模态窗口展示对应内容
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { useSystemStore, ModalPanelType } from '../../stores/systemStore';
 import './Sidebar.css';
 
@@ -11,9 +11,13 @@ import './Sidebar.css';
  * 菜单项配置
  */
 interface MenuItem {
-  id: ModalPanelType;
+  id: ModalPanelType | 'live2d-config';
   label: string;
   icon: React.ReactNode;
+  subItems?: {
+    id: 'transform' | 'tracking';
+    label: string;
+  }[];
 }
 
 /**
@@ -66,6 +70,21 @@ const MENU_ITEMS: MenuItem[] = [
       </svg>
     ),
   },
+  {
+    id: 'live2d-config',
+    label: '立绘初始化配置',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20.5a8.3 8.3 0 0 1-3-1.5 8.3 8.3 0 0 1-3-3 8.3 8.3 0 0 1-1.5-3 8.3 8.3 0 0 1 0-6 8.3 8.3 0 0 1 1.5-3 8.3 8.3 0 0 1 3-1.5 8.3 8.3 0 0 1 6 0 8.3 8.3 0 0 1 3 1.5 8.3 8.3 0 0 1 1.5 3 8.3 8.3 0 0 1 0 6 8.3 8.3 0 0 1-1.5 3 8.3 8.3 0 0 1-3 3 8.3 8.3 0 0 1-3 1.5z"></path>
+        <path d="M12 16v-4"></path>
+        <path d="M12 8h.01"></path>
+      </svg>
+    ),
+    subItems: [
+      { id: 'transform', label: '立绘配置' },
+      { id: 'tracking', label: '鼠标追踪配置' },
+    ],
+  },
 ];
 
 /**
@@ -77,13 +96,30 @@ export const Sidebar: React.FC = () => {
   // 从 Store 获取状态
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
   const openModal = useSystemStore.getState().openModal;
+  const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
+  const showGlobalMessage = useSystemStore((state) => state.showGlobalMessage);
+
+  const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
 
   /**
    * 处理菜单项点击
-   * 打开对应的模态窗口面板
+   * 打开对应的模态窗口面板或展开子菜单
    */
-  const handleMenuClick = (panel: ModalPanelType): void => {
-    openModal(panel);
+  const handleMenuClick = (item: MenuItem): void => {
+    if (item.subItems) {
+      setExpandedMenu(expandedMenu === item.id ? null : item.id);
+    } else {
+      openModal(item.id as ModalPanelType);
+    }
+  };
+
+  const handleSubMenuClick = (subId: 'transform' | 'tracking') => {
+    setLive2dConfigMode(subId);
+    if (subId === 'transform') {
+      showGlobalMessage('当前正在配置立绘', 0);
+    } else if (subId === 'tracking') {
+      showGlobalMessage('当前正在配置鼠标追踪点', 0);
+    }
   };
 
   return (
@@ -99,15 +135,34 @@ export const Sidebar: React.FC = () => {
       {/* 侧边栏菜单 */}
       <nav className="sidebar-menu">
         {MENU_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            className="sidebar-menu-item"
-            onClick={() => handleMenuClick(item.id)}
-            title={item.label}
-          >
-            <span className="menu-icon">{item.icon}</span>
-            <span className="menu-label">{item.label}</span>
-          </button>
+          <div key={item.id} className="sidebar-menu-group">
+            <button
+              className={`sidebar-menu-item ${expandedMenu === item.id ? 'expanded' : ''}`}
+              onClick={() => handleMenuClick(item)}
+              title={item.label}
+            >
+              <span className="menu-icon">{item.icon}</span>
+              <span className="menu-label">{item.label}</span>
+              {item.subItems && (
+                <span className="menu-arrow">
+                  {expandedMenu === item.id ? '▼' : '▶'}
+                </span>
+              )}
+            </button>
+            {item.subItems && expandedMenu === item.id && (
+              <div className="sidebar-sub-menu">
+                {item.subItems.map((sub) => (
+                  <button
+                    key={sub.id}
+                    className="sidebar-sub-menu-item"
+                    onClick={() => handleSubMenuClick(sub.id)}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
       </nav>
 

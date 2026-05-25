@@ -23,6 +23,11 @@ export const Live2DView: React.FC = () => {
 
   const currentEmotion = useSystemStore((state) => state.currentEmotion);
   const addSystemLog = useSystemStore((state) => state.addSystemLog);
+  const live2dConfigMode = useSystemStore((state) => state.live2dConfigMode);
+  const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
+  const showGlobalMessage = useSystemStore((state) => state.showGlobalMessage);
+
+  const [trackingOriginOffset, setTrackingOriginOffset] = useState({ x: 0, y: 0 });
 
   // 1. 检查 WebGL 支持
   useEffect(() => {
@@ -33,45 +38,6 @@ export const Live2DView: React.FC = () => {
     }
   }, [addSystemLog]);
 
-  // 2. 检查核心脚本是否已全局可用，若未加载则动态注入
-  useEffect(() => {
-    // @ts-ignore
-    if (window.Live2DCubismCore) {
-      setIsScriptLoaded(true);
-      return;
-    }
-
-    // 使用 window.location.origin 构建绝对 URL，避免 Vite/electron-vite 路径解析差异
-    const baseUrl = window.location.origin;
-
-    // 动态注入 live2dcubismcore.min.js
-    const s1 = document.createElement('script');
-    s1.src = baseUrl + '/live2dcubismcore.min.js';
-    s1.onload = () => {
-      setIsScriptLoaded(true);
-      addSystemLog('Live2D 核心脚本加载成功');
-    };
-    s1.onerror = () => {
-      setIsScriptLoaded(false);
-      addSystemLog('Live2D 核心脚本加载失败');
-    };
-
-    // 动态注入 live2d.min.js（编排层）
-    const s2 = document.createElement('script');
-    s2.src = baseUrl + '/live2d.min.js';
-    s2.onerror = () => {
-      console.error('Live2D 编排库加载失败');
-    };
-
-    document.head.appendChild(s1);
-    document.head.appendChild(s2);
-
-    return () => {
-      // 组件卸载时移除动态注入的脚本
-      if (document.head.contains(s1)) document.head.removeChild(s1);
-      if (document.head.contains(s2)) document.head.removeChild(s2);
-    };
-  }, [addSystemLog]);
 
   // 初始化 PIXI Application
   useEffect(() => {
@@ -123,6 +89,9 @@ export const Live2DView: React.FC = () => {
     let cancelled = false;
     let currentModel: any = null;
 
+    const TRANSFORM_KEY = "luna:transform";
+    const TRACKING_KEY = "luna:tracking";
+
     const load = async () => {
       try {
         const { Live2DModel } = await import("pixi-live2d-display/cubism4");
@@ -148,6 +117,29 @@ export const Live2DView: React.FC = () => {
         // 初始位置放在屏幕中下方
         live2dModel.x = app.renderer.width / 2;
         live2dModel.y = app.renderer.height / 2 + 150;
+
+        // 尝试加载持久化的配置
+        try {
+          const rawTransform = localStorage.getItem(TRANSFORM_KEY);
+          if (rawTransform) {
+            const data = JSON.parse(rawTransform);
+            if (typeof data.x === "number" && !isNaN(data.x)) container.x = data.x;
+            if (typeof data.y === "number" && !isNaN(data.y)) container.y = data.y;
+            if (typeof data.scale === "number" && !isNaN(data.scale) && data.scale > 0) {
+              container.scale.set(data.scale);
+            }
+          }
+
+          const rawTracking = localStorage.getItem(TRACKING_KEY);
+          if (rawTracking) {
+            const data = JSON.parse(rawTracking);
+            if (typeof data.x === "number" && !isNaN(data.x) && typeof data.y === "number" && !isNaN(data.y)) {
+              setTrackingOriginOffset({ x: data.x, y: data.y });
+            }
+          }
+        } catch (e) {
+          console.warn("[Live2D] 加载持久化配置失败", e);
+        }
         
         // 关闭模型自带的交互，我们通过 window 捕获阶段手动处理
         live2dModel.interactive = false;
@@ -192,16 +184,34 @@ export const Live2DView: React.FC = () => {
       // 手动进行碰撞检测：使用模型的包围盒
       const bounds = model.getBounds();
       if (bounds.contains(point.x, point.y)) {
-        dragging.current = true;
-        lastPos.current = { x: e.clientX, y: e.clientY };
-        // 阻止事件向下传播，防止触发底层 UI 的点击事件
-        e.stopPropagation();
-        e.preventDefault();
+        if (live2dConfigMode === 'tracking') {
+          // 鼠标追踪配置模式：记录点击位置为追踪锚点
+          const local = container.toLocal(point, app.stage);
+          setTrackingOriginOffset({ x: local.x, y: local.y });
+          
+          // 持久化追踪锚点
+          const TRACKING_KEY = "luna:tracking";
+          localStorage.setItem(TRACKING_KEY, JSON.stringify({ x: local.x, y: local.y }));
+          
+          showGlobalMessage('追踪锚点已更新', 2000);
+          
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+
+        if (live2dConfigMode === 'transform') {
+          dragging.current = true;
+          lastPos.current = { x: e.clientX, y: e.clientY };
+          // 阻止事件向下传播，防止触发底层 UI 的点击事件
+          e.stopPropagation();
+          e.preventDefault();
+        }
       }
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!dragging.current) return;
+      if (!dragging.current || live2dConfigMode !== 'transform') return;
       const dx = e.clientX - lastPos.current.x;
       const dy = e.clientY - lastPos.current.y;
       lastPos.current = { x: e.clientX, y: e.clientY };
@@ -233,12 +243,12 @@ export const Live2DView: React.FC = () => {
       window.removeEventListener("pointerup", onPointerUp, { capture: true });
       window.removeEventListener("pointercancel", onPointerUp, { capture: true });
     };
-  }, [model, container, app]);
+  }, [model, container, app, live2dConfigMode, showGlobalMessage]);
 
   // 2. 滚轮缩放
   useEffect(() => {
     const onWheel = (ev: WheelEvent) => {
-      if (!model || !app || !container) return;
+      if (!model || !app || !container || live2dConfigMode !== 'transform') return;
       const rect = canvasRef.current!.getBoundingClientRect();
       const globalPoint = new PIXI.Point(ev.clientX - rect.left, ev.clientY - rect.top);
       
@@ -260,7 +270,7 @@ export const Live2DView: React.FC = () => {
     // 使用 capture: true 优先拦截滚轮事件
     window.addEventListener("wheel", onWheel, { passive: false, capture: true });
     return () => window.removeEventListener("wheel", onWheel, { capture: true } as any);
-  }, [model, app, container]);
+  }, [model, app, container, live2dConfigMode]);
 
   // 3. 视线追踪（全局 pointermove）
   useEffect(() => {
@@ -271,13 +281,17 @@ export const Live2DView: React.FC = () => {
       const world = new PIXI.Point(ev.clientX - rect.left, ev.clientY - rect.top);
       const local = container.toLocal(world, app.stage);
       
+      // 引入自定义追踪原点偏移量
+      const targetX = local.x - trackingOriginOffset.x;
+      const targetY = local.y - trackingOriginOffset.y;
+
       // 调用 pixi-live2d-display 提供的 focus 方法实现视线追踪
       // focus 接受局部坐标 (x, y)
-      model.focus(local.x, local.y);
+      model.focus(targetX, targetY);
     };
     window.addEventListener("pointermove", onGlobalMove);
     return () => window.removeEventListener("pointermove", onGlobalMove);
-  }, [model, container, app]);
+  }, [model, container, app, trackingOriginOffset]);
 
   // 4. 情绪状态监听与表情/动作触发
   useEffect(() => {
@@ -311,18 +325,59 @@ export const Live2DView: React.FC = () => {
     }
   }, [model, currentEmotion]);
 
+  // 保存立绘配置
+  const handleSaveTransform = () => {
+    if (!container) return;
+    const TRANSFORM_KEY = "luna:transform";
+    const data = { x: container.x, y: container.y, scale: container.scale.x };
+    localStorage.setItem(TRANSFORM_KEY, JSON.stringify(data));
+    showGlobalMessage('立绘配置已保存', 2000);
+    setLive2dConfigMode('none');
+  };
+
+  // 退出配置模式
+  const handleExitConfig = () => {
+    setLive2dConfigMode('none');
+    showGlobalMessage('已退出配置模式', 2000);
+  };
+
   if (!isWebGLSupported || !isScriptLoaded) {
     return null; // 或者渲染一个兜底的 UI
   }
 
   return (
-    <div id="live2d-wrapper">
+    <div id="live2d-wrapper" className={live2dConfigMode !== 'none' ? 'config-mode' : ''}>
       <canvas
         ref={canvasRef}
         id="live2d-canvas"
         className="live2d-canvas"
         onContextMenu={(e) => e.preventDefault()}
       />
+      
+      {/* 追踪锚点视觉反馈 */}
+      {live2dConfigMode === 'tracking' && container && app && (
+        <div
+          className="tracking-anchor-indicator"
+          style={{
+            left: container.toGlobal(new PIXI.Point(trackingOriginOffset.x, trackingOriginOffset.y)).x,
+            top: container.toGlobal(new PIXI.Point(trackingOriginOffset.x, trackingOriginOffset.y)).y,
+          }}
+        />
+      )}
+
+      {/* 配置模式操作面板 */}
+      {live2dConfigMode !== 'none' && (
+        <div className="live2d-config-panel">
+          {live2dConfigMode === 'transform' && (
+            <button className="config-btn save-btn" onClick={handleSaveTransform}>
+              保存配置
+            </button>
+          )}
+          <button className="config-btn exit-btn" onClick={handleExitConfig}>
+            退出配置
+          </button>
+        </div>
+      )}
     </div>
   );
 };

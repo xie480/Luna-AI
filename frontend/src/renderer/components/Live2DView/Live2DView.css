@@ -18,3 +18,77 @@
   -webkit-user-select: none;
   -webkit-touch-callout: none; /* 防止 iOS 长按弹出菜单 */
 }
+
+/* 配置模式下允许交互 */
+#live2d-wrapper.config-mode {
+  pointer-events: auto;
+  background-color: rgba(0, 0, 0, 0.2); /* 添加半透明遮罩以突出配置状态 */
+}
+
+/* 追踪锚点指示器 */
+.tracking-anchor-indicator {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background-color: #ff4757;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.8);
+  z-index: 20;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 71, 87, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 71, 87, 0);
+  }
+}
+
+/* 配置操作面板 */
+.live2d-config-panel {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  z-index: 30;
+  pointer-events: auto;
+}
+
+.config-btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.save-btn {
+  background-color: #48bb78;
+  color: white;
+}
+
+.save-btn:hover {
+  background-color: #38a169;
+}
+
+.exit-btn {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.exit-btn:hover {
+  background-color: #cbd5e0;
+}

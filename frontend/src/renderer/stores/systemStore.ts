@@ -39,6 +39,10 @@ interface SystemState {
   isDebugPanelOpen: boolean;
   // 当前情绪状态
   currentEmotion: EmotionState;
+  // Live2D 配置模式
+  live2dConfigMode: 'none' | 'transform' | 'tracking';
+  // 全局提示消息
+  globalMessage: string | null;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -51,6 +55,9 @@ interface SystemState {
   clearSystemLogs: () => void;
   setDebugPanelOpen: (isOpen: boolean) => void;
   setEmotion: (emotion: EmotionState) => void;
+  setLive2dConfigMode: (mode: 'none' | 'transform' | 'tracking') => void;
+  showGlobalMessage: (message: string, duration?: number) => void;
+  hideGlobalMessage: () => void;
 }
 
 /**
@@ -64,6 +71,8 @@ export const useSystemStore = create<SystemState>((set) => ({
   systemLogs: [],
   isDebugPanelOpen: false,
   currentEmotion: 'neutral',
+  live2dConfigMode: 'none',
+  globalMessage: null,
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
@@ -97,4 +106,25 @@ export const useSystemStore = create<SystemState>((set) => ({
 
   // 设置情绪状态
   setEmotion: (emotion) => set({ currentEmotion: emotion }),
+
+  // 设置 Live2D 配置模式
+  setLive2dConfigMode: (mode) => set({ live2dConfigMode: mode }),
+
+  // 显示全局提示消息
+  showGlobalMessage: (message, duration = 3000) => {
+    set({ globalMessage: message });
+    if (duration > 0) {
+      setTimeout(() => {
+        set((state) => {
+          if (state.globalMessage === message) {
+            return { globalMessage: null };
+          }
+          return state;
+        });
+      }, duration);
+    }
+  },
+
+  // 隐藏全局提示消息
+  hideGlobalMessage: () => set({ globalMessage: null }),
 }));

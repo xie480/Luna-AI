@@ -66,6 +66,38 @@
   background-color: #4a5568;
 }
 
+.sidebar-menu-item.expanded {
+  background-color: #4a5568;
+}
+
+.menu-arrow {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.sidebar-sub-menu {
+  background-color: #1a202c;
+  padding: 8px 0;
+}
+
+.sidebar-sub-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 20px 10px 50px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.sidebar-sub-menu-item:hover {
+  background-color: #2d3748;
+  color: white;
+}
+
 .menu-icon {
   display: flex;
   align-items: center;
