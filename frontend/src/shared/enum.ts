@@ -37,7 +37,6 @@ export const WS_MSG_TYPE = {
   // 基础消息类型
   PING: "PING",
   PONG: "PONG",
-  CHAT_REQUEST: "CHAT_REQUEST",
   CHAT_STREAM: "CHAT_STREAM",
   ERROR: "ERROR",
   // 前端发送的命令类型 (CMD_*)

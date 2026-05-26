@@ -4,7 +4,6 @@ package types
 const (
 	WSMsgTypePing             = "PING"
 	WSMsgTypePong             = "PONG"
-	WSMsgTypeChatRequest      = "CHAT_REQUEST"
 	WSMsgTypeChatStream       = "CHAT_STREAM"
 	WSMsgTypeError            = "ERROR"
 	WSMsgTypeCmdSyncInitState = "CMD_SYNC_INIT_STATE"
