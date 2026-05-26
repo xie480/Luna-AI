@@ -37,6 +37,7 @@
   /* 隐藏滚动条但保留滚动功能 */
   scrollbar-width: none;
   -ms-overflow-style: none;
+  margin-top: 60px;
 }
 
 .messages-container::-webkit-scrollbar {
