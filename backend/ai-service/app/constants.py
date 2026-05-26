@@ -1,7 +1,14 @@
-from enum import IntEnum
+from enum import Enum, IntEnum
 from typing import Any
 
 from pydantic import BaseModel
+
+
+class Role(str, Enum):
+    """全局统一的角色枚举"""
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
 
 
 class ErrorCode(IntEnum):

@@ -17,3 +17,10 @@ const (
 	HealthStatusUnhealthy = "unhealthy"
 	HealthStatusDegraded  = "degraded"
 )
+
+// 角色常量定义
+const (
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleSystem    = "system"
+)

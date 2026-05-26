@@ -36,6 +36,7 @@ from pydantic import BaseModel, ValidationError
 from app.config import settings
 from app.logger import get_logger
 from app.agent.prompts import get_system_prompt, render_runtime_prompt
+from app.constants import Role
 from app.llm.context_manager import (
     format_messages_for_api,
     should_flush_buffer,
@@ -203,28 +204,16 @@ class LLMClient:
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
         reraise=True,
-        before_sleep=before_sleep_log(logger, 20),  # 在重试前记录日志
+        before_sleep=before_sleep_log(logger, 20),
     )
     async def _call_api_with_retry(
         self,
-        messages: List[Dict[str, str]],
+        prompt: str,
         **kwargs: Any
     ) -> Any:
-        """
-        调用 OpenAI API，带有重试机制
-
-        做什么：执行实际的 LLM API 调用，仅在遇到限流或连接错误时重试。
-        为什么这样做：使用 tenacity 库实现指数退避重试，避免 API 抖动导致请求失败。
-        输入输出：
-            - 输入：messages 消息列表、kwargs 其他 API 参数
-            - 输出：OpenAI API 流式响应对象
-        边界条件：
-            - 仅对 RateLimitError (429) 和 APIConnectionError 重试
-            - 最多重试 3 次
-            - 重试间隔：2s, 4s, 8s（指数退避）
-        异常行为：重试耗尽后抛出原始异常，由上层调用方处理。
-        """
         logger.info("正在调用 LLM API（带重试机制）")
+        # 内部统一封装为单体 user 消息
+        messages = [{"role": Role.USER.value, "content": prompt}]
         return await self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
@@ -234,33 +223,15 @@ class LLMClient:
 
     async def stream_chat(
         self,
-        messages: List[Dict[str, str]],
+        prompt: str,
         trace_id: str,
         **kwargs: Any
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        流式对话接口（集成上下文管理 + 缓冲平滑）
-
-        做什么：接收已组装好的 messages 列表，调用 LLM API 并流式返回响应。
-              内部使用 buffer 机制合并小 chunk 后输出，降低前端渲染频率。
-        为什么这样做：提供统一的流式入口，确保所有输出经过 Pydantic 校验。
-        输入输出：
-            - 输入：messages 消息列表、trace_id 追踪 ID、kwargs 其他 API 参数
-            - 输出：AsyncGenerator，yield 包含 chunk, is_finished, finish_reason, error 的 dict
-        边界条件：
-            - messages 必须包含 system prompt 作为第一条消息
-            - kwargs 可传入 temperature, max_tokens 等
-        异常行为：
-            - APIError：记录错误日志并返回错误响应
-            - 未知异常：记录错误日志并返回通用错误响应
-        """
         logger.info(f"[TraceID:{trace_id}] 开始调用 LLM API, model: {self.model_name}")
-
-        # 初始化流式输出缓冲器
         buffer = LLMStreamBuffer()
 
         try:
-            response = await self._call_api_with_retry(messages, **kwargs)
+            response = await self._call_api_with_retry(prompt, **kwargs)
 
             async for chunk in response:
                 # 检查是否收到结束信号（流结束且无 choices）
@@ -473,29 +444,38 @@ class LLMClient:
             key_facts=key_facts,
         )
 
-        # 使用上下文管理器进行 Token 截断
-        # 注意：rendered_user_message 作为 user content 传入，
-        # 其中已包含原始用户输入 + 生成指令
+        # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
-            messages = format_messages_for_api(
+            truncated_messages = format_messages_for_api(
                 system_prompt=effective_system_prompt,
                 history=history,
                 current_message=rendered_user_message,
                 model_name=self.model_name,
             )
         except Exception as e:
-            # 截断失败时，使用未截断的消息列表（兜底策略）
-            logger.error(
-                f"[TraceID:{trace_id}] 上下文截断失败，使用原始消息: {e}"
-            )
-            messages = [
-                {"role": "system", "content": effective_system_prompt},
+            logger.error(f"[TraceID:{trace_id}] 上下文截断失败，使用原始消息: {e}")
+            truncated_messages = [
+                {"role": Role.SYSTEM.value, "content": effective_system_prompt},
                 *history,
-                {"role": "user", "content": rendered_user_message},
+                {"role": Role.USER.value, "content": rendered_user_message},
             ]
 
-        # 返回流式结果
-        async for chunk_data in self.stream_chat(messages, trace_id, **kwargs):
+        # 2. 将截断后的结构化消息合并为单体完整提示词文本
+        combined_prompt_parts = []
+        for msg in truncated_messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == Role.SYSTEM.value:
+                combined_prompt_parts.append(content)
+            elif role == Role.USER.value:
+                combined_prompt_parts.append(content)
+            elif role == Role.ASSISTANT.value:
+                combined_prompt_parts.append(content)
+
+        full_combined_prompt = "\n\n".join(combined_prompt_parts)
+
+        # 3. 以单体文本发起请求
+        async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, **kwargs):
             yield chunk_data
 
 

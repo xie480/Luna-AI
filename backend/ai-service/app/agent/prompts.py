@@ -18,6 +18,8 @@ from app.templates.template_manager import TemplateManager, get_template_manager
 TEMPLATE_SYSTEM: str = "system"
 # 运行时上下文模板（注入当前用户输入和对话历史）
 TEMPLATE_RUNTIME: str = "runtime"
+# 摘要压缩模板
+TEMPLATE_SUMMARIZE: str = "summarize"
 
 # ============================================================
 # TemplateManager 实例
@@ -74,6 +76,28 @@ def render_runtime_prompt(
         CURRENT_MESSAGE=current_message,
         CORE_SUMMARY=core_summary,
         KEY_FACTS=key_facts,
+    )
+
+
+# ============================================================
+# 摘要压缩提示词
+# ============================================================
+
+def render_summarize_prompt(
+    current_core_summary: str,
+    current_key_facts: str,
+    messages_text: str,
+) -> str:
+    """
+    渲染摘要压缩提示词
+
+    作用：将当前摘要和新对话记录注入 summarize.j2 模板。
+    """
+    return _get_tm().render(
+        TEMPLATE_SUMMARIZE,
+        CURRENT_CORE_SUMMARY=current_core_summary,
+        CURRENT_KEY_FACTS=current_key_facts,
+        MESSAGES_TEXT=messages_text,
     )
 
 

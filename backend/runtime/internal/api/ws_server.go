@@ -228,42 +228,12 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		return
 	}
 
-	// 1. 保存用户消息到 PG 和 Redis
 	userMsgID := cmdPayload.MsgID
 	if userMsgID == "" {
 		userMsgID = snowflake.GenerateStringID()
 	}
-	now := time.Now()
-	
-	userMsg := repository.ChatMessage{
-		MsgID:     userMsgID,
-		Role:      "user",
-		Content:   cmdPayload.Message,
-		Timestamp: now.Unix(),
-	}
-	
-	userMsgModel := &repository.ChatMessageModel{
-		ID:        snowflake.GenerateStringID(),
-		SessionID: cmdPayload.SessionID,
-		MsgID:     userMsgID,
-		Role:      "user",
-		Content:   cmdPayload.Message,
-		CreatedAt: now,
-	}
 
-	if s.pgRepo != nil {
-		if err := s.pgRepo.SaveMessage(ctx, userMsgModel); err != nil {
-			logger.Error(ctx, "保存用户消息到 PG 失败", zap.Error(err))
-		}
-	}
-
-	if s.redisRepo != nil {
-		if _, err := s.redisRepo.SaveMessage(ctx, cmdPayload.SessionID, userMsg); err != nil {
-			logger.Error(ctx, "保存用户消息到 Redis 失败", zap.Error(err))
-		}
-	}
-
-	// 2. 从 Redis 获取上下文 (摘要 + 近期历史)
+	// 1. 仅从 Redis 获取上下文 (摘要 + 近期历史)，此时不保存当前用户消息
 	var summary repository.ChatSummary
 	var recentHistory []repository.ChatMessage
 	if s.redisRepo != nil {
@@ -277,16 +247,13 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	// 将近期历史转换为 protobuf 的 ChatMessage
 	protoHistory := make([]*pb.ChatMessage, 0, len(recentHistory))
 	for _, h := range recentHistory {
-		// 排除当前消息，因为当前消息已经在 req.Message 中
-		if h.MsgID != userMsgID {
-			protoHistory = append(protoHistory, &pb.ChatMessage{
-				Role:    h.Role,
-				Content: h.Content,
-			})
-		}
+		protoHistory = append(protoHistory, &pb.ChatMessage{
+			Role:    h.Role,
+			Content: h.Content,
+		})
 	}
 
-	// 构造 gRPC ChatRequest，包含历史记录、系统提示词和摘要
+	// 构造 gRPC ChatRequest
 	req := &pb.ChatRequest{
 		TraceId:      msg.TraceID,
 		Message:      cmdPayload.Message,
@@ -296,15 +263,9 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		KeyFacts:     summary.KeyFacts,
 	}
 
-	historyCount := len(protoHistory)
-	logger.Info(ctx, "发送流式对话请求到 AI 服务",
-		zap.String("trace_id", msg.TraceID),
-		zap.Int("history_count", historyCount),
-		zap.Bool("has_custom_prompt", cmdPayload.SystemPrompt != ""),
-		zap.Bool("has_summary", summary.CoreSummary != ""),
-	)
+	logger.Info(ctx, "发送流式对话请求到 AI 服务", zap.String("trace_id", msg.TraceID))
 
-	// 调用 AI 服务的 ChatStream
+	// 2. 调用 AI 服务的 ChatStream
 	stream, err := s.aiClient.ChatStream(ctx, req)
 	if err != nil {
 		logger.Error(ctx, "调用 AI 服务 ChatStream 失败", zap.Error(err))
@@ -319,7 +280,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
-			// 流正常结束
 			break
 		}
 		if err != nil {
@@ -330,10 +290,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 
 		if isFirstChunk && resp.Chunk != "" {
 			ttft := time.Since(startTime).Milliseconds()
-			logger.Info(ctx, "首字延迟 (TTFT)",
-				zap.String("trace_id", msg.TraceID),
-				zap.Int64("ttft_ms", ttft),
-			)
+			logger.Info(ctx, "首字延迟 (TTFT)", zap.String("trace_id", msg.TraceID), zap.Int64("ttft_ms", ttft))
 			isFirstChunk = false
 		}
 
@@ -355,7 +312,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 
 		if err := conn.WriteJSON(streamMsg); err != nil {
 			logger.Error(ctx, "发送 CHAT_STREAM 消息失败", zap.Error(err))
-			// 如果发送失败（例如连接已断开），则退出循环
 			return
 		}
 
@@ -364,42 +320,70 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 	}
 
-	// 3. 流式响应结束，保存 Assistant 消息到 PG 和 Redis
+	// 3. 流式响应结束，开启异步协程执行持久化与压缩触发
 	if fullAssistantContent != "" {
-		assistantMsgID := snowflake.GenerateStringID()
-		assistantNow := time.Now()
+		go func() {
+			// 使用脱离原请求生命周期的 Background Context
+			bgCtx := context.Background()
+			assistantMsgID := snowflake.GenerateStringID()
+			assistantNow := time.Now()
+			userNow := startTime // 使用请求开始时间作为用户消息时间
 
-		assistantMsg := repository.ChatMessage{
-			MsgID:     assistantMsgID,
-			Role:      "assistant",
-			Content:   fullAssistantContent,
-			Timestamp: assistantNow.Unix(),
-		}
-
-		assistantMsgModel := &repository.ChatMessageModel{
-			ID:        snowflake.GenerateStringID(),
-			SessionID: cmdPayload.SessionID,
-			MsgID:     assistantMsgID,
-			Role:      "assistant",
-			Content:   fullAssistantContent,
-			CreatedAt: assistantNow,
-		}
-
-		if s.pgRepo != nil {
-			if err := s.pgRepo.SaveMessage(context.Background(), assistantMsgModel); err != nil {
-				logger.Error(context.Background(), "保存 Assistant 消息到 PG 失败", zap.Error(err))
+			// 构造 User 消息实体
+			userMsg := repository.ChatMessage{
+				MsgID:     userMsgID,
+				Role:      types.RoleUser,
+				Content:   cmdPayload.Message,
+				Timestamp: userNow.Unix(),
 			}
-		}
-
-		if s.redisRepo != nil {
-			length, err := s.redisRepo.SaveMessage(context.Background(), cmdPayload.SessionID, assistantMsg)
-			if err != nil {
-				logger.Error(context.Background(), "保存 Assistant 消息到 Redis 失败", zap.Error(err))
-			} else if length > repository.MemWorkingWindowSize {
-				// 4. 触发摘要压缩
-				go s.triggerCompression(context.Background(), cmdPayload.SessionID, msg.TraceID)
+			userMsgModel := &repository.ChatMessageModel{
+				ID:        snowflake.GenerateStringID(),
+				SessionID: cmdPayload.SessionID,
+				MsgID:     userMsgID,
+				Role:      types.RoleUser,
+				Content:   cmdPayload.Message,
+				CreatedAt: userNow,
 			}
-		}
+
+			// 构造 Assistant 消息实体
+			assistantMsg := repository.ChatMessage{
+				MsgID:     assistantMsgID,
+				Role:      types.RoleAssistant,
+				Content:   fullAssistantContent,
+				Timestamp: assistantNow.Unix(),
+			}
+			assistantMsgModel := &repository.ChatMessageModel{
+				ID:        snowflake.GenerateStringID(),
+				SessionID: cmdPayload.SessionID,
+				MsgID:     assistantMsgID,
+				Role:      types.RoleAssistant,
+				Content:   fullAssistantContent,
+				CreatedAt: assistantNow,
+			}
+
+			// 异步写入 PG
+			if s.pgRepo != nil {
+				if err := s.pgRepo.SaveMessage(bgCtx, userMsgModel); err != nil {
+					logger.Error(bgCtx, "异步保存用户消息到 PG 失败", zap.Error(err))
+				}
+				if err := s.pgRepo.SaveMessage(bgCtx, assistantMsgModel); err != nil {
+					logger.Error(bgCtx, "异步保存 Assistant 消息到 PG 失败", zap.Error(err))
+				}
+			}
+
+			// 异步写入 Redis 并触发压缩
+			if s.redisRepo != nil {
+				if _, err := s.redisRepo.SaveMessage(bgCtx, cmdPayload.SessionID, userMsg); err != nil {
+					logger.Error(bgCtx, "异步保存用户消息到 Redis 失败", zap.Error(err))
+				}
+				length, err := s.redisRepo.SaveMessage(bgCtx, cmdPayload.SessionID, assistantMsg)
+				if err != nil {
+					logger.Error(bgCtx, "异步保存 Assistant 消息到 Redis 失败", zap.Error(err))
+				} else if length > repository.MemWorkingWindowSize {
+					s.triggerCompression(bgCtx, cmdPayload.SessionID, msg.TraceID)
+				}
+			}
+		}()
 	}
 }
 

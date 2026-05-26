@@ -25,6 +25,8 @@ from app.api import communication_pb2
 from app.api import communication_pb2_grpc
 from app.logger import get_logger
 from app.llm.client import llm_client, compression_llm_client
+from app.agent.prompts import render_summarize_prompt
+from app.constants import Role
 
 logger = get_logger(__name__)
 
@@ -201,22 +203,15 @@ class CommunicationServiceServicer(
             for msg in request.messages_to_compress:
                 messages_text += f"{msg.role}: {msg.content}\n"
 
-            system_prompt = (
-                "你是一个专业的对话摘要助手。请根据提供的当前摘要和新的对话记录，"
-                "生成更新后的核心摘要(core_summary)和关键事实(key_facts)。\n"
-                "请以 JSON 格式输出，包含 'core_summary' 和 'key_facts' 两个字段。"
+            # 使用模板渲染完整的单体提示词
+            full_prompt = render_summarize_prompt(
+                current_core_summary=request.current_core_summary,
+                current_key_facts=request.current_key_facts,
+                messages_text=messages_text
             )
 
-            user_prompt = (
-                f"当前核心摘要:\n{request.current_core_summary}\n\n"
-                f"当前关键事实:\n{request.current_key_facts}\n\n"
-                f"需要压缩的新对话记录:\n{messages_text}"
-            )
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+            # 废弃角色拆分，直接作为单体 user 消息发送
+            messages = [{"role": Role.USER.value, "content": full_prompt}]
 
             # 调用压缩模型
             result_text = await compression_llm_client.summarize(
