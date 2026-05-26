@@ -53,9 +53,9 @@ CREATE TABLE tool_registry (
 
 -- 工具执行审计日志
 CREATE TABLE tool_audit_logs (
-    log_id UUID PRIMARY KEY,
-    workflow_id UUID NOT NULL,     -- 关联的工作流
-    node_id UUID NOT NULL,         -- 关联的执行节点
+    log_id VARCHAR(64) PRIMARY KEY,  -- 雪花算法 ID
+    workflow_id VARCHAR(64) NOT NULL, -- 关联的工作流（雪花算法 ID）
+    node_id VARCHAR(64) NOT NULL,     -- 关联的执行节点（雪花算法 ID）
     tool_id VARCHAR(64) NOT NULL,
     input_args JSONB NOT NULL,     -- 校验后的参数
     output_result JSONB,           -- 执行结果

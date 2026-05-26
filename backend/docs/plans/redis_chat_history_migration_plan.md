@@ -26,7 +26,7 @@
 - **表结构设计**:
   ```sql
   CREATE TABLE chat_messages (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      id VARCHAR(64) PRIMARY KEY,  -- 雪花算法 ID
       session_id VARCHAR(64) NOT NULL,
       msg_id VARCHAR(64) NOT NULL UNIQUE,
       role VARCHAR(20) NOT NULL, -- 'user', 'assistant', 'system'

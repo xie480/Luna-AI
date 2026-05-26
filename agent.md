@@ -180,6 +180,13 @@ Luna 面向**普通个人本地使用，而不是企业使用**。
     编码时请参考 `backend/docs/system` 和 `frontend/docs/system`。
 20. **不要强调兼容性和扩展性**
     以可读性为最优先，不要过度强调代码的兼容性和扩展性。
+21. **所有业务和实体的 ID 生成必须统一使用雪花算法（Snowflake），禁止使用 UUID（强制）**
+    *   所有涉及主键、唯一标识生成的场景（包括但不限于：消息 ID、会话 ID、任务 ID、节点 ID、记忆 ID、工具调用日志 ID、Trace ID 等），必须使用项目提供的统一雪花算法生成器。
+    *   **Go 层**：使用 `internal/utils/snowflake` 包的 `GenerateID()`（返回 `int64`）或 `GenerateStringID()`（返回 `string`）。
+    *   **Python 层**：使用 `app/utils/snowflake.py` 的 `generate_id()`（返回 `int`）或 `generate_string_id()`（返回 `str`）。
+    *   **TypeScript 层**：使用 `frontend/src/shared/utils/snowflake.ts` 的 `generateId()`（返回 `string`）。
+    *   禁止直接使用 `crypto.randomUUID()`、`uuid.uuid4()`、`google/uuid`、`Date.now()` 拼接字符串等方式生成 ID。
+    *   所有数据库中 ID 字段类型使用 `VARCHAR(64)` 或 `BIGINT`，禁止使用 `UUID` 类型。
 
 ### 6.2 职责与边界约束
 

@@ -61,7 +61,7 @@
 
 | 字段名                 | 类型           | 说明                                                   |
 |:------------------- |:------------ |:---------------------------------------------------- |
-| `id`                | VARCHAR(36)  | 唯一标识符 (UUID)                                         |
+| `id`                | VARCHAR(64)  | 唯一标识符（雪花算法 ID）                                         |
 | `name`              | VARCHAR(100) | 模板名称，如 `core_persona`                                |
 | `category`          | VARCHAR(50)  | `persona`, `task`, `tool_rule`, `recovery`, `memory` |
 | `slot_position`     | VARCHAR(50)  | 装配槽位位置（决定拼接顺序），如 `system_header`, `system_body`      |
@@ -74,8 +74,8 @@
 
 | 字段名           | 类型           | 说明                                      |
 |:------------- |:------------ |:--------------------------------------- |
-| `id`          | VARCHAR(36)  | 唯一标识符 (UUID)                            |
-| `template_id` | VARCHAR(36)  | 关联的模板 ID                                |
+| `id`          | VARCHAR(64)  | 唯一标识符（雪花算法 ID）                            |
+| `template_id` | VARCHAR(64)  | 关联的模板 ID（雪花算法 ID）                                |
 | `version_num` | INT          | 版本号，单调递增 (如 1, 2, 3)                    |
 | `content`     | TEXT         | 模板文本（支持 Jinja2 语法）                      |
 | `variables`   | JSONB        | 声明该版本依赖的变量集合（如 `["user_name", "time"]`） |

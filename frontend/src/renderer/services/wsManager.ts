@@ -11,6 +11,7 @@
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore } from '../stores/systemStore';
 import { WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
+import { generateId } from '../../shared/utils/snowflake';
 import {
   WSMessage,
   PongPayload,
@@ -231,7 +232,7 @@ class WSManager {
       const message = JSON.stringify({
         ...data,
         timestamp: Date.now(),
-        trace_id: `tr-${crypto.randomUUID?.() || Date.now()}`,
+        trace_id: `tr-${generateId()}`,
       });
       this.ws.send(message);
       useSystemStore.getState().addSystemLog(`发送消息: ${data.type}`);
@@ -255,7 +256,7 @@ class WSManager {
     }
 
     // 先添加用户消息到 UI（等待 Go 确认）
-    const userMsgId = `user-${Date.now()}`;
+    const userMsgId = `user-${generateId()}`;
     sessionStore.appendMessage(sessionId, {
       messageId: userMsgId,
       sessionId,
