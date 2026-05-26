@@ -54,6 +54,8 @@ def get_system_prompt() -> str:
 
 def render_runtime_prompt(
     current_message: str,
+    core_summary: str = "",
+    key_facts: str = "",
 ) -> str:
     """
     渲染运行时上下文提示词
@@ -62,12 +64,16 @@ def render_runtime_prompt(
 
     参数：
         current_message: 当前用户输入的文本
+        core_summary: 核心摘要
+        key_facts: 关键事实
 
     返回：渲染后的运行时提示词字符串。
     """
     return _get_tm().render(
         TEMPLATE_RUNTIME,
         CURRENT_MESSAGE=current_message,
+        CORE_SUMMARY=core_summary,
+        KEY_FACTS=key_facts,
     )
 
 

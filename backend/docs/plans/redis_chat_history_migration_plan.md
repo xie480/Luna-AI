@@ -1,7 +1,7 @@
 # 对话历史记录存储迁移技术实现计划 (滑动窗口 + 摘要压缩方案)
 
 ## 1. 背景与目标
-当前 Luna 系统的对话历史记录（History）依赖前端在每次请求时全量传递，这不仅增加了网络传输开销，也存在状态不一致和前端被篡改的风险。为实现后端（Go Runtime）对状态的绝对控制（SSOT），并遵循《多层记忆系统设计》中关于“工作记忆”与“事实记忆”分离的原则，计划将对话历史记录的存储迁移至后端的 **Redis + PostgreSQL 双写架构**，并引入**两段式摘要压缩策略**以解决长对话上下文丢失的问题。
+当前 Luna 系统的对话历史记录（History）依赖前端在每次请求时全量传递，这不仅增加了网络传输开销，也存在状态不一致和前端被篡改的风险。为实现后端（Go Runtime）对状态的绝对控制（SSOT），并遵循《多层记忆系统设计》中关于"工作记忆"与"事实记忆"分离的原则，计划将对话历史记录的存储迁移至后端的 **Redis + PostgreSQL 双写架构**，并引入**两段式摘要压缩策略**以解决长对话上下文丢失的问题。
 
 ## 2. 存储设计方案 (冷热分离 + 摘要压缩)
 
@@ -36,6 +36,56 @@
   CREATE INDEX idx_chat_messages_session_id_created_at ON chat_messages(session_id, created_at DESC);
   ```
 
+### 2.3 环境变量配置 (压缩模型解耦)
+为提升系统的配置灵活性与资源调配效率，摘要压缩功能将与主对话模型完全解耦。系统通过独立的 `.env` 环境变量配置压缩专用模型（例如使用更轻量、更快速的模型如 `gpt-4o-mini` 或 `qwen-turbo` 进行摘要提取），与主模型互不依赖。
+
+新增环境变量配置项示例：
+```env
+# 压缩专用模型配置
+COMPRESSION_MODEL_NAME=gpt-4o-mini
+COMPRESSION_API_BASE=https://api.openai.com/v1
+COMPRESSION_API_KEY=sk-xxxxxx
+```
+
+Python AI 服务在初始化时，将根据 `COMPRESSION_MODEL_NAME`、`COMPRESSION_API_BASE`、`COMPRESSION_API_KEY` 三项独立配置实例化一个专属的 LLM Client（`CompressionLLMClient`），专门用于处理 `SummarizeContext` 请求。该 Client 的生命周期独立于主对话模型 Client，可单独配置超时、重试策略及并发数，从而避免压缩任务占用主模型资源。
+
+### 2.4 架构总览图
+
+```mermaid
+flowchart TB
+    subgraph 配置层
+        ENV[.env 文件]
+        ChatCfg[主对话模型配置<br/>MODEL_NAME / API_BASE / API_KEY]
+        CompCfg[压缩模型配置<br/>COMPRESSION_MODEL_NAME / API_BASE / API_KEY]
+    end
+
+    subgraph Python AI 服务
+        MainLLM[主对话 LLM Client<br/>处理 ChatRequest]
+        CompLLM[CompressionLLMClient<br/>处理 SummarizeContext]
+        Summarize[SummarizeContext 接口]
+    end
+
+    subgraph Go Runtime
+        RedisRepo[ChatHistoryRedisRepo]
+        WS[ws_server.go]
+    end
+
+    subgraph 数据层
+        Redis[(Redis<br/>history List + summary Hash)]
+        PG[(PostgreSQL<br/>chat_messages)]
+    end
+
+    ENV --> ChatCfg
+    ENV --> CompCfg
+    ChatCfg --> MainLLM
+    CompCfg --> CompLLM
+    Summarize --> CompLLM
+    WS --> RedisRepo
+    RedisRepo --> Redis
+    RedisRepo --> PG
+    WS --> Summarize
+```
+
 ## 3. 数据读写与摘要压缩逻辑
 
 ### 3.1 写入逻辑 (双写)
@@ -47,6 +97,7 @@
 1. **阈值检测**: 每次写入 Redis 后，检查 `history` 列表的长度。如果长度超过 `MEM_WORKING_WINDOW_SIZE`（例如 20 轮）。
 2. **触发压缩**: Go Runtime 异步调用 Python AI 服务的 `SummarizeContext` 接口。
    - **输入**: 当前 Redis 中的 `summary` Hash (如果有) + `history` 中最早的 N 条消息（例如前 10 条）。
+   - **处理**: Python AI 服务调用独立配置的 `CompressionLLMClient`（由 `COMPRESSION_MODEL_NAME` 等环境变量指定）对输入内容进行摘要提取。压缩模型与主对话模型完全解耦，避免占用主模型资源。
    - **输出**: 新的 `core_summary` (核心概括) 和 `key_facts` (关键事实，用于后续转存长期记忆)。
 3. **状态更新**:
    - 使用 `HSET` 将新的 `core_summary` 和 `key_facts` 覆盖写入 Redis 的 `summary` Hash 键。
@@ -54,7 +105,7 @@
 
 ### 3.3 读取逻辑 (组装上下文)
 - **AI 上下文读取 (高频)**:
-  - 当需要组装 Prompt 发给大模型时，Go Runtime 从 Redis 读取：
+  - 当需要组装 Prompt 发给主对话模型时，Go Runtime 从 Redis 读取：
     1. `HGETALL luna:mem:chat:{session_id}:summary` (获取 `core_summary` 和 `key_facts`)。
     2. `LRANGE luna:mem:chat:{session_id}:history 0 -1` (获取近期的精确对话上下文)。
   - **模板注入**: 将获取到的 `core_summary` 和 `key_facts` 分别注入到 `memory.j2` 模板的 `{{CORE_SUMMARY}}` 和 `{{KEY_FACTS}}` 占位符中。将 `history` 转换为对话格式注入到 `runtime.j2` 或作为消息列表传递。
@@ -217,7 +268,9 @@ func (r *ChatHistoryRedisRepo) UpdateSummaryAndTrim(ctx context.Context, session
 - [ ] **新增逻辑**: 在双写完成后，检查 Redis List 长度，若超过 `MemWorkingWindowSize`，则启动 Goroutine 调用 Python 的 `SummarizeContext` 接口，并在成功后调用 `UpdateSummaryAndTrim`。
 
 ### Phase 3: Python AI 服务适配
-- [ ] 确保 Python 端的 `SummarizeContext` 接口能够正确返回 `core_summary` 和 `key_facts`。
+- [ ] 在 `.env` 和 `config.py` 中增加 `COMPRESSION_MODEL_NAME`、`COMPRESSION_API_BASE`、`COMPRESSION_API_KEY` 等独立压缩模型配置项。
+- [ ] 在 LLM 模块中，基于压缩模型配置实例化独立的 `CompressionLLMClient`，具备独立的超时、重试策略。
+- [ ] 确保 Python 端的 `SummarizeContext` 接口调用 `CompressionLLMClient`，并能够正确返回 `core_summary` 和 `key_facts`。
 - [ ] 确保 Python 端在处理 `ChatRequest` 时，能够正确解析并注入 `core_summary` 和 `key_facts` 到 `memory.j2` 模板中。
 
 ### Phase 4: 前端适配与联调

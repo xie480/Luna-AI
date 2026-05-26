@@ -267,31 +267,13 @@ class WSManager {
       status: 'sending',
     });
 
-    // 构建历史记录：将已有消息转换为 ChatMessage 格式
-    const currentMessages = sessionStore.messages[sessionId] || [];
-    const history: ChatMessage[] = [];
-
-    for (const msg of currentMessages) {
-      // 跳过刚发送的当前消息（还未在历史中）
-      if (msg.messageId === userMsgId) continue;
-      // 只保留 user 和 assistant 角色的消息作为历史记录
-      // 排除 system/tool 角色消息
-      if (msg.role === 'user' || msg.role === 'assistant') {
-        history.push({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        });
-      }
-    }
-
-    // 发送聊天请求到 Go（携带历史记录和可选的系统提示词）
+    // 发送聊天请求到 Go（不再携带全量历史记录，由后端 Redis 管理）
     this.send({
       type: WS_MSG_TYPE.CMD_USER_INPUT,
       payload: {
         sessionId,
         message,
         msgId: userMsgId,
-        history, // 多轮对话历史记录
         system_prompt: customSystemPrompt || '', // 自定义系统提示词（可选）
       },
     });

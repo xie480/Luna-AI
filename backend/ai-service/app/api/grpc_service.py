@@ -20,10 +20,11 @@ import time
 from typing import AsyncGenerator
 
 import grpc
+import json
 from app.api import communication_pb2
 from app.api import communication_pb2_grpc
 from app.logger import get_logger
-from app.llm.client import llm_client
+from app.llm.client import llm_client, compression_llm_client
 
 logger = get_logger(__name__)
 
@@ -131,6 +132,8 @@ class CommunicationServiceServicer(
                 history=history,
                 current_message=message,
                 trace_id=trace_id,
+                core_summary=request.core_summary,
+                key_facts=request.key_facts,
             ):
                 # 检查客户端是否已断开连接
                 if not context.is_active():
@@ -180,3 +183,69 @@ class CommunicationServiceServicer(
                 logger.error(
                     f"[TraceID:{trace_id}] 发送错误响应失败，流可能已关闭"
                 )
+
+    async def SummarizeContext(
+        self,
+        request: communication_pb2.SummarizeContextRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.SummarizeContextResponse:
+        """
+        处理后台摘要压缩请求
+        """
+        trace_id = request.trace_id
+        logger.info(f"[TraceID:{trace_id}] 收到 SummarizeContext 请求")
+
+        try:
+            # 构造压缩 Prompt
+            messages_text = ""
+            for msg in request.messages_to_compress:
+                messages_text += f"{msg.role}: {msg.content}\n"
+
+            system_prompt = (
+                "你是一个专业的对话摘要助手。请根据提供的当前摘要和新的对话记录，"
+                "生成更新后的核心摘要(core_summary)和关键事实(key_facts)。\n"
+                "请以 JSON 格式输出，包含 'core_summary' 和 'key_facts' 两个字段。"
+            )
+
+            user_prompt = (
+                f"当前核心摘要:\n{request.current_core_summary}\n\n"
+                f"当前关键事实:\n{request.current_key_facts}\n\n"
+                f"需要压缩的新对话记录:\n{messages_text}"
+            )
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+
+            # 调用压缩模型
+            result_text = await compression_llm_client.summarize(
+                messages=messages,
+                response_format={"type": "json_object"}
+            )
+
+            # 解析 JSON
+            try:
+                result_json = json.loads(result_text)
+                new_core_summary = result_json.get("core_summary", request.current_core_summary)
+                new_key_facts = result_json.get("key_facts", request.current_key_facts)
+            except json.JSONDecodeError:
+                logger.error(f"[TraceID:{trace_id}] 压缩模型返回的不是有效的 JSON: {result_text}")
+                new_core_summary = request.current_core_summary
+                new_key_facts = request.current_key_facts
+
+            logger.info(f"[TraceID:{trace_id}] 摘要压缩完成")
+            return communication_pb2.SummarizeContextResponse(
+                trace_id=trace_id,
+                new_core_summary=new_core_summary,
+                new_key_facts=new_key_facts,
+            )
+
+        except Exception as e:
+            logger.error(f"[TraceID:{trace_id}] SummarizeContext 处理异常: {e}")
+            # 发生异常时返回原有的摘要
+            return communication_pb2.SummarizeContextResponse(
+                trace_id=trace_id,
+                new_core_summary=request.current_core_summary,
+                new_key_facts=request.current_key_facts,
+            )

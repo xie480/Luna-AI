@@ -83,3 +83,20 @@ func (c *AIClient) ChatStream(ctx context.Context, req *pb.ChatRequest) (pb.Comm
 
 	return stream, nil
 }
+
+// SummarizeContext 发送摘要压缩请求到 AI 服务
+func (c *AIClient) SummarizeContext(ctx context.Context, req *pb.SummarizeContextRequest) (*pb.SummarizeContextResponse, error) {
+	logger.Info(ctx, "发送 SummarizeContext 请求到 AI 服务", zap.String("trace_id", req.TraceId))
+
+	// 设置超时时间，摘要压缩可能需要较长时间
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	resp, err := c.client.SummarizeContext(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "SummarizeContext 请求失败", zap.String("trace_id", req.TraceId), zap.Error(err))
+		return nil, fmt.Errorf("summarize context failed: %w", err)
+	}
+
+	return resp, nil
+}

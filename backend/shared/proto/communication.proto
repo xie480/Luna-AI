@@ -42,6 +42,32 @@ message ChatRequest {
   repeated ChatMessage history = 3;
   // 系统提示词，为空时 Python 侧使用默认提示词
   string system_prompt = 4;
+  // 核心摘要
+  string core_summary = 5;
+  // 关键事实
+  string key_facts = 6;
+}
+
+// SummarizeContext 请求消息
+message SummarizeContextRequest {
+  // 跟踪ID，用于请求追踪
+  string trace_id = 1;
+  // 当前的 core_summary
+  string current_core_summary = 2;
+  // 当前的 key_facts
+  string current_key_facts = 3;
+  // 需要被压缩的旧消息列表
+  repeated ChatMessage messages_to_compress = 4;
+}
+
+// SummarizeContext 响应消息
+message SummarizeContextResponse {
+  // 跟踪ID，用于请求追踪
+  string trace_id = 1;
+  // 新的 core_summary
+  string new_core_summary = 2;
+  // 新的 key_facts
+  string new_key_facts = 3;
 }
 
 // Chat 流式响应消息
@@ -66,4 +92,7 @@ service CommunicationService {
   // ChatStream 方法，用于流式对话
   // 支持多轮对话历史记录和系统提示词配置
   rpc ChatStream(ChatRequest) returns (stream ChatStreamResponse);
+
+  // SummarizeContext 方法，用于后台摘要压缩
+  rpc SummarizeContext(SummarizeContextRequest) returns (SummarizeContextResponse);
 }

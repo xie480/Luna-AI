@@ -18,6 +18,7 @@ import (
 	"luna-ai/backend/runtime/internal/config"
 	"luna-ai/backend/runtime/internal/infrastructure"
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/repository"
 
 	"go.uber.org/zap"
 )
@@ -75,6 +76,13 @@ func main() {
 	} else {
 		defer postgresClient.Close()
 		logger.Info(ctx, "PostgreSQL 连接成功", zap.String("database", cfg.Postgres.Database))
+		
+		// 自动迁移数据库表结构
+		if err := postgresClient.GetDB().AutoMigrate(&repository.ChatMessageModel{}); err != nil {
+			logger.Error(ctx, "自动迁移数据库表结构失败", zap.Error(err))
+		} else {
+			logger.Info(ctx, "自动迁移数据库表结构成功")
+		}
 	}
 
 	// 5. 初始化 AI 客户端 - 连接 Python AI 服务
@@ -93,7 +101,9 @@ func main() {
 	mux.HandleFunc("/health", healthHandler.HandleHealthCheck)
 
 	// WebSocket 端点 - 前端通信入口
-	wsServer := api.NewWSServer(aiClient)
+	redisRepo := repository.NewChatHistoryRedisRepo(redisClient)
+	pgRepo := repository.NewChatHistoryPGRepo(postgresClient)
+	wsServer := api.NewWSServer(aiClient, redisRepo, pgRepo)
 	mux.HandleFunc("/ws", wsServer.HandleWS)
 
 	// 定义 CORS 中间件，允许前端跨域请求 HTTP 接口

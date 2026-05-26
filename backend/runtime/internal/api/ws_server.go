@@ -12,7 +12,9 @@ import (
 	"go.uber.org/zap"
 
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/repository"
 	"luna-ai/backend/runtime/internal/types"
+	"luna-ai/backend/runtime/internal/utils/snowflake"
 	pb "luna-ai/backend/runtime/shared/proto"
 )
 
@@ -98,13 +100,17 @@ func (c *WSConnection) RemoteAddr() string {
 
 // WSServer 封装 WebSocket 服务
 type WSServer struct {
-	aiClient *AIClient
+	aiClient  *AIClient
+	redisRepo *repository.ChatHistoryRedisRepo
+	pgRepo    *repository.ChatHistoryPGRepo
 }
 
 // NewWSServer 创建一个新的 WSServer 实例
-func NewWSServer(aiClient *AIClient) *WSServer {
+func NewWSServer(aiClient *AIClient, redisRepo *repository.ChatHistoryRedisRepo, pgRepo *repository.ChatHistoryPGRepo) *WSServer {
 	return &WSServer{
-		aiClient: aiClient,
+		aiClient:  aiClient,
+		redisRepo: redisRepo,
+		pgRepo:    pgRepo,
 	}
 }
 
@@ -222,21 +228,72 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		return
 	}
 
-	// 将前端的历史消息（ChatMessage）转换为 protobuf 的 ChatMessage
-	protoHistory := make([]*pb.ChatMessage, 0, len(cmdPayload.History))
-	for _, h := range cmdPayload.History {
-		protoHistory = append(protoHistory, &pb.ChatMessage{
-			Role:    h.Role,
-			Content: h.Content,
-		})
+	// 1. 保存用户消息到 PG 和 Redis
+	userMsgID := cmdPayload.MsgID
+	if userMsgID == "" {
+		userMsgID = snowflake.GenerateStringID()
+	}
+	now := time.Now()
+	
+	userMsg := repository.ChatMessage{
+		MsgID:     userMsgID,
+		Role:      "user",
+		Content:   cmdPayload.Message,
+		Timestamp: now.Unix(),
+	}
+	
+	userMsgModel := &repository.ChatMessageModel{
+		ID:        snowflake.GenerateStringID(),
+		SessionID: cmdPayload.SessionID,
+		MsgID:     userMsgID,
+		Role:      "user",
+		Content:   cmdPayload.Message,
+		CreatedAt: now,
 	}
 
-	// 构造 gRPC ChatRequest，包含历史记录和系统提示词
+	if s.pgRepo != nil {
+		if err := s.pgRepo.SaveMessage(ctx, userMsgModel); err != nil {
+			logger.Error(ctx, "保存用户消息到 PG 失败", zap.Error(err))
+		}
+	}
+
+	if s.redisRepo != nil {
+		if _, err := s.redisRepo.SaveMessage(ctx, cmdPayload.SessionID, userMsg); err != nil {
+			logger.Error(ctx, "保存用户消息到 Redis 失败", zap.Error(err))
+		}
+	}
+
+	// 2. 从 Redis 获取上下文 (摘要 + 近期历史)
+	var summary repository.ChatSummary
+	var recentHistory []repository.ChatMessage
+	if s.redisRepo != nil {
+		var err error
+		summary, recentHistory, err = s.redisRepo.GetContext(ctx, cmdPayload.SessionID)
+		if err != nil {
+			logger.Error(ctx, "从 Redis 获取上下文失败", zap.Error(err))
+		}
+	}
+
+	// 将近期历史转换为 protobuf 的 ChatMessage
+	protoHistory := make([]*pb.ChatMessage, 0, len(recentHistory))
+	for _, h := range recentHistory {
+		// 排除当前消息，因为当前消息已经在 req.Message 中
+		if h.MsgID != userMsgID {
+			protoHistory = append(protoHistory, &pb.ChatMessage{
+				Role:    h.Role,
+				Content: h.Content,
+			})
+		}
+	}
+
+	// 构造 gRPC ChatRequest，包含历史记录、系统提示词和摘要
 	req := &pb.ChatRequest{
 		TraceId:      msg.TraceID,
 		Message:      cmdPayload.Message,
 		History:      protoHistory,
 		SystemPrompt: cmdPayload.SystemPrompt,
+		CoreSummary:  summary.CoreSummary,
+		KeyFacts:     summary.KeyFacts,
 	}
 
 	historyCount := len(protoHistory)
@@ -244,6 +301,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		zap.String("trace_id", msg.TraceID),
 		zap.Int("history_count", historyCount),
 		zap.Bool("has_custom_prompt", cmdPayload.SystemPrompt != ""),
+		zap.Bool("has_summary", summary.CoreSummary != ""),
 	)
 
 	// 调用 AI 服务的 ChatStream
@@ -256,6 +314,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 
 	startTime := time.Now()
 	isFirstChunk := true
+	var fullAssistantContent string
 
 	for {
 		resp, err := stream.Recv()
@@ -277,6 +336,8 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			)
 			isFirstChunk = false
 		}
+
+		fullAssistantContent += resp.Chunk
 
 		chatPayload := ChatStreamPayload{
 			Chunk:      resp.Chunk,
@@ -301,6 +362,97 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		if resp.IsFinished {
 			break
 		}
+	}
+
+	// 3. 流式响应结束，保存 Assistant 消息到 PG 和 Redis
+	if fullAssistantContent != "" {
+		assistantMsgID := snowflake.GenerateStringID()
+		assistantNow := time.Now()
+
+		assistantMsg := repository.ChatMessage{
+			MsgID:     assistantMsgID,
+			Role:      "assistant",
+			Content:   fullAssistantContent,
+			Timestamp: assistantNow.Unix(),
+		}
+
+		assistantMsgModel := &repository.ChatMessageModel{
+			ID:        snowflake.GenerateStringID(),
+			SessionID: cmdPayload.SessionID,
+			MsgID:     assistantMsgID,
+			Role:      "assistant",
+			Content:   fullAssistantContent,
+			CreatedAt: assistantNow,
+		}
+
+		if s.pgRepo != nil {
+			if err := s.pgRepo.SaveMessage(context.Background(), assistantMsgModel); err != nil {
+				logger.Error(context.Background(), "保存 Assistant 消息到 PG 失败", zap.Error(err))
+			}
+		}
+
+		if s.redisRepo != nil {
+			length, err := s.redisRepo.SaveMessage(context.Background(), cmdPayload.SessionID, assistantMsg)
+			if err != nil {
+				logger.Error(context.Background(), "保存 Assistant 消息到 Redis 失败", zap.Error(err))
+			} else if length > repository.MemWorkingWindowSize {
+				// 4. 触发摘要压缩
+				go s.triggerCompression(context.Background(), cmdPayload.SessionID, msg.TraceID)
+			}
+		}
+	}
+}
+
+func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, traceID string) {
+	logger.Info(ctx, "触发摘要压缩", zap.String("session_id", sessionID), zap.String("trace_id", traceID))
+
+	// 获取当前上下文
+	summary, history, err := s.redisRepo.GetContext(ctx, sessionID)
+	if err != nil {
+		logger.Error(ctx, "获取上下文失败，无法进行压缩", zap.Error(err))
+		return
+	}
+
+	if len(history) <= repository.MemWorkingWindowSize {
+		return
+	}
+
+	// 提取需要压缩的旧消息
+	compressCount := repository.MemCompressBatchSize
+	if len(history) < compressCount {
+		compressCount = len(history)
+	}
+
+	messagesToCompress := make([]*pb.ChatMessage, 0, compressCount)
+	for i := 0; i < compressCount; i++ {
+		messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
+			Role:    history[i].Role,
+			Content: history[i].Content,
+		})
+	}
+
+	req := &pb.SummarizeContextRequest{
+		TraceId:              traceID,
+		CurrentCoreSummary:   summary.CoreSummary,
+		CurrentKeyFacts:      summary.KeyFacts,
+		MessagesToCompress:   messagesToCompress,
+	}
+
+	resp, err := s.aiClient.SummarizeContext(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "调用 AI 服务 SummarizeContext 失败", zap.Error(err))
+		return
+	}
+
+	newSummary := repository.ChatSummary{
+		CoreSummary: resp.NewCoreSummary,
+		KeyFacts:    resp.NewKeyFacts,
+	}
+
+	if err := s.redisRepo.UpdateSummaryAndTrim(ctx, sessionID, newSummary, int64(compressCount)); err != nil {
+		logger.Error(ctx, "更新摘要并裁剪历史失败", zap.Error(err))
+	} else {
+		logger.Info(ctx, "摘要压缩完成", zap.String("session_id", sessionID))
 	}
 }
 

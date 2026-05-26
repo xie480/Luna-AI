@@ -152,6 +152,36 @@ class LLMStreamBuffer:
 # LLM 客户端主类
 # ============================================================
 
+class CompressionLLMClient:
+    """
+    专门用于后台摘要压缩的 LLM 客户端
+    """
+
+    def __init__(self) -> None:
+        self.client = AsyncOpenAI(
+            api_key=settings.compression_api_key or "dummy",
+            base_url=settings.compression_api_base,
+        )
+        self.model_name = settings.compression_model_name
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
+        reraise=True,
+        before_sleep=before_sleep_log(logger, 20),
+    )
+    async def summarize(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+        logger.info(f"正在调用压缩模型 API: {self.model_name}")
+        response = await self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            stream=False,
+            **kwargs
+        )
+        return response.choices[0].message.content or ""
+
+
 class LLMClient:
     """
     LLM 客户端封装，提供统一的流式对话接口、重试机制和上下文管理
@@ -401,6 +431,8 @@ class LLMClient:
         history: List[Dict[str, str]],
         current_message: str,
         trace_id: str,
+        core_summary: str = "",
+        key_facts: str = "",
         **kwargs: Any
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -435,7 +467,11 @@ class LLMClient:
 
         # 渲染 runtime 提示词：将当前用户输入注入 runtime.j2 模板
         # 输出包含思维链要求和 JSON 输出格式约束的完整 user message
-        rendered_user_message = render_runtime_prompt(current_message)
+        rendered_user_message = render_runtime_prompt(
+            current_message=current_message,
+            core_summary=core_summary,
+            key_facts=key_facts,
+        )
 
         # 使用上下文管理器进行 Token 截断
         # 注意：rendered_user_message 作为 user content 传入，
@@ -465,3 +501,4 @@ class LLMClient:
 
 # 全局单例
 llm_client = LLMClient()
+compression_llm_client = CompressionLLMClient()

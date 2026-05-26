@@ -22,8 +22,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CommunicationService_Ping_FullMethodName       = "/communication.CommunicationService/Ping"
-	CommunicationService_ChatStream_FullMethodName = "/communication.CommunicationService/ChatStream"
+	CommunicationService_Ping_FullMethodName             = "/communication.CommunicationService/Ping"
+	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
+	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
 )
 
 // CommunicationServiceClient is the client API for CommunicationService service.
@@ -37,6 +38,8 @@ type CommunicationServiceClient interface {
 	// ChatStream 方法，用于流式对话
 	// 支持多轮对话历史记录和系统提示词配置
 	ChatStream(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamResponse], error)
+	// SummarizeContext 方法，用于后台摘要压缩
+	SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error)
 }
 
 type communicationServiceClient struct {
@@ -76,6 +79,16 @@ func (c *communicationServiceClient) ChatStream(ctx context.Context, in *ChatReq
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CommunicationService_ChatStreamClient = grpc.ServerStreamingClient[ChatStreamResponse]
 
+func (c *communicationServiceClient) SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SummarizeContextResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_SummarizeContext_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommunicationServiceServer is the server API for CommunicationService service.
 // All implementations must embed UnimplementedCommunicationServiceServer
 // for forward compatibility.
@@ -87,6 +100,8 @@ type CommunicationServiceServer interface {
 	// ChatStream 方法，用于流式对话
 	// 支持多轮对话历史记录和系统提示词配置
 	ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error
+	// SummarizeContext 方法，用于后台摘要压缩
+	SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
 
@@ -102,6 +117,9 @@ func (UnimplementedCommunicationServiceServer) Ping(context.Context, *PingReques
 }
 func (UnimplementedCommunicationServiceServer) ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error {
 	return status.Error(codes.Unimplemented, "method ChatStream not implemented")
+}
+func (UnimplementedCommunicationServiceServer) SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SummarizeContext not implemented")
 }
 func (UnimplementedCommunicationServiceServer) mustEmbedUnimplementedCommunicationServiceServer() {}
 func (UnimplementedCommunicationServiceServer) testEmbeddedByValue()                              {}
@@ -153,6 +171,24 @@ func _CommunicationService_ChatStream_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CommunicationService_ChatStreamServer = grpc.ServerStreamingServer[ChatStreamResponse]
 
+func _CommunicationService_SummarizeContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SummarizeContextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).SummarizeContext(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_SummarizeContext_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).SummarizeContext(ctx, req.(*SummarizeContextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommunicationService_ServiceDesc is the grpc.ServiceDesc for CommunicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -163,6 +199,10 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Ping",
 			Handler:    _CommunicationService_Ping_Handler,
+		},
+		{
+			MethodName: "SummarizeContext",
+			Handler:    _CommunicationService_SummarizeContext_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
