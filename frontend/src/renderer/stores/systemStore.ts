@@ -3,12 +3,13 @@
  * 管理连接状态、左侧边栏状态、模态窗口状态等系统级配置
  */
 import { create } from 'zustand';
+import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 
 /**
  * 模态窗口面板类型
  * 用于标识当前模态窗口展示的内容
  */
-export type ModalPanelType = 'dag' | 'memory' | 'settings' | 'logs';
+export type ModalPanelType = 'dag' | 'memory' | 'settings' | 'logs' | 'clothing';
 
 /**
  * WebSocket 连接状态
@@ -19,7 +20,7 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 're
  * 情绪状态 (ESM)
  * 用于驱动 Live2D 表情与动作
  */
-export type EmotionState = 'neutral' | 'happy' | 'sad' | 'angry' | 'thinking' | 'surprised';
+export type EmotionState = keyof typeof EMOTION_EXPRESSIONS | 'neutral';
 
 /**
  * 系统状态切片
@@ -43,6 +44,8 @@ interface SystemState {
   live2dConfigMode: 'none' | 'transform' | 'tracking';
   // 全局提示消息
   globalMessage: string | null;
+  // 服装配置状态（实时保存到 localStorage）
+  clothingConfig: Record<string, boolean>;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -58,6 +61,24 @@ interface SystemState {
   setLive2dConfigMode: (mode: 'none' | 'transform' | 'tracking') => void;
   showGlobalMessage: (message: string, duration?: number) => void;
   hideGlobalMessage: () => void;
+  // 设置服装配置项，同时持久化到 localStorage
+  setClothingConfig: (id: string, enabled: boolean) => void;
+}
+
+/**
+ * 从 localStorage 读取服装配置，不存在时返回空对象
+ * 服装项由 ClothingPanel 动态扫描目录后决定，这里不写死默认值
+ */
+function loadClothingConfig(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem('luna:clothing');
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    // 解析失败时返回空对象
+  }
+  return {};
 }
 
 /**
@@ -73,6 +94,8 @@ export const useSystemStore = create<SystemState>((set) => ({
   currentEmotion: 'neutral',
   live2dConfigMode: 'none',
   globalMessage: null,
+  // 初始化服装配置，从 localStorage 读取或使用空对象
+  clothingConfig: loadClothingConfig(),
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
@@ -83,7 +106,7 @@ export const useSystemStore = create<SystemState>((set) => ({
   // 打开左侧边栏
   openLeftSidebar: () => set({ isLeftSidebarOpen: true }),
 
-  // 关闭左侧边栏
+  // 关闭左侧侧边栏
   closeLeftSidebar: () => set({ isLeftSidebarOpen: false }),
 
   // 打开模态窗口并展示指定面板
@@ -127,4 +150,16 @@ export const useSystemStore = create<SystemState>((set) => ({
 
   // 隐藏全局提示消息
   hideGlobalMessage: () => set({ globalMessage: null }),
+
+  // 设置服装配置项，同时持久化到 localStorage
+  setClothingConfig: (id, enabled) =>
+    set((state) => {
+      const newConfig = { ...state.clothingConfig, [id]: enabled };
+      try {
+        localStorage.setItem('luna:clothing', JSON.stringify(newConfig));
+      } catch (e) {
+        // 忽略存储错误（如 localStorage 满）
+      }
+      return { clothingConfig: newConfig };
+    }),
 }));

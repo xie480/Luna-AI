@@ -5,7 +5,7 @@
   width: 100vw;
   height: 100vh;
   pointer-events: none; /* 容器不拦截事件，允许点击穿透到下层 UI */
-  z-index: 10; /* 确保在聊天框之上 */
+  z-index: -1; /* 降至全局最低层，确保输入框在其之上 */
   overflow: visible;
 }
 
@@ -52,15 +52,44 @@
   }
 }
 
-/* 配置操作面板 */
+/* 配置状态提示栏 — 使用 fixed 定位，独立于 canvas 包裹层 */
+.live2d-config-status-bar {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 24px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* 配置操作面板 — 使用 fixed 定位，确保完全独立于 canvas 的 DOM 树 */
 .live2d-config-panel {
-  position: absolute;
-  bottom: 30px;
+  position: fixed;
+  bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 16px;
-  z-index: 30;
+  z-index: 9999;
   pointer-events: auto;
 }
 

@@ -1,0 +1,185 @@
+/**
+ * Luna AI 服装配置面板样式
+ * 服装清单展示与切换开关样式
+ * 注意：无 emoji 预览图标，仅显示文件名
+ */
+
+/* 服装面板主容器 */
+.clothing-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+/* 加载中 */
+.clothing-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--text-secondary, #888);
+  font-size: 14px;
+}
+
+/* 空状态 */
+.clothing-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  gap: 12px;
+}
+
+.clothing-empty .empty-text {
+  font-size: 14px;
+  color: var(--text-primary, #eee);
+}
+
+.clothing-empty .empty-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+/* 顶部提示文字 */
+.clothing-hint {
+  font-size: 13px;
+  color: var(--text-secondary, #888);
+  line-height: 1.5;
+}
+
+/* 顶部操作栏 */
+.clothing-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.clothing-toggle-all-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  border: 1px solid var(--accent-color, #7c5cfc);
+  background: transparent;
+  color: var(--accent-color, #7c5cfc);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.clothing-toggle-all-btn:hover {
+  background: var(--accent-color, #7c5cfc);
+  color: #fff;
+}
+
+/* 服装列表 */
+.clothing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 单个服装配置项 */
+.clothing-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.clothing-item:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+  border-color: var(--accent-color, #7c5cfc);
+}
+
+.clothing-item.enabled {
+  border-color: var(--accent-color, #7c5cfc);
+  background: var(--bg-active, rgba(124, 92, 252, 0.08));
+}
+
+/* 左侧：名称区域 */
+.clothing-item-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.clothing-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #eee);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 右侧：切换开关（复选框样式美化） */
+.clothing-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+/* 隐藏原生复选框 */
+.clothing-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* 开关轨道 */
+.clothing-toggle-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--toggle-bg-off, rgba(255, 255, 255, 0.15));
+  border-radius: 11px;
+  transition: background-color 0.25s ease;
+}
+
+/* 开关滑块 */
+.clothing-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--toggle-thumb-off, #bbb);
+  border-radius: 50%;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* 选中状态 */
+.clothing-checkbox:checked + .clothing-toggle-track {
+  background: var(--accent-color, #7c5cfc);
+}
+
+.clothing-checkbox:checked + .clothing-toggle-track .clothing-toggle-thumb {
+  left: 21px;
+  background: #fff;
+}
+
+/* 聚焦状态 */
+.clothing-checkbox:focus-visible + .clothing-toggle-track {
+  outline: 2px solid var(--accent-color, #7c5cfc);
+  outline-offset: 2px;
+}

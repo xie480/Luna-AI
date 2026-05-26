@@ -3,8 +3,9 @@
  * 负责：窗口创建、系统托盘、系统能力桥接
  * 注意：主进程禁止直接访问本地 DB、Redis、Python 服务
  */
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
+import fs from 'fs';
 
 // 主窗口引用
 let mainWindow: BrowserWindow | null = null;
@@ -50,8 +51,50 @@ function createWindow(): void {
   });
 }
 
+/**
+ * 注册 IPC 处理器，用于渲染进程请求读取模型目录下的可配置 JSON 文件
+ * 返回去掉路径和扩展名的文件名列表
+ */
+function registerIpcHandlers(): void {
+  ipcMain.handle('get-model-config-files', async () => {
+    // 模型目录相对于应用根目录，开发环境下是 public/models/luna
+    // 生产环境下是 exe 同级的 resources/models/luna
+    let modelsDir: string;
+
+    if (process.env.NODE_ENV === 'development') {
+      // 开发环境：从项目根目录的 public/models/luna 读取
+      // __dirname 在 dev 环境下指向 src/main
+      modelsDir = path.resolve(__dirname, '../../public/models/luna');
+    } else {
+      // 生产环境：从 resources/models/luna 读取
+      modelsDir = path.resolve(process.resourcesPath, 'models/luna');
+    }
+
+    // 如果目录不存在，尝试备用路径
+    if (!fs.existsSync(modelsDir)) {
+      // 备用：尝试从 app 根目录查找
+      modelsDir = path.resolve(__dirname, '../../models/luna');
+    }
+
+    if (!fs.existsSync(modelsDir)) {
+      return [];
+    }
+
+    const files = fs.readdirSync(modelsDir);
+
+    // 只返回 .exp3.json 文件，去掉 ".exp3.json" 后缀
+    const configFiles = files
+      .filter((f) => f.endsWith('.exp3.json'))
+      .map((f) => f.replace(/\.exp3\.json$/, ''))
+      .sort(); // 排序保持列表顺序稳定
+
+    return configFiles;
+  });
+}
+
 // 当 Electron 完成初始化后创建窗口
 app.whenReady().then(() => {
+  registerIpcHandlers();
   createWindow();
 
   // macOS: 点击 dock 图标时如果没有窗口则重新创建

@@ -2,10 +2,12 @@
  * Luna AI 模态窗口组件
  * 用于在屏幕正中央展示任务流、记忆、设置、日志等面板内容
  * 替代原有的右侧边栏弹出逻辑
+ * 支持鼠标拖拽移动位置
  */
-import React from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { useSystemStore, ModalPanelType } from '../../stores/systemStore';
 import { useSessionStore } from '../../stores/sessionStore';
+import { ClothingPanel } from '../ClothingPanel/ClothingPanel';
 import './Modal.css';
 
 /**
@@ -23,15 +25,82 @@ export const Modal: React.FC = () => {
   const memory = useSessionStore((state) => state.memory);
   const systemLogs = useSystemStore((state) => state.systemLogs);
 
+  // 拖拽状态
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const modalRef = useRef<HTMLDivElement>(null);
+  const [modalPosition, setModalPosition] = useState<{ x: number; y: number } | null>(null);
+  // 记录拖拽开始时的位置，用于计算相对于弹窗初始位置的偏移
+  const initialPositionRef = useRef({ x: 0, y: 0 });
+
   /**
    * 处理遮罩层点击
    * 点击遮罩层关闭模态窗口
    */
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (e.target === e.currentTarget) {
+    if (e.target === e.currentTarget && !isDragging) {
       closeModal();
     }
   };
+
+  /**
+   * 开始拖拽
+   */
+  const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // 仅响应鼠标左键
+    if (e.button !== 0) return;
+    // 如果点击的是关闭按钮，不触发拖拽
+    const target = e.target as HTMLElement;
+    if (target.closest('.modal-close')) return;
+
+    setIsDragging(true);
+    const rect = modalRef.current?.getBoundingClientRect();
+    if (rect) {
+      dragOffset.current = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+      // 如果已有自定义位置，记录当前位置；否则使用 rect 计算居中位置
+      initialPositionRef.current = {
+        x: rect.left,
+        y: rect.top,
+      };
+    }
+    e.preventDefault();
+  }, []);
+
+  /**
+   * 全局鼠标移动和释放监听
+   */
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!modalRef.current) return;
+      const newX = e.clientX - dragOffset.current.x;
+      const newY = e.clientY - dragOffset.current.y;
+      setModalPosition({ x: newX, y: newY });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
+  // 关闭模态窗口时重置位置
+  useEffect(() => {
+    if (!isModalOpen) {
+      setModalPosition(null);
+    }
+  }, [isModalOpen]);
 
   /**
    * 获取当前面板的标题
@@ -46,6 +115,8 @@ export const Modal: React.FC = () => {
         return '设置';
       case 'logs':
         return '日志';
+      case 'clothing':
+        return '服装配置';
       default:
         return '';
     }
@@ -58,9 +129,16 @@ export const Modal: React.FC = () => {
 
   return (
     <div className="modal-overlay" onClick={handleOverlayClick}>
-      <div className="modal-container">
-        {/* 模态窗口头部 */}
-        <div className="modal-header">
+      <div
+        className={`modal-container ${modalPosition ? 'has-position' : ''}`}
+        ref={modalRef}
+        style={modalPosition ? { left: modalPosition.x, top: modalPosition.y } : undefined}
+      >
+        {/* 模态窗口头部 - 可拖拽区域 */}
+        <div
+          className="modal-header modal-drag-handle"
+          onMouseDown={handleHeaderMouseDown}
+        >
           <h2 className="modal-title">{getPanelTitle(activeModalPanel)}</h2>
           <button className="modal-close" onClick={closeModal}>
             ✕
@@ -175,6 +253,13 @@ export const Modal: React.FC = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* 服装配置面板 */}
+          {activeModalPanel === 'clothing' && (
+            <div className="panel clothing-panel">
+              <ClothingPanel />
             </div>
           )}
         </div>

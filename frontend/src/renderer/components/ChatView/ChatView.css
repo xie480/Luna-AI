@@ -132,6 +132,7 @@
   background-color: transparent; /* 移除背景色，避免遮挡模型 */
   margin-top: auto;
   position: relative; /* 为内部绝对定位元素提供参考 */
+  z-index: 9999; /* 确保输入框在全局最高层级 */
 }
 
 .input-container {

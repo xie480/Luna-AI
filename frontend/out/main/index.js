@@ -1,6 +1,7 @@
 "use strict";
 const electron = require("electron");
 const path = require("path");
+const fs = require("fs");
 let mainWindow = null;
 function createWindow() {
   mainWindow = new electron.BrowserWindow({
@@ -32,7 +33,27 @@ function createWindow() {
     mainWindow = null;
   });
 }
+function registerIpcHandlers() {
+  electron.ipcMain.handle("get-model-config-files", async () => {
+    let modelsDir;
+    if (process.env.NODE_ENV === "development") {
+      modelsDir = path.resolve(__dirname, "../../public/models/luna");
+    } else {
+      modelsDir = path.resolve(process.resourcesPath, "models/luna");
+    }
+    if (!fs.existsSync(modelsDir)) {
+      modelsDir = path.resolve(__dirname, "../../models/luna");
+    }
+    if (!fs.existsSync(modelsDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(modelsDir);
+    const configFiles = files.filter((f) => f.endsWith(".exp3.json")).map((f) => f.replace(/\.exp3\.json$/, "")).sort();
+    return configFiles;
+  });
+}
 electron.app.whenReady().then(() => {
+  registerIpcHandlers();
   createWindow();
   electron.app.on("activate", () => {
     if (electron.BrowserWindow.getAllWindows().length === 0) {

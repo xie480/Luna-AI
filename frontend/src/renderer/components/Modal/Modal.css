@@ -1,6 +1,7 @@
 /**
  * Luna AI 模态窗口样式
  * 居中弹窗，带有半透明遮罩层
+ * 支持鼠标拖拽移动
  */
 
 /* 模态窗口遮罩层 */
@@ -41,6 +42,13 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 }
 
+/* 拖拽后脱离 flexbox 居中，使用 fixed 定位跟随鼠标 */
+.modal-container.has-position {
+  position: fixed;
+  animation: none;
+  z-index: 201;
+}
+
 @keyframes scaleIn {
   from {
     transform: scale(0.95);
@@ -50,6 +58,16 @@
     transform: scale(1);
     opacity: 1;
   }
+}
+
+/* 拖拽手柄区域 */
+.modal-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.modal-drag-handle:active {
+  cursor: grabbing;
 }
 
 /* 模态窗口头部 */
@@ -204,10 +222,11 @@
 .node-description {
   color: #9ca3af;
   font-size: 13px;
-  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
 .node-progress {
+  margin-top: 8px;
   height: 4px;
   background-color: #2d2d44;
   border-radius: 2px;
@@ -216,14 +235,47 @@
 
 .progress-bar {
   height: 100%;
-  background-color: #4f46e5;
-  transition: width 0.3s;
+  background-color: #8b5cf6;
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 
 .node-error {
+  margin-top: 8px;
   color: #ef4444;
   font-size: 12px;
-  margin-top: 8px;
+}
+
+/* 日志面板 */
+.logs-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.logs-view h3 {
+  color: #e5e7eb;
+  font-size: 16px;
+  margin: 0;
+}
+
+.logs-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #0f0f23;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.log-item {
+  font-size: 12px;
+  color: #9ca3af;
+  font-family: monospace;
+  line-height: 1.5;
+  padding: 2px 0;
 }
 
 /* 记忆面板 */
@@ -236,66 +288,30 @@
 .memory-section h4 {
   color: #e5e7eb;
   font-size: 14px;
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2d2d44;
 }
 
 .memory-list {
   list-style: none;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .memory-list li {
   color: #9ca3af;
   font-size: 13px;
-  padding: 8px 12px;
-  background-color: #16162a;
-  border-radius: 6px;
-  margin-bottom: 8px;
+  padding: 4px 0;
 }
 
 /* 设置面板 */
-.settings-view h3 {
-  color: #e5e7eb;
-  font-size: 16px;
-  margin: 0 0 16px 0;
-}
-
 .settings-placeholder {
   color: #6b7280;
   font-size: 14px;
-  padding: 20px;
-  background-color: #16162a;
-  border-radius: 8px;
-}
-
-/* 日志面板 */
-.logs-view h3 {
-  color: #e5e7eb;
-  font-size: 16px;
-  margin: 0 0 16px 0;
-}
-
-.logs-container {
-  background-color: #0d0d1a;
-  border-radius: 8px;
-  padding: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  /* 隐藏滚动条 */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.logs-container::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-.log-item {
-  color: #00ff00;
-  font-family: monospace;
-  font-size: 12px;
-  margin-bottom: 4px;
+  padding: 24px;
+  text-align: center;
 }
