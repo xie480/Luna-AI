@@ -2,6 +2,11 @@
  * Luna AI WebSocket 管理器
  * 负责与 Go Runtime 建立 WebSocket 连接，处理消息分发和重连逻辑
  * 严格遵循 Go Runtime 为唯一状态权威的原则，前端仅为状态投影
+ *
+ * 增强功能：
+ * - 发送聊天消息时携带多轮对话历史记录
+ * - 支持自定义系统提示词
+ * - 完善流式输出的错误处理和用户提示
  */
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore } from '../stores/systemStore';
@@ -11,6 +16,7 @@ import {
   PongPayload,
   ErrorPayload,
   ChatStreamPayload,
+  ChatMessage,
 } from '../../shared/types';
 
 /**
@@ -235,10 +241,11 @@ class WSManager {
   }
 
   /**
-   * 发送用户聊天消息
+   * 发送用户聊天消息（携带多轮对话历史记录）
    * @param message 用户输入的消息内容
+   * @param customSystemPrompt 可选的自定义系统提示词
    */
-  public sendChatMessage(message: string): void {
+  public sendChatMessage(message: string, customSystemPrompt?: string): void {
     const sessionStore = useSessionStore.getState();
     const sessionId = sessionStore.currentSessionId;
 
@@ -259,13 +266,32 @@ class WSManager {
       status: 'sending',
     });
 
-    // 发送聊天请求到 Go
+    // 构建历史记录：将已有消息转换为 ChatMessage 格式
+    const currentMessages = sessionStore.messages[sessionId] || [];
+    const history: ChatMessage[] = [];
+
+    for (const msg of currentMessages) {
+      // 跳过刚发送的当前消息（还未在历史中）
+      if (msg.messageId === userMsgId) continue;
+      // 只保留 user 和 assistant 角色的消息作为历史记录
+      // 排除 system/tool 角色消息
+      if (msg.role === 'user' || msg.role === 'assistant') {
+        history.push({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        });
+      }
+    }
+
+    // 发送聊天请求到 Go（携带历史记录和可选的系统提示词）
     this.send({
       type: WS_MSG_TYPE.CMD_USER_INPUT,
       payload: {
         sessionId,
         message,
         msgId: userMsgId,
+        history, // 多轮对话历史记录
+        system_prompt: customSystemPrompt || '', // 自定义系统提示词（可选）
       },
     });
   }

@@ -5,6 +5,7 @@
 // source: communication.proto
 
 // 通信模块的协议定义
+// 本文件定义 Luna AI 各层之间（Go Runtime <-> Python AI Service）的 gRPC 通信协议
 
 package communication
 
@@ -142,20 +143,80 @@ func (x *PongResponse) GetSource() string {
 	return ""
 }
 
+// ChatMessage 定义单条对话消息，用于多轮对话历史记录
+type ChatMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 角色：system / user / assistant
+	Role string `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	// 消息文本内容
+	Content       string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatMessage) Reset() {
+	*x = ChatMessage{}
+	mi := &file_communication_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatMessage) ProtoMessage() {}
+
+func (x *ChatMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatMessage.ProtoReflect.Descriptor instead.
+func (*ChatMessage) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ChatMessage) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *ChatMessage) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
 // Chat 请求消息
 type ChatRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
 	// 用户输入的消息内容
-	Message       string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// 多轮对话历史记录列表，不包含当前 message
+	// 前端维护的历史记录，按时间正序排列（最旧的在最前）
+	History []*ChatMessage `protobuf:"bytes,3,rep,name=history,proto3" json:"history,omitempty"`
+	// 系统提示词，为空时 Python 侧使用默认提示词
+	SystemPrompt  string `protobuf:"bytes,4,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
 	*x = ChatRequest{}
-	mi := &file_communication_proto_msgTypes[2]
+	mi := &file_communication_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -167,7 +228,7 @@ func (x *ChatRequest) String() string {
 func (*ChatRequest) ProtoMessage() {}
 
 func (x *ChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[2]
+	mi := &file_communication_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -180,7 +241,7 @@ func (x *ChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatRequest.ProtoReflect.Descriptor instead.
 func (*ChatRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{2}
+	return file_communication_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ChatRequest) GetTraceId() string {
@@ -197,18 +258,32 @@ func (x *ChatRequest) GetMessage() string {
 	return ""
 }
 
+func (x *ChatRequest) GetHistory() []*ChatMessage {
+	if x != nil {
+		return x.History
+	}
+	return nil
+}
+
+func (x *ChatRequest) GetSystemPrompt() string {
+	if x != nil {
+		return x.SystemPrompt
+	}
+	return ""
+}
+
 // Chat 流式响应消息
 type ChatStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	// 文本块
+	// 文本块内容（经过缓冲合并后的短语或短句）
 	Chunk string `protobuf:"bytes,2,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	// 是否结束
 	IsFinished bool `protobuf:"varint,3,opt,name=is_finished,json=isFinished,proto3" json:"is_finished,omitempty"`
-	// 结束原因 (如 stop, length 等)
+	// 结束原因 (stop / length / error)
 	FinishReason string `protobuf:"bytes,4,opt,name=finish_reason,json=finishReason,proto3" json:"finish_reason,omitempty"`
-	// 错误信息，如果发生错误
+	// 错误信息，仅当 finish_reason = "error" 时非空
 	Error         string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -216,7 +291,7 @@ type ChatStreamResponse struct {
 
 func (x *ChatStreamResponse) Reset() {
 	*x = ChatStreamResponse{}
-	mi := &file_communication_proto_msgTypes[3]
+	mi := &file_communication_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -228,7 +303,7 @@ func (x *ChatStreamResponse) String() string {
 func (*ChatStreamResponse) ProtoMessage() {}
 
 func (x *ChatStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[3]
+	mi := &file_communication_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -241,7 +316,7 @@ func (x *ChatStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatStreamResponse.ProtoReflect.Descriptor instead.
 func (*ChatStreamResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{3}
+	return file_communication_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ChatStreamResponse) GetTraceId() string {
@@ -290,10 +365,15 @@ const file_communication_proto_rawDesc = "" +
 	"\fPongResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x16\n" +
-	"\x06source\x18\x03 \x01(\tR\x06source\"B\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\";\n" +
+	"\vChatMessage\x12\x12\n" +
+	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\"\x9d\x01\n" +
 	"\vChatRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xa1\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
+	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
+	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"\xa1\x01\n" +
 	"\x12ChatStreamResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x14\n" +
 	"\x05chunk\x18\x02 \x01(\tR\x05chunk\x12\x1f\n" +
@@ -318,23 +398,25 @@ func file_communication_proto_rawDescGZIP() []byte {
 	return file_communication_proto_rawDescData
 }
 
-var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_communication_proto_goTypes = []any{
 	(*PingRequest)(nil),        // 0: communication.PingRequest
 	(*PongResponse)(nil),       // 1: communication.PongResponse
-	(*ChatRequest)(nil),        // 2: communication.ChatRequest
-	(*ChatStreamResponse)(nil), // 3: communication.ChatStreamResponse
+	(*ChatMessage)(nil),        // 2: communication.ChatMessage
+	(*ChatRequest)(nil),        // 3: communication.ChatRequest
+	(*ChatStreamResponse)(nil), // 4: communication.ChatStreamResponse
 }
 var file_communication_proto_depIdxs = []int32{
-	0, // 0: communication.CommunicationService.Ping:input_type -> communication.PingRequest
-	2, // 1: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
-	1, // 2: communication.CommunicationService.Ping:output_type -> communication.PongResponse
-	3, // 3: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
+	0, // 1: communication.CommunicationService.Ping:input_type -> communication.PingRequest
+	3, // 2: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
+	1, // 3: communication.CommunicationService.Ping:output_type -> communication.PongResponse
+	4, // 4: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_communication_proto_init() }
@@ -348,7 +430,7 @@ func file_communication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_proto_rawDesc), len(file_communication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

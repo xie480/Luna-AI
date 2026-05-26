@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 // 通信模块的协议定义
+// 本文件定义 Luna AI 各层之间（Go Runtime <-> Python AI Service）的 gRPC 通信协议
 package communication;
 option go_package = "luna-ai/backend/runtime/shared/proto/communication";
 
@@ -22,25 +23,38 @@ message PongResponse {
   string source = 3;
 }
 
+// ChatMessage 定义单条对话消息，用于多轮对话历史记录
+message ChatMessage {
+  // 角色：system / user / assistant
+  string role = 1;
+  // 消息文本内容
+  string content = 2;
+}
+
 // Chat 请求消息
 message ChatRequest {
   // 跟踪ID，用于请求追踪
   string trace_id = 1;
   // 用户输入的消息内容
   string message = 2;
+  // 多轮对话历史记录列表，不包含当前 message
+  // 前端维护的历史记录，按时间正序排列（最旧的在最前）
+  repeated ChatMessage history = 3;
+  // 系统提示词，为空时 Python 侧使用默认提示词
+  string system_prompt = 4;
 }
 
 // Chat 流式响应消息
 message ChatStreamResponse {
   // 跟踪ID，用于请求追踪
   string trace_id = 1;
-  // 文本块
+  // 文本块内容（经过缓冲合并后的短语或短句）
   string chunk = 2;
   // 是否结束
   bool is_finished = 3;
-  // 结束原因 (如 stop, length 等)
+  // 结束原因 (stop / length / error)
   string finish_reason = 4;
-  // 错误信息，如果发生错误
+  // 错误信息，仅当 finish_reason = "error" 时非空
   string error = 5;
 }
 
@@ -50,5 +64,6 @@ service CommunicationService {
   rpc Ping(PingRequest) returns (PongResponse);
   
   // ChatStream 方法，用于流式对话
+  // 支持多轮对话历史记录和系统提示词配置
   rpc ChatStream(ChatRequest) returns (stream ChatStreamResponse);
 }

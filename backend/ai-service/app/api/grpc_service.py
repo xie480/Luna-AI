@@ -1,6 +1,25 @@
+"""
+Luna AI gRPC 通信服务实现
+
+做什么：实现 gRPC 通信服务，处理 Ping 健康检查和 ChatStream 流式对话请求。
+         流式对话支持多轮历史记录、自定义系统提示词、TTFT 监控和全面的异常容错。
+为什么这样做：作为 Go Runtime 与 Python AI Service 之间的通信桥梁，确保消息的可靠透传。
+输入输出：
+    - Ping(): 健康检查，返回 Pong 响应
+    - ChatStream(): 流式对话，返回 AsyncGenerator[ChatStreamResponse]
+边界条件：
+    - ChatRequest.history 为空时表示首次对话
+    - ChatRequest.system_prompt 为空时使用默认提示词
+    - 客户端断开连接时立即停止流式输出
+异常行为：
+    - context.is_active() 返回 False 时终止流
+    - LLM 调用异常时返回结构化错误响应
+"""
+
 import time
-import grpc
 from typing import AsyncGenerator
+
+import grpc
 from app.api import communication_pb2
 from app.api import communication_pb2_grpc
 from app.logger import get_logger
@@ -8,63 +27,156 @@ from app.llm.client import llm_client
 
 logger = get_logger(__name__)
 
-class CommunicationServiceServicer(communication_pb2_grpc.CommunicationServiceServicer):
+
+class CommunicationServiceServicer(
+    communication_pb2_grpc.CommunicationServiceServicer
+):
     """
     实现 gRPC 通信服务
+
+    做什么：处理来自 Go Runtime 的 gRPC 请求，提供 Ping 和 ChatStream 服务。
     """
-    def Ping(self, request: communication_pb2.PingRequest, context: grpc.ServicerContext) -> communication_pb2.PongResponse:
+
+    def Ping(
+        self,
+        request: communication_pb2.PingRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.PongResponse:
         """
         处理 Ping 请求并返回 Pong 响应
+
+        做什么：接收 Ping 请求，记录日志后返回 Pong 响应。
+        为什么这样做：用于 Go Runtime 和 Python AI Service 之间的健康检查。
+        输入输出：
+            - 输入：PingRequest {trace_id, timestamp}
+            - 输出：PongResponse {trace_id, timestamp, source}
+        边界条件：无。
+        异常行为：无（纯同步操作，无需复杂错误处理）。
         """
-        logger.info(f"[TraceID:{request.trace_id}] 收到 Ping 请求, timestamp: {request.timestamp}")
-        
+        logger.info(
+            f"[TraceID:{request.trace_id}] 收到 Ping 请求, "
+            f"timestamp: {request.timestamp}"
+        )
+
         response = communication_pb2.PongResponse(
             trace_id=request.trace_id,
             timestamp=int(time.time() * 1000),
-            source="python-ai-service"
+            source="python-ai-service",
         )
-        
-        logger.info(f"[TraceID:{request.trace_id}] 返回 Pong 响应, timestamp: {response.timestamp}")
+
+        logger.info(
+            f"[TraceID:{request.trace_id}] 返回 Pong 响应, "
+            f"timestamp: {response.timestamp}, source: {response.source}"
+        )
         return response
 
     async def ChatStream(
         self,
         request: communication_pb2.ChatRequest,
-        context: grpc.ServicerContext
+        context: grpc.ServicerContext,
     ) -> AsyncGenerator[communication_pb2.ChatStreamResponse, None]:
         """
-        处理流式对话请求
+        处理流式对话请求（支持多轮历史记录和系统提示词）
+
+        做什么：接收 ChatRequest，提取 history 和 system_prompt，调用 LLM 客户端
+              进行流式对话，将每个文本块封装为 ChatStreamResponse 返回。
+        为什么这样做：作为对话入口，负责解析请求参数、监控 TTFT、处理客户端断开。
+        输入输出：
+            - 输入：ChatRequest {trace_id, message, history[], system_prompt}
+            - 输出：AsyncGenerator[ChatStreamResponse, None]
+        边界条件：
+            - request.history 为空时表示无历史记录
+            - request.system_prompt 为空时 Python 侧使用默认提示词
+            - 客户端断开时（context.is_active() == False）终止流
+        异常行为：
+            - 解析 history 失败时使用空历史（兜底策略）
+            - LLM 调用异常时返回错误响应
         """
         trace_id = request.trace_id
         message = request.message
-        
-        logger.info(f"[TraceID:{trace_id}] 收到 ChatStream 请求, message: {message[:50]}...")
-        
-        # 构造简单的消息列表，后续可扩展为包含历史记录
-        messages = [{"role": "user", "content": message}]
-        
+        system_prompt = request.system_prompt or ""
+
+        # 解析历史记录
+        # proto 的 repeated ChatMessage 字段需要逐条解析
+        history = []
         try:
-            async for chunk_data in llm_client.stream_chat(messages, trace_id):
+            for hist_msg in request.history:
+                history.append({
+                    "role": hist_msg.role,
+                    "content": hist_msg.content,
+                })
+        except Exception as e:
+            # 解析失败时使用空历史（兜底策略）
+            logger.warning(
+                f"[TraceID:{trace_id}] 解析历史记录失败，使用空历史: {e}"
+            )
+            history = []
+
+        history_count = len(history)
+        logger.info(
+            f"[TraceID:{trace_id}] 收到 ChatStream 请求, "
+            f"message: {message[:100]}, "
+            f"history_count: {history_count}, "
+            f"has_custom_prompt: {bool(system_prompt)}"
+        )
+
+        # 记录 TTFT（首字延迟）起始时间
+        start_time = time.monotonic()
+        is_first_chunk = True
+
+        try:
+            # 使用带上下文管理的流式接口
+            async for chunk_data in llm_client.stream_chat_with_context(
+                system_prompt=system_prompt,
+                history=history,
+                current_message=message,
+                trace_id=trace_id,
+            ):
                 # 检查客户端是否已断开连接
-                if context.is_active() is False:
-                    logger.warning(f"[TraceID:{trace_id}] 客户端已断开连接，终止流式输出")
+                if not context.is_active():
+                    logger.warning(
+                        f"[TraceID:{trace_id}] 客户端已断开连接，终止流式输出"
+                    )
                     break
-                    
+
+                # 计算 TTFT：首次收到非空 chunk 时记录延迟
+                if is_first_chunk and chunk_data.get("chunk"):
+                    ttft = (time.monotonic() - start_time) * 1000  # 转换为毫秒
+                    logger.info(
+                        f"[TraceID:{trace_id}] 首字延迟 (TTFT): {ttft:.0f}ms"
+                    )
+                    is_first_chunk = False
+
+                # 构造 gRPC 响应
                 response = communication_pb2.ChatStreamResponse(
                     trace_id=trace_id,
-                    chunk=chunk_data["chunk"],
-                    is_finished=chunk_data["is_finished"],
-                    finish_reason=chunk_data["finish_reason"] or "",
-                    error=chunk_data["error"] or ""
+                    chunk=chunk_data.get("chunk", ""),
+                    is_finished=chunk_data.get("is_finished", False),
+                    finish_reason=chunk_data.get("finish_reason") or "",
+                    error=chunk_data.get("error") or "",
                 )
                 yield response
-                
+
+                # 如果流结束，退出循环
+                if chunk_data.get("is_finished", False):
+                    break
+
         except Exception as e:
-            logger.error(f"[TraceID:{trace_id}] ChatStream 处理异常: {str(e)}")
-            yield communication_pb2.ChatStreamResponse(
-                trace_id=trace_id,
-                chunk="",
-                is_finished=True,
-                finish_reason="error",
-                error=str(e)
+            # 确保所有异常都被捕获，不会导致 gRPC 流意外中断
+            logger.error(
+                f"[TraceID:{trace_id}] ChatStream 处理异常: "
+                f"{type(e).__name__}: {e}"
             )
+            try:
+                yield communication_pb2.ChatStreamResponse(
+                    trace_id=trace_id,
+                    chunk="",
+                    is_finished=True,
+                    finish_reason="error",
+                    error=f"AI 服务处理异常: {type(e).__name__}",
+                )
+            except Exception:
+                # 如果连发送错误响应都失败，忽略（流已关闭）
+                logger.error(
+                    f"[TraceID:{trace_id}] 发送错误响应失败，流可能已关闭"
+                )

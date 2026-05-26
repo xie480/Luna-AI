@@ -5,6 +5,7 @@
 // source: communication.proto
 
 // 通信模块的协议定义
+// 本文件定义 Luna AI 各层之间（Go Runtime <-> Python AI Service）的 gRPC 通信协议
 
 package communication
 
@@ -34,6 +35,7 @@ type CommunicationServiceClient interface {
 	// Ping 方法，用于健康检查和连接测试
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
 	// ChatStream 方法，用于流式对话
+	// 支持多轮对话历史记录和系统提示词配置
 	ChatStream(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamResponse], error)
 }
 
@@ -83,6 +85,7 @@ type CommunicationServiceServer interface {
 	// Ping 方法，用于健康检查和连接测试
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
 	// ChatStream 方法，用于流式对话
+	// 支持多轮对话历史记录和系统提示词配置
 	ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error
 	mustEmbedUnimplementedCommunicationServiceServer()
 }

@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ommunication.proto\x12\rcommunication\"2\n\x0bPingRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\"C\n\x0cPongResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0e\n\x06source\x18\x03 \x01(\t\"0\n\x0b\x43hatRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\"p\n\x12\x43hatStreamResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\r\n\x05\x63hunk\x18\x02 \x01(\t\x12\x13\n\x0bis_finished\x18\x03 \x01(\x08\x12\x15\n\rfinish_reason\x18\x04 \x01(\t\x12\r\n\x05\x65rror\x18\x05 \x01(\t2\xa6\x01\n\x14\x43ommunicationService\x12?\n\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n\nChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x42\x34Z2luna-ai/backend/runtime/shared/proto/communicationb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ommunication.proto\x12\rcommunication\"2\n\x0bPingRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\"C\n\x0cPongResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0e\n\x06source\x18\x03 \x01(\t\",\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\"t\n\x0b\x43hatRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12+\n\x07history\x18\x03 \x03(\x0b\x32\x1a.communication.ChatMessage\x12\x15\n\rsystem_prompt\x18\x04 \x01(\t\"p\n\x12\x43hatStreamResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\r\n\x05\x63hunk\x18\x02 \x01(\t\x12\x13\n\x0bis_finished\x18\x03 \x01(\x08\x12\x15\n\rfinish_reason\x18\x04 \x01(\t\x12\r\n\x05\x65rror\x18\x05 \x01(\t2\xa6\x01\n\x14\x43ommunicationService\x12?\n\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n\nChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x42\x34Z2luna-ai/backend/runtime/shared/proto/communicationb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,10 +36,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_PINGREQUEST']._serialized_end=88
   _globals['_PONGRESPONSE']._serialized_start=90
   _globals['_PONGRESPONSE']._serialized_end=157
-  _globals['_CHATREQUEST']._serialized_start=159
-  _globals['_CHATREQUEST']._serialized_end=207
-  _globals['_CHATSTREAMRESPONSE']._serialized_start=209
-  _globals['_CHATSTREAMRESPONSE']._serialized_end=321
-  _globals['_COMMUNICATIONSERVICE']._serialized_start=324
-  _globals['_COMMUNICATIONSERVICE']._serialized_end=490
+  _globals['_CHATMESSAGE']._serialized_start=159
+  _globals['_CHATMESSAGE']._serialized_end=203
+  _globals['_CHATREQUEST']._serialized_start=205
+  _globals['_CHATREQUEST']._serialized_end=321
+  _globals['_CHATSTREAMRESPONSE']._serialized_start=323
+  _globals['_CHATSTREAMRESPONSE']._serialized_end=435
+  _globals['_COMMUNICATIONSERVICE']._serialized_start=438
+  _globals['_COMMUNICATIONSERVICE']._serialized_end=604
 # @@protoc_insertion_point(module_scope)

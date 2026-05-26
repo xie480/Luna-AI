@@ -8,6 +8,7 @@ const (
 	WSMsgTypeChatStream       = "CHAT_STREAM"
 	WSMsgTypeError            = "ERROR"
 	WSMsgTypeCmdSyncInitState = "CMD_SYNC_INIT_STATE"
+	WSMsgTypeCmdUserInput     = "CMD_USER_INPUT"
 	WSMsgTypeEvtInitState     = "EVT_INIT_STATE"
 )
 

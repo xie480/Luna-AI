@@ -25,9 +25,6 @@ export interface WSMessage<T = unknown> {
  * Ping 消息 Payload
  * 做什么：定义 Ping 消息的数据结构。
  * 为什么这样做：规范化 Ping 消息格式。
- * 输入输出：无。
- * 边界条件：无。
- * 异常行为：无。
  */
 export interface PingPayload {
   timestamp: number;
@@ -37,9 +34,6 @@ export interface PingPayload {
  * Pong 消息 Payload
  * 做什么：定义 Pong 消息的数据结构。
  * 为什么这样做：规范化 Pong 消息格式。
- * 输入输出：无。
- * 边界条件：无。
- * 异常行为：无。
  */
 export interface PongPayload {
   timestamp: number;
@@ -50,9 +44,6 @@ export interface PongPayload {
  * Error 消息 Payload
  * 做什么：定义 Error 消息的数据结构。
  * 为什么这样做：规范化 Error 消息格式。
- * 输入输出：无。
- * 边界条件：无。
- * 异常行为：无。
  */
 export interface ErrorPayload {
   code: number;
@@ -60,15 +51,32 @@ export interface ErrorPayload {
 }
 
 /**
- * ChatRequest 消息 Payload
- * 做什么：定义 ChatRequest 消息的数据结构。
- * 为什么这样做：规范化 ChatRequest 消息格式。
- * 输入输出：无。
- * 边界条件：无。
- * 异常行为：无。
+ * ChatMessage 定义单条对话消息，用于多轮对话历史记录
+ * 做什么：定义对话消息的数据结构，用于前端维护历史记录和发送给后端。
+ * 为什么这样做：确保前端发送给后端的 history 格式与后端期望一致。
+ * 边界条件：
+ *   - role 只能是 'user' | 'assistant' | 'system'
+ *   - content 不能为空字符串
+ */
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+/**
+ * ChatRequest 消息 Payload（增强版，支持多轮历史记录和系统提示词）
+ * 做什么：定义 ChatRequest 消息的完整数据结构。
+ * 为什么这样做：支持多轮对话，让 AI 模型能够感知对话上下文。
+ * 边界条件：
+ *   - history 为空数组时表示首次对话
+ *   - system_prompt 为空时后端使用默认提示词
  */
 export interface ChatRequestPayload {
   message: string;
+  /** 多轮对话历史记录，按时间正序排列（最旧的在前） */
+  history?: ChatMessage[];
+  /** 可选的自定义系统提示词，为空时使用后端默认值 */
+  system_prompt?: string;
 }
 
 /**

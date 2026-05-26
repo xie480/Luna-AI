@@ -49,9 +49,27 @@ type ErrorPayload struct {
 	Message string `json:"message"`
 }
 
-// ChatRequestPayload 定义 Chat 请求的 Payload
+// ChatMessage 定义单条对话消息（与前端 types.ts 中的 ChatMessage 对齐）
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatRequestPayload 定义 Chat 请求的 Payload（增强版，支持历史记录和系统提示词）
 type ChatRequestPayload struct {
-	Message string `json:"message"`
+	Message      string         `json:"message"`
+	History      []ChatMessage  `json:"history,omitempty"`
+	SystemPrompt string         `json:"system_prompt,omitempty"`
+}
+
+// CMDUserInputPayload 定义前端 CMD_USER_INPUT 消息的 Payload
+// 前端发送的消息封装了会话 ID、消息 ID 等额外字段
+type CMDUserInputPayload struct {
+	SessionID    string         `json:"sessionId"`
+	Message      string         `json:"message"`
+	MsgID        string         `json:"msgId"`
+	History      []ChatMessage  `json:"history,omitempty"`
+	SystemPrompt string         `json:"system_prompt,omitempty"`
 }
 
 // ChatStreamPayload 定义 Chat 流式响应的 Payload
@@ -142,7 +160,10 @@ func (s *WSServer) handleMessage(ctx context.Context, conn *WSConnection, msg WS
 	switch msg.Type {
 	case types.WSMsgTypePing:
 		s.handlePing(ctx, conn, msg)
-	case types.WSMsgTypeChatRequest:
+	case types.WSMsgTypeChatRequest, types.WSMsgTypeCmdUserInput:
+		// 支持两种消息类型路由到聊天处理：
+		//   CHAT_REQUEST: 直接聊天请求
+		//   CMD_USER_INPUT: 前端携带 sessionId/msgId 的聊天请求
 		// 异步处理聊天请求，避免阻塞读循环
 		go s.handleChatRequest(ctx, conn, msg)
 	case types.WSMsgTypeCmdSyncInitState:
@@ -204,20 +225,61 @@ func (s *WSServer) handlePing(ctx context.Context, conn *WSConnection, msg WSMes
 }
 
 func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, msg WSMessage) {
-	var payload ChatRequestPayload
-	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-		logger.Error(ctx, "解析 ChatRequest Payload 失败", zap.Error(err))
-		s.sendError(conn, msg.TraceID, 4003, "Invalid ChatRequest payload")
-		return
+	// 提取聊天请求参数，兼容 CHAT_REQUEST 和 CMD_USER_INPUT 两种消息类型
+	var message string
+	var history []ChatMessage
+	var systemPrompt string
+	var nodeID string
+
+	if msg.Type == types.WSMsgTypeCmdUserInput {
+		// 解析 CMD_USER_INPUT 格式（前端实际发送的格式）
+		var cmdPayload CMDUserInputPayload
+		if err := json.Unmarshal(msg.Payload, &cmdPayload); err != nil {
+			logger.Error(ctx, "解析 CMD_USER_INPUT Payload 失败", zap.Error(err))
+			s.sendError(conn, msg.TraceID, 4003, "Invalid CMD_USER_INPUT payload")
+			return
+		}
+		message = cmdPayload.Message
+		history = cmdPayload.History
+		systemPrompt = cmdPayload.SystemPrompt
+		nodeID = cmdPayload.MsgID
+	} else {
+		// 解析 CHAT_REQUEST 格式
+		var payload ChatRequestPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			logger.Error(ctx, "解析 ChatRequest Payload 失败", zap.Error(err))
+			s.sendError(conn, msg.TraceID, 4003, "Invalid ChatRequest payload")
+			return
+		}
+		message = payload.Message
+		history = payload.History
+		systemPrompt = payload.SystemPrompt
+		nodeID = "node-" + msg.TraceID
 	}
 
-	// 临时生成一个 NodeID，后续由 DAG 引擎分配
-	nodeID := "node-" + msg.TraceID
+	// 将前端的历史消息（ChatMessage）转换为 protobuf 的 ChatMessage
+	protoHistory := make([]*pb.ChatMessage, 0, len(history))
+	for _, h := range history {
+		protoHistory = append(protoHistory, &pb.ChatMessage{
+			Role:    h.Role,
+			Content: h.Content,
+		})
+	}
 
+	// 构造 gRPC ChatRequest，包含历史记录和系统提示词
 	req := &pb.ChatRequest{
-		TraceId: msg.TraceID,
-		Message: payload.Message,
+		TraceId:      msg.TraceID,
+		Message:      message,
+		History:      protoHistory,
+		SystemPrompt: systemPrompt,
 	}
+
+	historyCount := len(protoHistory)
+	logger.Info(ctx, "发送流式对话请求到 AI 服务",
+		zap.String("trace_id", msg.TraceID),
+		zap.Int("history_count", historyCount),
+		zap.Bool("has_custom_prompt", systemPrompt != ""),
+	)
 
 	// 调用 AI 服务的 ChatStream
 	stream, err := s.aiClient.ChatStream(ctx, req)
@@ -233,7 +295,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
-			// 流结束
+			// 流正常结束
 			break
 		}
 		if err != nil {
@@ -244,7 +306,10 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 
 		if isFirstChunk && resp.Chunk != "" {
 			ttft := time.Since(startTime).Milliseconds()
-			logger.Info(ctx, "首字延迟 (TTFT)", zap.String("trace_id", msg.TraceID), zap.Int64("ttft_ms", ttft))
+			logger.Info(ctx, "首字延迟 (TTFT)",
+				zap.String("trace_id", msg.TraceID),
+				zap.Int64("ttft_ms", ttft),
+			)
 			isFirstChunk = false
 		}
 
