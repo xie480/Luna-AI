@@ -32,7 +32,7 @@ def setup_logger(level: str = "INFO") -> logging.Logger:
     边界条件：如果 logger 已经配置过 handler，则不会重复添加。
     异常行为：如果传入的 level 字符串不合法，logging.setLevel 可能会抛出 ValueError。
     """
-    logger = logging.getLogger("luna_ai")
+    logger = logging.getLogger("app")
     logger.setLevel(level.upper())
     
     # 避免重复添加 handler

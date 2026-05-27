@@ -162,6 +162,13 @@ class CommunicationServiceServicer(
                     error=chunk_data.get("error") or "",
                 )
                 yield response
+                logger.info(
+                    f"[TraceID:{trace_id}] 响应 ChatStreamResponse, "
+                    f"chunk: {chunk_data.get('chunk', '')[:100]}, "
+                    f"is_finished: {chunk_data.get('is_finished', False)}, "
+                    f"finish_reason: {chunk_data.get('finish_reason', '')}, "
+                    f"error: {chunk_data.get('error', '')}"
+                )
 
                 # 如果流结束，退出循环
                 if chunk_data.get("is_finished", False):

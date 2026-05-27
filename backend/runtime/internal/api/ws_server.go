@@ -60,11 +60,11 @@ type ChatMessage struct {
 // CMDUserInputPayload 定义前端 CMD_USER_INPUT 消息的 Payload
 // 前端发送的消息封装了会话 ID、消息 ID 等额外字段
 type CMDUserInputPayload struct {
-	SessionID    string         `json:"sessionId"`
-	Message      string         `json:"message"`
-	MsgID        string         `json:"msgId"`
-	History      []ChatMessage  `json:"history,omitempty"`
-	SystemPrompt string         `json:"system_prompt,omitempty"`
+	SessionID    string        `json:"sessionId"`
+	Message      string        `json:"message"`
+	MsgID        string        `json:"msgId"`
+	History      []ChatMessage `json:"history,omitempty"`
+	SystemPrompt string        `json:"system_prompt,omitempty"`
 }
 
 // ChatStreamPayload 定义 Chat 流式响应的 Payload
@@ -294,6 +294,8 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			isFirstChunk = false
 		}
 
+		logger.Info(ctx, "接收 ChatStream 响应", zap.String("trace_id", msg.TraceID), zap.String("chunk", resp.Chunk))
+
 		fullAssistantContent += resp.Chunk
 
 		chatPayload := ChatStreamPayload{
@@ -416,10 +418,10 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 	}
 
 	req := &pb.SummarizeContextRequest{
-		TraceId:              traceID,
-		CurrentCoreSummary:   summary.CoreSummary,
-		CurrentKeyFacts:      summary.KeyFacts,
-		MessagesToCompress:   messagesToCompress,
+		TraceId:            traceID,
+		CurrentCoreSummary: summary.CoreSummary,
+		CurrentKeyFacts:    summary.KeyFacts,
+		MessagesToCompress: messagesToCompress,
 	}
 
 	resp, err := s.aiClient.SummarizeContext(ctx, req)
