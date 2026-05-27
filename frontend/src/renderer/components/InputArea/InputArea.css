@@ -12,12 +12,17 @@
 
 .input-area {
   width: 80%;
+  height: 50px; /* 严格固定高度，彻底消除布局偏移 */
   background: rgba(0, 0, 0, 0.2);
-  border-radius: 30px;
-  padding: 4px 20px;
+  border-radius: 25px;
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .input-area:focus-within {
@@ -26,17 +31,29 @@
   box-shadow: 0 0 20px rgba(0, 255, 200, 0.1);
 }
 
+/* 等待状态下的外发光和边框动画 */
+.input-area.waiting {
+  background: rgba(0, 20, 15, 0.4);
+  border-color: rgba(0, 255, 200, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 200, 0.15), inset 0 0 15px rgba(0, 255, 200, 0.05);
+}
+
 .quiet-input {
   width: 100%;
+  height: 100%;
   background: transparent;
   border: none;
   outline: none;
   color: rgba(255, 255, 255, 0.9);
   font-size: 15px;
-  padding: 12px 0;
   text-align: center;
   font-weight: 300;
   letter-spacing: 0.5px;
+  padding: 0 20px;
+  /* 平滑过渡：透明度与轻微位移 */
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  inset: 0;
 }
 
 .quiet-input::placeholder {
@@ -48,48 +65,86 @@
   color: transparent;
 }
 
-/* 等待响应的加载动画 */
-.input-area.waiting {
+/* 隐藏输入框时的状态（向下平滑滑出） */
+.quiet-input.hidden {
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+}
+
+/* =========================================
+   Cyber-Neural 炫酷加载动画
+   ========================================= */
+
+.cyber-loader {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
+  opacity: 0;
+  transform: translateY(-10px); /* 初始偏上 */
+  pointer-events: none;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
 }
 
-.loading-indicator {
+/* 激活时平滑滑入 */
+.cyber-loader.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 扫描光束背景 */
+.cyber-loader::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 255, 200, 0.0) 35%,
+    rgba(0, 255, 200, 0.2) 50%,
+    rgba(0, 255, 200, 0.0) 65%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: cyberScan 2s infinite linear;
+  z-index: -1;
+}
+
+@keyframes cyberScan {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 核心文字与发光效果 */
+.cyber-text {
+  color: rgba(0, 255, 200, 0.9);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 12px 0;
+  gap: 12px;
+  text-shadow: 0 0 10px rgba(0, 255, 200, 0.6);
 }
 
-.loading-dot {
-  font-size: 32px;
-  color: rgba(0, 255, 200, 0.7);
-  line-height: 1;
-  animation: loadingBounce 1.4s ease-in-out infinite;
+/* 动态能量粒子点缀 */
+.cyber-dot {
+  width: 6px;
+  height: 6px;
+  background: #00ffc8;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #00ffc8, 0 0 15px #00ffc8;
+  animation: cyberPulse 1.2s ease-in-out infinite alternate;
 }
 
-.dot-1 {
-  animation-delay: 0s;
-}
+.cyber-dot:nth-child(1) { animation-delay: 0s; }
+.cyber-dot:nth-child(3) { animation-delay: 0.6s; }
 
-.dot-2 {
-  animation-delay: 0.2s;
-}
-
-.dot-3 {
-  animation-delay: 0.4s;
-}
-
-@keyframes loadingBounce {
-  0%, 80%, 100% {
-    transform: translateY(0);
-    opacity: 0.3;
-  }
-  40% {
-    transform: translateY(-8px);
-    opacity: 1;
-  }
+@keyframes cyberPulse {
+  0% { transform: scale(0.7); opacity: 0.4; box-shadow: 0 0 4px #00ffc8; }
+  100% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px #00ffc8, 0 0 24px #00ffc8; }
 }

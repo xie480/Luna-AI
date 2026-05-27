@@ -18,12 +18,12 @@ export const InputArea: React.FC = () => {
     return msgs.some((m) => m.status === 'sending' || m.status === 'streaming');
   });
 
-  // 自动聚焦
+  // 自动聚焦：连接成功且不在等待状态时聚焦
   useEffect(() => {
-    if (connectionStatus === 'connected') {
+    if (connectionStatus === 'connected' && !isWaiting) {
       inputRef.current?.focus();
     }
-  }, [connectionStatus]);
+  }, [connectionStatus, isWaiting]);
 
   const handleSendMessage = () => {
     if (!inputValue.trim()) return;
@@ -35,7 +35,6 @@ export const InputArea: React.FC = () => {
 
     wsManager.sendChatMessage(inputValue.trim());
     setInputValue('');
-    inputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -48,24 +47,28 @@ export const InputArea: React.FC = () => {
   return (
     <div className="input-area-wrapper">
       <div className={`input-area ${isWaiting ? 'waiting' : ''}`}>
-        {isWaiting ? (
-          <div className="loading-indicator">
-            <span className="loading-dot dot-1">.</span>
-            <span className="loading-dot dot-2">.</span>
-            <span className="loading-dot dot-3">.</span>
+        
+        {/* 炫酷的 Cyber-Neural 加载动画 */}
+        <div className={`cyber-loader ${isWaiting ? 'active' : ''}`}>
+          <div className="cyber-text">
+            <span className="cyber-dot"></span>
+            PROCESSING
+            <span className="cyber-dot"></span>
           </div>
-        ) : (
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={connectionStatus === 'connected' ? '和她说点什么...' : '等待连接...'}
-            disabled={connectionStatus !== 'connected'}
-            className="quiet-input"
-          />
-        )}
+        </div>
+
+        {/* 输入框始终存在于 DOM 中，通过 CSS 控制显隐，彻底解决布局偏移 */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={connectionStatus === 'connected' ? '和她说点什么...' : '等待连接...'}
+          disabled={connectionStatus !== 'connected' || isWaiting}
+          className={`quiet-input ${isWaiting ? 'hidden' : ''}`}
+        />
+        
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ class JSONFormatter(logging.Formatter):
             log_record["exc_info"] = self.formatException(record.exc_info)
             
         import json
-        return json.dumps(log_record)
+        return json.dumps(log_record, ensure_ascii=False)
 
 def setup_logger(level: str = "INFO") -> logging.Logger:
     """
