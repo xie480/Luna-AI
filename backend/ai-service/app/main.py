@@ -1,8 +1,13 @@
 import asyncio
 import uvicorn
 import grpc
+import sys
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
+# 将 app/api 目录添加到 sys.path，解决 gRPC 生成文件的绝对导入问题
+sys.path.append(os.path.join(os.path.dirname(__file__), 'api'))
 
 from app.api.health import router as health_router
 from app.api import communication_pb2_grpc
