@@ -19,6 +19,9 @@ type ChatMessage struct {
 	MsgID     string `json:"msgId"`
 	Role      string `json:"role"`
 	Content   string `json:"content"`
+	// Thought 字段存储助手消息的内心独白（thought），用于记忆系统展示历史心理状态
+	// 仅 assistant 角色有此字段，user/system 角色为空字符串
+	Thought   string `json:"thought,omitempty"`
 	Timestamp int64  `json:"timestamp"`
 }
 

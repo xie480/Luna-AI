@@ -74,9 +74,9 @@ message SummarizeContextResponse {
 message ChatStreamResponse {
   // 跟踪ID，用于请求追踪
   string trace_id = 1;
-  // 消息类型："emotion_update" 或 "reply_chunk"
+  // 消息类型："thought_content"（内心独白）/"emotion_update"（情绪更新）/"reply_chunk"（回复文本片段）
   string type = 2;
-  // 文本块内容（情绪枚举值 或 经过缓冲合并后的短语/短句）
+  // 文本块内容（情绪枚举值 / 内心独白文本 / 经过缓冲合并后的短语/短句）
   string chunk = 3;
   // 是否结束
   bool is_finished = 4;

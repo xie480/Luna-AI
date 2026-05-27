@@ -55,6 +55,9 @@ type ErrorPayload struct {
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	// Thought 字段存储助手消息的内心独白（thought），用于记忆系统展示历史心理状态
+	// 仅 assistant 角色有此字段
+	Thought string `json:"thought,omitempty"`
 }
 
 // CMDUserInputPayload 定义前端 CMD_USER_INPUT 消息的 Payload
@@ -278,6 +281,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	startTime := time.Now()
 	isFirstChunk := true
 	var fullAssistantContent string
+	var fullAssistantThought string
 
 	for {
 		resp, err := stream.Recv()
@@ -297,8 +301,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 
 		// 根据 gRPC 响应中的 type 字段进行不同的处理
-		// type = "emotion_update": 专门的情绪事件，用于 Live2D 表情同步，不累积到完整回复文本
-		// type = "reply_chunk" 或空字符串: 正常的回复文本片段，累积到完整回复文本用于持久化
 		msgType := resp.Type
 		if msgType == "" {
 			msgType = "reply_chunk"
@@ -307,29 +309,48 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		logger.Info(ctx, "接收 ChatStream 响应", zap.String("trace_id", msg.TraceID),
 			zap.String("type", msgType), zap.String("chunk", resp.Chunk))
 
-		// 仅累积 reply_chunk 类型的文本到完整助手回复中
-		if msgType == "reply_chunk" {
+		// 根据消息类型进行不同的累积和转发逻辑
+		// type 字段支持的值：
+		//   - "reply_chunk"：正常的回复文本片段，累积到完整回复文本用于持久化
+		//   - "thought_content"：内心独白文本片段，累积到完整 thought 用于持久化，不转发给前端
+		//   - "emotion_update"：情绪更新消息，仅用于 Live2D 表情同步，不累积到文本内容
+		switch msgType {
+		case "reply_chunk":
+			fullAssistantContent += resp.Chunk
+
+		case "thought_content":
+			fullAssistantThought += resp.Chunk
+			// thought_content 不转发给前端（内心独白仅用于后端持久化）
+
+		case "emotion_update":
+			// 情绪更新消息，仅用于 Live2D 表情同步，不累积到文本内容
+
+		default:
+			// 未知类型，按 reply_chunk 处理（向前兼容）
 			fullAssistantContent += resp.Chunk
 		}
 
-		chatPayload := ChatStreamPayload{
-			Type:       msgType,
-			Chunk:      resp.Chunk,
-			IsFinished: resp.IsFinished,
-			NodeID:     cmdPayload.MsgID,
-			Error:      resp.Error,
-		}
-		payloadBytes, _ := json.Marshal(chatPayload)
+		// 转发给前端：仅转发 emotion_update 和 reply_chunk 类型，不转发 thought_content
+		if msgType != "thought_content" {
+			chatPayload := ChatStreamPayload{
+				Type:       msgType,
+				Chunk:      resp.Chunk,
+				IsFinished: resp.IsFinished,
+				NodeID:     cmdPayload.MsgID,
+				Error:      resp.Error,
+			}
+			payloadBytes, _ := json.Marshal(chatPayload)
 
-		streamMsg := WSMessage{
-			Type:    types.WSMsgTypeChatStream,
-			TraceID: msg.TraceID,
-			Payload: payloadBytes,
-		}
+			streamMsg := WSMessage{
+				Type:    types.WSMsgTypeChatStream,
+				TraceID: msg.TraceID,
+				Payload: payloadBytes,
+			}
 
-		if err := conn.WriteJSON(streamMsg); err != nil {
-			logger.Error(ctx, "发送 CHAT_STREAM 消息失败", zap.Error(err))
-			return
+			if err := conn.WriteJSON(streamMsg); err != nil {
+				logger.Error(ctx, "发送 CHAT_STREAM 消息失败", zap.Error(err))
+				return
+			}
 		}
 
 		if resp.IsFinished {
@@ -362,11 +383,12 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 				CreatedAt: userNow,
 			}
 
-			// 构造 Assistant 消息实体
+			// 构造 Assistant 消息实体（包含 thought 内心独白）
 			assistantMsg := repository.ChatMessage{
 				MsgID:     assistantMsgID,
 				Role:      types.RoleAssistant,
 				Content:   fullAssistantContent,
+				Thought:   fullAssistantThought,
 				Timestamp: assistantNow.Unix(),
 			}
 			assistantMsgModel := &repository.ChatMessageModel{
@@ -375,6 +397,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 				MsgID:     assistantMsgID,
 				Role:      types.RoleAssistant,
 				Content:   fullAssistantContent,
+				Thought:   fullAssistantThought,
 				CreatedAt: assistantNow,
 			}
 
@@ -427,9 +450,9 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 	messagesToCompress := make([]*pb.ChatMessage, 0, compressCount)
 	for i := 0; i < compressCount; i++ {
 		messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
-			Role:    history[i].Role,
-			Content: history[i].Content,
-		})
+				Role:    history[i].Role,
+				Content: history[i].Content,
+			})
 	}
 
 	req := &pb.SummarizeContextRequest{

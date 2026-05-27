@@ -11,6 +11,9 @@ type ChatMessageModel struct {
 	MsgID     string    `gorm:"column:msg_id;type:varchar(64);not null;unique"`
 	Role      string    `gorm:"column:role;type:varchar(20);not null"`
 	Content   string    `gorm:"column:content;type:text;not null"`
+	// Thought 字段存储助手消息的内心独白（thought），用于记忆系统展示历史心理状态
+	// 仅 assistant 角色有此字段，user/system 角色为空字符串
+	Thought   string    `gorm:"column:thought;type:text;not null;default:''"`
 	CreatedAt time.Time `gorm:"column:created_at;type:timestamp with time zone;default:CURRENT_TIMESTAMP;index:idx_chat_messages_session_id_created_at,sort:desc"`
 }
 
