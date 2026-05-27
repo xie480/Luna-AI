@@ -61,41 +61,5 @@ export const useBubble = () => {
     }, duration);
   }, []);
 
-  const splitReplyIntoChunks = useCallback((text: string): string[] => {
-    if (!text) return [];
-    text = String(text).replace(/\s+/g, " ").trim();
-    if (!text) return [];
-
-    const sentenceRe = /[^。！？!?~～…]+[。！？!?~～…]?/g;
-    const sentences = text.match(sentenceRe) || [text];
-    const parts: string[] = [];
-    const commaRe = /[^，,、；;]+[，,、；;]?/g;
-
-    for (let s of sentences) {
-      s = s.trim();
-      if (!s) continue;
-      const subs = s.match(commaRe) || [s];
-      for (let sub of subs) {
-        sub = sub.replace(/[，,、；;]$/u, "").trim();
-        if (sub) parts.push(sub);
-      }
-    }
-    return parts;
-  }, []);
-
-  const sendReplyAsBubbles = useCallback(async (reply: string, opts: { interval?: number, duration?: number } = {}) => {
-    const interval = typeof opts.interval === "number" ? opts.interval : 450;
-    const duration = typeof opts.duration === "number" ? opts.duration : 5000;
-    const chunks = splitReplyIntoChunks(reply);
-    if (!chunks.length) return;
-
-    for (let i = 0; i < chunks.length; i++) {
-      showBubble(chunks[i], duration);
-      if (i < chunks.length - 1) {
-        await new Promise((r) => setTimeout(r, interval));
-      }
-    }
-  }, [showBubble, splitReplyIntoChunks]);
-
-  return { bubbles, showBubble, registerBubble, sendReplyAsBubbles, splitReplyIntoChunks };
+  return { bubbles, showBubble, registerBubble };
 };

@@ -1,71 +1,42 @@
-import React, { useEffect, useRef } from 'react';
+/**
+ * Luna AI 气泡栈组件
+ * 负责展示聊天气泡，采用独立气泡策略（streaming_rendering_plan.md §3.3 策略 A）
+ *
+ * 重构说明（根据 streaming_rendering_plan.md）：
+ * - 废弃：从 sessionStore 监听消息变化 + 前端 splitReplyIntoChunks 分句逻辑。
+ * - 废弃：sendReplyAsBubbles 批量发送逻辑（拆分移至后端 stream_parser.py）。
+ * - 采用：监听 window 自定义事件 luna:show-bubble，直接调用 showBubble 渲染。
+ * - 后端已按标点断句并下发语义完整的句子，前端无需再分句。
+ */
+import React, { useEffect } from 'react';
 import { useBubble } from '../../hooks/useBubble';
-import { useSessionStore } from '../../stores/sessionStore';
 import './BubbleStack.css';
 
+interface ShowBubbleEventDetail {
+  text: string;
+  duration?: number;
+}
+
 export const BubbleStack: React.FC = () => {
-  const { bubbles, registerBubble, sendReplyAsBubbles } = useBubble();
-  const currentSessionId = useSessionStore((state) => state.currentSessionId);
-  const messages = useSessionStore((state) =>
-    currentSessionId ? state.messages[currentSessionId] || [] : []
-  );
-  
-  // 记录已经处理过的消息 ID，避免重复显示
-  const processedMessageIds = useRef<Set<string>>(new Set());
-  // 记录当前正在流式输出的消息 ID
-  const streamingMessageId = useRef<string | null>(null);
-  // 记录当前流式消息已经处理的文本长度
-  const processedLength = useRef<number>(0);
+  const { bubbles, registerBubble, showBubble } = useBubble();
 
+  /**
+   * 监听 wsManager 分发的 luna:show-bubble 事件
+   * 直接以独立气泡策略渲染每个文本块
+   */
   useEffect(() => {
-    if (messages.length === 0) return;
+    const handleShowBubble = (e: Event) => {
+      const customEvent = e as CustomEvent<ShowBubbleEventDetail>;
+      const { text, duration } = customEvent.detail;
+      if (!text || !text.trim()) return;
+      showBubble(text, duration ?? Math.max(3000, text.length * 200));
+    };
 
-    const lastMessage = messages[messages.length - 1];
-    
-    // 只处理 assistant 的消息
-    if (lastMessage.role !== 'assistant') return;
-
-    const msgId = lastMessage.messageId;
-
-    if (lastMessage.status === 'completed') {
-      // 如果消息已完成且未处理过，或者之前是流式但现在完成了（需要处理剩余部分）
-      if (!processedMessageIds.current.has(msgId)) {
-        const textToProcess = lastMessage.content.substring(processedLength.current);
-        if (textToProcess.trim()) {
-           sendReplyAsBubbles(textToProcess);
-        }
-        processedMessageIds.current.add(msgId);
-        streamingMessageId.current = null;
-        processedLength.current = 0;
-      }
-    } else if (lastMessage.status === 'streaming') {
-      // 处理流式消息
-      if (streamingMessageId.current !== msgId) {
-        // 新的流式消息开始
-        streamingMessageId.current = msgId;
-        processedLength.current = 0;
-      }
-
-      // 检查是否有新的完整句子可以显示
-      const currentContent = lastMessage.content;
-      const newContent = currentContent.substring(processedLength.current);
-      
-      // 简单的分句逻辑，遇到标点符号认为是一句
-      const sentenceEndRegex = /[。！？!?~～…\n]/;
-      const match = newContent.match(sentenceEndRegex);
-      
-      if (match && match.index !== undefined) {
-        const endIndex = match.index + match[0].length;
-        const sentence = newContent.substring(0, endIndex);
-        
-        if (sentence.trim()) {
-          sendReplyAsBubbles(sentence);
-        }
-        
-        processedLength.current += endIndex;
-      }
-    }
-  }, [messages, sendReplyAsBubbles]);
+    window.addEventListener('luna:show-bubble', handleShowBubble);
+    return () => {
+      window.removeEventListener('luna:show-bubble', handleShowBubble);
+    };
+  }, [showBubble]);
 
   return (
     <div className="bubble-stack">

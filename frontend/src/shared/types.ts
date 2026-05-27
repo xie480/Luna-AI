@@ -94,3 +94,22 @@ export interface ChatStreamPayload {
   node_id: string;
   error?: string;
 }
+
+/**
+ * 情绪更新事件 Payload —— 对应 EVT_EMOTION_UPDATE
+ * 做什么：承载后端推送的 Live2D 情绪名称。
+ * 为什么这样做：与 streaming_rendering_plan.md §3.1 契约对齐。
+ */
+export interface EmotionUpdatePayload {
+  emotion: string;
+}
+
+/**
+ * 回复文本块事件 Payload —— 对应 EVT_REPLY_CHUNK
+ * 做什么：承载后端按标点断句后的完整句子文本块。
+ * 为什么这样做：与 streaming_rendering_plan.md §3.1 契约对齐。
+ */
+export interface ReplyChunkPayload {
+  chunk: string;
+  is_finished: boolean;
+}

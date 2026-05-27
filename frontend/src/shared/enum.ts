@@ -52,6 +52,9 @@ export const WS_MSG_TYPE = {
   EVT_MEMORY_UPDATED: "EVT_MEMORY_UPDATED",
   EVT_DEBUG_LOG: "EVT_DEBUG_LOG",
   EVT_CHAT_STREAM_CHUNK: "EVT_CHAT_STREAM_CHUNK",
+  // 流式渲染事件类型 —— 参考 streaming_rendering_plan.md §3.1
+  EVT_EMOTION_UPDATE: "EVT_EMOTION_UPDATE",
+  EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK",
 } as const;
 
 /**

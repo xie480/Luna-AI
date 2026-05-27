@@ -3,10 +3,10 @@
  * 负责与 Go Runtime 建立 WebSocket 连接，处理消息分发和重连逻辑
  * 严格遵循 Go Runtime 为唯一状态权威的原则，前端仅为状态投影
  *
- * 增强功能：
- * - 发送聊天消息时携带多轮对话历史记录
- * - 支持自定义系统提示词
- * - 完善流式输出的错误处理和用户提示
+ * 流式渲染改造（对齐 streaming_rendering_plan.md）：
+ * - CHAT_STREAM → 解析内含的 type 字段（emotion_update / reply_chunk），
+ *   以 CustomEvent 桥接到 BubbleStack（气泡渲染）和 Live2DView（情绪同步）。
+ * - EVT_EMOTION_UPDATE / EVT_REPLY_CHUNK 作为独立消息类型直接处理。
  */
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore } from '../stores/systemStore';
@@ -17,6 +17,8 @@ import {
   PongPayload,
   ErrorPayload,
   ChatStreamPayload,
+  EmotionUpdatePayload,
+  ReplyChunkPayload,
   ChatMessage,
 } from '../../shared/types';
 
@@ -128,9 +130,34 @@ class WSManager {
         break;
 
       case WS_MSG_TYPE.CHAT_STREAM:
-        // 聊天流式输出
+        // 聊天流式输出 —— 内含 type 字段区分 emotion_update / reply_chunk
         const chatPayload = msg.payload as ChatStreamPayload;
         this.handleChatStream(chatPayload);
+        break;
+
+      // === 流式渲染独立事件（streaming_rendering_plan.md §3.1）===
+      case WS_MSG_TYPE.EVT_EMOTION_UPDATE:
+        // 独立情绪更新事件
+        const emotionPayload = msg.payload as EmotionUpdatePayload;
+        systemStore.setEmotion(emotionPayload.emotion);
+        // 同步触发全局事件供 Live2D 消费
+        window.dispatchEvent(
+          new CustomEvent('luna:emotion-update', { detail: { emotion: emotionPayload.emotion } })
+        );
+        break;
+
+      case WS_MSG_TYPE.EVT_REPLY_CHUNK:
+        // 独立回复文本块事件
+        const replyPayload = msg.payload as ReplyChunkPayload;
+        // 触发气泡显示事件
+        if (replyPayload.chunk && replyPayload.chunk.trim()) {
+          const duration = Math.max(3000, replyPayload.chunk.length * 200);
+          window.dispatchEvent(
+            new CustomEvent('luna:show-bubble', {
+              detail: { text: replyPayload.chunk, duration },
+            })
+          );
+        }
         break;
 
       case WS_MSG_TYPE.EVT_INIT_STATE:
@@ -170,39 +197,50 @@ class WSManager {
   }
 
   /**
-   * 处理聊天流式输出
-   * 使用高频渲染优化策略，避免频繁触发 React 重渲染
+   * 处理聊天流式输出（CHAT_STREAM 消息）
+   * 按 payload.type 拆分为情绪更新和回复文本块
    */
   private handleChatStream(payload: ChatStreamPayload): void {
-    const sessionStore = useSessionStore.getState();
     const systemStore = useSystemStore.getState();
-    const currentSessionId = sessionStore.currentSessionId;
-
-    if (!currentSessionId) {
-      systemStore.addSystemLog('收到聊天消息但无活跃会话');
-      return;
-    }
-
-    // 根据消息类型(type)进行不同的处理
-    // type = "emotion_update": 情绪更新，用于 Live2D 表情同步
-    // type = "reply_chunk": 回复文本片段，更新到消息气泡
     const msgType = payload.type || 'reply_chunk';
 
     if (msgType === 'emotion_update') {
-      // 情绪更新：直接更新 Live2D 表情状态，不修改对话消息内容
+      // 情绪更新：更新 Live2D 表情状态（streaming_rendering_plan.md §3.2）
       systemStore.setEmotion(payload.chunk as any);
+      // 同步触发全局事件供 Live2D 消费（与 EVT_EMOTION_UPDATE 路径一致）
+      window.dispatchEvent(
+        new CustomEvent('luna:emotion-update', { detail: { emotion: payload.chunk } })
+      );
       return;
     }
 
-    // reply_chunk 类型：更新消息内容
-    sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
+    if (msgType === 'reply_chunk') {
+      // 回复文本块：通过 CustomEvent 桥接到 BubbleStack（streaming_rendering_plan.md §3.3）
+      if (payload.chunk && payload.chunk.trim()) {
+        const duration = Math.max(3000, payload.chunk.length * 200);
+        window.dispatchEvent(
+          new CustomEvent('luna:show-bubble', {
+            detail: { text: payload.chunk, duration },
+          })
+        );
+      }
 
-    // 如果流结束，更新消息状态
-    if (payload.is_finished) {
-      const status = payload.error ? 'error' : 'completed';
-      sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
-      if (payload.error) {
-        systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
+      // 追加到 sessionStore 的消息内容中（用于完整对话历史记录持久化）
+      const sessionStore = useSessionStore.getState();
+      const currentSessionId = sessionStore.currentSessionId;
+      if (currentSessionId) {
+        sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
+      }
+
+      // 如果流结束，更新消息状态
+      if (payload.is_finished) {
+        const status = payload.error ? 'error' : 'completed';
+        if (currentSessionId) {
+          sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
+        }
+        if (payload.error) {
+          systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
+        }
       }
     }
   }
