@@ -1,11 +1,11 @@
 #live2d-wrapper {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   pointer-events: none; /* 容器不拦截事件，允许点击穿透到下层 UI */
-  z-index: -1; /* 降至全局最低层，确保输入框在其之上 */
+  z-index: 10; /* 调整层级，在背景之上，交互层之下 */
   overflow: visible;
 }
 

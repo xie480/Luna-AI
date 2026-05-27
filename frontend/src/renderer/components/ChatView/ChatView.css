@@ -1,217 +1,31 @@
-/**
- * Luna AI 聊天视图样式
- * 提供沉浸式聊天体验，无滚动条设计
- */
-
 .chat-view {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  background-color: transparent; /* 移除背景色，让底层背景透出 */
   position: relative;
-  z-index: 0; /* 创建层叠上下文 */
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #0a0f0d;
 }
 
-/* 为整个应用添加底层背景 */
-.chat-view::before {
-  content: '';
+.live2d-layer {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #1a1a2e;
-  z-index: -2; /* 确保背景在最底层，低于 Live2D 的 -1 */
-}
-
-/* 消息列表容器 */
-.messages-container {
-  flex: 1;
-  padding: 20px 30px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  /* 隐藏滚动条但保留滚动功能 */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  margin-top: 60px;
-}
-
-.messages-container::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-/* 空状态提示 */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #6b7280;
-}
-
-.empty-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.empty-text {
-  font-size: 16px;
-}
-
-/* 消息气泡 */
-.chat-message {
-  display: flex;
-  flex-direction: column;
-  max-width: 80%;
-}
-
-.user-message {
-  align-self: flex-end;
-}
-
-.assistant-message {
-  align-self: flex-start;
-}
-
-.message-bubble {
-  padding: 12px 16px;
-  border-radius: 16px;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.user-bubble {
-  background-color: #4f46e5;
-  color: #ffffff;
-  border-bottom-right-radius: 4px;
-}
-
-.assistant-bubble {
-  background-color: #2d2d44;
-  color: #e5e7eb;
-  border-bottom-left-radius: 4px;
-}
-
-.message-content {
-  line-height: 1.5;
-}
-
-/* 流式输出光标动画 */
-.streaming-cursor {
-  display: inline-block;
-  width: 8px;
-  height: 16px;
-  background-color: #9ca3af;
-  margin-left: 4px;
-  animation: blink 1s step-end infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-/* 错误提示 */
-.message-error {
-  color: #ef4444;
-  font-size: 12px;
-  margin-top: 4px;
-}
-
-/* 输入区域 */
-.input-container-wrapper {
   width: 100%;
-  padding: 0 30px 30px 30px;
-  box-sizing: border-box;
-  background-color: transparent; /* 移除背景色，避免遮挡模型 */
-  margin-top: auto;
-  position: relative; /* 为内部绝对定位元素提供参考 */
-  z-index: 9999; /* 确保输入框在全局最高层级 */
+  height: 100%;
+  z-index: 10;
+  pointer-events: none; /* 让点击事件穿透到下层，如果 Live2D 需要交互，可以在 Live2DView 内部处理 */
 }
 
-.input-container {
-  display: flex;
-  gap: 12px;
-  background-color: #16162a;
-  border: 1px solid #2d2d44;
-  border-radius: 12px;
-  padding: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  position: relative;
-  z-index: 10; /* 确保输入框在 Live2D 之上 */
-}
-
-.chat-input {
-  flex: 1;
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: none;
-  background-color: transparent;
-  color: #e5e7eb;
-  font-size: 14px;
-  outline: none;
-}
-
-.chat-input:focus {
-  border-color: #4f46e5;
-}
-
-.chat-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chat-input::placeholder {
-  color: #6b7280;
-}
-
-.send-button {
-  padding: 12px 24px;
-  border-radius: 8px;
-  background-color: #4f46e5;
-  color: #ffffff;
-  border: none;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background-color 0.2s, opacity 0.2s;
-}
-
-.send-button:hover:not(:disabled) {
-  background-color: #4338ca;
-}
-
-.send-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 连接状态指示器 */
-.connection-indicator {
+.interaction-layer {
   position: absolute;
-  top: 16px;
-  right: 30px;
-  font-size: 12px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background-color: #2d2d44;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 20;
+  pointer-events: none; /* 默认穿透 */
 }
 
-.connection-indicator.connected {
-  color: #22c55e;
-}
-
-.connection-indicator.connecting,
-.connection-indicator.reconnecting {
-  color: #f59e0b;
-}
-
-.connection-indicator.disconnected {
-  color: #ef4444;
+.interaction-layer > * {
+  pointer-events: auto; /* 子元素恢复交互 */
 }

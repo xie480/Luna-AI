@@ -1,0 +1,1102 @@
+/**
+ * Luna AI 桌面端全局样式
+ * 负责隐藏滚动条、设置全局字体和背景色等基础样式
+ */
+
+/* 隐藏基于 WebKit 的浏览器（Chrome/Edge/Safari/Electron）的滚动条 */
+::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 兼容 Firefox 和 IE/Edge 传统模式 */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+
+/* 全局基础样式 */
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: #1a1a2e;
+  color: #ffffff;
+}
+
+.app-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  height: 100%;
+  position: relative;
+}
+
+/* 禁止文本选择，提升桌面应用体验 */
+body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 输入框允许选择 */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* 全局消息提示框 */
+.global-message-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translate(-50%, -20px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}#live2d-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* 容器不拦截事件，允许点击穿透到下层 UI */
+  z-index: 10; /* 调整层级，在背景之上，交互层之下 */
+  overflow: visible;
+}
+
+.live2d-canvas {
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* 画布不拦截事件，通过 window capture 阶段手动分发 */
+  touch-action: none; /* 防止触摸设备上的默认手势（如滚动、缩放）干扰拖拽 */
+  user-select: none; /* 防止长按选中文本 */
+  -webkit-user-select: none;
+  -webkit-touch-callout: none; /* 防止 iOS 长按弹出菜单 */
+}
+
+/* 配置模式下允许交互 */
+#live2d-wrapper.config-mode {
+  pointer-events: auto;
+  background-color: rgba(0, 0, 0, 0.2); /* 添加半透明遮罩以突出配置状态 */
+}
+
+/* 追踪锚点指示器 */
+.tracking-anchor-indicator {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background-color: #ff4757;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.8);
+  z-index: 20;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 71, 87, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 71, 87, 0);
+  }
+}
+
+/* 配置状态提示栏 — 使用 fixed 定位，独立于 canvas 包裹层 */
+.live2d-config-status-bar {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 24px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 9999;
+  pointer-events: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* 配置操作面板 — 使用 fixed 定位，确保完全独立于 canvas 的 DOM 树 */
+.live2d-config-panel {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.config-btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.save-btn {
+  background-color: #48bb78;
+  color: white;
+}
+
+.save-btn:hover {
+  background-color: #38a169;
+}
+
+.exit-btn {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.exit-btn:hover {
+  background-color: #cbd5e0;
+}
+.background-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #0a0f0d; /* 深色背景底色 */
+  overflow: hidden;
+}
+
+.background-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.6;
+}
+
+.background-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at center, transparent 0%, rgba(10, 15, 13, 0.8) 100%);
+}
+.top-status-panel {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.status-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 16px;
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: 0.5px;
+  font-weight: 300;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #00ffc8;
+  box-shadow: 0 0 8px #00ffc8;
+  opacity: 0.8;
+}
+
+.status-dot.disconnected {
+  background-color: #ff4d4f;
+  box-shadow: 0 0 8px #ff4d4f;
+}
+
+.status-dot.connecting {
+  background-color: #faad14;
+  box-shadow: 0 0 8px #faad14;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+.bubble-stack {
+  position: absolute;
+  bottom: 120px; /* 位于输入框上方 */
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+  z-index: 20;
+  width: 100%;
+  max-width: 600px;
+}
+
+.css-chat-bubble {
+  max-width: 80%;
+  padding: 12px 20px;
+  width: fit-content;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(240, 255, 250, 0.85));
+  border: 1px solid rgba(0, 255, 200, 0.2);
+  border-radius: 20px 20px 20px 4px;
+  color: #1a2b26;
+  font-size: 14px;
+  line-height: 1.6;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  word-break: break-word;
+  box-shadow: 0 8px 24px rgba(0, 255, 200, 0.08), 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: bubbleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  backdrop-filter: blur(8px);
+}
+
+.bubble-avatar {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  animation: bubbleAvatarBounce 2s ease-in-out infinite;
+}
+
+@keyframes bubbleAvatarBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes bubbleIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.9) translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
+}
+
+@keyframes bubbleOut {
+  from { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
+  to { 
+    opacity: 0; 
+    transform: scale(0.95) translateY(-10px); 
+  }
+}
+
+.css-chat-bubble.leaving {
+  animation: bubbleOut 0.3s ease-in forwards;
+}
+.input-area-wrapper {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 600px;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+}
+
+.input-area {
+  width: 80%;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 30px;
+  padding: 4px 20px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+.input-area:focus-within {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(0, 255, 200, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 200, 0.1);
+}
+
+.quiet-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  padding: 12px 0;
+  text-align: center;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+}
+
+.quiet-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  transition: color 0.3s ease;
+}
+
+.quiet-input:focus::placeholder {
+  color: transparent;
+}
+.chat-view {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #0a0f0d;
+}
+
+.live2d-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none; /* 让点击事件穿透到下层，如果 Live2D 需要交互，可以在 Live2DView 内部处理 */
+}
+
+.interaction-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 20;
+  pointer-events: none; /* 默认穿透 */
+}
+
+.interaction-layer > * {
+  pointer-events: auto; /* 子元素恢复交互 */
+}
+/* Luna AI 侧边栏样式 */
+
+.left-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: var(--sidebar-width, 240px);
+  height: 100vh;
+  background-color: #2d3748;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: transform 0.3s ease-in-out;
+}
+
+.left-sidebar.open {
+  transform: translateX(0);
+}
+
+.left-sidebar.closed {
+  transform: translateX(-100%);
+}
+
+.sidebar-header {
+  padding: 20px;
+  border-bottom: 1px solid #4a5568;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-icon {
+  font-size: 24px;
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.sidebar-menu {
+  flex: 1;
+  padding: 20px 0;
+  overflow-y: auto;
+}
+
+.sidebar-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  gap: 12px;
+  transition: background-color 0.2s;
+}
+
+.sidebar-menu-item:hover {
+  background-color: #4a5568;
+}
+
+.sidebar-menu-item.expanded {
+  background-color: #4a5568;
+}
+
+.menu-arrow {
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+.sidebar-sub-menu {
+  background-color: #1a202c;
+  padding: 8px 0;
+}
+
+.sidebar-sub-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 20px 10px 50px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.sidebar-sub-menu-item:hover {
+  background-color: #2d3748;
+  color: white;
+}
+
+.menu-icon {
+  display: flex;
+  align-items: center;
+}
+
+.menu-label {
+  flex: 1;
+}
+
+.sidebar-footer {
+  padding: 20px;
+  border-top: 1px solid #4a5568;
+}
+
+.version-info {
+  text-align: center;
+  font-size: 12px;
+  color: #a0aec0;
+}/**
+ * Luna AI 左侧边栏开关按钮样式
+ * 固定在页面左上角
+ */
+
+.sidebar-trigger {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background-color: #2d2d44;
+  color: #e5e7eb;
+  border: 1px solid #3d3d5c;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+}
+
+.sidebar-trigger:hover {
+  background-color: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.sidebar-trigger:active {
+  transform: scale(0.95);
+}
+
+/* 当侧边栏展开时，按钮位置调整 */
+.sidebar-trigger.sidebar-open {
+  left: 272px; /* 260px (侧边栏宽度) + 12px */
+}
+
+/* 图标容器 */
+.trigger-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.sidebar-trigger:hover .trigger-icon {
+  transform: scale(1.1);
+}/**
+ * Luna AI 服装配置面板样式
+ * 服装清单展示与切换开关样式
+ * 注意：无 emoji 预览图标，仅显示文件名
+ */
+
+/* 服装面板主容器 */
+.clothing-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+/* 加载中 */
+.clothing-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--text-secondary, #888);
+  font-size: 14px;
+}
+
+/* 空状态 */
+.clothing-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+  gap: 12px;
+}
+
+.clothing-empty .empty-text {
+  font-size: 14px;
+  color: var(--text-primary, #eee);
+}
+
+.clothing-empty .empty-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+}
+
+/* 顶部提示文字 */
+.clothing-hint {
+  font-size: 13px;
+  color: var(--text-secondary, #888);
+  line-height: 1.5;
+}
+
+/* 顶部操作栏 */
+.clothing-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.04));
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.clothing-toggle-all-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  border: 1px solid var(--accent-color, #7c5cfc);
+  background: transparent;
+  color: var(--accent-color, #7c5cfc);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.clothing-toggle-all-btn:hover {
+  background: var(--accent-color, #7c5cfc);
+  color: #fff;
+}
+
+/* 服装列表 */
+.clothing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 单个服装配置项 */
+.clothing-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.clothing-item:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.1));
+  border-color: var(--accent-color, #7c5cfc);
+}
+
+.clothing-item.enabled {
+  border-color: var(--accent-color, #7c5cfc);
+  background: var(--bg-active, rgba(124, 92, 252, 0.08));
+}
+
+/* 左侧：名称区域 */
+.clothing-item-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.clothing-item-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #eee);
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 右侧：切换开关（复选框样式美化） */
+.clothing-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+/* 隐藏原生复选框 */
+.clothing-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* 开关轨道 */
+.clothing-toggle-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--toggle-bg-off, rgba(255, 255, 255, 0.15));
+  border-radius: 11px;
+  transition: background-color 0.25s ease;
+}
+
+/* 开关滑块 */
+.clothing-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--toggle-thumb-off, #bbb);
+  border-radius: 50%;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* 选中状态 */
+.clothing-checkbox:checked + .clothing-toggle-track {
+  background: var(--accent-color, #7c5cfc);
+}
+
+.clothing-checkbox:checked + .clothing-toggle-track .clothing-toggle-thumb {
+  left: 21px;
+  background: #fff;
+}
+
+/* 聚焦状态 */
+.clothing-checkbox:focus-visible + .clothing-toggle-track {
+  outline: 2px solid var(--accent-color, #7c5cfc);
+  outline-offset: 2px;
+}
+/**
+ * Luna AI 模态窗口样式
+ * 居中弹窗，带有半透明遮罩层
+ * 支持鼠标拖拽移动
+ */
+
+/* 模态窗口遮罩层 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 模态窗口容器 */
+.modal-container {
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background-color: #1a1a2e;
+  border-radius: 12px;
+  border: 1px solid #2d2d44;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* 拖拽后脱离 flexbox 居中，使用 fixed 定位跟随鼠标 */
+.modal-container.has-position {
+  position: fixed;
+  animation: none;
+  z-index: 201;
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* 拖拽手柄区域 */
+.modal-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.modal-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* 模态窗口头部 */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #2d2d44;
+}
+
+.modal-title {
+  color: #e5e7eb;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #6b7280;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: #ef4444;
+  background-color: #2d2d44;
+}
+
+/* 模态窗口内容区 */
+.modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  /* 隐藏滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.modal-content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 面板通用样式 */
+.panel {
+  height: 100%;
+}
+
+.empty-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #6b7280;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 14px;
+}
+
+/* DAG 任务树面板 */
+.dag-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.plan-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-header h3 {
+  color: #e5e7eb;
+  font-size: 16px;
+  margin: 0;
+}
+
+.plan-id {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.nodes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.node-item {
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: #16162a;
+  border: 1px solid #2d2d44;
+}
+
+.node-item.running {
+  border-color: #f59e0b;
+}
+
+.node-item.completed {
+  border-color: #22c55e;
+}
+
+.node-item.failed {
+  border-color: #ef4444;
+}
+
+.node-item.waiting_user_auth {
+  border-color: #8b5cf6;
+}
+
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.node-name {
+  color: #e5e7eb;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.node-status {
+  color: #6b7280;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: #2d2d44;
+}
+
+.node-description {
+  color: #9ca3af;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.node-progress {
+  margin-top: 8px;
+  height: 4px;
+  background-color: #2d2d44;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: #8b5cf6;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.node-error {
+  margin-top: 8px;
+  color: #ef4444;
+  font-size: 12px;
+}
+
+/* 日志面板 */
+.logs-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.logs-view h3 {
+  color: #e5e7eb;
+  font-size: 16px;
+  margin: 0;
+}
+
+.logs-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #0f0f23;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.log-item {
+  font-size: 12px;
+  color: #9ca3af;
+  font-family: monospace;
+  line-height: 1.5;
+  padding: 2px 0;
+}
+
+/* 记忆面板 */
+.memory-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.memory-section h4 {
+  color: #e5e7eb;
+  font-size: 14px;
+  margin: 0 0 8px 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2d2d44;
+}
+
+.memory-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memory-list li {
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+/* 设置面板 */
+.settings-placeholder {
+  color: #6b7280;
+  font-size: 14px;
+  padding: 24px;
+  text-align: center;
+}

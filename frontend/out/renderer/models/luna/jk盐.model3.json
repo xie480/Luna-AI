@@ -1,0 +1,28 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "jk盐.moc3",
+		"Textures": [
+			"jk盐.8192/texture_00.png",
+			"jk盐.8192/texture_01.png"
+		],
+		"Physics": "jk盐.physics3.json",
+		"UserData": "jk盐.userdata3.json",
+		"DisplayInfo": "jk盐.cdi3.json"
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		},
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeROpen",
+				"ParamEyeLOpen"
+			]
+		}
+	]
+}
