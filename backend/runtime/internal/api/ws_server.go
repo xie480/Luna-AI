@@ -68,7 +68,9 @@ type CMDUserInputPayload struct {
 }
 
 // ChatStreamPayload 定义 Chat 流式响应的 Payload
+// type 字段区分消息来源："emotion_update"（情绪更新，用于 Live2D 表情同步）或 "reply_chunk"（回复文本片段）
 type ChatStreamPayload struct {
+	Type       string `json:"type"`
 	Chunk      string `json:"chunk"`
 	IsFinished bool   `json:"is_finished"`
 	NodeID     string `json:"node_id"`
@@ -294,11 +296,24 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			isFirstChunk = false
 		}
 
-		logger.Info(ctx, "接收 ChatStream 响应", zap.String("trace_id", msg.TraceID), zap.String("chunk", resp.Chunk))
+		// 根据 gRPC 响应中的 type 字段进行不同的处理
+		// type = "emotion_update": 专门的情绪事件，用于 Live2D 表情同步，不累积到完整回复文本
+		// type = "reply_chunk" 或空字符串: 正常的回复文本片段，累积到完整回复文本用于持久化
+		msgType := resp.Type
+		if msgType == "" {
+			msgType = "reply_chunk"
+		}
 
-		fullAssistantContent += resp.Chunk
+		logger.Info(ctx, "接收 ChatStream 响应", zap.String("trace_id", msg.TraceID),
+			zap.String("type", msgType), zap.String("chunk", resp.Chunk))
+
+		// 仅累积 reply_chunk 类型的文本到完整助手回复中
+		if msgType == "reply_chunk" {
+			fullAssistantContent += resp.Chunk
+		}
 
 		chatPayload := ChatStreamPayload{
+			Type:       msgType,
 			Chunk:      resp.Chunk,
 			IsFinished: resp.IsFinished,
 			NodeID:     cmdPayload.MsgID,
@@ -444,6 +459,7 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 
 func (s *WSServer) sendChatStreamError(conn *WSConnection, traceID string, nodeID string, errorMsg string) {
 	chatPayload := ChatStreamPayload{
+		Type:       "reply_chunk",
 		Chunk:      "",
 		IsFinished: true,
 		NodeID:     nodeID,

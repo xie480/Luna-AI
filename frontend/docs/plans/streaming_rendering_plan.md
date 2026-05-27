@@ -38,58 +38,47 @@
 ```
 
 ### 3.2 情绪同步逻辑 (Live2D)
+- 结合现有的 Live2D 架构（参考 `live2d_architecture_analysis.md`），前端已经具备了完善的表情系统（`applyEmotionExpressions` 和 `tweenParameters`）。
 - 在 `sessionStore` 或专门的 `live2dStore` 中监听 `EVT_EMOTION_UPDATE` 事件。
-- 收到事件后，立即调用 Live2D SDK/封装库的 API（如 `setExpression("Confused")`）。
+- 收到事件后，立即调用现有的 `applyEmotionExpressions(msg.payload.emotion)` 方法。
+- 该方法会根据 `EMOTION_EXPRESSIONS` 映射表，加载对应的 `.exp3.json` 参数，并通过 `tweenParameters` 实现 220ms 的平滑缓动过渡。
 - 由于后端保证了 `emotion` 字段在 `reply` 之前输出并解析下发，前端可以在文本气泡出现前或同时完成表情切换，体验更加自然。
 
-### 3.3 气泡渲染逻辑 (ChatView)
-- 废弃原有的逐字打字机（Typewriter）效果，因为后端已经按语义（标点符号）进行了断句。
+### 3.3 气泡渲染逻辑 (BubbleStack)
+- 结合现有的气泡架构（参考 `bubble_text_architecture_analysis.md`），前端已经具备了基于 `useBubble.js` 的独立气泡栈渲染能力。
+- 废弃原有的在前端进行 `splitReplyIntoChunks` 的逻辑，因为后端已经按语义（标点符号）进行了断句并下发 `EVT_REPLY_CHUNK`。
 - 监听 `EVT_REPLY_CHUNK` 事件。
 - **渲染策略**：
-  - **策略 A（独立气泡）**：每个 `chunk` 渲染为一个独立的聊天气泡。这种方式类似微信/QQ的连续发送，适合短句，表现力强。
-  - **策略 B（追加气泡）**：在当前 AI 回复的同一个大气泡内，按段落或行追加 `chunk`。可以使用 CSS 动画（如淡入）让新追加的句子平滑出现。
-  - **推荐**：采用策略 B 的变体，即在同一个消息块中，每个 `chunk` 作为一个独立的 `<span>` 或 `<div>` 淡入显示，既保持了消息的整体性，又避免了闪烁。
+  - 沿用现有的**独立气泡策略**（策略 A）。每个 `chunk` 作为一个独立的聊天气泡弹出。
+  - 收到 `EVT_REPLY_CHUNK` 后，直接调用 `useBubble.js` 暴露的 `showChatBubble(chunk, duration)` 方法。
+  - `showChatBubble` 会自动处理气泡的入场动画（`bubbleIn`）、旧气泡的 FLIP 向上推移动画（基于 GSAP），以及气泡的定时自动销毁（`bubbleOut`）。
+  - 这种方式类似微信/QQ的连续发送，适合短句，表现力强，且完全复用了现有的复杂动画逻辑。
 
-### 3.4 状态管理 (Zustand)
-更新 `sessionStore.ts` 中的状态处理逻辑：
+### 3.4 状态管理与事件分发
+更新 `sessionStore.ts` 或 WebSocket 消息处理中心：
 ```typescript
 // 伪代码示例
-const useSessionStore = create((set, get) => ({
-  messages: [],
-  currentEmotion: 'Neutral',
-  
-  handleWebSocketMessage: (msg) => {
-    switch (msg.type) {
-      case 'EVT_EMOTION_UPDATE':
-        set({ currentEmotion: msg.payload.emotion });
-        // 触发 Live2D 表情更新
-        updateLive2DExpression(msg.payload.emotion);
-        break;
-      case 'EVT_REPLY_CHUNK':
-        set((state) => {
-          // 找到当前正在生成的 AI 消息，追加 chunk
-          const lastMsg = state.messages[state.messages.length - 1];
-          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.isFinished) {
-            return {
-              messages: [
-                ...state.messages.slice(0, -1),
-                { ...lastMsg, content: lastMsg.content + msg.payload.chunk }
-              ]
-            };
-          }
-          // 如果没有正在生成的消息，则创建新消息
-          return {
-            messages: [
-              ...state.messages,
-              { role: 'assistant', content: msg.payload.chunk, isFinished: false }
-            ]
-          };
-        });
-        break;
-      // ... 处理 is_finished 等其他逻辑
-    }
+import { useBubble } from '../hooks/useBubble';
+// 假设 applyEmotionExpressions 已经暴露或可以通过事件总线调用
+
+const handleWebSocketMessage = (msg) => {
+  switch (msg.type) {
+    case 'EVT_EMOTION_UPDATE':
+      // 触发 Live2D 表情更新，利用现有的 220ms 缓动逻辑
+      applyEmotionExpressions(msg.payload.emotion);
+      break;
+    case 'EVT_REPLY_CHUNK':
+      // 直接调用 useBubble 的方法显示气泡
+      // duration 可以根据 chunk 长度动态计算，或者使用默认值
+      const duration = Math.max(3000, msg.payload.chunk.length * 200);
+      showChatBubble(msg.payload.chunk, duration);
+      
+      // 同时，如果需要将完整对话保存到历史记录，可以追加到 sessionStore 的 messages 中
+      appendChunkToCurrentMessage(msg.payload.chunk);
+      break;
+    // ... 处理 is_finished 等其他逻辑
   }
-}));
+};
 ```
 
 ## 4. 实施步骤
@@ -97,9 +86,10 @@ const useSessionStore = create((set, get) => ({
 1. **Phase 1: 契约对齐**
    - 确认后端 WebSocket 消息格式，更新前端 `shared/types.ts` 中的消息类型定义。
 2. **Phase 2: 状态与逻辑改造**
-   - 修改 `sessionStore.ts`，移除旧的 JSON 碎片拼接逻辑，接入新的 `EVT_EMOTION_UPDATE` 和 `EVT_REPLY_CHUNK` 处理逻辑。
-3. **Phase 3: UI 渲染优化**
-   - 修改 `ChatView` 和 `BubbleStack` 组件，移除打字机效果，添加新 chunk 淡入的 CSS 动画。
-   - 确保 Live2D 组件能够正确响应 `currentEmotion` 的变化并平滑过渡。
+   - 修改 WebSocket 消息处理逻辑，移除旧的 JSON 碎片拼接逻辑。
+   - 接入 `EVT_EMOTION_UPDATE`，直接桥接到现有的 `applyEmotionExpressions` 方法。
+   - 接入 `EVT_REPLY_CHUNK`，直接桥接到现有的 `showChatBubble` 方法。
+3. **Phase 3: 冗余代码清理**
+   - 移除 `useBubble.js` 中不再需要的 `splitReplyIntoChunks` 和 `sendReplyAsBubbles` 方法（因为拆分和循环发送逻辑已移至后端）。
 4. **Phase 4: 联调与测试**
-   - 与后端进行全链路联调，验证情绪切换的及时性和气泡渲染的平滑度。
+   - 与后端进行全链路联调，验证情绪切换的及时性（220ms 缓动是否自然）和气泡渲染的平滑度（FLIP 动画是否正常触发）。

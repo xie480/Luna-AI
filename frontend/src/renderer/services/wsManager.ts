@@ -175,14 +175,26 @@ class WSManager {
    */
   private handleChatStream(payload: ChatStreamPayload): void {
     const sessionStore = useSessionStore.getState();
+    const systemStore = useSystemStore.getState();
     const currentSessionId = sessionStore.currentSessionId;
 
     if (!currentSessionId) {
-      useSystemStore.getState().addSystemLog('收到聊天消息但无活跃会话');
+      systemStore.addSystemLog('收到聊天消息但无活跃会话');
       return;
     }
 
-    // 更新消息内容
+    // 根据消息类型(type)进行不同的处理
+    // type = "emotion_update": 情绪更新，用于 Live2D 表情同步
+    // type = "reply_chunk": 回复文本片段，更新到消息气泡
+    const msgType = payload.type || 'reply_chunk';
+
+    if (msgType === 'emotion_update') {
+      // 情绪更新：直接更新 Live2D 表情状态，不修改对话消息内容
+      systemStore.setEmotion(payload.chunk as any);
+      return;
+    }
+
+    // reply_chunk 类型：更新消息内容
     sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
 
     // 如果流结束，更新消息状态
@@ -190,7 +202,7 @@ class WSManager {
       const status = payload.error ? 'error' : 'completed';
       sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
       if (payload.error) {
-        useSystemStore.getState().addSystemLog(`聊天流错误: ${payload.error}`);
+        systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
       }
     }
   }

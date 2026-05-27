@@ -88,6 +88,7 @@ export interface ChatRequestPayload {
  * 异常行为：无。
  */
 export interface ChatStreamPayload {
+  type: string;
   chunk: string;
   is_finished: boolean;
   node_id: string;

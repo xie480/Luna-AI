@@ -432,14 +432,16 @@ type ChatStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	// 文本块内容（经过缓冲合并后的短语或短句）
-	Chunk string `protobuf:"bytes,2,opt,name=chunk,proto3" json:"chunk,omitempty"`
+	// 消息类型："emotion_update" 或 "reply_chunk"
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// 文本块内容（情绪枚举值 或 经过缓冲合并后的短语/短句）
+	Chunk string `protobuf:"bytes,3,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	// 是否结束
-	IsFinished bool `protobuf:"varint,3,opt,name=is_finished,json=isFinished,proto3" json:"is_finished,omitempty"`
+	IsFinished bool `protobuf:"varint,4,opt,name=is_finished,json=isFinished,proto3" json:"is_finished,omitempty"`
 	// 结束原因 (stop / length / error)
-	FinishReason string `protobuf:"bytes,4,opt,name=finish_reason,json=finishReason,proto3" json:"finish_reason,omitempty"`
+	FinishReason string `protobuf:"bytes,5,opt,name=finish_reason,json=finishReason,proto3" json:"finish_reason,omitempty"`
 	// 错误信息，仅当 finish_reason = "error" 时非空
-	Error         string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	Error         string `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -477,6 +479,13 @@ func (*ChatStreamResponse) Descriptor() ([]byte, []int) {
 func (x *ChatStreamResponse) GetTraceId() string {
 	if x != nil {
 		return x.TraceId
+	}
+	return ""
+}
+
+func (x *ChatStreamResponse) GetType() string {
+	if x != nil {
+		return x.Type
 	}
 	return ""
 }
@@ -539,14 +548,15 @@ const file_communication_proto_rawDesc = "" +
 	"\x18SummarizeContextResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12(\n" +
 	"\x10new_core_summary\x18\x02 \x01(\tR\x0enewCoreSummary\x12\"\n" +
-	"\rnew_key_facts\x18\x03 \x01(\tR\vnewKeyFacts\"\xa1\x01\n" +
+	"\rnew_key_facts\x18\x03 \x01(\tR\vnewKeyFacts\"\xb5\x01\n" +
 	"\x12ChatStreamResponse\x12\x19\n" +
-	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x14\n" +
-	"\x05chunk\x18\x02 \x01(\tR\x05chunk\x12\x1f\n" +
-	"\vis_finished\x18\x03 \x01(\bR\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
+	"\x05chunk\x18\x03 \x01(\tR\x05chunk\x12\x1f\n" +
+	"\vis_finished\x18\x04 \x01(\bR\n" +
 	"isFinished\x12#\n" +
-	"\rfinish_reason\x18\x04 \x01(\tR\ffinishReason\x12\x14\n" +
-	"\x05error\x18\x05 \x01(\tR\x05error2\x8b\x02\n" +
+	"\rfinish_reason\x18\x05 \x01(\tR\ffinishReason\x12\x14\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error2\x8b\x02\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +

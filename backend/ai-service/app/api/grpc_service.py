@@ -25,6 +25,7 @@ from app.api import communication_pb2
 from app.api import communication_pb2_grpc
 from app.logger import get_logger
 from app.llm.client import llm_client, compression_llm_client
+from app.llm.stream_parser import StreamParser
 from app.agent.prompts import render_summarize_prompt
 from app.constants import Role
 
@@ -82,7 +83,7 @@ class CommunicationServiceServicer(
         处理流式对话请求（支持多轮历史记录和系统提示词）
 
         做什么：接收 ChatRequest，提取 history 和 system_prompt，调用 LLM 客户端
-              进行流式对话，将每个文本块封装为 ChatStreamResponse 返回。
+               进行流式对话，将每个文本块封装为 ChatStreamResponse 返回。
         为什么这样做：作为对话入口，负责解析请求参数、监控 TTFT、处理客户端断开。
         输入输出：
             - 输入：ChatRequest {trace_id, message, history[], system_prompt}
@@ -127,6 +128,9 @@ class CommunicationServiceServicer(
         start_time = time.monotonic()
         is_first_chunk = True
 
+        # 初始化流式解析器，用于提取 emotion 和切分 reply 句子
+        parser = StreamParser(trace_id)
+
         try:
             # 使用带上下文管理的流式接口
             async for chunk_data in llm_client.stream_chat_with_context(
@@ -153,25 +157,57 @@ class CommunicationServiceServicer(
                     )
                     is_first_chunk = False
 
-                # 构造 gRPC 响应
-                response = communication_pb2.ChatStreamResponse(
-                    trace_id=trace_id,
-                    chunk=chunk_data.get("chunk", ""),
-                    is_finished=chunk_data.get("is_finished", False),
-                    finish_reason=chunk_data.get("finish_reason") or "",
-                    error=chunk_data.get("error") or "",
-                )
-                yield response
-                logger.info(
-                    f"[TraceID:{trace_id}] 响应 ChatStreamResponse, "
-                    f"chunk: {chunk_data.get('chunk', '')[:100]}, "
-                    f"is_finished: {chunk_data.get('is_finished', False)}, "
-                    f"finish_reason: {chunk_data.get('finish_reason', '')}, "
-                    f"error: {chunk_data.get('error', '')}"
-                )
+                # 使用 StreamParser 解析原始 LLM 输出块，提取 emotion 和切分 reply
+                msgs = parser.feed(chunk_data.get("chunk", ""))
+                for msg_type, content in msgs:
+                    # 构造 gRPC 响应，通过 type 字段区分消息类型
+                    response = communication_pb2.ChatStreamResponse(
+                        trace_id=trace_id,
+                        chunk=content,
+                        is_finished=False,
+                        finish_reason="",
+                        error="",
+                    )
+                    # 设置消息类型："emotion_update" 或 "reply_chunk"
+                    response.type = msg_type
+                    yield response
+                    logger.info(
+                        f"[TraceID:{trace_id}] 发送 ChatStreamResponse, "
+                        f"type={msg_type}, chunk={content[:100]}"
+                    )
 
-                # 如果流结束，退出循环
+                # 如果流结束，发送剩余缓冲并标记结束
                 if chunk_data.get("is_finished", False):
+                    flush_msgs = parser.flush()
+                    if not flush_msgs:
+                        # 没有剩余内容，直接发送空结束消息
+                        response = communication_pb2.ChatStreamResponse(
+                            trace_id=trace_id,
+                            chunk="",
+                            is_finished=True,
+                            finish_reason=chunk_data.get("finish_reason") or "",
+                            error=chunk_data.get("error") or "",
+                        )
+                        response.type = "reply_chunk"
+                        yield response
+                        logger.info(
+                            f"[TraceID:{trace_id}] 发送结束 ChatStreamResponse"
+                        )
+                    else:
+                        for f_type, f_content in flush_msgs:
+                            response = communication_pb2.ChatStreamResponse(
+                                trace_id=trace_id,
+                                chunk=f_content,
+                                is_finished=True,
+                                finish_reason=chunk_data.get("finish_reason") or "",
+                                error=chunk_data.get("error") or "",
+                            )
+                            response.type = f_type
+                            yield response
+                            logger.info(
+                                f"[TraceID:{trace_id}] 发送结束 ChatStreamResponse, "
+                                f"type={f_type}, chunk={f_content[:100]}"
+                            )
                     break
 
         except Exception as e:
@@ -181,13 +217,15 @@ class CommunicationServiceServicer(
                 f"{type(e).__name__}: {e}"
             )
             try:
-                yield communication_pb2.ChatStreamResponse(
+                response = communication_pb2.ChatStreamResponse(
                     trace_id=trace_id,
                     chunk="",
                     is_finished=True,
                     finish_reason="error",
                     error=f"AI 服务处理异常: {type(e).__name__}",
                 )
+                response.type = "reply_chunk"
+                yield response
             except Exception:
                 # 如果连发送错误响应都失败，忽略（流已关闭）
                 logger.error(

@@ -7,7 +7,7 @@
 // 通信模块的协议定义
 // 本文件定义 Luna AI 各层之间（Go Runtime <-> Python AI Service）的 gRPC 通信协议
 
-package communication
+package proto
 
 import (
 	context "context"

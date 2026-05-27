@@ -3,7 +3,7 @@ syntax = "proto3";
 // 通信模块的协议定义
 // 本文件定义 Luna AI 各层之间（Go Runtime <-> Python AI Service）的 gRPC 通信协议
 package communication;
-option go_package = "luna-ai/backend/runtime/shared/proto/communication";
+option go_package = "luna-ai/backend/runtime/shared/proto";
 
 // Ping 请求消息
 message PingRequest {
@@ -74,14 +74,16 @@ message SummarizeContextResponse {
 message ChatStreamResponse {
   // 跟踪ID，用于请求追踪
   string trace_id = 1;
-  // 文本块内容（经过缓冲合并后的短语或短句）
-  string chunk = 2;
+  // 消息类型："emotion_update" 或 "reply_chunk"
+  string type = 2;
+  // 文本块内容（情绪枚举值 或 经过缓冲合并后的短语/短句）
+  string chunk = 3;
   // 是否结束
-  bool is_finished = 3;
+  bool is_finished = 4;
   // 结束原因 (stop / length / error)
-  string finish_reason = 4;
+  string finish_reason = 5;
   // 错误信息，仅当 finish_reason = "error" 时非空
-  string error = 5;
+  string error = 6;
 }
 
 // 通信服务定义
