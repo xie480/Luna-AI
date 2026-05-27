@@ -64,6 +64,7 @@ class StreamParser:
         self._reply_buffer: str = ""
         self._thought_buffer: str = ""
         self._thought_sent: bool = False
+        self._intermediate_buffer: str = ""  # 新增：用于缓冲 thought 结束到 reply 开始之间的碎片
 
     def _flush_thought_to_emotion_reply(self) -> Tuple[bool, str]:
         """
@@ -153,13 +154,31 @@ class StreamParser:
         内部方法，允许多次调用以处理不同文本片段。
         """
         msgs: List[Tuple[str, str]] = []
-        # 提取 emotion（仅第一次）
-        emotion = self._extract_emotion(text)
-        if emotion is not None:
-            msgs.append(("emotion_update", emotion))
-        # 处理 reply 内容并切分句子
-        self._feed_reply(text)
-        msgs.extend(self._pop_sentence())
+        
+        if not self._reply_started:
+            # 将碎片追加到缓冲池中，防止 JSON 键值对被 chunk 截断
+            self._intermediate_buffer += text
+            
+            # 提取 emotion（仅第一次）
+            if not self._emotion_sent:
+                m = _EMOTION_RE.search(self._intermediate_buffer)
+                if m:
+                    self._emotion_sent = True
+                    msgs.append(("emotion_update", m.group(1)))
+            
+            # 寻找 reply 起始标记
+            m = _REPLY_START_RE.search(self._intermediate_buffer)
+            if m:
+                self._reply_started = True
+                # 将 reply 起始标记之后的内容放入 reply_buffer
+                self._reply_buffer += self._intermediate_buffer[m.end():]
+                self._intermediate_buffer = ""  # 释放缓冲池
+                msgs.extend(self._pop_sentence())
+        else:
+            # 已经进入 reply 读取阶段，直接追加并切分
+            self._reply_buffer += text
+            msgs.extend(self._pop_sentence())
+            
         return msgs
 
     def _extract_emotion(self, chunk: str) -> str | None:
@@ -218,3 +237,4 @@ class StreamParser:
         self._reply_buffer = ""
         self._thought_buffer = ""
         self._thought_sent = False
+        self._intermediate_buffer = ""  # 重置缓冲池

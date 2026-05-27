@@ -27,9 +27,9 @@ export const useBubble = () => {
   const bubbleElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const bubbleIdCounter = useRef(0);
 
-  // 缓冲队列和活跃计数
+  // 缓冲队列和调度器状态
   const queueRef = useRef<QueueItem[]>([]);
-  const activeCountRef = useRef(0);
+  const isProcessingRef = useRef(false);
   const MAX_BUBBLES = 3;
 
   const registerBubble = useCallback((el: HTMLDivElement | null, id: number) => {
@@ -41,63 +41,86 @@ export const useBubble = () => {
   }, []);
 
   /**
-   * 处理缓冲队列
-   * 当活跃气泡数少于最大限制时，从队列头部取出下一个项目进行渲染
+   * 异步气泡调度器
+   * 逐个按序渲染气泡，控制弹出间隔，并处理淘汰逻辑
    */
-  const processQueue = useCallback(() => {
-    if (activeCountRef.current >= MAX_BUBBLES || queueRef.current.length === 0) {
+  const processQueue = useCallback(async () => {
+    // 如果正在处理中，或队列为空，则直接返回
+    if (isProcessingRef.current || queueRef.current.length === 0) {
       return;
     }
+    isProcessingRef.current = true;
 
-    const item = queueRef.current.shift()!;
-    activeCountRef.current++;
+    while (queueRef.current.length > 0) {
+      const item = queueRef.current.shift()!;
+      const { id, text, duration } = item;
 
-    const { id, text, duration } = item;
-
-    // 1. 记录旧位置 (First)
-    const prevPositions = new Map<number, number>();
-    bubbleElsRef.current.forEach((el, key) => {
-      try { prevPositions.set(key, el.getBoundingClientRect().top); } catch (e) { /* 忽略获取失败的元素 */ }
-    });
-
-    // 2. 添加新气泡触发渲染 (Last)
-    setBubbles(prev => [...prev, { id, text, leaving: false }]);
-
-    // 3. 等待 DOM 更新后执行动画 (Invert & Play)
-    requestAnimationFrame(() => {
+      // 1. 记录旧位置 (用于 GSAP 平滑上移动画)
+      const prevPositions = new Map<number, number>();
       bubbleElsRef.current.forEach((el, key) => {
-        if (prevPositions.has(key) && key !== id) {
-          const prevTop = prevPositions.get(key)!;
-          const currentTop = el.getBoundingClientRect().top;
-          const dy = prevTop - currentTop;
-          if (Math.abs(dy) > 0.5) {
-            gsap.fromTo(el, { y: dy }, { y: 0, duration: 0.3, ease: "power2.out" });
+        try { prevPositions.set(key, el.getBoundingClientRect().top); } catch (e) { /* ignore */ }
+      });
+
+      // 2. 添加新气泡，并执行自动淘汰逻辑
+      setBubbles(prev => {
+        const next = [...prev, { id, text, leaving: false }];
+        // 查找当前活跃（未 leaving）的气泡
+        const activeBubbles = next.filter(b => !b.leaving);
+        
+        // 如果超过最大限制，强制淘汰最旧的
+        if (activeBubbles.length > MAX_BUBBLES) {
+          const oldest = activeBubbles[0];
+          const oldestIndex = next.findIndex(b => b.id === oldest.id);
+          if (oldestIndex !== -1) {
+            next[oldestIndex] = { ...next[oldestIndex], leaving: true };
+            // 触发 DOM 清理
+            setTimeout(() => {
+              setBubbles(current => current.filter(b => b.id !== oldest.id));
+              bubbleElsRef.current.delete(oldest.id);
+            }, 300);
           }
         }
+        return next;
       });
-    });
 
-    // 4. 定时销毁
-    setTimeout(() => {
-      setBubbles(prev => prev.map(b => b.id === id ? { ...b, leaving: true } : b));
+      // 3. 等待 DOM 更新后执行动画
+      requestAnimationFrame(() => {
+        bubbleElsRef.current.forEach((el, key) => {
+          if (prevPositions.has(key) && key !== id) {
+            const prevTop = prevPositions.get(key)!;
+            const currentTop = el.getBoundingClientRect().top;
+            const dy = prevTop - currentTop;
+            if (Math.abs(dy) > 0.5) {
+              gsap.fromTo(el, { y: dy }, { y: 0, duration: 0.3, ease: "power2.out" });
+            }
+          }
+        });
+      });
+
+      // 4. 设置当前气泡的自然生命周期 (基于字数成正比计算的时长)
       setTimeout(() => {
-        setBubbles(prev => prev.filter(b => b.id !== id));
-        bubbleElsRef.current.delete(id);
-        activeCountRef.current--;
-        // 销毁后尝试处理队列中的下一个
-        processQueue();
-      }, 300); // 等待 CSS 淡出动画完成
-    }, duration);
+        setBubbles(prev => {
+          const target = prev.find(b => b.id === id);
+          // 如果气泡还在且未被提前淘汰，则标记为 leaving
+          if (target && !target.leaving) {
+            setTimeout(() => {
+              setBubbles(current => current.filter(b => b.id !== id));
+              bubbleElsRef.current.delete(id);
+            }, 300);
+            return prev.map(b => b.id === id ? { ...b, leaving: true } : b);
+          }
+          return prev;
+        });
+      }, duration);
+
+      // 5. 强制等待一个最小弹出间隔，防止气泡一次性全部弹出
+      // 800ms 保证了视觉上的逐个弹出，同时允许气泡在屏幕上共存（因为 duration 通常远大于 800ms）
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
+    isProcessingRef.current = false;
   }, []);
 
-  /**
-   * 显示气泡
-   * 不立即渲染，而是将请求放入缓冲队列
-   * 由 processQueue 控制实际的渲染时机
-   *
-   * @param text 气泡文本
-   * @param duration 可选的自定义停留时间，默认根据字数动态计算
-   */
   const showBubble = useCallback((text: string, duration?: number) => {
     const id = bubbleIdCounter.current++;
     // 动态计算停留时间：基础 3000ms，每字 250ms，确保与字数成正比

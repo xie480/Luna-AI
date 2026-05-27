@@ -373,23 +373,36 @@ export const Live2DView: React.FC = () => {
   useEffect(() => {
     if (!model) return;
 
-    try {
-      // 根据情绪映射表应用对应的表情列表
-      if (currentEmotion === 'neutral') {
-        model.expression('neutral');
-      } else {
-        const expressions = EMOTION_EXPRESSIONS[currentEmotion as keyof typeof EMOTION_EXPRESSIONS] ?? [];
-        for (const exp of expressions) {
-          try {
-            model.expression(exp);
-          } catch (e) {
-            console.warn(`[Live2D] 表情 ${exp} 应用失败`, e);
+    let isCancelled = false;
+
+    const applyExpressions = async () => {
+      try {
+        // 根据情绪映射表应用对应的表情列表
+        if (currentEmotion === 'neutral') {
+          model.expression('neutral');
+        } else {
+          const expressions = EMOTION_EXPRESSIONS[currentEmotion as keyof typeof EMOTION_EXPRESSIONS] ?? [];
+          for (const exp of expressions) {
+            if (isCancelled) break;
+            try {
+              model.expression(exp);
+              // 增加微小延迟，确保底层 ExpressionManager 能正确处理并发表情
+              await new Promise(resolve => setTimeout(resolve, 50));
+            } catch (e) {
+              console.warn(`[Live2D] 表情 ${exp} 应用失败`, e);
+            }
           }
         }
+      } catch (e) {
+        console.warn(`[Live2D] 无法应用情绪状态 ${currentEmotion}`, e);
       }
-    } catch (e) {
-      console.warn(`[Live2D] 无法应用情绪状态 ${currentEmotion}`, e);
-    }
+    };
+
+    applyExpressions();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [model, currentEmotion]);
 
   // 保存立绘配置
