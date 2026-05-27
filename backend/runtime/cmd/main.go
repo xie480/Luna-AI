@@ -101,8 +101,15 @@ func main() {
 	mux.HandleFunc("/health", healthHandler.HandleHealthCheck)
 
 	// WebSocket 端点 - 前端通信入口
-	redisRepo := repository.NewChatHistoryRedisRepo(redisClient)
-	pgRepo := repository.NewChatHistoryPGRepo(postgresClient)
+	// 注意：redisClient 和 postgresClient 可能为 nil（连接失败时），仓库层需处理 nil 情况
+	var redisRepo *repository.ChatHistoryRedisRepo
+	if redisClient != nil {
+		redisRepo = repository.NewChatHistoryRedisRepo(redisClient)
+	}
+	var pgRepo *repository.ChatHistoryPGRepo
+	if postgresClient != nil {
+		pgRepo = repository.NewChatHistoryPGRepo(postgresClient)
+	}
 	wsServer := api.NewWSServer(aiClient, redisRepo, pgRepo)
 	mux.HandleFunc("/ws", wsServer.HandleWS)
 
