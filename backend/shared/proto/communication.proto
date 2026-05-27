@@ -29,6 +29,10 @@ message ChatMessage {
   string role = 1;
   // 消息文本内容
   string content = 2;
+  // 是否为错误消息
+  bool is_error = 3;
+  // 错误详情
+  string error_details = 4;
 }
 
 // Chat 请求消息

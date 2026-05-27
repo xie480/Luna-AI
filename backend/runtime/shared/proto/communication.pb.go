@@ -149,7 +149,11 @@ type ChatMessage struct {
 	// 角色：system / user / assistant
 	Role string `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
 	// 消息文本内容
-	Content       string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	Content string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	// 是否为错误消息
+	IsError bool `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	// 错误详情
+	ErrorDetails  string `protobuf:"bytes,4,opt,name=error_details,json=errorDetails,proto3" json:"error_details,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -194,6 +198,20 @@ func (x *ChatMessage) GetRole() string {
 func (x *ChatMessage) GetContent() string {
 	if x != nil {
 		return x.Content
+	}
+	return ""
+}
+
+func (x *ChatMessage) GetIsError() bool {
+	if x != nil {
+		return x.IsError
+	}
+	return false
+}
+
+func (x *ChatMessage) GetErrorDetails() string {
+	if x != nil {
+		return x.ErrorDetails
 	}
 	return ""
 }
@@ -432,9 +450,9 @@ type ChatStreamResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	// 消息类型："emotion_update" 或 "reply_chunk"
+	// 消息类型："thought_content"（内心独白）/"emotion_update"（情绪更新）/"reply_chunk"（回复文本片段）
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	// 文本块内容（情绪枚举值 或 经过缓冲合并后的短语/短句）
+	// 文本块内容（情绪枚举值 / 内心独白文本 / 经过缓冲合并后的短语/短句）
 	Chunk string `protobuf:"bytes,3,opt,name=chunk,proto3" json:"chunk,omitempty"`
 	// 是否结束
 	IsFinished bool `protobuf:"varint,4,opt,name=is_finished,json=isFinished,proto3" json:"is_finished,omitempty"`
@@ -529,10 +547,12 @@ const file_communication_proto_rawDesc = "" +
 	"\fPongResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1c\n" +
 	"\ttimestamp\x18\x02 \x01(\x03R\ttimestamp\x12\x16\n" +
-	"\x06source\x18\x03 \x01(\tR\x06source\";\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"{\n" +
 	"\vChatMessage\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\tR\acontent\"\xdd\x01\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\x12#\n" +
+	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\xdd\x01\n" +
 	"\vChatRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +

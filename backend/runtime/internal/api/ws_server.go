@@ -249,7 +249,9 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 	}
 
-	// 将历史 Interaction 列表展开为 protobuf 的 ChatMessage 列表
+	// 【第三步修复】将历史 Interaction 列表展开为 protobuf 的 ChatMessage 列表
+	// 增加对失败回复的处理逻辑：如果助手历史回复存在错误状态，
+	// 将该条错误信息正常封装入 protobuf 列表中，同时在相应字段中明确标记为回复失败状态并附带失败原因
 	protoHistory := make([]*pb.ChatMessage, 0, len(recentHistory)*2)
 	for _, h := range recentHistory {
 		// 用户消息
@@ -257,13 +259,17 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			Role:    types.RoleUser,
 			Content: h.UserContent,
 		})
-		// 助手回复（如果出错则跳过后端展示空回复）
-		if h.Error == "" {
-			protoHistory = append(protoHistory, &pb.ChatMessage{
-				Role:    types.RoleAssistant,
-				Content: h.AssistantContent,
-			})
+		// 助手回复：无论是否出错，都将回复内容正常封装
+		// 如果出错，通过 IsError 和 ErrorDetails 字段标记失败状态和原因
+		assistantMsg := &pb.ChatMessage{
+			Role:    types.RoleAssistant,
+			Content: h.AssistantContent,
 		}
+		if h.Error != "" {
+			assistantMsg.IsError = true
+			assistantMsg.ErrorDetails = h.Error
+		}
+		protoHistory = append(protoHistory, assistantMsg)
 	}
 
 	// 构造 gRPC ChatRequest
@@ -291,6 +297,8 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	var fullAssistantContent string
 	var fullAssistantThought string
 	var fullAssistantEmotion string
+	// 【第二步优化】新增 streamError 变量捕获流式读取时产生的真实报错信息
+	var streamError error
 
 	for {
 		resp, err := stream.Recv()
@@ -300,7 +308,9 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		if err != nil {
 			logger.Error(ctx, "接收 ChatStream 响应失败", zap.Error(err))
 			s.sendChatStreamError(conn, msg.TraceID, cmdPayload.MsgID, err.Error())
-			return
+			// 【第二步优化】在 break 前捕获真实报错信息，传递到持久化协程
+			streamError = err
+			break
 		}
 
 		if isFirstChunk && resp.Chunk != "" {
@@ -393,11 +403,26 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		bgCtx := context.Background()
 		now := time.Now()
 
-		// 【问题5修复】统一标识符，移除前缀；问答绑定为 Interaction 存储单元
-		// 如果系统未正常生成回复，将回复内容替换为标准报错 JSON
+		// 【第二步优化】动态捕获上层执行时产生的真实报错信息，替代写死的标准报错JSON
+		// 由持久化协程负责动态序列化并写入包含真实 details 的报错 JSON
 		errorJSON := ""
-		if fullAssistantContent == "" {
-			errorJSON = `{"error":"generation_failed","details":"Assistant returned empty content"}`
+		if streamError != nil {
+			errData := map[string]string{
+				"error":   "generation_failed",
+				"details": streamError.Error(),
+			}
+			errBytes, _ := json.Marshal(errData)
+			errorJSON = string(errBytes)
+			if fullAssistantContent == "" {
+				fullAssistantContent = errorJSON
+			}
+		} else if fullAssistantContent == "" {
+			errData := map[string]string{
+				"error":   "generation_failed",
+				"details": "Assistant returned empty content",
+			}
+			errBytes, _ := json.Marshal(errData)
+			errorJSON = string(errBytes)
 			fullAssistantContent = errorJSON
 		}
 
@@ -471,12 +496,15 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 			Role:    types.RoleUser,
 			Content: interaction.UserContent,
 		})
-		if interaction.Error == "" {
-			messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
-				Role:    types.RoleAssistant,
-				Content: interaction.AssistantContent,
-			})
+		assistantMsg := &pb.ChatMessage{
+			Role:    types.RoleAssistant,
+			Content: interaction.AssistantContent,
 		}
+		if interaction.Error != "" {
+			assistantMsg.IsError = true
+			assistantMsg.ErrorDetails = interaction.Error
+		}
+		messagesToCompress = append(messagesToCompress, assistantMsg)
 	}
 
 	req := &pb.SummarizeContextRequest{

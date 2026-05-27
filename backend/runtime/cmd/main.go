@@ -77,8 +77,8 @@ func main() {
 		defer postgresClient.Close()
 		logger.Info(ctx, "PostgreSQL 连接成功", zap.String("database", cfg.Postgres.Database))
 		
-		// 自动迁移数据库表结构
-		if err := postgresClient.GetDB().AutoMigrate(&repository.ChatMessageModel{}); err != nil {
+		// 自动迁移数据库表结构（使用 InteractionModel 替代旧的 ChatMessageModel）
+		if err := postgresClient.GetDB().AutoMigrate(&repository.InteractionModel{}); err != nil {
 			logger.Error(ctx, "自动迁移数据库表结构失败", zap.Error(err))
 		} else {
 			logger.Info(ctx, "自动迁移数据库表结构成功")
