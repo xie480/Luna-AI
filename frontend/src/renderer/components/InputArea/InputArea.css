@@ -47,3 +47,49 @@
 .quiet-input:focus::placeholder {
   color: transparent;
 }
+
+/* 等待响应的加载动画 */
+.input-area.waiting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 0;
+}
+
+.loading-dot {
+  font-size: 32px;
+  color: rgba(0, 255, 200, 0.7);
+  line-height: 1;
+  animation: loadingBounce 1.4s ease-in-out infinite;
+}
+
+.dot-1 {
+  animation-delay: 0s;
+}
+
+.dot-2 {
+  animation-delay: 0.2s;
+}
+
+.dot-3 {
+  animation-delay: 0.4s;
+}
+
+@keyframes loadingBounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  40% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
+import { useSessionStore } from '../../stores/sessionStore';
 import { wsManager } from '../../services/wsManager';
 import './InputArea.css';
 
@@ -8,6 +9,14 @@ export const InputArea: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const connectionStatus = useSystemStore((state) => state.connectionStatus);
   const addSystemLog = useSystemStore.getState().addSystemLog;
+
+  // 检查是否正在等待响应（有 sending 或 streaming 状态的消息）
+  const isWaiting = useSessionStore((state) => {
+    const sessionId = state.currentSessionId;
+    if (!sessionId) return false;
+    const msgs = state.messages[sessionId] || [];
+    return msgs.some((m) => m.status === 'sending' || m.status === 'streaming');
+  });
 
   // 自动聚焦
   useEffect(() => {
@@ -38,17 +47,25 @@ export const InputArea: React.FC = () => {
 
   return (
     <div className="input-area-wrapper">
-      <div className="input-area">
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={connectionStatus === 'connected' ? '和她说点什么...' : '等待连接...'}
-          disabled={connectionStatus !== 'connected'}
-          className="quiet-input"
-        />
+      <div className={`input-area ${isWaiting ? 'waiting' : ''}`}>
+        {isWaiting ? (
+          <div className="loading-indicator">
+            <span className="loading-dot dot-1">.</span>
+            <span className="loading-dot dot-2">.</span>
+            <span className="loading-dot dot-3">.</span>
+          </div>
+        ) : (
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={connectionStatus === 'connected' ? '和她说点什么...' : '等待连接...'}
+            disabled={connectionStatus !== 'connected'}
+            className="quiet-input"
+          />
+        )}
       </div>
     </div>
   );

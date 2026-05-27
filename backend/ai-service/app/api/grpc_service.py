@@ -12,7 +12,7 @@ Luna AI gRPC 通信服务实现
     - ChatRequest.system_prompt 为空时使用默认提示词
     - 客户端断开连接时立即停止流式输出
 异常行为：
-    - context.is_active() 返回 False 时终止流
+    - context.cancelled() 返回 True 时终止流
     - LLM 调用异常时返回结构化错误响应
 """
 
@@ -90,7 +90,7 @@ class CommunicationServiceServicer(
         边界条件：
             - request.history 为空时表示无历史记录
             - request.system_prompt 为空时 Python 侧使用默认提示词
-            - 客户端断开时（context.is_active() == False）终止流
+            - 客户端断开时（context.cancelled() == True）终止流
         异常行为：
             - 解析 history 失败时使用空历史（兜底策略）
             - LLM 调用异常时返回错误响应
@@ -138,7 +138,8 @@ class CommunicationServiceServicer(
                 key_facts=request.key_facts,
             ):
                 # 检查客户端是否已断开连接
-                if not context.is_active():
+                # 注意：grpc.aio.ServicerContext 使用 cancelled() 而非 is_active()
+                if context.cancelled():
                     logger.warning(
                         f"[TraceID:{trace_id}] 客户端已断开连接，终止流式输出"
                     )
