@@ -274,12 +274,13 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 
 	// 构造 gRPC ChatRequest
 	req := &pb.ChatRequest{
-		TraceId:      msg.TraceID,
-		Message:      cmdPayload.Message,
-		History:      protoHistory,
-		SystemPrompt: cmdPayload.SystemPrompt,
-		CoreSummary:  summary.CoreSummary,
-		KeyFacts:     summary.KeyFacts,
+		TraceId:        msg.TraceID,
+		Message:        cmdPayload.Message,
+		History:        protoHistory,
+		SystemPrompt:   cmdPayload.SystemPrompt,
+		CoreSummary:    summary.CoreSummary,
+		KeyFacts:       summary.KeyFacts,
+		MemorySnippets: "", // 记忆片段：Phase 6（长期记忆写入）完成后从此字段传入 Qdrant 检索结果
 	}
 
 	logger.Info(ctx, "发送流式对话请求到 AI 服务", zap.String("trace_id", msg.TraceID))

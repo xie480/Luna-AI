@@ -229,11 +229,14 @@ type ChatRequest struct {
 	// 系统提示词，为空时 Python 侧使用默认提示词
 	SystemPrompt string `protobuf:"bytes,4,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
 	// 核心摘要
+	// 核心摘要
 	CoreSummary string `protobuf:"bytes,5,opt,name=core_summary,json=coreSummary,proto3" json:"core_summary,omitempty"`
 	// 关键事实
-	KeyFacts      string `protobuf:"bytes,6,opt,name=key_facts,json=keyFacts,proto3" json:"key_facts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	KeyFacts string `protobuf:"bytes,6,opt,name=key_facts,json=keyFacts,proto3" json:"key_facts,omitempty"`
+	// 记忆片段（用于渲染 memory.j2 模板的原始记忆文本）
+	MemorySnippets string `protobuf:"bytes,7,opt,name=memory_snippets,json=memorySnippets,proto3" json:"memory_snippets,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
@@ -304,6 +307,13 @@ func (x *ChatRequest) GetCoreSummary() string {
 func (x *ChatRequest) GetKeyFacts() string {
 	if x != nil {
 		return x.KeyFacts
+	}
+	return ""
+}
+
+func (x *ChatRequest) GetMemorySnippets() string {
+	if x != nil {
+		return x.MemorySnippets
 	}
 	return ""
 }
@@ -552,14 +562,15 @@ const file_communication_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x03 \x01(\bR\aisError\x12#\n" +
-	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\xdd\x01\n" +
+	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\x86\x02\n" +
 	"\vChatRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
 	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\x12!\n" +
 	"\fcore_summary\x18\x05 \x01(\tR\vcoreSummary\x12\x1b\n" +
-	"\tkey_facts\x18\x06 \x01(\tR\bkeyFacts\"\xe0\x01\n" +
+	"\tkey_facts\x18\x06 \x01(\tR\bkeyFacts\x12'\n" +
+	"\x0fmemory_snippets\x18\a \x01(\tR\x0ememorySnippets\"\xe0\x01\n" +
 	"\x17SummarizeContextRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x120\n" +
 	"\x14current_core_summary\x18\x02 \x01(\tR\x12currentCoreSummary\x12*\n" +

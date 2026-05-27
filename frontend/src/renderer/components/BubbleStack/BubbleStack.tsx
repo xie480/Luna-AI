@@ -46,7 +46,6 @@ export const BubbleStack: React.FC = () => {
           ref={(el) => registerBubble(el, bubble.id)}
           className={`css-chat-bubble ${bubble.leaving ? 'leaving' : ''}`}
         >
-          <span className="bubble-avatar">✨</span>
           {bubble.text}
         </div>
       ))}

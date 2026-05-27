@@ -47,9 +47,12 @@ message ChatRequest {
   // 系统提示词，为空时 Python 侧使用默认提示词
   string system_prompt = 4;
   // 核心摘要
+  // 核心摘要
   string core_summary = 5;
   // 关键事实
   string key_facts = 6;
+  // 记忆片段（用于渲染 memory.j2 模板的原始记忆文本）
+  string memory_snippets = 7;
 }
 
 // SummarizeContext 请求消息

@@ -35,7 +35,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import settings
 from app.logger import get_logger
-from app.agent.prompts import get_system_prompt, render_runtime_prompt
+from app.agent.prompts import get_system_prompt, render_runtime_prompt, render_memory_prompt
 from app.constants import Role
 from app.llm.context_manager import (
     format_messages_for_api,
@@ -227,7 +227,7 @@ class LLMClient:
         trace_id: str,
         **kwargs: Any
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        logger.info(f"[TraceID:{trace_id}] 开始调用 LLM API, model: {self.model_name}")
+        logger.info(f"[TraceID:{trace_id}] 开始调用 LLM API, model: {self.model_name}, prompt: {prompt}")
         buffer = LLMStreamBuffer()
 
         try:
@@ -404,6 +404,7 @@ class LLMClient:
         trace_id: str,
         core_summary: str = "",
         key_facts: str = "",
+        memory_snippets: str = "",
         **kwargs: Any
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -424,6 +425,9 @@ class LLMClient:
                 history: 历史消息列表
                 current_message: 当前用户消息
                 trace_id: 追踪 ID
+                core_summary: 核心摘要
+                key_facts: 关键事实
+                memory_snippets: 记忆片段
                 **kwargs: 其他 API 参数
             - 输出：AsyncGenerator，yield StreamChunkModel 的 dict
         边界条件：
@@ -436,13 +440,24 @@ class LLMClient:
         # 使用默认 System Prompt
         effective_system_prompt = system_prompt if system_prompt else get_system_prompt()
 
-        # 渲染 runtime 提示词：将当前用户输入注入 runtime.j2 模板
-        # 输出包含思维链要求和 JSON 输出格式约束的完整 user message
-        rendered_user_message = render_runtime_prompt(
-            current_message=current_message,
+        # 渲染记忆上下文
+        memory_text = render_memory_prompt(
             core_summary=core_summary,
             key_facts=key_facts,
+            memory_snippets=memory_snippets,
         )
+
+        # 渲染 runtime 提示词：将当前用户输入注入 runtime.j2 模板
+        # 输出包含思维链要求和 JSON 输出格式约束的完整 user message
+        runtime_text = render_runtime_prompt(
+            current_message=current_message,
+        )
+
+        # 组合最终的 user message
+        if memory_text:
+            rendered_user_message = f"{memory_text}\n\n{runtime_text}"
+        else:
+            rendered_user_message = runtime_text
 
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:

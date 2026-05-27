@@ -6,7 +6,9 @@ Luna AI 提示词模板模块（基础问答版）
 为什么这样做：遵循 agent.md 中禁止硬编码魔法字符串的规范，将提示词内容外置于 .j2 文件。
 """
 
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from app.templates.template_manager import TemplateManager, get_template_manager
 
@@ -18,6 +20,8 @@ from app.templates.template_manager import TemplateManager, get_template_manager
 TEMPLATE_SYSTEM: str = "system"
 # 运行时上下文模板（注入当前用户输入和对话历史）
 TEMPLATE_RUNTIME: str = "runtime"
+# 记忆上下文模板
+TEMPLATE_MEMORY: str = "memory"
 # 摘要压缩模板
 TEMPLATE_SUMMARIZE: str = "summarize"
 
@@ -54,10 +58,36 @@ def get_system_prompt() -> str:
 # 运行时上下文提示词
 # ============================================================
 
-def render_runtime_prompt(
-    current_message: str,
+def render_memory_prompt(
     core_summary: str = "",
     key_facts: str = "",
+    memory_snippets: str = "",
+) -> str:
+    """
+    渲染记忆上下文提示词
+
+    作用：将核心摘要、关键事实和记忆片段注入 memory.j2 模板。
+
+    参数：
+        core_summary: 核心摘要
+        key_facts: 关键事实
+        memory_snippets: 记忆片段
+
+    返回：渲染后的记忆提示词字符串。若无记忆内容则返回空字符串。
+    """
+    if not (core_summary or key_facts or memory_snippets):
+        return ""
+
+    return _get_tm().render(
+        TEMPLATE_MEMORY,
+        CORE_SUMMARY=core_summary or "无",
+        KEY_FACTS=key_facts or "无",
+        MEMORY_SNIPPETS=memory_snippets or "无",
+    )
+
+
+def render_runtime_prompt(
+    current_message: str,
 ) -> str:
     """
     渲染运行时上下文提示词
@@ -66,16 +96,18 @@ def render_runtime_prompt(
 
     参数：
         current_message: 当前用户输入的文本
-        core_summary: 核心摘要
-        key_facts: 关键事实
 
     返回：渲染后的运行时提示词字符串。
     """
+    # 1. 获取当前东八区时间
+    tz = ZoneInfo("Asia/Shanghai")
+    current_time = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S %A")
+
+    # 2. 渲染运行时上下文
     return _get_tm().render(
         TEMPLATE_RUNTIME,
         CURRENT_MESSAGE=current_message,
-        CORE_SUMMARY=core_summary,
-        KEY_FACTS=key_facts,
+        CURRENT_TIME=current_time,
     )
 
 

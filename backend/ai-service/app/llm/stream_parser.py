@@ -41,6 +41,8 @@ _REPLY_START_RE = re.compile(r'"reply"\s*:\s*"')
 _SENTENCE_BOUNDARY_RE = re.compile(r'[。！？……,，\n]')
 # 【问题2优化】末尾标点过滤：精准剔除末尾的逗号和句号，保留！、？、～、……
 _TRAILING_PUNCTUATION_RE = re.compile(r'[，,。\.]+$')
+# 匹配连续的省略号
+_ELLIPSIS_RE = re.compile(r'^[…\.]+$')
 
 
 class _ParseState(Enum):
@@ -213,6 +215,13 @@ class StreamParser:
             # 【问题2优化】标点过滤逻辑：剔除末尾的逗号和句号，保留！、？、～、……
             sentence = sentence.strip()
             sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
+            
+            # 修复首字符重复追加问题：如果切分出来的句子全是省略号，且后续还有内容，
+            # 则将其合并到下一个句子中，避免单独作为一个 chunk 发送
+            if _ELLIPSIS_RE.match(sentence) and self._reply_buffer:
+                self._reply_buffer = sentence + self._reply_buffer
+                continue
+                
             if sentence:
                 msgs.append(("reply_chunk", sentence))
         return msgs
