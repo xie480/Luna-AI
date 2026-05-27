@@ -305,8 +305,8 @@ class WSManager {
       return;
     }
 
-    // 先添加用户消息到 UI（等待 Go 确认）
-    const userMsgId = `user-${generateId()}`;
+    // 【问题5修复】统一标识符生成规范，消息 ID 移除任何类型的前缀，全面采用雪花算法
+    const userMsgId = generateId();
     sessionStore.appendMessage(sessionId, {
       messageId: userMsgId,
       sessionId,

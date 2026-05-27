@@ -17,6 +17,9 @@ StreamParser 用于解析 LLM 流式输出的 JSON 结构化文本。
 - `thought` 字段（角色内心独白）被捕获并作为 `"thought_content"` 消息类型输出（用于持久化）
 - `emotion` 字段被提取并立即下发（仅首次出现时）
 - `reply` 字段被基于标点的语义断句，将完整的句子作为独立的 `reply_chunk` 发送
+
+【问题2优化】在输出文本分块时增加标点过滤逻辑：
+精准去除文本末尾的逗号和句号（包括全角/半角），但必须保留感叹号、省略号、波浪号等表达语气的标点。
 """
 
 from __future__ import annotations
@@ -36,6 +39,8 @@ _EMOTION_RE = re.compile(r'"emotion"\s*:\s*"([^"]+)"')
 _REPLY_START_RE = re.compile(r'"reply"\s*:\s*"')
 # 句子结束标点
 _SENTENCE_BOUNDARY_RE = re.compile(r'[。！？……,，\n]')
+# 【问题2优化】末尾标点过滤：精准剔除末尾的逗号和句号，保留！、？、～、……
+_TRAILING_PUNCTUATION_RE = re.compile(r'[，,。\.]+$')
 
 
 class _ParseState(Enum):
@@ -176,6 +181,7 @@ class StreamParser:
             self._reply_buffer += chunk
 
     def _pop_sentence(self) -> List[Tuple[str, str]]:
+        """从 reply 缓存中切分出完整的句子，并过滤末尾平白标点。"""
         msgs: List[Tuple[str, str]] = []
         while True:
             m = _SENTENCE_BOUNDARY_RE.search(self._reply_buffer)
@@ -184,7 +190,12 @@ class StreamParser:
             idx = m.end()
             sentence = self._reply_buffer[:idx]
             self._reply_buffer = self._reply_buffer[idx:]
-            msgs.append(("reply_chunk", sentence))
+
+            # 【问题2优化】标点过滤逻辑：剔除末尾的逗号和句号，保留！、？、～、……
+            sentence = sentence.strip()
+            sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
+            if sentence:
+                msgs.append(("reply_chunk", sentence))
         return msgs
 
     def flush(self) -> List[Tuple[str, str]]:
@@ -192,7 +203,11 @@ class StreamParser:
         msgs: List[Tuple[str, str]] = []
         msgs.extend(self._emit_thought())
         if self._reply_buffer:
-            msgs.append(("reply_chunk", self._reply_buffer))
+            # 【问题2优化】对末尾剩余内容同样执行标点过滤
+            sentence = self._reply_buffer.strip()
+            sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
+            if sentence:
+                msgs.append(("reply_chunk", sentence))
             self._reply_buffer = ""
         return msgs
 

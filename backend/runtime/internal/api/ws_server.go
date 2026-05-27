@@ -238,9 +238,9 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		userMsgID = snowflake.GenerateStringID()
 	}
 
-	// 1. 仅从 Redis 获取上下文 (摘要 + 近期历史)，此时不保存当前用户消息
+	// 1. 仅从 Redis 获取上下文 (摘要 + 历史 Interaction 列表)，此时不保存当前用户消息
 	var summary repository.ChatSummary
-	var recentHistory []repository.ChatMessage
+	var recentHistory []repository.Interaction
 	if s.redisRepo != nil {
 		var err error
 		summary, recentHistory, err = s.redisRepo.GetContext(ctx, cmdPayload.SessionID)
@@ -249,13 +249,21 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 	}
 
-	// 将近期历史转换为 protobuf 的 ChatMessage
-	protoHistory := make([]*pb.ChatMessage, 0, len(recentHistory))
+	// 将历史 Interaction 列表展开为 protobuf 的 ChatMessage 列表
+	protoHistory := make([]*pb.ChatMessage, 0, len(recentHistory)*2)
 	for _, h := range recentHistory {
+		// 用户消息
 		protoHistory = append(protoHistory, &pb.ChatMessage{
-			Role:    h.Role,
-			Content: h.Content,
+			Role:    types.RoleUser,
+			Content: h.UserContent,
 		})
+		// 助手回复（如果出错则跳过后端展示空回复）
+		if h.Error == "" {
+			protoHistory = append(protoHistory, &pb.ChatMessage{
+				Role:    types.RoleAssistant,
+				Content: h.AssistantContent,
+			})
+		}
 	}
 
 	// 构造 gRPC ChatRequest
@@ -282,6 +290,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	isFirstChunk := true
 	var fullAssistantContent string
 	var fullAssistantThought string
+	var fullAssistantEmotion string
 
 	for {
 		resp, err := stream.Recv()
@@ -313,7 +322,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		// type 字段支持的值：
 		//   - "reply_chunk"：正常的回复文本片段，累积到完整回复文本用于持久化
 		//   - "thought_content"：内心独白文本片段，累积到完整 thought 用于持久化，不转发给前端
-		//   - "emotion_update"：情绪更新消息，仅用于 Live2D 表情同步，不累积到文本内容
+		//   - "emotion_update"：情绪更新消息，捕获情绪值用于持久化，仅用于 Live2D 表情同步
 		switch msgType {
 		case "reply_chunk":
 			fullAssistantContent += resp.Chunk
@@ -323,7 +332,8 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			// thought_content 不转发给前端（内心独白仅用于后端持久化）
 
 		case "emotion_update":
-			// 情绪更新消息，仅用于 Live2D 表情同步，不累积到文本内容
+			// 捕获情绪值用于持久化，实现宕机后情绪恢复
+			fullAssistantEmotion = resp.Chunk
 
 		default:
 			// 未知类型，按 reply_chunk 处理（向前兼容）
@@ -351,6 +361,25 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 				logger.Error(ctx, "发送 CHAT_STREAM 消息失败", zap.Error(err))
 				return
 			}
+		} else if resp.IsFinished {
+			// 【问题1修复】thought_content 携带 is_finished=true 时，强制发送空结束信号
+			// 防止前端收不到流结束事件，导致输入框持续 loading
+			chatPayload := ChatStreamPayload{
+				Type:       "reply_chunk",
+				Chunk:      "",
+				IsFinished: true,
+				NodeID:     cmdPayload.MsgID,
+				Error:      resp.Error,
+			}
+			payloadBytes, _ := json.Marshal(chatPayload)
+
+			streamMsg := WSMessage{
+				Type:    types.WSMsgTypeChatStream,
+				TraceID: msg.TraceID,
+				Payload: payloadBytes,
+			}
+
+			_ = conn.WriteJSON(streamMsg)
 		}
 
 		if resp.IsFinished {
@@ -359,72 +388,60 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	}
 
 	// 3. 流式响应结束，开启异步协程执行持久化与压缩触发
-	if fullAssistantContent != "" {
-		go func() {
-			// 使用脱离原请求生命周期的 Background Context
-			bgCtx := context.Background()
-			assistantMsgID := snowflake.GenerateStringID()
-			assistantNow := time.Now()
-			userNow := startTime // 使用请求开始时间作为用户消息时间
+	go func() {
+		// 使用脱离原请求生命周期的 Background Context
+		bgCtx := context.Background()
+		now := time.Now()
 
-			// 构造 User 消息实体
-			userMsg := repository.ChatMessage{
-				MsgID:     userMsgID,
-				Role:      types.RoleUser,
-				Content:   cmdPayload.Message,
-				Timestamp: userNow.Unix(),
-			}
-			userMsgModel := &repository.ChatMessageModel{
-				ID:        snowflake.GenerateStringID(),
-				SessionID: cmdPayload.SessionID,
-				MsgID:     userMsgID,
-				Role:      types.RoleUser,
-				Content:   cmdPayload.Message,
-				CreatedAt: userNow,
-			}
+		// 【问题5修复】统一标识符，移除前缀；问答绑定为 Interaction 存储单元
+		// 如果系统未正常生成回复，将回复内容替换为标准报错 JSON
+		errorJSON := ""
+		if fullAssistantContent == "" {
+			errorJSON = `{"error":"generation_failed","details":"Assistant returned empty content"}`
+			fullAssistantContent = errorJSON
+		}
 
-			// 构造 Assistant 消息实体（包含 thought 内心独白）
-			assistantMsg := repository.ChatMessage{
-				MsgID:     assistantMsgID,
-				Role:      types.RoleAssistant,
-				Content:   fullAssistantContent,
-				Thought:   fullAssistantThought,
-				Timestamp: assistantNow.Unix(),
-			}
-			assistantMsgModel := &repository.ChatMessageModel{
-				ID:        snowflake.GenerateStringID(),
-				SessionID: cmdPayload.SessionID,
-				MsgID:     assistantMsgID,
-				Role:      types.RoleAssistant,
-				Content:   fullAssistantContent,
-				Thought:   fullAssistantThought,
-				CreatedAt: assistantNow,
-			}
+		// 构造 Interaction 聚合实体（一问一答绑定为完整存储单元）
+		interaction := repository.Interaction{
+			MsgID:            userMsgID,
+			UserContent:      cmdPayload.Message,
+			AssistantContent: fullAssistantContent,
+			Thought:          fullAssistantThought,
+			// 【问题4修复】持久化情绪字段，确保宕机后能恢复情绪上下文
+			Emotion:   fullAssistantEmotion,
+			Error:     errorJSON,
+			Timestamp: now.Unix(),
+		}
 
-			// 异步写入 PG
-			if s.pgRepo != nil {
-				if err := s.pgRepo.SaveMessage(bgCtx, userMsgModel); err != nil {
-					logger.Error(bgCtx, "异步保存用户消息到 PG 失败", zap.Error(err))
-				}
-				if err := s.pgRepo.SaveMessage(bgCtx, assistantMsgModel); err != nil {
-					logger.Error(bgCtx, "异步保存 Assistant 消息到 PG 失败", zap.Error(err))
-				}
-			}
+		interactionModel := &repository.InteractionModel{
+			ID:               snowflake.GenerateStringID(),
+			SessionID:        cmdPayload.SessionID,
+			MessageID:        userMsgID,
+			UserContent:      cmdPayload.Message,
+			AssistantContent: fullAssistantContent,
+			Thought:          fullAssistantThought,
+			Emotion:          fullAssistantEmotion,
+			Error:            errorJSON,
+			CreatedAt:        now,
+		}
 
-			// 异步写入 Redis 并触发压缩
-			if s.redisRepo != nil {
-				if _, err := s.redisRepo.SaveMessage(bgCtx, cmdPayload.SessionID, userMsg); err != nil {
-					logger.Error(bgCtx, "异步保存用户消息到 Redis 失败", zap.Error(err))
-				}
-				length, err := s.redisRepo.SaveMessage(bgCtx, cmdPayload.SessionID, assistantMsg)
-				if err != nil {
-					logger.Error(bgCtx, "异步保存 Assistant 消息到 Redis 失败", zap.Error(err))
-				} else if length > repository.MemWorkingWindowSize {
-					s.triggerCompression(bgCtx, cmdPayload.SessionID, msg.TraceID)
-				}
+		// 异步写入 PG
+		if s.pgRepo != nil {
+			if err := s.pgRepo.SaveInteraction(bgCtx, interactionModel); err != nil {
+				logger.Error(bgCtx, "异步保存 Interaction 到 PG 失败", zap.Error(err))
 			}
-		}()
-	}
+		}
+
+		// 异步写入 Redis 并触发压缩
+		if s.redisRepo != nil {
+			length, err := s.redisRepo.SaveInteraction(bgCtx, cmdPayload.SessionID, interaction)
+			if err != nil {
+				logger.Error(bgCtx, "异步保存 Interaction 到 Redis 失败", zap.Error(err))
+			} else if length > int64(repository.MemWorkingWindowSize) {
+				s.triggerCompression(bgCtx, cmdPayload.SessionID, msg.TraceID)
+			}
+		}
+	}()
 }
 
 func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, traceID string) {
@@ -437,22 +454,29 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		return
 	}
 
-	if len(history) <= repository.MemWorkingWindowSize {
+	if len(history) <= int(repository.MemWorkingWindowSize) {
 		return
 	}
 
-	// 提取需要压缩的旧消息
-	compressCount := repository.MemCompressBatchSize
+	// 提取需要压缩的旧 Interaction 记录
+	compressCount := int(repository.MemCompressBatchSize)
 	if len(history) < compressCount {
 		compressCount = len(history)
 	}
 
-	messagesToCompress := make([]*pb.ChatMessage, 0, compressCount)
+	messagesToCompress := make([]*pb.ChatMessage, 0, compressCount*2)
 	for i := 0; i < compressCount; i++ {
+		interaction := history[i]
 		messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
-				Role:    history[i].Role,
-				Content: history[i].Content,
+			Role:    types.RoleUser,
+			Content: interaction.UserContent,
+		})
+		if interaction.Error == "" {
+			messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
+				Role:    types.RoleAssistant,
+				Content: interaction.AssistantContent,
 			})
+		}
 	}
 
 	req := &pb.SummarizeContextRequest{

@@ -23,7 +23,7 @@ func setupTestRedis(t *testing.T) (*infrastructure.RedisClient, *miniredis.Minir
 	return client, mr
 }
 
-func TestChatHistoryRedisRepo_SaveMessage(t *testing.T) {
+func TestChatHistoryRedisRepo_SaveInteraction(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
 	defer client.Close()
@@ -32,14 +32,16 @@ func TestChatHistoryRedisRepo_SaveMessage(t *testing.T) {
 	ctx := context.Background()
 	sessionID := "test-session-1"
 
-	msg := ChatMessage{
-		MsgID:     "msg-1",
-		Role:      "user",
-		Content:   "hello",
-		Timestamp: time.Now().Unix(),
+	interaction := Interaction{
+		MsgID:            "interaction-1",
+		UserContent:      "hello",
+		AssistantContent: "hi there!",
+		Thought:          "I am thinking...",
+		Emotion:          "Happy",
+		Timestamp:        time.Now().Unix(),
 	}
 
-	length, err := repo.SaveMessage(ctx, sessionID, msg)
+	length, err := repo.SaveInteraction(ctx, sessionID, interaction)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), length)
 
@@ -48,7 +50,9 @@ func TestChatHistoryRedisRepo_SaveMessage(t *testing.T) {
 	list, err := client.GetClient().LRange(ctx, key, 0, -1).Result()
 	assert.NoError(t, err)
 	assert.Len(t, list, 1)
-	assert.Contains(t, list[0], "msg-1")
+	assert.Contains(t, list[0], "interaction-1")
+	assert.Contains(t, list[0], "hi there!")
+	assert.Contains(t, list[0], "Happy")
 }
 
 func TestChatHistoryRedisRepo_GetContext(t *testing.T) {
@@ -65,10 +69,10 @@ func TestChatHistoryRedisRepo_GetContext(t *testing.T) {
 	mr.HSet(summaryKey, "core_summary", "test core summary")
 	mr.HSet(summaryKey, "key_facts", "test key facts")
 
-	msg1 := ChatMessage{MsgID: "msg-1", Role: "user", Content: "hello"}
-	msg2 := ChatMessage{MsgID: "msg-2", Role: "assistant", Content: "hi"}
-	_, _ = repo.SaveMessage(ctx, sessionID, msg1)
-	_, _ = repo.SaveMessage(ctx, sessionID, msg2)
+	interaction1 := Interaction{MsgID: "interaction-1", UserContent: "hello", AssistantContent: "hi there!"}
+	interaction2 := Interaction{MsgID: "interaction-2", UserContent: "how are you?", AssistantContent: "I am fine!", Emotion: "Happy"}
+	_, _ = repo.SaveInteraction(ctx, sessionID, interaction1)
+	_, _ = repo.SaveInteraction(ctx, sessionID, interaction2)
 
 	// Test GetContext
 	summary, history, err := repo.GetContext(ctx, sessionID)
@@ -77,8 +81,9 @@ func TestChatHistoryRedisRepo_GetContext(t *testing.T) {
 	assert.Equal(t, "test core summary", summary.CoreSummary)
 	assert.Equal(t, "test key facts", summary.KeyFacts)
 	assert.Len(t, history, 2)
-	assert.Equal(t, "msg-1", history[0].MsgID)
-	assert.Equal(t, "msg-2", history[1].MsgID)
+	assert.Equal(t, "interaction-1", history[0].MsgID)
+	assert.Equal(t, "interaction-2", history[1].MsgID)
+	assert.Equal(t, "Happy", history[1].Emotion)
 }
 
 func TestChatHistoryRedisRepo_UpdateSummaryAndTrim(t *testing.T) {
@@ -92,8 +97,12 @@ func TestChatHistoryRedisRepo_UpdateSummaryAndTrim(t *testing.T) {
 
 	// Setup data
 	for i := 0; i < 5; i++ {
-		msg := ChatMessage{MsgID: fmt.Sprintf("msg-%d", i), Content: "test"}
-		_, _ = repo.SaveMessage(ctx, sessionID, msg)
+		interaction := Interaction{
+			MsgID:            fmt.Sprintf("interaction-%d", i),
+			UserContent:      fmt.Sprintf("user msg %d", i),
+			AssistantContent: fmt.Sprintf("assistant reply %d", i),
+		}
+		_, _ = repo.SaveInteraction(ctx, sessionID, interaction)
 	}
 
 	newSummary := ChatSummary{
@@ -101,7 +110,7 @@ func TestChatHistoryRedisRepo_UpdateSummaryAndTrim(t *testing.T) {
 		KeyFacts:    "new key facts",
 	}
 
-	// Trim first 2 messages (keep from index 2)
+	// Trim first 2 interactions (keep from index 2)
 	err := repo.UpdateSummaryAndTrim(ctx, sessionID, newSummary, 2)
 	assert.NoError(t, err)
 
@@ -112,6 +121,6 @@ func TestChatHistoryRedisRepo_UpdateSummaryAndTrim(t *testing.T) {
 	assert.Equal(t, "new core summary", summary.CoreSummary)
 	assert.Equal(t, "new key facts", summary.KeyFacts)
 	assert.Len(t, history, 3)
-	assert.Equal(t, "msg-2", history[0].MsgID)
-	assert.Equal(t, "msg-4", history[2].MsgID)
+	assert.Equal(t, "interaction-2", history[0].MsgID)
+	assert.Equal(t, "interaction-4", history[2].MsgID)
 }
