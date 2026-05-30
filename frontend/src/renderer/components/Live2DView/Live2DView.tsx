@@ -30,6 +30,46 @@ export const Live2DView: React.FC = () => {
 
   const [trackingOriginOffset, setTrackingOriginOffset] = useState({ x: 0, y: 0 });
 
+  // --- 新增：表情缓存与状态 ---
+  const expressionCache = useRef<Map<string, any>>(new Map());
+  const currentEmotionMeta = useRef<Record<string, number>>({});
+
+  // --- 新增：预加载表情文件 ---
+  useEffect(() => {
+    const preloadExpressions = async () => {
+      const allFiles = [
+        "眼-生气",
+        "脸红2隐藏",
+        "脸黑",
+        "眼-哭哭",
+        "眼-泪眼汪汪",
+        "眼-眩晕流汗",
+        "脸红",
+        "眼-平静死鱼眼",
+        "嘴-平静v形（不可张开",
+        "眼-星星眼",
+        "脸红-痴汉嘴（兼容吐舌",
+        "眼-爱心眼",
+      ];
+      await Promise.all(
+        allFiles.map(async (name) => {
+          try {
+            const res = await fetch(`/models/luna/${encodeURIComponent(name)}.exp3.json`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const text = await res.text();
+            if (text.trim().startsWith("<")) {
+              throw new Error("文件未找到(返回了HTML)");
+            }
+            expressionCache.current.set(name, JSON.parse(text));
+          } catch (e) {
+            console.warn(`[Live2D] 预加载表情 ${name} 失败`, e);
+          }
+        })
+      );
+    };
+    preloadExpressions();
+  }, []);
+
   /**
    * 应用服装配置到模型
    * 遍历 clothingConfig，对已启用的项加载对应的 .exp3.json 并设置参数
@@ -369,68 +409,119 @@ export const Live2DView: React.FC = () => {
     return () => window.removeEventListener("pointermove", onGlobalMove);
   }, [model, container, app, trackingOriginOffset]);
 
-  // ---------- 情绪状态监听 ----------
+  // ---------- 情绪状态监听 (重构后) ----------
   useEffect(() => {
     if (!model) return;
 
     let isCancelled = false;
 
-    /**
-     * 标准化情绪字符串：
-     * 1. 去除首尾空格
-     * 2. 转换为首字母大写的 PascalCase 格式
-     * 3. 如果不在 EMOTION_EXPRESSIONS 列表中，返回 null
-     */
     const normalizeEmotion = (emotion: string): string | null => {
       if (!emotion) return null;
-      
-      // 去除首尾空格
       const trimmed = emotion.trim();
-      
-      // 转换为首字母大写（PascalCase）
-      // 例如：'happy' -> 'Happy', 'SAD' -> 'Sad'
       const normalized = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
-      
-      // 检查是否在 EMOTION_EXPRESSIONS 列表中
       if (normalized in EMOTION_EXPRESSIONS) {
         return normalized;
       }
-      
-      // 不在列表中，返回 null
       return null;
     };
 
-    const applyExpressions = async () => {
-      try {
-        // 标准化情绪字符串
-        const normalizedEmotion = normalizeEmotion(currentEmotion);
-        
-        // 如果情绪为空或不在列表中，使用默认的 neutral 表情
-        if (!normalizedEmotion || normalizedEmotion === 'neutral') {
-          model.expression('neutral');
-          addSystemLog(`[Live2D] 应用默认表情: neutral (原始情绪: ${currentEmotion})`);
-        } else {
-          const expressions = EMOTION_EXPRESSIONS[normalizedEmotion as keyof typeof EMOTION_EXPRESSIONS];
-          addSystemLog(`[Live2D] 应用情绪表情: ${normalizedEmotion} -> ${expressions.length} 个表情`);
-          for (const exp of expressions) {
-            if (isCancelled) break;
-            try {
-              model.expression(exp);
-              // 增加微小延迟，确保底层 ExpressionManager 能正确处理并发表情
-              await new Promise(resolve => setTimeout(resolve, 50));
-            } catch (e) {
-              console.warn(`[Live2D] 表情 ${exp} 应用失败`, e);
-              addSystemLog(`[Live2D] 表情 ${exp} 应用失败: ${e}`);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn(`[Live2D] 无法应用情绪状态 ${currentEmotion}`, e);
-        addSystemLog(`[Live2D] 无法应用情绪状态 ${currentEmotion}: ${e}`);
+    // 1. 重置为平静状态
+    const resetToSolemn = async (core: any) => {
+      if (!core) return;
+      const keys = Object.keys(currentEmotionMeta.current);
+      if (!keys.length) return;
+      for (const id of keys) {
+        try {
+          core.setParameterValueById(id, typeof currentEmotionMeta.current[id] === "number" ? currentEmotionMeta.current[id] : 0);
+        } catch {}
       }
+      currentEmotionMeta.current = {};
+      await new Promise((r) => requestAnimationFrame(r));
     };
 
-    applyExpressions();
+    // 2. 平滑过渡动画
+    const tweenParameters = (core: any, targetValues: Record<string, number>, duration = 220) => {
+      return new Promise<void>((resolve) => {
+        const startTime = performance.now();
+        const fromValues: Record<string, number> = {};
+        for (const id in targetValues) {
+          fromValues[id] = core.getParameterValueById(id) ?? 0;
+        }
+        function step(now: number) {
+          if (isCancelled) {
+            resolve();
+            return;
+          }
+          const t = Math.min((now - startTime) / duration, 1);
+          const k = t * t * (3 - 2 * t); // Ease-out 曲线
+          for (const id in targetValues) {
+            core.setParameterValueById(id, fromValues[id] + (targetValues[id] - fromValues[id]) * k);
+          }
+          if (t < 1) requestAnimationFrame(step);
+          else resolve();
+        }
+        requestAnimationFrame(step);
+      });
+    };
+
+    // 3. 应用表情核心逻辑
+    const applyEmotionExpressions = async (emotion: string) => {
+      if (!model || !model.internalModel || !model.internalModel.coreModel) return;
+      const core = model.internalModel.coreModel;
+
+      // 先重置状态
+      await resetToSolemn(core);
+      if (isCancelled) return;
+      await new Promise((r) => requestAnimationFrame(r));
+      if (isCancelled) return;
+
+      const normalizedEmotion = normalizeEmotion(emotion);
+      if (!normalizedEmotion || normalizedEmotion === 'neutral') {
+        addSystemLog(`[Live2D] 应用默认表情: neutral (原始情绪: ${emotion})`);
+        await applySavedClothingConfig(model); // 恢复外观
+        return;
+      }
+
+      const names = EMOTION_EXPRESSIONS[normalizedEmotion as keyof typeof EMOTION_EXPRESSIONS] || [];
+      if (!names.length) {
+        await applySavedClothingConfig(model); // 恢复外观
+        return;
+      }
+
+      addSystemLog(`[Live2D] 应用情绪表情: ${normalizedEmotion} -> ${names.length} 个表情`);
+
+      const targetValues: Record<string, number> = {};
+      const thisApplyPrev: Record<string, number> = {};
+
+      // 计算目标参数
+      for (const cnName of names) {
+        const expJson = expressionCache.current.get(cnName);
+        if (!expJson) {
+          console.warn(`[Live2D] 表情文件未缓存或不存在: ${cnName}`);
+          continue;
+        }
+        (expJson.Parameters || []).forEach(({ Id, Value, Blend }: any) => {
+          const base = targetValues[Id] ?? core.getParameterValueById(Id) ?? 0;
+          if (!(Id in thisApplyPrev)) thisApplyPrev[Id] = base;
+          
+          if (Blend === "Add") targetValues[Id] = base + Value;
+          else if (Blend === "Multiply") targetValues[Id] = base * Value;
+          else targetValues[Id] = Value; // Overwrite
+        });
+      }
+
+      // 执行补间动画
+      await tweenParameters(core, targetValues, 220);
+      if (isCancelled) return;
+      
+      // 记录本次修改的参数，用于下次重置
+      currentEmotionMeta.current = thisApplyPrev;
+      
+      // 动画结束后，重新应用外观配置，防止被表情覆盖
+      await applySavedClothingConfig(model);
+    };
+
+    applyEmotionExpressions(currentEmotion);
 
     return () => {
       isCancelled = true;

@@ -131,6 +131,7 @@ class CommunicationServiceServicer(
         # 初始化流式解析器，用于提取 emotion 和切分 reply 句子
         parser = StreamParser(trace_id)
 
+        # TODO: 持久化逻辑应该转移到GO端
         try:
             # 使用带上下文管理的流式接口
             async for chunk_data in llm_client.stream_chat_with_context(
