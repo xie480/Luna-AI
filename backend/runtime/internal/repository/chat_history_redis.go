@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/redis/go-redis/v9"
 	"luna-ai/backend/runtime/internal/infrastructure"
+
+	"github.com/redis/go-redis/v9"
 )
 
 const (
-	MemWorkingWindowSize = 20 // 触发压缩的阈值（以 Interaction 为单位）
-	MemCompressBatchSize = 10 // 每次压缩的 Interaction 数量
+	MemWorkingWindowSize = 50 // 触发压缩的阈值（以 Interaction 为单位）
+	MemCompressBatchSize = 20 // 每次压缩的 Interaction 数量
 )
 
 // Interaction 表示单次问答记录（Redis 缓存层）
@@ -30,10 +31,10 @@ type Interaction struct {
 }
 
 // ChatSummary 表示聊天摘要
+// 仅包含 core_summary 和 key_facts 两个核心字段，移除冗余的 short_term_memory
 type ChatSummary struct {
-	CoreSummary     string `json:"core_summary"`
-	KeyFacts        string `json:"key_facts"`
-	ShortTermMemory string `json:"short_term_memory"`
+	CoreSummary string `json:"core_summary"`
+	KeyFacts    string `json:"key_facts"`
 }
 
 // ChatHistoryRedisRepo 封装 Redis 短期记忆与摘要读写
@@ -87,9 +88,8 @@ func (r *ChatHistoryRedisRepo) GetContext(ctx context.Context, sessionID string)
 
 	summaryMap := summaryCmd.Val()
 	summary := ChatSummary{
-		CoreSummary:     summaryMap["core_summary"],
-		KeyFacts:        summaryMap["key_facts"],
-		ShortTermMemory: summaryMap["short_term_memory"],
+		CoreSummary: summaryMap["core_summary"],
+		KeyFacts:    summaryMap["key_facts"],
 	}
 
 	strs := historyCmd.Val()
@@ -104,14 +104,28 @@ func (r *ChatHistoryRedisRepo) GetContext(ctx context.Context, sessionID string)
 }
 
 // UpdateSummaryAndTrim 更新摘要并移除已压缩的旧 Interaction 记录
+// 做什么：使用 Redis Pipeline 原子化地更新摘要字段并裁剪历史记录
+// 为什么这样做：确保摘要更新和历史裁剪在同一事务中完成，防止数据不一致
+// 输入输出：
+//   - 输入：sessionID, summary (仅包含 core_summary 和 key_facts), trimCount (要删除的记录数)
+//   - 输出：error (操作失败时返回错误)
+//
+// 边界条件：trimCount 必须大于 0，否则不执行裁剪
+// 异常行为：Pipeline 执行失败时返回错误，不进行部分更新
 func (r *ChatHistoryRedisRepo) UpdateSummaryAndTrim(ctx context.Context, sessionID string, summary ChatSummary, trimCount int64) error {
 	historyKey := r.buildHistoryKey(sessionID)
 	summaryKey := r.buildSummaryKey(sessionID)
 
 	pipe := r.redis.GetClient().Pipeline()
-	pipe.HSet(ctx, summaryKey, "core_summary", summary.CoreSummary, "key_facts", summary.KeyFacts, "short_term_memory", summary.ShortTermMemory)
-	// 保留从 trimCount 开始到末尾的元素
+
+	// 1. 仅更新 core_summary 和 key_facts 两个核心字段
+	pipe.HSet(ctx, summaryKey, "core_summary", summary.CoreSummary, "key_facts", summary.KeyFacts)
+
+	// 2. 裁剪历史记录：保留从 trimCount 开始到末尾的元素
+	// LTrim 范围是 start 到 stop，例如 trimCount=20，则保留索引 20 到 -1 的元素
+	// 即删除了最旧的 20 条记录（索引 0-19）
 	pipe.LTrim(ctx, historyKey, trimCount, -1)
+
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("更新摘要并裁剪历史失败: %w", err)

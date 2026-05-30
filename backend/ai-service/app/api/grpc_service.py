@@ -244,58 +244,119 @@ class CommunicationServiceServicer(
     ) -> communication_pb2.SummarizeContextResponse:
         """
         处理后台摘要压缩请求
+
+        做什么：接收 SummarizeContextRequest，调用 LLM 生成摘要，解析 JSON 并校验非空后返回。
+        为什么这样做：确保 LLM 返回的摘要字段有效，避免空值覆盖 Redis 中的原有数据。
+        输入输出：
+            - 输入：SummarizeContextRequest {trace_id, current_core_summary, current_key_facts, messages_to_compress}
+            - 输出：SummarizeContextResponse {trace_id, new_core_summary, new_key_facts}
+        边界条件：
+            - LLM 返回空字段时回退到当前值
+            - JSON 解析失败时回退到当前值
+        异常行为：
+            - 任何异常都返回原有摘要，确保系统稳定性
         """
         trace_id = request.trace_id
         logger.info(f"[TraceID:{trace_id}] 收到 SummarizeContext 请求")
 
-        try:
-            # 构造压缩 Prompt
-            messages_text = ""
-            for msg in request.messages_to_compress:
-                messages_text += f"{msg.role}: {msg.content}\n"
+        # 构造压缩 Prompt：将 messages_to_compress 转换为文本格式
+        messages_text = ""
+        for msg in request.messages_to_compress:
+            messages_text += f"{msg.role}: {msg.content}\n"
 
-            # 使用模板渲染完整的单体提示词
-            full_prompt = render_summarize_prompt(
-                current_core_summary=request.current_core_summary,
-                current_key_facts=request.current_key_facts,
-                messages_text=messages_text
-            )
+        # 使用模板渲染完整的单体提示词
+        full_prompt = render_summarize_prompt(
+            current_core_summary=request.current_core_summary,
+            current_key_facts=request.current_key_facts,
+            messages_text=messages_text
+        )
 
-            # 废弃角色拆分，直接作为单体 user 消息发送
-            messages = [{"role": Role.USER.value, "content": full_prompt}]
+        # 废弃角色拆分，直接作为单体 user 消息发送
+        messages = [{"role": Role.USER.value, "content": full_prompt}]
 
-            # 调用压缩模型
-            result_text = await compression_llm_client.summarize(
-                messages=messages,
-                response_format={"type": "json_object"}
-            )
-
-            # 解析 JSON
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                result_json = json.loads(result_text)
-                new_core_summary = result_json.get("core_summary", request.current_core_summary)
-                new_key_facts = result_json.get("key_facts", request.current_key_facts)
-                new_short_term_memory = result_json.get("short_term_memory", "")
-            except json.JSONDecodeError:
-                logger.error(f"[TraceID:{trace_id}] 压缩模型返回的不是有效的 JSON: {result_text}")
-                new_core_summary = request.current_core_summary
-                new_key_facts = request.current_key_facts
-                new_short_term_memory = ""
+                # 调用压缩模型，强制 JSON 输出格式
+                result_text = await compression_llm_client.summarize(
+                    messages=messages,
+                    response_format={"type": "json_object"}
+                )
 
-            logger.info(f"[TraceID:{trace_id}] 摘要压缩完成")
-            return communication_pb2.SummarizeContextResponse(
-                trace_id=trace_id,
-                new_core_summary=new_core_summary,
-                new_key_facts=new_key_facts,
-                new_short_term_memory=new_short_term_memory,
-            )
+                # 解析 JSON 并进行严格校验，兼容 markdown 代码块包装以及数组形式的 key_facts
+                try:
+                    # 1. 移除可能的 markdown 代码块包装，例如 ```json {...}```
+                    cleaned_text = result_text.strip()
+                    # 使用正则提取最内层的 JSON 对象
+                    import re
+                    json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", cleaned_text, re.DOTALL)
+                    if json_match:
+                        json_str = json_match.group(1)
+                    else:
+                        json_str = cleaned_text
 
-        except Exception as e:
-            logger.error(f"[TraceID:{trace_id}] SummarizeContext 处理异常: {e}")
-            # 发生异常时返回原有的摘要
-            return communication_pb2.SummarizeContextResponse(
-                trace_id=trace_id,
-                new_core_summary=request.current_core_summary,
-                new_key_facts=request.current_key_facts,
-                new_short_term_memory="",
-            )
+                    # 2. 如果仍然包含多余的前缀/后缀，尝试定位首个 '{' 和最后一个 '}'
+                    if not (json_str.startswith('{') and json_str.endswith('}')):
+                        start_idx = json_str.find('{')
+                        end_idx = json_str.rfind('}')
+                        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                            json_str = json_str[start_idx:end_idx+1]
+                    # 解析 JSON
+                    result_json = json.loads(json_str)
+
+                    # 提取 core_summary 并去除首尾空白
+                    new_core_summary = str(result_json.get("core_summary", "")).strip()
+
+                    # 提取 key_facts：可能是字符串或列表，统一转为字符串，每条以换行分隔
+                    raw_key_facts = result_json.get("key_facts", "")
+                    if isinstance(raw_key_facts, list):
+                        new_key_facts = "\n".join([str(item).strip() for item in raw_key_facts if str(item).strip()])
+                    else:
+                        new_key_facts = str(raw_key_facts).strip()
+
+                    # 校验非空：如果 LLM 返回 core_summary 或 key_facts 为空，则触发重试
+                    if not new_core_summary or not new_key_facts:
+                        logger.warning(
+                            f"[TraceID:{trace_id}] 第 {attempt + 1} 次尝试：LLM 返回的 core_summary 或 key_facts 为空，准备重试"
+                        )
+                        if attempt < max_retries - 1:
+                            continue
+                        else:
+                            logger.warning(f"[TraceID:{trace_id}] 达到最大重试次数，回退到当前值")
+                            new_core_summary = request.current_core_summary
+                            new_key_facts = request.current_key_facts
+
+                    logger.info(f"[TraceID:{trace_id}] 摘要压缩完成")
+                    return communication_pb2.SummarizeContextResponse(
+                        trace_id=trace_id,
+                        new_core_summary=new_core_summary,
+                        new_key_facts=new_key_facts,
+                        # 兼容旧版 proto，new_short_term_memory 传空字符串
+                    )
+
+                except json.JSONDecodeError:
+                    logger.error(
+                        f"[TraceID:{trace_id}] 第 {attempt + 1} 次尝试：压缩模型返回的不是有效的 JSON: "
+                        f"{result_text[:200]}"
+                    )
+                    if attempt < max_retries - 1:
+                        continue
+                    else:
+                        # JSON 解析失败时回退到当前值
+                        return communication_pb2.SummarizeContextResponse(
+                            trace_id=trace_id,
+                            new_core_summary=request.current_core_summary,
+                            new_key_facts=request.current_key_facts,
+                        )
+
+            except Exception as e:
+                logger.error(f"[TraceID:{trace_id}] 第 {attempt + 1} 次尝试：SummarizeContext 处理异常: {e}")
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    # 发生异常时返回原有的摘要，确保系统稳定性
+                    return communication_pb2.SummarizeContextResponse(
+                        trace_id=trace_id,
+                        new_core_summary=request.current_core_summary,
+                        new_key_facts=request.current_key_facts,
+                    )

@@ -499,6 +499,18 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	}()
 }
 
+// triggerCompression 触发摘要压缩流程
+// 做什么：提取最旧的 N 条历史记录，调用 AI 服务生成摘要，校验非空后更新 Redis
+// 为什么这样做：确保摘要字段有效，防止空值覆盖 Redis 中的原有数据
+// 输入输出：
+//   - 输入：sessionID, traceID
+//   - 输出：无（异步执行，结果通过日志记录）
+// 边界条件：
+//   - history 长度未超过阈值时不触发压缩
+//   - AI 服务返回空字段时放弃本次更新
+// 异常行为：
+//   - 获取上下文失败时终止压缩
+//   - AI 服务调用失败时终止压缩
 func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, traceID string) {
 	logger.Info(ctx, "触发摘要压缩", zap.String("session_id", sessionID), zap.String("trace_id", traceID))
 
@@ -509,17 +521,26 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		return
 	}
 
+	// 检查是否达到压缩阈值
 	if len(history) <= int(repository.MemWorkingWindowSize) {
+		logger.Info(ctx, "历史记录未超过阈值，无需压缩",
+			zap.Int("history_count", len(history)),
+			zap.Int("threshold", int(repository.MemWorkingWindowSize)))
 		return
 	}
 
-	// 提取需要压缩的旧 Interaction 记录
+	// 提取需要压缩的旧 Interaction 记录 (最旧的 N 条)
 	compressCount := int(repository.MemCompressBatchSize)
 	if len(history) < compressCount {
 		compressCount = len(history)
 	}
 
+	logger.Info(ctx, "准备压缩历史记录",
+		zap.Int("compress_count", compressCount),
+		zap.Int("total_history", len(history)))
+
 	messagesToCompress := make([]*pb.ChatMessage, 0, compressCount*2)
+	// 提取最旧的 compressCount 条记录
 	for i := 0; i < compressCount; i++ {
 		interaction := history[i]
 		messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
@@ -550,16 +571,27 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		return
 	}
 
-	newSummary := repository.ChatSummary{
-		CoreSummary:     resp.NewCoreSummary,
-		KeyFacts:        resp.NewKeyFacts,
-		ShortTermMemory: resp.NewShortTermMemory,
+	// 【双重校验】Go 侧拦截：如果返回的摘要为空，则放弃本次更新，防止 Redis 被写空
+	if strings.TrimSpace(resp.NewCoreSummary) == "" || strings.TrimSpace(resp.NewKeyFacts) == "" {
+		logger.Warn(ctx, "AI 服务返回的摘要存在空字段，放弃本次更新",
+			zap.String("session_id", sessionID),
+			zap.Bool("core_summary_empty", strings.TrimSpace(resp.NewCoreSummary) == ""),
+			zap.Bool("key_facts_empty", strings.TrimSpace(resp.NewKeyFacts) == ""))
+		return
 	}
 
+	newSummary := repository.ChatSummary{
+		CoreSummary: resp.NewCoreSummary,
+		KeyFacts:    resp.NewKeyFacts,
+	}
+
+	// 更新 Redis 摘要并裁剪历史记录
 	if err := s.redisRepo.UpdateSummaryAndTrim(ctx, sessionID, newSummary, int64(compressCount)); err != nil {
 		logger.Error(ctx, "更新摘要并裁剪历史失败", zap.Error(err))
 	} else {
-		logger.Info(ctx, "摘要压缩完成", zap.String("session_id", sessionID))
+		logger.Info(ctx, "摘要压缩完成",
+			zap.String("session_id", sessionID),
+			zap.Int("trimmed_count", compressCount))
 	}
 }
 
