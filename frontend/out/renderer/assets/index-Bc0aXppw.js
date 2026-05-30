@@ -9067,7 +9067,7 @@ var objectInspect = function inspect_(obj, options, depth, seen2) {
     var ys = arrObjKeys(obj, inspect2);
     var isPlainObject = gPO ? gPO(obj) === Object.prototype : obj instanceof Object || obj.constructor === Object;
     var protoTag = obj instanceof Object ? "" : "null prototype";
-    var stringTag = !isPlainObject && toStringTag && Object(obj) === obj && toStringTag in obj ? $slice.call(toStr$1(obj), 8, -1) : protoTag ? "Object" : "";
+    var stringTag = !isPlainObject && toStringTag && Object(obj) === obj && toStringTag in obj ? $slice.call(toStr(obj), 8, -1) : protoTag ? "Object" : "";
     var constructorTag = isPlainObject || typeof obj.constructor !== "function" ? "" : obj.constructor.name ? obj.constructor.name + " " : "";
     var tag = constructorTag + (stringTag || protoTag ? "[" + $join.call($concat$1.call([], stringTag || [], protoTag || []), ": ") + "] " : "");
     if (ys.length === 0) {
@@ -9092,25 +9092,25 @@ function canTrustToString(obj) {
   return !toStringTag || !(typeof obj === "object" && (toStringTag in obj || typeof obj[toStringTag] !== "undefined"));
 }
 function isArray$3(obj) {
-  return toStr$1(obj) === "[object Array]" && canTrustToString(obj);
+  return toStr(obj) === "[object Array]" && canTrustToString(obj);
 }
 function isDate(obj) {
-  return toStr$1(obj) === "[object Date]" && canTrustToString(obj);
+  return toStr(obj) === "[object Date]" && canTrustToString(obj);
 }
 function isRegExp$1(obj) {
-  return toStr$1(obj) === "[object RegExp]" && canTrustToString(obj);
+  return toStr(obj) === "[object RegExp]" && canTrustToString(obj);
 }
 function isError(obj) {
-  return toStr$1(obj) === "[object Error]" && canTrustToString(obj);
+  return toStr(obj) === "[object Error]" && canTrustToString(obj);
 }
 function isString(obj) {
-  return toStr$1(obj) === "[object String]" && canTrustToString(obj);
+  return toStr(obj) === "[object String]" && canTrustToString(obj);
 }
 function isNumber(obj) {
-  return toStr$1(obj) === "[object Number]" && canTrustToString(obj);
+  return toStr(obj) === "[object Number]" && canTrustToString(obj);
 }
 function isBoolean(obj) {
-  return toStr$1(obj) === "[object Boolean]" && canTrustToString(obj);
+  return toStr(obj) === "[object Boolean]" && canTrustToString(obj);
 }
 function isSymbol(obj) {
   if (hasShammedSymbols) {
@@ -9146,7 +9146,7 @@ var hasOwn$1 = Object.prototype.hasOwnProperty || function(key) {
 function has$3(obj, key) {
   return hasOwn$1.call(obj, key);
 }
-function toStr$1(obj) {
+function toStr(obj) {
   return objectToString.call(obj);
 }
 function nameOf(f2) {
@@ -9454,7 +9454,7 @@ var syntax = SyntaxError;
 var uri = URIError;
 var abs$1 = Math.abs;
 var floor$1 = Math.floor;
-var max$2 = Math.max;
+var max$1 = Math.max;
 var min$1 = Math.min;
 var pow$1 = Math.pow;
 var round$2 = Math.round;
@@ -9583,78 +9583,99 @@ function requireObject_getPrototypeOf() {
   Object_getPrototypeOf = $Object2.getPrototypeOf || null;
   return Object_getPrototypeOf;
 }
-var ERROR_MESSAGE = "Function.prototype.bind called on incompatible ";
-var toStr = Object.prototype.toString;
-var max$1 = Math.max;
-var funcType = "[object Function]";
-var concatty = function concatty2(a, b) {
-  var arr = [];
-  for (var i = 0; i < a.length; i += 1) {
-    arr[i] = a[i];
-  }
-  for (var j = 0; j < b.length; j += 1) {
-    arr[j + a.length] = b[j];
-  }
-  return arr;
-};
-var slicy = function slicy2(arrLike, offset) {
-  var arr = [];
-  for (var i = offset, j = 0; i < arrLike.length; i += 1, j += 1) {
-    arr[j] = arrLike[i];
-  }
-  return arr;
-};
-var joiny = function(arr, joiner) {
-  var str = "";
-  for (var i = 0; i < arr.length; i += 1) {
-    str += arr[i];
-    if (i + 1 < arr.length) {
-      str += joiner;
+var implementation;
+var hasRequiredImplementation;
+function requireImplementation() {
+  if (hasRequiredImplementation) return implementation;
+  hasRequiredImplementation = 1;
+  var ERROR_MESSAGE = "Function.prototype.bind called on incompatible ";
+  var toStr2 = Object.prototype.toString;
+  var max2 = Math.max;
+  var funcType = "[object Function]";
+  var concatty = function concatty2(a, b) {
+    var arr = [];
+    for (var i = 0; i < a.length; i += 1) {
+      arr[i] = a[i];
     }
-  }
-  return str;
-};
-var implementation$1 = function bind(that) {
-  var target = this;
-  if (typeof target !== "function" || toStr.apply(target) !== funcType) {
-    throw new TypeError(ERROR_MESSAGE + target);
-  }
-  var args = slicy(arguments, 1);
-  var bound;
-  var binder = function() {
-    if (this instanceof bound) {
-      var result = target.apply(
-        this,
+    for (var j = 0; j < b.length; j += 1) {
+      arr[j + a.length] = b[j];
+    }
+    return arr;
+  };
+  var slicy = function slicy2(arrLike, offset) {
+    var arr = [];
+    for (var i = offset, j = 0; i < arrLike.length; i += 1, j += 1) {
+      arr[j] = arrLike[i];
+    }
+    return arr;
+  };
+  var joiny = function(arr, joiner) {
+    var str = "";
+    for (var i = 0; i < arr.length; i += 1) {
+      str += arr[i];
+      if (i + 1 < arr.length) {
+        str += joiner;
+      }
+    }
+    return str;
+  };
+  implementation = function bind2(that) {
+    var target = this;
+    if (typeof target !== "function" || toStr2.apply(target) !== funcType) {
+      throw new TypeError(ERROR_MESSAGE + target);
+    }
+    var args = slicy(arguments, 1);
+    var bound;
+    var binder = function() {
+      if (this instanceof bound) {
+        var result = target.apply(
+          this,
+          concatty(args, arguments)
+        );
+        if (Object(result) === result) {
+          return result;
+        }
+        return this;
+      }
+      return target.apply(
+        that,
         concatty(args, arguments)
       );
-      if (Object(result) === result) {
-        return result;
-      }
-      return this;
-    }
-    return target.apply(
-      that,
-      concatty(args, arguments)
-    );
-  };
-  var boundLength = max$1(0, target.length - args.length);
-  var boundArgs = [];
-  for (var i = 0; i < boundLength; i++) {
-    boundArgs[i] = "$" + i;
-  }
-  bound = Function("binder", "return function (" + joiny(boundArgs, ",") + "){ return binder.apply(this,arguments); }")(binder);
-  if (target.prototype) {
-    var Empty = function Empty2() {
     };
-    Empty.prototype = target.prototype;
-    bound.prototype = new Empty();
-    Empty.prototype = null;
-  }
-  return bound;
-};
-var implementation = implementation$1;
-var functionBind = Function.prototype.bind || implementation;
-var functionCall = Function.prototype.call;
+    var boundLength = max2(0, target.length - args.length);
+    var boundArgs = [];
+    for (var i = 0; i < boundLength; i++) {
+      boundArgs[i] = "$" + i;
+    }
+    bound = Function("binder", "return function (" + joiny(boundArgs, ",") + "){ return binder.apply(this,arguments); }")(binder);
+    if (target.prototype) {
+      var Empty = function Empty2() {
+      };
+      Empty.prototype = target.prototype;
+      bound.prototype = new Empty();
+      Empty.prototype = null;
+    }
+    return bound;
+  };
+  return implementation;
+}
+var functionBind;
+var hasRequiredFunctionBind;
+function requireFunctionBind() {
+  if (hasRequiredFunctionBind) return functionBind;
+  hasRequiredFunctionBind = 1;
+  var implementation2 = requireImplementation();
+  functionBind = Function.prototype.bind || implementation2;
+  return functionBind;
+}
+var functionCall;
+var hasRequiredFunctionCall;
+function requireFunctionCall() {
+  if (hasRequiredFunctionCall) return functionCall;
+  hasRequiredFunctionCall = 1;
+  functionCall = Function.prototype.call;
+  return functionCall;
+}
 var functionApply;
 var hasRequiredFunctionApply;
 function requireFunctionApply() {
@@ -9664,14 +9685,14 @@ function requireFunctionApply() {
   return functionApply;
 }
 var reflectApply = typeof Reflect !== "undefined" && Reflect && Reflect.apply;
-var bind$2 = functionBind;
+var bind$2 = requireFunctionBind();
 var $apply$1 = requireFunctionApply();
-var $call$2 = functionCall;
+var $call$2 = requireFunctionCall();
 var $reflectApply = reflectApply;
 var actualApply = $reflectApply || bind$2.call($call$2, $apply$1);
-var bind$1 = functionBind;
+var bind$1 = requireFunctionBind();
 var $TypeError$4 = type;
-var $call$1 = functionCall;
+var $call$1 = requireFunctionCall();
 var $actualApply = actualApply;
 var callBindApplyHelpers = function callBindBasic(args) {
   if (args.length < 1 || typeof args[0] !== "function") {
@@ -9737,8 +9758,8 @@ function requireHasown() {
   hasRequiredHasown = 1;
   var call = Function.prototype.call;
   var $hasOwn = Object.prototype.hasOwnProperty;
-  var bind3 = functionBind;
-  hasown = bind3.call(call, $hasOwn);
+  var bind2 = requireFunctionBind();
+  hasown = bind2.call(call, $hasOwn);
   return hasown;
 }
 var undefined$1;
@@ -9752,7 +9773,7 @@ var $TypeError$3 = type;
 var $URIError = uri;
 var abs = abs$1;
 var floor = floor$1;
-var max = max$2;
+var max = max$1;
 var min = min$1;
 var pow = pow$1;
 var round$1 = round$2;
@@ -9786,7 +9807,7 @@ var getProto = requireGetProto();
 var $ObjectGPO = requireObject_getPrototypeOf();
 var $ReflectGPO = requireReflect_getPrototypeOf();
 var $apply = requireFunctionApply();
-var $call = functionCall;
+var $call = requireFunctionCall();
 var needsEval = {};
 var TypedArray = typeof Uint8Array === "undefined" || !getProto ? undefined$1 : getProto(Uint8Array);
 var INTRINSICS = {
@@ -9957,13 +9978,13 @@ var LEGACY_ALIASES = {
   "%WeakMapPrototype%": ["WeakMap", "prototype"],
   "%WeakSetPrototype%": ["WeakSet", "prototype"]
 };
-var bind2 = functionBind;
+var bind = requireFunctionBind();
 var hasOwn = requireHasown();
-var $concat = bind2.call($call, Array.prototype.concat);
-var $spliceApply = bind2.call($apply, Array.prototype.splice);
-var $replace = bind2.call($call, String.prototype.replace);
-var $strSlice = bind2.call($call, String.prototype.slice);
-var $exec = bind2.call($call, RegExp.prototype.exec);
+var $concat = bind.call($call, Array.prototype.concat);
+var $spliceApply = bind.call($apply, Array.prototype.splice);
+var $replace = bind.call($call, String.prototype.replace);
+var $strSlice = bind.call($call, String.prototype.slice);
+var $exec = bind.call($call, RegExp.prototype.exec);
 var rePropName = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
 var reEscapeChar = /\\(\\)?/g;
 var stringToPath = function stringToPath2(string) {
@@ -37213,6 +37234,42 @@ const Live2DView = () => {
   const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
   const showGlobalMessage = useSystemStore((state) => state.showGlobalMessage);
   const [trackingOriginOffset, setTrackingOriginOffset] = reactExports.useState({ x: 0, y: 0 });
+  const expressionCache = reactExports.useRef(/* @__PURE__ */ new Map());
+  const currentEmotionMeta = reactExports.useRef({});
+  reactExports.useEffect(() => {
+    const preloadExpressions = async () => {
+      const allFiles = [
+        "眼-生气",
+        "脸红2隐藏",
+        "脸黑",
+        "眼-哭哭",
+        "眼-泪眼汪汪",
+        "眼-眩晕流汗",
+        "脸红",
+        "眼-平静死鱼眼",
+        "嘴-平静v形（不可张开",
+        "眼-星星眼",
+        "脸红-痴汉嘴（兼容吐舌",
+        "眼-爱心眼"
+      ];
+      await Promise.all(
+        allFiles.map(async (name) => {
+          try {
+            const res = await fetch(`/models/luna/${encodeURIComponent(name)}.exp3.json`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const text = await res.text();
+            if (text.trim().startsWith("<")) {
+              throw new Error("文件未找到(返回了HTML)");
+            }
+            expressionCache.current.set(name, JSON.parse(text));
+          } catch (e) {
+            console.warn(`[Live2D] 预加载表情 ${name} 失败`, e);
+          }
+        })
+      );
+    };
+    preloadExpressions();
+  }, []);
   const applySavedClothingConfig = async (live2dModel) => {
     if (!live2dModel || !live2dModel.internalModel || !live2dModel.internalModel.coreModel) {
       return;
@@ -37258,7 +37315,7 @@ const Live2DView = () => {
     let pixiApp = null;
     let isCancelled = false;
     __vitePreload(async () => {
-      const { Live2DModel } = await import("./cubism4.es-D6pChFw0.js");
+      const { Live2DModel } = await import("./cubism4.es-DrF-WG2e.js");
       return { Live2DModel };
     }, true ? [] : void 0, import.meta.url).then(({ Live2DModel }) => {
       if (isCancelled) return;
@@ -37300,7 +37357,7 @@ const Live2DView = () => {
     const load = async () => {
       try {
         const { Live2DModel } = await __vitePreload(async () => {
-          const { Live2DModel: Live2DModel2 } = await import("./cubism4.es-D6pChFw0.js");
+          const { Live2DModel: Live2DModel2 } = await import("./cubism4.es-DrF-WG2e.js");
           return { Live2DModel: Live2DModel2 };
         }, true ? [] : void 0, import.meta.url);
         const live2dModel = await Live2DModel.from(
@@ -37482,23 +37539,97 @@ const Live2DView = () => {
   }, [model, container, app, trackingOriginOffset]);
   reactExports.useEffect(() => {
     if (!model) return;
-    try {
-      if (currentEmotion === "neutral") {
-        model.expression("neutral");
-      } else {
-        const expressions = EMOTION_EXPRESSIONS[currentEmotion] ?? [];
-        for (const exp of expressions) {
-          try {
-            model.expression(exp);
-          } catch (e) {
-            console.warn(`[Live2D] 表情 ${exp} 应用失败`, e);
-          }
+    let isCancelled = false;
+    const normalizeEmotion = (emotion) => {
+      if (!emotion) return null;
+      const trimmed = emotion.trim();
+      const normalized = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+      if (normalized in EMOTION_EXPRESSIONS) {
+        return normalized;
+      }
+      return null;
+    };
+    const resetToSolemn = async (core) => {
+      if (!core) return;
+      const keys = Object.keys(currentEmotionMeta.current);
+      if (!keys.length) return;
+      for (const id2 of keys) {
+        try {
+          core.setParameterValueById(id2, typeof currentEmotionMeta.current[id2] === "number" ? currentEmotionMeta.current[id2] : 0);
+        } catch {
         }
       }
-    } catch (e) {
-      console.warn(`[Live2D] 无法应用情绪状态 ${currentEmotion}`, e);
-    }
-  }, [model, currentEmotion]);
+      currentEmotionMeta.current = {};
+      await new Promise((r2) => requestAnimationFrame(r2));
+    };
+    const tweenParameters = (core, targetValues, duration = 220) => {
+      return new Promise((resolve2) => {
+        const startTime = performance.now();
+        const fromValues = {};
+        for (const id2 in targetValues) {
+          fromValues[id2] = core.getParameterValueById(id2) ?? 0;
+        }
+        function step(now) {
+          if (isCancelled) {
+            resolve2();
+            return;
+          }
+          const t2 = Math.min((now - startTime) / duration, 1);
+          const k2 = t2 * t2 * (3 - 2 * t2);
+          for (const id2 in targetValues) {
+            core.setParameterValueById(id2, fromValues[id2] + (targetValues[id2] - fromValues[id2]) * k2);
+          }
+          if (t2 < 1) requestAnimationFrame(step);
+          else resolve2();
+        }
+        requestAnimationFrame(step);
+      });
+    };
+    const applyEmotionExpressions = async (emotion) => {
+      if (!model || !model.internalModel || !model.internalModel.coreModel) return;
+      const core = model.internalModel.coreModel;
+      await resetToSolemn(core);
+      if (isCancelled) return;
+      await new Promise((r2) => requestAnimationFrame(r2));
+      if (isCancelled) return;
+      const normalizedEmotion = normalizeEmotion(emotion);
+      if (!normalizedEmotion || normalizedEmotion === "neutral") {
+        addSystemLog(`[Live2D] 应用默认表情: neutral (原始情绪: ${emotion})`);
+        await applySavedClothingConfig(model);
+        return;
+      }
+      const names = EMOTION_EXPRESSIONS[normalizedEmotion] || [];
+      if (!names.length) {
+        await applySavedClothingConfig(model);
+        return;
+      }
+      addSystemLog(`[Live2D] 应用情绪表情: ${normalizedEmotion} -> ${names.length} 个表情`);
+      const targetValues = {};
+      const thisApplyPrev = {};
+      for (const cnName of names) {
+        const expJson = expressionCache.current.get(cnName);
+        if (!expJson) {
+          console.warn(`[Live2D] 表情文件未缓存或不存在: ${cnName}`);
+          continue;
+        }
+        (expJson.Parameters || []).forEach(({ Id: Id2, Value, Blend }) => {
+          const base = targetValues[Id2] ?? core.getParameterValueById(Id2) ?? 0;
+          if (!(Id2 in thisApplyPrev)) thisApplyPrev[Id2] = base;
+          if (Blend === "Add") targetValues[Id2] = base + Value;
+          else if (Blend === "Multiply") targetValues[Id2] = base * Value;
+          else targetValues[Id2] = Value;
+        });
+      }
+      await tweenParameters(core, targetValues, 220);
+      if (isCancelled) return;
+      currentEmotionMeta.current = thisApplyPrev;
+      await applySavedClothingConfig(model);
+    };
+    applyEmotionExpressions(currentEmotion);
+    return () => {
+      isCancelled = true;
+    };
+  }, [model, currentEmotion, addSystemLog]);
   const handleSaveTransform = () => {
     if (!container) return;
     const TRANSFORM_KEY = "luna:transform";
@@ -41649,8 +41780,16 @@ var gsapWithCSS = gsap.registerPlugin(CSSPlugin) || gsap;
 gsapWithCSS.core.Tween;
 const useBubble = () => {
   const [bubbles, setBubbles] = reactExports.useState([]);
+  const bubblesRef = reactExports.useRef([]);
   const bubbleElsRef = reactExports.useRef(/* @__PURE__ */ new Map());
   const bubbleIdCounter = reactExports.useRef(0);
+  const queueRef = reactExports.useRef([]);
+  const isProcessingRef = reactExports.useRef(false);
+  const spaceAvailableResolversRef = reactExports.useRef([]);
+  const MAX_BUBBLES = 3;
+  reactExports.useEffect(() => {
+    bubblesRef.current = bubbles;
+  }, [bubbles]);
   const registerBubble = reactExports.useCallback((el2, id2) => {
     if (!el2) {
       bubbleElsRef.current.delete(id2);
@@ -41658,69 +41797,96 @@ const useBubble = () => {
     }
     bubbleElsRef.current.set(id2, el2);
   }, []);
-  const showBubble = reactExports.useCallback(async (text, duration = 5e3) => {
-    const id2 = bubbleIdCounter.current++;
-    const prevPositions = /* @__PURE__ */ new Map();
-    bubbleElsRef.current.forEach((el2, key) => {
-      try {
-        prevPositions.set(key, el2.getBoundingClientRect().top);
-      } catch (e) {
-        console.warn("Failed to get bounding client rect", e);
+  const notifySpaceAvailable = reactExports.useCallback(() => {
+    if (spaceAvailableResolversRef.current.length > 0) {
+      const resolve2 = spaceAvailableResolversRef.current.shift();
+      resolve2?.();
+    }
+  }, []);
+  const processQueue = reactExports.useCallback(async () => {
+    if (isProcessingRef.current) {
+      return;
+    }
+    isProcessingRef.current = true;
+    while (queueRef.current.length > 0) {
+      const activeBubbles = bubblesRef.current.filter((b) => !b.leaving);
+      if (activeBubbles.length >= MAX_BUBBLES) {
+        await new Promise((resolve2) => {
+          spaceAvailableResolversRef.current.push(resolve2);
+        });
+        continue;
       }
-    });
-    setBubbles((prev) => [...prev, { id: id2, text, leaving: false }]);
-    requestAnimationFrame(() => {
+      const item = queueRef.current.shift();
+      const { id: id2, text, duration } = item;
+      const prevPositions = /* @__PURE__ */ new Map();
       bubbleElsRef.current.forEach((el2, key) => {
-        if (prevPositions.has(key) && key !== id2) {
-          const prevTop = prevPositions.get(key);
-          const currentTop = el2.getBoundingClientRect().top;
-          const dy = prevTop - currentTop;
-          if (Math.abs(dy) > 0.5) {
-            gsapWithCSS.fromTo(el2, { y: dy }, { y: 0, duration: 0.3, ease: "power2.out" });
-          }
+        try {
+          prevPositions.set(key, el2.getBoundingClientRect().top);
+        } catch (e) {
         }
       });
-    });
-    setTimeout(() => {
-      setBubbles((prev) => prev.map((b) => b.id === id2 ? { ...b, leaving: true } : b));
+      setBubbles((prev) => [...prev, { id: id2, text, leaving: false }]);
+      requestAnimationFrame(() => {
+        bubbleElsRef.current.forEach((el2, key) => {
+          if (prevPositions.has(key) && key !== id2) {
+            const prevTop = prevPositions.get(key);
+            const currentTop = el2.getBoundingClientRect().top;
+            const dy = prevTop - currentTop;
+            if (Math.abs(dy) > 0.5) {
+              gsapWithCSS.fromTo(el2, { y: dy }, { y: 0, duration: 0.3, ease: "power2.out" });
+            }
+          }
+        });
+      });
       setTimeout(() => {
-        setBubbles((prev) => prev.filter((b) => b.id !== id2));
-        bubbleElsRef.current.delete(id2);
-      }, 300);
-    }, duration);
-  }, []);
-  const splitReplyIntoChunks = reactExports.useCallback((text) => {
-    if (!text) return [];
-    text = String(text).replace(/\s+/g, " ").trim();
-    if (!text) return [];
-    const sentenceRe = /[^。！？!?~～…]+[。！？!?~～…]?/g;
-    const sentences = text.match(sentenceRe) || [text];
-    const parts = [];
-    const commaRe = /[^，,、；;]+[，,、；;]?/g;
-    for (let s of sentences) {
-      s = s.trim();
-      if (!s) continue;
-      const subs = s.match(commaRe) || [s];
-      for (let sub of subs) {
-        sub = sub.replace(/[，,、；;]$/u, "").trim();
-        if (sub) parts.push(sub);
-      }
+        setBubbles((prev) => {
+          const target = prev.find((b) => b.id === id2);
+          if (target && !target.leaving) {
+            setTimeout(() => {
+              setBubbles((current) => current.filter((b) => b.id !== id2));
+              bubbleElsRef.current.delete(id2);
+              notifySpaceAvailable();
+            }, 300);
+            return prev.map((b) => b.id === id2 ? { ...b, leaving: true } : b);
+          }
+          return prev;
+        });
+      }, duration);
+      await new Promise((resolve2) => setTimeout(resolve2, 800));
     }
-    return parts;
-  }, []);
-  const sendReplyAsBubbles = reactExports.useCallback(async (reply, opts = {}) => {
-    const interval = typeof opts.interval === "number" ? opts.interval : 450;
-    const duration = typeof opts.duration === "number" ? opts.duration : 5e3;
-    const chunks = splitReplyIntoChunks(reply);
-    if (!chunks.length) return;
-    for (let i = 0; i < chunks.length; i++) {
-      showBubble(chunks[i], duration);
-      if (i < chunks.length - 1) {
-        await new Promise((r2) => setTimeout(r2, interval));
-      }
-    }
-  }, [showBubble, splitReplyIntoChunks]);
-  return { bubbles, showBubble, registerBubble, sendReplyAsBubbles, splitReplyIntoChunks };
+    isProcessingRef.current = false;
+  }, [notifySpaceAvailable]);
+  const showBubble = reactExports.useCallback((text, duration) => {
+    const id2 = bubbleIdCounter.current++;
+    const calcDuration = duration ?? Math.max(2e3, text.length * 250);
+    queueRef.current.push({ id: id2, text, duration: calcDuration });
+    processQueue();
+  }, [processQueue]);
+  return { bubbles, showBubble, registerBubble };
+};
+const BubbleStack = () => {
+  const { bubbles, registerBubble, showBubble } = useBubble();
+  reactExports.useEffect(() => {
+    const handleShowBubble = (e) => {
+      const customEvent = e;
+      const { text, duration } = customEvent.detail;
+      if (!text || !text.trim()) return;
+      showBubble(text, duration ?? Math.max(3e3, text.length * 200));
+    };
+    window.addEventListener("luna:show-bubble", handleShowBubble);
+    return () => {
+      window.removeEventListener("luna:show-bubble", handleShowBubble);
+    };
+  }, [showBubble]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bubble-stack", children: bubbles.map((bubble) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      ref: (el2) => registerBubble(el2, bubble.id),
+      className: `css-chat-bubble ${bubble.leaving ? "leaving" : ""}`,
+      children: bubble.text
+    },
+    bubble.id
+  )) });
 };
 const useSessionStore = create((set) => ({
   currentSessionId: null,
@@ -41796,62 +41962,6 @@ const useSessionStore = create((set) => ({
     }
   }))
 }));
-const BubbleStack = () => {
-  const { bubbles, registerBubble, sendReplyAsBubbles } = useBubble();
-  const currentSessionId = useSessionStore((state) => state.currentSessionId);
-  const messages = useSessionStore(
-    (state) => currentSessionId ? state.messages[currentSessionId] || [] : []
-  );
-  const processedMessageIds = reactExports.useRef(/* @__PURE__ */ new Set());
-  const streamingMessageId = reactExports.useRef(null);
-  const processedLength = reactExports.useRef(0);
-  reactExports.useEffect(() => {
-    if (messages.length === 0) return;
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.role !== "assistant") return;
-    const msgId = lastMessage.messageId;
-    if (lastMessage.status === "completed") {
-      if (!processedMessageIds.current.has(msgId)) {
-        const textToProcess = lastMessage.content.substring(processedLength.current);
-        if (textToProcess.trim()) {
-          sendReplyAsBubbles(textToProcess);
-        }
-        processedMessageIds.current.add(msgId);
-        streamingMessageId.current = null;
-        processedLength.current = 0;
-      }
-    } else if (lastMessage.status === "streaming") {
-      if (streamingMessageId.current !== msgId) {
-        streamingMessageId.current = msgId;
-        processedLength.current = 0;
-      }
-      const currentContent = lastMessage.content;
-      const newContent = currentContent.substring(processedLength.current);
-      const sentenceEndRegex = /[。！？!?~～…\n]/;
-      const match = newContent.match(sentenceEndRegex);
-      if (match && match.index !== void 0) {
-        const endIndex = match.index + match[0].length;
-        const sentence = newContent.substring(0, endIndex);
-        if (sentence.trim()) {
-          sendReplyAsBubbles(sentence);
-        }
-        processedLength.current += endIndex;
-      }
-    }
-  }, [messages, sendReplyAsBubbles]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bubble-stack", children: bubbles.map((bubble) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      ref: (el2) => registerBubble(el2, bubble.id),
-      className: `css-chat-bubble ${bubble.leaving ? "leaving" : ""}`,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bubble-avatar", children: "✨" }),
-        bubble.text
-      ]
-    },
-    bubble.id
-  )) });
-};
 const WS_MSG_TYPE = {
   // 基础消息类型
   PING: "PING",
@@ -41866,7 +41976,10 @@ const WS_MSG_TYPE = {
   EVT_PLAN_SNAPSHOT: "EVT_PLAN_SNAPSHOT",
   EVT_NODE_STATUS_UPDATE: "EVT_NODE_STATUS_UPDATE",
   EVT_MEMORY_UPDATED: "EVT_MEMORY_UPDATED",
-  EVT_DEBUG_LOG: "EVT_DEBUG_LOG"
+  EVT_DEBUG_LOG: "EVT_DEBUG_LOG",
+  // 流式渲染事件类型 —— 参考 streaming_rendering_plan.md §3.1
+  EVT_EMOTION_UPDATE: "EVT_EMOTION_UPDATE",
+  EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK"
 };
 class Snowflake {
   // Epoch is set to 2024-01-01 00:00:00 UTC
@@ -42026,6 +42139,24 @@ class WSManager {
         const chatPayload = msg.payload;
         this.handleChatStream(chatPayload);
         break;
+      case WS_MSG_TYPE.EVT_EMOTION_UPDATE:
+        const emotionPayload = msg.payload;
+        systemStore.setEmotion(emotionPayload.emotion);
+        window.dispatchEvent(
+          new CustomEvent("luna:emotion-update", { detail: { emotion: emotionPayload.emotion } })
+        );
+        break;
+      case WS_MSG_TYPE.EVT_REPLY_CHUNK:
+        const replyPayload = msg.payload;
+        if (replyPayload.chunk && replyPayload.chunk.trim()) {
+          const duration = Math.max(3e3, replyPayload.chunk.length * 200);
+          window.dispatchEvent(
+            new CustomEvent("luna:show-bubble", {
+              detail: { text: replyPayload.chunk, duration }
+            })
+          );
+        }
+        break;
       case WS_MSG_TYPE.EVT_INIT_STATE:
         this.handleInitState(msg.payload);
         break;
@@ -42052,22 +42183,44 @@ class WSManager {
     }
   }
   /**
-   * 处理聊天流式输出
-   * 使用高频渲染优化策略，避免频繁触发 React 重渲染
+   * 处理聊天流式输出（CHAT_STREAM 消息）
+   * 按 payload.type 拆分为情绪更新和回复文本块
    */
   handleChatStream(payload) {
-    const sessionStore = useSessionStore.getState();
-    const currentSessionId = sessionStore.currentSessionId;
-    if (!currentSessionId) {
-      useSystemStore.getState().addSystemLog("收到聊天消息但无活跃会话");
+    const systemStore = useSystemStore.getState();
+    const msgType = payload.type || "reply_chunk";
+    if (msgType === "emotion_update") {
+      const rawEmotion = payload.chunk;
+      const normalizedEmotion = rawEmotion ? rawEmotion.trim() : "neutral";
+      systemStore.setEmotion(normalizedEmotion);
+      systemStore.addSystemLog(`[WS] 收到情绪更新: ${rawEmotion} -> ${normalizedEmotion}`);
+      window.dispatchEvent(
+        new CustomEvent("luna:emotion-update", { detail: { emotion: normalizedEmotion } })
+      );
       return;
     }
-    sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
-    if (payload.is_finished) {
-      const status = payload.error ? "error" : "completed";
-      sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
-      if (payload.error) {
-        useSystemStore.getState().addSystemLog(`聊天流错误: ${payload.error}`);
+    if (msgType === "reply_chunk") {
+      if (payload.chunk && payload.chunk.trim()) {
+        const duration = Math.max(3e3, payload.chunk.length * 200);
+        window.dispatchEvent(
+          new CustomEvent("luna:show-bubble", {
+            detail: { text: payload.chunk, duration }
+          })
+        );
+      }
+      const sessionStore = useSessionStore.getState();
+      const currentSessionId = sessionStore.currentSessionId;
+      if (currentSessionId) {
+        sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
+      }
+      if (payload.is_finished) {
+        const status = payload.error ? "error" : "completed";
+        if (currentSessionId) {
+          sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
+        }
+        if (payload.error) {
+          systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
+        }
       }
     }
   }
@@ -42121,7 +42274,7 @@ class WSManager {
       useSystemStore.getState().addSystemLog("无活跃会话，无法发送消息");
       return;
     }
-    const userMsgId = `user-${generateId()}`;
+    const userMsgId = generateId();
     sessionStore.appendMessage(sessionId, {
       messageId: userMsgId,
       sessionId,
@@ -42211,23 +42364,74 @@ class WSManager {
 const wsManager = new WSManager();
 const InputArea = () => {
   const [inputValue, setInputValue] = reactExports.useState("");
-  const inputRef = reactExports.useRef(null);
+  const [showFullscreenButton, setShowFullscreenButton] = reactExports.useState(false);
+  const [isFullscreenMode, setIsFullscreenMode] = reactExports.useState(false);
+  const [fullscreenText, setFullscreenText] = reactExports.useState("");
+  const textareaRef = reactExports.useRef(null);
+  const fullscreenTextareaRef = reactExports.useRef(null);
+  const measureRef = reactExports.useRef(null);
   const connectionStatus = useSystemStore((state) => state.connectionStatus);
   const addSystemLog = useSystemStore.getState().addSystemLog;
-  reactExports.useEffect(() => {
-    if (connectionStatus === "connected") {
-      inputRef.current?.focus();
+  const LINE_HEIGHT = 24;
+  const MAX_LINES = 3;
+  const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES + 24;
+  const isWaiting = useSessionStore((state) => {
+    const sessionId = state.currentSessionId;
+    if (!sessionId) return false;
+    const msgs = state.messages[sessionId] || [];
+    return msgs.some((m2) => m2.status === "sending" || m2.status === "streaming");
+  });
+  reactExports.useCallback((text) => {
+    if (!measureRef.current) return LINE_HEIGHT;
+    const measureEl = measureRef.current;
+    measureEl.style.width = textareaRef.current ? `${textareaRef.current.clientWidth}px` : "auto";
+    measureEl.textContent = text || "占位";
+    return measureEl.scrollHeight;
+  }, []);
+  const adjustHeight = reactExports.useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const scrollHeight = textarea.scrollHeight;
+    const newHeight = Math.min(scrollHeight, MAX_HEIGHT);
+    textarea.style.height = `${newHeight}px`;
+    const shouldShowButton = scrollHeight > MAX_HEIGHT - LINE_HEIGHT / 2;
+    setShowFullscreenButton(shouldShowButton);
+    if (scrollHeight > MAX_HEIGHT) {
+      textarea.style.overflowY = "auto";
+    } else {
+      textarea.style.overflowY = "hidden";
     }
-  }, [connectionStatus]);
+  }, [MAX_HEIGHT]);
+  reactExports.useEffect(() => {
+    adjustHeight();
+  }, [inputValue, adjustHeight]);
+  reactExports.useEffect(() => {
+    if (connectionStatus === "connected" && !isWaiting && !isFullscreenMode) {
+      textareaRef.current?.focus();
+    }
+  }, [connectionStatus, isWaiting, isFullscreenMode]);
+  reactExports.useEffect(() => {
+    if (isFullscreenMode) {
+      setTimeout(() => {
+        fullscreenTextareaRef.current?.focus();
+      }, 100);
+    }
+  }, [isFullscreenMode]);
   const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+    const textToSend = isFullscreenMode ? fullscreenText : inputValue;
+    if (!textToSend.trim()) return;
     if (connectionStatus !== "connected") {
       addSystemLog("WebSocket 未连接，无法发送消息");
       return;
     }
-    wsManager.sendChatMessage(inputValue.trim());
-    setInputValue("");
-    inputRef.current?.focus();
+    wsManager.sendChatMessage(textToSend.trim());
+    if (isFullscreenMode) {
+      setFullscreenText("");
+      setIsFullscreenMode(false);
+    } else {
+      setInputValue("");
+    }
   };
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -42235,19 +42439,126 @@ const InputArea = () => {
       handleSendMessage();
     }
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "input-area-wrapper", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "input-area", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "input",
-    {
-      ref: inputRef,
-      type: "text",
-      value: inputValue,
-      onChange: (e) => setInputValue(e.target.value),
-      onKeyDown: handleKeyDown,
-      placeholder: connectionStatus === "connected" ? "和她说点什么..." : "等待连接...",
-      disabled: connectionStatus !== "connected",
-      className: "quiet-input"
+  const openFullscreenMode = () => {
+    setFullscreenText(inputValue);
+    setIsFullscreenMode(true);
+  };
+  const closeFullscreenMode = () => {
+    setInputValue(fullscreenText);
+    setIsFullscreenMode(false);
+    setShowFullscreenButton(false);
+  };
+  const handleFullscreenKeyDown = (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeFullscreenMode();
+    } else if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
-  ) }) });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        ref: measureRef,
+        className: "input-measure-layer",
+        "aria-hidden": "true"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "input-area-wrapper", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `input-area ${isWaiting ? "waiting" : ""} ${showFullscreenButton ? "has-fullscreen-btn" : ""}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `cyber-loader ${isWaiting ? "active" : ""}`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "cyber-text", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cyber-dot" }),
+        "PROCESSING",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "cyber-dot" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "textarea",
+        {
+          ref: textareaRef,
+          value: inputValue,
+          onChange: (e) => setInputValue(e.target.value),
+          onKeyDown: handleKeyDown,
+          placeholder: connectionStatus === "connected" ? "和她说点什么..." : "等待连接...",
+          disabled: connectionStatus !== "connected" || isWaiting,
+          className: `quiet-textarea ${isWaiting ? "hidden" : ""}`,
+          rows: 1
+        }
+      ),
+      showFullscreenButton && !isWaiting && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          className: "fullscreen-btn",
+          onClick: openFullscreenMode,
+          title: "全屏编辑",
+          "aria-label": "展开全屏编辑模式",
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" }) })
+        }
+      )
+    ] }) }),
+    isFullscreenMode && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fullscreen-modal-overlay", onClick: closeFullscreenMode, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "fullscreen-modal",
+        onClick: (e) => e.stopPropagation(),
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fullscreen-modal-header", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "fullscreen-modal-title", children: "沉浸式编辑" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fullscreen-modal-actions", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  className: "fullscreen-action-btn send-btn",
+                  onClick: handleSendMessage,
+                  disabled: !fullscreenText.trim() || connectionStatus !== "connected",
+                  title: "发送消息",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "发送" })
+                  ]
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  className: "fullscreen-action-btn close-btn",
+                  onClick: closeFullscreenMode,
+                  title: "关闭 (Esc)",
+                  children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M18 6L6 18M6 6l12 12" }) })
+                }
+              )
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fullscreen-editor-container", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "textarea",
+            {
+              ref: fullscreenTextareaRef,
+              value: fullscreenText,
+              onChange: (e) => setFullscreenText(e.target.value),
+              onKeyDown: handleFullscreenKeyDown,
+              placeholder: "在这里输入你想说的话...",
+              className: "fullscreen-textarea",
+              autoFocus: true
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fullscreen-modal-footer", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shortcut-hint", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "Enter" }),
+              " 发送 · ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "Shift+Enter" }),
+              " 换行 · ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { children: "Esc" }),
+              " 关闭"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "char-count", children: [
+              fullscreenText.length,
+              " 字符"
+            ] })
+          ] })
+        ]
+      }
+    ) })
+  ] });
 };
 const ChatView = () => {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chat-view", children: [
@@ -42285,7 +42596,7 @@ const MENU_ITEMS = [
     label: "设置",
     icon: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "18", height: "18", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "3" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" })
     ] })
   },
   {
@@ -42326,7 +42637,6 @@ const Sidebar = () => {
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
   const openModal = useSystemStore.getState().openModal;
   const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
-  useSystemStore((state) => state.showGlobalMessage);
   const [expandedMenu, setExpandedMenu] = reactExports.useState(null);
   const handleMenuClick = (item) => {
     if (item.subItems) {
@@ -42340,8 +42650,8 @@ const Sidebar = () => {
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `left-sidebar ${isLeftSidebarOpen ? "open" : "closed"}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sidebar-header", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sidebar-logo", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "logo-icon", children: "🌙" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "logo-text", children: "Luna AI" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "logo-icon", children: "😸" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "logo-text", children: "Luna" })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "sidebar-menu", children: MENU_ITEMS.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "sidebar-menu-group", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(

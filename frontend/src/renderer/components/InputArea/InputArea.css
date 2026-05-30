@@ -1,3 +1,26 @@
+/* =========================================
+   InputArea 高级文本输入框样式
+   支持动态自适应高度与全屏扩展功能
+   ========================================= */
+
+/* 隐藏的测量层，用于精确计算文本高度 */
+.input-measure-layer {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+  line-height: 24px;
+  padding: 12px 20px;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: -9999;
+}
+
+/* 输入区域外层容器 */
 .input-area-wrapper {
   position: absolute;
   bottom: 40px;
@@ -10,9 +33,11 @@
   justify-content: center;
 }
 
+/* 输入框主容器 */
 .input-area {
   width: 80%;
-  height: 50px; /* 严格固定高度，彻底消除布局偏移 */
+  min-height: 50px;
+  max-height: 96px; /* 三行文本最大高度 */
   background: rgba(0, 0, 0, 0.2);
   border-radius: 25px;
   backdrop-filter: blur(8px);
@@ -21,10 +46,12 @@
   position: relative;
   overflow: hidden;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding: 0;
 }
 
+/* 聚焦状态 */
 .input-area:focus-within {
   background: rgba(0, 0, 0, 0.4);
   border-color: rgba(0, 255, 200, 0.3);
@@ -38,41 +65,136 @@
   box-shadow: 0 0 20px rgba(0, 255, 200, 0.15), inset 0 0 15px rgba(0, 255, 200, 0.05);
 }
 
-.quiet-input {
+/* 当显示全屏按钮时，调整圆角 */
+.input-area.has-fullscreen-btn {
+  border-radius: 25px;
+}
+
+/* =========================================
+   多行文本输入框样式
+   ========================================= */
+
+.quiet-textarea {
   width: 100%;
-  height: 100%;
+  min-height: 50px;
+  max-height: 96px;
   background: transparent;
   border: none;
   outline: none;
   color: rgba(255, 255, 255, 0.9);
   font-size: 15px;
-  text-align: center;
   font-weight: 300;
   letter-spacing: 0.5px;
-  padding: 0 20px;
+  line-height: 24px;
+  padding: 13px 20px;
   box-sizing: border-box;
   margin: 0;
-  line-height: 50px;
+  resize: none;
+  overflow-y: hidden;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
   /* 平滑过渡：透明度与轻微位移 */
-  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  position: absolute;
-  inset: 0;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+              transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  font-family: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 200, 0.3) transparent;
 }
 
-.quiet-input::placeholder {
+/* 自定义滚动条样式 */
+.quiet-textarea::-webkit-scrollbar {
+  width: 4px;
+}
+
+.quiet-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quiet-textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 200, 0.3);
+  border-radius: 2px;
+}
+
+.quiet-textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 200, 0.5);
+}
+
+.quiet-textarea::placeholder {
   color: rgba(255, 255, 255, 0.3);
   transition: color 0.3s ease;
 }
 
-.quiet-input:focus::placeholder {
+.quiet-textarea:focus::placeholder {
   color: transparent;
 }
 
 /* 隐藏输入框时的状态（向下平滑滑出） */
-.quiet-input.hidden {
+.quiet-textarea.hidden {
   opacity: 0;
   transform: translateY(10px);
   pointer-events: none;
+}
+
+/* 禁用状态 */
+.quiet-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* =========================================
+   全屏编辑按钮样式
+   ========================================= */
+
+.fullscreen-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 255, 200, 0.1);
+  border: 1px solid rgba(0, 255, 200, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+  padding: 0;
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+/* 当需要显示按钮时，通过父容器的类来控制 */
+.input-area.has-fullscreen-btn .fullscreen-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.fullscreen-btn:hover {
+  background: rgba(0, 255, 200, 0.2);
+  border-color: rgba(0, 255, 200, 0.5);
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(0, 255, 200, 0.3);
+}
+
+.fullscreen-btn:active {
+  transform: scale(0.95);
+}
+
+.fullscreen-btn svg {
+  width: 18px;
+  height: 18px;
+  color: rgba(0, 255, 200, 0.8);
+  transition: color 0.3s ease;
+}
+
+.fullscreen-btn:hover svg {
+  color: rgba(0, 255, 200, 1);
 }
 
 /* =========================================
@@ -150,4 +272,306 @@
 @keyframes cyberPulse {
   0% { transform: scale(0.7); opacity: 0.4; box-shadow: 0 0 4px #00ffc8; }
   100% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px #00ffc8, 0 0 24px #00ffc8; }
+}
+
+/* =========================================
+   全屏编辑模态框样式
+   ========================================= */
+
+/* 模态框遮罩层 */
+.fullscreen-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 模态框主体 */
+.fullscreen-modal {
+  width: 90%;
+  max-width: 900px;
+  height: 80%;
+  max-height: 700px;
+  background: linear-gradient(
+    145deg,
+    rgba(10, 25, 30, 0.95) 0%,
+    rgba(5, 15, 20, 0.98) 100%
+  );
+  border-radius: 20px;
+  border: 1px solid rgba(0, 255, 200, 0.2);
+  box-shadow: 
+    0 0 60px rgba(0, 255, 200, 0.1),
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 模态框头部 */
+.fullscreen-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(0, 255, 200, 0.1);
+  background: rgba(0, 255, 200, 0.03);
+}
+
+.fullscreen-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(0, 255, 200, 0.9);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.fullscreen-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 操作按钮通用样式 */
+.fullscreen-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: rgba(0, 255, 200, 0.1);
+  border: 1px solid rgba(0, 255, 200, 0.3);
+  border-radius: 10px;
+  color: rgba(0, 255, 200, 0.9);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fullscreen-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fullscreen-action-btn:hover {
+  background: rgba(0, 255, 200, 0.2);
+  border-color: rgba(0, 255, 200, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 255, 200, 0.2);
+}
+
+.fullscreen-action-btn:active {
+  transform: translateY(0);
+}
+
+/* 发送按钮特殊样式 */
+.fullscreen-action-btn.send-btn {
+  background: rgba(0, 255, 200, 0.15);
+}
+
+.fullscreen-action-btn.send-btn:hover {
+  background: rgba(0, 255, 200, 0.25);
+}
+
+.fullscreen-action-btn.send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 关闭按钮特殊样式 */
+.fullscreen-action-btn.close-btn {
+  padding: 8px;
+  background: rgba(255, 100, 100, 0.1);
+  border-color: rgba(255, 100, 100, 0.3);
+  color: rgba(255, 150, 150, 0.9);
+}
+
+.fullscreen-action-btn.close-btn:hover {
+  background: rgba(255, 100, 100, 0.2);
+  border-color: rgba(255, 100, 100, 0.5);
+  color: rgba(255, 100, 100, 1);
+}
+
+/* 编辑器容器 */
+.fullscreen-editor-container {
+  flex: 1;
+  padding: 20px 24px;
+  overflow: hidden;
+  display: flex;
+}
+
+/* 全屏文本编辑区 */
+.fullscreen-textarea {
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 255, 200, 0.15);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.8;
+  letter-spacing: 0.3px;
+  padding: 20px;
+  box-sizing: border-box;
+  resize: none;
+  outline: none;
+  overflow-y: auto;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  font-family: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 200, 0.3) transparent;
+}
+
+.fullscreen-textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fullscreen-textarea::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.fullscreen-textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 200, 0.3);
+  border-radius: 3px;
+}
+
+.fullscreen-textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 200, 0.5);
+}
+
+.fullscreen-textarea:focus {
+  border-color: rgba(0, 255, 200, 0.4);
+  box-shadow: 
+    0 0 20px rgba(0, 255, 200, 0.1),
+    inset 0 0 20px rgba(0, 255, 200, 0.02);
+}
+
+.fullscreen-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* 模态框底部 */
+.fullscreen-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-top: 1px solid rgba(0, 255, 200, 0.1);
+  background: rgba(0, 255, 200, 0.02);
+}
+
+.shortcut-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.shortcut-hint kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(0, 255, 200, 0.1);
+  border: 1px solid rgba(0, 255, 200, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  color: rgba(0, 255, 200, 0.7);
+}
+
+.char-count {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================
+   响应式适配
+   ========================================= */
+
+@media (max-width: 768px) {
+  .input-area-wrapper {
+    max-width: 100%;
+    padding: 0 10px;
+  }
+
+  .input-area {
+    width: 95%;
+  }
+
+  .fullscreen-modal {
+    width: 95%;
+    height: 90%;
+    border-radius: 16px;
+  }
+
+  .fullscreen-modal-header {
+    padding: 12px 16px;
+  }
+
+  .fullscreen-modal-title {
+    font-size: 14px;
+  }
+
+  .fullscreen-editor-container {
+    padding: 12px 16px;
+  }
+
+  .fullscreen-textarea {
+    font-size: 15px;
+    padding: 16px;
+  }
+
+  .fullscreen-modal-footer {
+    padding: 10px 16px;
+  }
+}
+
+/* =========================================
+   动画性能优化
+   ========================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .quiet-textarea,
+  .fullscreen-btn,
+  .fullscreen-modal-overlay,
+  .fullscreen-modal,
+  .fullscreen-action-btn {
+    transition: none;
+    animation: none;
+  }
 }

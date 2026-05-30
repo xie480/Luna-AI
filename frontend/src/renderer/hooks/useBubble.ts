@@ -6,31 +6,58 @@
  * - 采用：通过缓冲队列（Queue）进行控制
  * - 限制：界面上最多同时渲染并展示三个气泡
  * - 计算：根据每个气泡内的实际字数，动态计算并分配成正比的屏幕停留时间
+ * - 优化：基于生命周期的平滑等待机制，不再强制淘汰最老气泡
+ * - 修复：气泡必须严格按照渲染顺序依次消失，确保消失顺序与出现顺序严格一致
  */
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import gsap from 'gsap';
 
 export interface Bubble {
   id: number;
   text: string;
   leaving: boolean;
+  /** 气泡在渲染队列中的序号，用于确保消失顺序 */
+  renderIndex: number;
 }
 
 interface QueueItem {
   id: number;
   text: string;
   duration: number;
+  renderIndex: number;
+}
+
+/** 待消失气泡的信息 */
+interface PendingRemoval {
+  id: number;
+  renderIndex: number;
 }
 
 export const useBubble = () => {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
+  const bubblesRef = useRef<Bubble[]>([]);
   const bubbleElsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const bubbleIdCounter = useRef(0);
+  const renderIndexCounter = useRef(0);
 
   // 缓冲队列和调度器状态
   const queueRef = useRef<QueueItem[]>([]);
   const isProcessingRef = useRef(false);
+  
+  // 阻塞等待队列，用于在气泡达到上限时挂起新的渲染任务
+  const spaceAvailableResolversRef = useRef<(() => void)[]>([]);
   const MAX_BUBBLES = 3;
+
+  // 消失顺序控制相关状态
+  // 待消失队列：存储所有 TTL 已到期但尚未执行消失的气泡（按 renderIndex 排序）
+  const pendingRemovalQueueRef = useRef<PendingRemoval[]>([]);
+  // 标记当前是否有气泡正在执行消失动画
+  const removalInProgressRef = useRef(false);
+
+  // 同步最新状态到 ref，方便在异步循环中读取最新气泡数量
+  useEffect(() => {
+    bubblesRef.current = bubbles;
+  }, [bubbles]);
 
   const registerBubble = useCallback((el: HTMLDivElement | null, id: number) => {
     if (!el) {
@@ -41,49 +68,129 @@ export const useBubble = () => {
   }, []);
 
   /**
+   * 触发等待队列继续执行
+   * 当有气泡自然消亡后，调用此函数唤醒被阻塞的渲染任务
+   */
+  const notifySpaceAvailable = useCallback(() => {
+    if (spaceAvailableResolversRef.current.length > 0) {
+      const resolve = spaceAvailableResolversRef.current.shift();
+      resolve?.();
+    }
+  }, []);
+
+  /**
+   * 处理待消失队列
+   * 确保气泡按照渲染顺序依次消失：
+   * - 只有队列中 renderIndex 最小（最早渲染）的气泡才能执行消失
+   * - 消失完成后，继续检查队列中下一个气泡是否可以消失
+   */
+  const processRemovalQueue = useCallback(() => {
+    // 如果当前有气泡正在执行消失动画，则不处理
+    if (removalInProgressRef.current) {
+      return;
+    }
+
+    // 按 renderIndex 排序，确保最早渲染的气泡排在队列头部
+    pendingRemovalQueueRef.current.sort((a, b) => a.renderIndex - b.renderIndex);
+
+    // 检查队列头部气泡是否可以消失
+    if (pendingRemovalQueueRef.current.length === 0) {
+      return;
+    }
+
+    const nextRemoval = pendingRemovalQueueRef.current[0];
+    
+    // 检查该气泡是否是当前所有活跃气泡中 renderIndex 最小的
+    // 即：只有最早渲染的气泡才能先消失
+    const activeBubbles = bubblesRef.current.filter(b => !b.leaving);
+    const minRenderIndex = Math.min(...activeBubbles.map(b => b.renderIndex));
+    
+    if (nextRemoval.renderIndex !== minRenderIndex) {
+      // 队列头部的气泡不是最早渲染的，需要等待更早的气泡先消失
+      return;
+    }
+
+    // 标记正在执行消失动画
+    removalInProgressRef.current = true;
+
+    // 从待消失队列中移除
+    pendingRemovalQueueRef.current.shift();
+
+    // 执行消失逻辑
+    setBubbles(prev => {
+      const target = prev.find(b => b.id === nextRemoval.id);
+      if (target && !target.leaving) {
+        // 消失动画结束后（300ms），真正移除 DOM
+        setTimeout(() => {
+          setBubbles(current => current.filter(b => b.id !== nextRemoval.id));
+          bubbleElsRef.current.delete(nextRemoval.id);
+          
+          // 消失动画完成，标记为可处理下一个
+          removalInProgressRef.current = false;
+          
+          // 唤醒可能在等待的下一个气泡渲染
+          notifySpaceAvailable();
+          
+          // 继续处理待消失队列中的下一个气泡
+          processRemovalQueue();
+        }, 300);
+        
+        return prev.map(b => b.id === nextRemoval.id ? { ...b, leaving: true } : b);
+      }
+      return prev;
+    });
+  }, [notifySpaceAvailable]);
+
+  /**
+   * 将气泡加入待消失队列
+   * 当气泡 TTL 到期时调用，不立即执行消失，而是等待队列处理
+   */
+  const scheduleRemoval = useCallback((id: number, renderIndex: number) => {
+    // 加入待消失队列
+    pendingRemovalQueueRef.current.push({ id, renderIndex });
+    
+    // 尝试处理队列
+    processRemovalQueue();
+  }, [processRemovalQueue]);
+
+  /**
    * 异步气泡调度器
-   * 逐个按序渲染气泡，控制弹出间隔，并处理淘汰逻辑
+   * 逐个按序渲染气泡，控制弹出间隔，并处理阻塞等待逻辑
+   * 当活跃气泡达到最大数量时，暂停处理队列，等待有气泡自然消亡后继续
    */
   const processQueue = useCallback(async () => {
-    // 如果正在处理中，或队列为空，则直接返回
-    if (isProcessingRef.current || queueRef.current.length === 0) {
+    // 如果正在处理中，则直接返回，避免并发冲突
+    if (isProcessingRef.current) {
       return;
     }
     isProcessingRef.current = true;
 
     while (queueRef.current.length > 0) {
-      const item = queueRef.current.shift()!;
-      const { id, text, duration } = item;
+      // 1. 检查当前活跃气泡数量（未处于 leaving 状态的）
+      const activeBubbles = bubblesRef.current.filter(b => !b.leaving);
+      
+      // 如果达到最大限制，则阻塞当前循环，等待有气泡被移除后唤醒
+      if (activeBubbles.length >= MAX_BUBBLES) {
+        await new Promise<void>(resolve => {
+          spaceAvailableResolversRef.current.push(resolve);
+        });
+        // 被唤醒后，重新进行 while 循环的条件检查，确保确实有空间
+        continue;
+      }
 
-      // 1. 记录旧位置 (用于 GSAP 平滑上移动画)
+      const item = queueRef.current.shift()!;
+      const { id, text, duration, renderIndex } = item;
+
+      // 2. 记录旧位置 (用于 GSAP 平滑上移动画)
       const prevPositions = new Map<number, number>();
       bubbleElsRef.current.forEach((el, key) => {
         try { prevPositions.set(key, el.getBoundingClientRect().top); } catch (e) { /* ignore */ }
       });
 
-      // 2. 添加新气泡，并执行自动淘汰逻辑
-      setBubbles(prev => {
-        const next = [...prev, { id, text, leaving: false }];
-        // 查找当前活跃（未 leaving）的气泡
-        const activeBubbles = next.filter(b => !b.leaving);
-        
-        // 如果超过最大限制，强制淘汰最旧的
-        if (activeBubbles.length > MAX_BUBBLES) {
-          const oldest = activeBubbles[0];
-          const oldestIndex = next.findIndex(b => b.id === oldest.id);
-          if (oldestIndex !== -1) {
-            next[oldestIndex] = { ...next[oldestIndex], leaving: true };
-            // 触发 DOM 清理
-            setTimeout(() => {
-              setBubbles(current => current.filter(b => b.id !== oldest.id));
-              bubbleElsRef.current.delete(oldest.id);
-            }, 300);
-          }
-        }
-        return next;
-      });
+      // 3. 添加新气泡（不再执行强制淘汰逻辑）
+      setBubbles(prev => [...prev, { id, text, leaving: false, renderIndex }]);
 
-      // 3. 等待 DOM 更新后执行动画
+      // 4. 等待 DOM 更新后执行动画
       requestAnimationFrame(() => {
         bubbleElsRef.current.forEach((el, key) => {
           if (prevPositions.has(key) && key !== id) {
@@ -97,35 +204,34 @@ export const useBubble = () => {
         });
       });
 
-      // 4. 设置当前气泡的自然生命周期 (基于字数成正比计算的时长)
+      // 5. 设置当前气泡的自然生命周期 (TTL)
+      // TTL 结束后将气泡加入待消失队列，而不是立即执行消失
       setTimeout(() => {
-        setBubbles(prev => {
-          const target = prev.find(b => b.id === id);
-          // 如果气泡还在且未被提前淘汰，则标记为 leaving
-          if (target && !target.leaving) {
-            setTimeout(() => {
-              setBubbles(current => current.filter(b => b.id !== id));
-              bubbleElsRef.current.delete(id);
-            }, 300);
-            return prev.map(b => b.id === id ? { ...b, leaving: true } : b);
-          }
-          return prev;
-        });
+        scheduleRemoval(id, renderIndex);
       }, duration);
 
-      // 5. 强制等待一个最小弹出间隔，防止气泡一次性全部弹出
-      // 800ms 保证了视觉上的逐个弹出，同时允许气泡在屏幕上共存（因为 duration 通常远大于 800ms）
+      // 6. 强制等待一个最小弹出间隔，防止气泡一次性全部弹出
       await new Promise(resolve => setTimeout(resolve, 800));
     }
 
     isProcessingRef.current = false;
-  }, []);
+  }, [scheduleRemoval]);
 
+  /**
+   * 显示气泡
+   * @param text 气泡文本内容
+   * @param duration 可选的自定义存活时间（毫秒）
+   */
   const showBubble = useCallback((text: string, duration?: number) => {
     const id = bubbleIdCounter.current++;
-    // 动态计算停留时间：基础 3000ms，每字 250ms，确保与字数成正比
-    const calcDuration = duration ?? Math.max(3000, text.length * 250);
-    queueRef.current.push({ id, text, duration: calcDuration });
+    const renderIndex = renderIndexCounter.current++;
+    
+    // 动态 TTL 计算策略：
+    // 基础存活时间 2000ms，每个字符增加 250ms 的阅读时间。
+    // 确保文本越长，气泡展示的时间越久，严格成正比。
+    const calcDuration = duration ?? Math.max(2000, text.length * 250);
+    
+    queueRef.current.push({ id, text, duration: calcDuration, renderIndex });
     processQueue();
   }, [processQueue]);
 
