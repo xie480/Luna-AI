@@ -25,8 +25,14 @@
 
 本方案采用 **“酒馆式（Tavern-style）模块化 + 动态槽位装配（Slot-based Assembly）”** 的设计模式：
 
-1. **分层槽位结构**：将最终输入给 LLM 的 System Message 划分为严格的槽位段（如：`Persona`, `TaskRule`, `ToolProtocol`, `MemoryEvidence`, `ErrorRecovery`）。
-2. **双实体模型**：数据库设计分为 `PromptTemplate`（模板元数据）与 `PromptVersion`（模板具体版本的文本与参数），实现逻辑上的配置与内容的解耦。
+1. **标准三槽位结构**：将最终输入给 LLM 的 System Message 严格划分为三个标准槽位段：
+   *   `system`: 核心系统设定、人格（Persona）、基础规则（TaskRule）、工具协议（ToolProtocol）等静态或低频变动内容。
+   *   `memory`: 记忆证据（MemoryEvidence）、历史对话摘要等与长期/短期记忆相关的动态内容。
+   *   `runtime`: 运行时状态、错误恢复（ErrorRecovery）、当前时间、临时指令等高频变动的即时上下文。
+2. **统一命名规范**：所有 Prompt 模板必须遵循 `[具体业务场景]_[槽位名称]` 的命名格式。例如：
+   *   普通对话场景：`chat_system`, `chat_memory`, `chat_runtime`
+   *   总结场景：`summarize_system`, `summarize_memory`, `summarize_runtime`
+3. **双实体模型**：数据库设计分为 `PromptTemplate`（模板元数据）与 `PromptVersion`（模板具体版本的文本与参数），实现逻辑上的配置与内容的解耦。
 3. **Go 运行时装配，Python 纯渲染**：**（核心原则）** Go 层作为唯一的控制面，负责从 DB/Cache 读取最新的 Prompt 模板，并根据当前状态机上下文选出所需的模板集合，将【模板字符串】与【变量字典】通过 gRPC 发送给 Python 层。Python 层仅作为无状态引擎，利用 Jinja2 等模板引擎进行最终的字符串渲染和 LLM 调用。
 4. **分类治理策略**：
    * *Execution-Type（执行型）*：如 JSON 输出约束、状态迁移规则。标记为 `is_system=true`，仅允许新增版本，禁止删除，修改需严格校验。
@@ -62,9 +68,9 @@
 | 字段名                 | 类型           | 说明                                                   |
 |:------------------- |:------------ |:---------------------------------------------------- |
 | `id`                | VARCHAR(64)  | 唯一标识符（雪花算法 ID）                                         |
-| `name`              | VARCHAR(100) | 模板名称，如 `core_persona`                                |
-| `category`          | VARCHAR(50)  | `persona`, `task`, `tool_rule`, `recovery`, `memory` |
-| `slot_position`     | VARCHAR(50)  | 装配槽位位置（决定拼接顺序），如 `system_header`, `system_body`      |
+| `name`              | VARCHAR(100) | 模板名称，必须遵循 `[业务场景]_[槽位]` 规范，如 `chat_system` |
+| `category`          | VARCHAR(50)  | 业务场景分类，如 `chat`, `summarize` |
+| `slot_position`     | VARCHAR(50)  | 装配槽位位置，严格限定为 `system`, `memory`, `runtime` |
 | `is_system`         | BOOLEAN      | 是否为系统底层规则（决定能否被用户删除，`true`不可删）                       |
 | `active_version_id` | VARCHAR(36)  | 当前生效的版本 ID                                           |
 | `created_at`        | TIMESTAMP    | 创建时间                                                 |
@@ -149,7 +155,7 @@ package luna.ai.v1;
 
 // Go 端传给 Python 端的单体 Prompt 槽位
 message PromptSlot {
-    string slot_name = 1;     // e.g., "persona", "task_instruction", "tool_rules"
+    string slot_name = 1;     // 严格限定为 "system", "memory", "runtime"
     string template_content = 2; // e.g., "You are Luna. Current time is {{time}}."
     bool is_required = 3;     // 如果渲染失败是否中断整个流程
 }
@@ -247,9 +253,9 @@ Prompt 版本状态流转采用严格的三态机：
 1. **用户输入**：“明早8点叫我起床”。
 2. **Go 状态机触发**：进入 `IntentRecognition` 节点。
 3. **Prompt 动态装配**：
-   * 加载 `core_persona` -> 槽位: System
-   * 加载 `tool_use_guideline` -> 槽位: Rule
-   * 由于识别到可能涉及时间，加载 `datetime_awareness`（内容型 Prompt） -> 槽位: Context
+   * 加载 `chat_system` -> 槽位: system (包含核心人格与工具规则)
+   * 加载 `chat_memory` -> 槽位: memory (包含用户偏好记忆)
+   * 加载 `chat_runtime` -> 槽位: runtime (包含当前时间等即时状态)
    * 上下文变量：`{"current_time": "2023-10-25 21:00:00", "user_name": "Master"}`
 4. **渲染与执行**：Go 传给 Python，Python 渲染出完整的带有时间感知的指令集，LLM 决定调用 `ScheduleTask` 工具。
 5. **工具执行反馈**：Go 记录工具调用成功，进行后续状态演进。
@@ -288,8 +294,8 @@ func (m *PromptManager) AssembleAndGenerate(ctx context.Context, agentID string,
     var slots []*pb.PromptSlot
     for _, tpl := range templates {
         slots = append(slots, &pb.PromptSlot{
-            SlotName:        tpl.Category, // e.g., "persona", "rule"
-            TemplateContent: tpl.Content,  // e.g., "You are Luna... {{user_name}}"
+            SlotName:        tpl.SlotPosition, // 严格为 "system", "memory", "runtime"
+            TemplateContent: tpl.Content,      // e.g., "You are Luna... {{user_name}}"
             IsRequired:      tpl.IsSystem,
         })
     }

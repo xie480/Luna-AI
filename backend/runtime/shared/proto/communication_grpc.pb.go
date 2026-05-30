@@ -25,6 +25,7 @@ const (
 	CommunicationService_Ping_FullMethodName             = "/communication.CommunicationService/Ping"
 	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
 	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
+	CommunicationService_SyncConfig_FullMethodName       = "/communication.CommunicationService/SyncConfig"
 )
 
 // CommunicationServiceClient is the client API for CommunicationService service.
@@ -36,10 +37,11 @@ type CommunicationServiceClient interface {
 	// Ping 方法，用于健康检查和连接测试
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
 	// ChatStream 方法，用于流式对话
-	// 支持多轮对话历史记录和系统提示词配置
 	ChatStream(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamResponse], error)
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error)
+	// SyncConfig 方法，用于热更新配置
+	SyncConfig(ctx context.Context, in *SyncConfigRequest, opts ...grpc.CallOption) (*SyncConfigResponse, error)
 }
 
 type communicationServiceClient struct {
@@ -89,6 +91,16 @@ func (c *communicationServiceClient) SummarizeContext(ctx context.Context, in *S
 	return out, nil
 }
 
+func (c *communicationServiceClient) SyncConfig(ctx context.Context, in *SyncConfigRequest, opts ...grpc.CallOption) (*SyncConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncConfigResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_SyncConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommunicationServiceServer is the server API for CommunicationService service.
 // All implementations must embed UnimplementedCommunicationServiceServer
 // for forward compatibility.
@@ -98,10 +110,11 @@ type CommunicationServiceServer interface {
 	// Ping 方法，用于健康检查和连接测试
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
 	// ChatStream 方法，用于流式对话
-	// 支持多轮对话历史记录和系统提示词配置
 	ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error)
+	// SyncConfig 方法，用于热更新配置
+	SyncConfig(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
 
@@ -120,6 +133,9 @@ func (UnimplementedCommunicationServiceServer) ChatStream(*ChatRequest, grpc.Ser
 }
 func (UnimplementedCommunicationServiceServer) SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SummarizeContext not implemented")
+}
+func (UnimplementedCommunicationServiceServer) SyncConfig(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncConfig not implemented")
 }
 func (UnimplementedCommunicationServiceServer) mustEmbedUnimplementedCommunicationServiceServer() {}
 func (UnimplementedCommunicationServiceServer) testEmbeddedByValue()                              {}
@@ -189,6 +205,24 @@ func _CommunicationService_SummarizeContext_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommunicationService_SyncConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).SyncConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_SyncConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).SyncConfig(ctx, req.(*SyncConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommunicationService_ServiceDesc is the grpc.ServiceDesc for CommunicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -203,6 +237,10 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SummarizeContext",
 			Handler:    _CommunicationService_SummarizeContext_Handler,
+		},
+		{
+			MethodName: "SyncConfig",
+			Handler:    _CommunicationService_SyncConfig_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -296,11 +296,10 @@ class WSManager {
   }
 
   /**
-   * 发送用户聊天消息（携带多轮对话历史记录）
+   * 发送用户聊天消息
    * @param message 用户输入的消息内容
-   * @param customSystemPrompt 可选的自定义系统提示词
    */
-  public sendChatMessage(message: string, customSystemPrompt?: string): void {
+  public sendChatMessage(message: string): void {
     const sessionStore = useSessionStore.getState();
     const sessionId = sessionStore.currentSessionId;
 
@@ -328,7 +327,6 @@ class WSManager {
         sessionId,
         message,
         msgId: userMsgId,
-        system_prompt: customSystemPrompt || '', // 自定义系统提示词（可选）
       },
     });
   }

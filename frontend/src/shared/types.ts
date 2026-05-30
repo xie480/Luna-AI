@@ -64,19 +64,16 @@ export interface ChatMessage {
 }
 
 /**
- * ChatRequest 消息 Payload（增强版，支持多轮历史记录和系统提示词）
+ * ChatRequest 消息 Payload
  * 做什么：定义 ChatRequest 消息的完整数据结构。
  * 为什么这样做：支持多轮对话，让 AI 模型能够感知对话上下文。
  * 边界条件：
  *   - history 为空数组时表示首次对话
- *   - system_prompt 为空时后端使用默认提示词
  */
 export interface ChatRequestPayload {
   message: string;
   /** 多轮对话历史记录，按时间正序排列（最旧的在前） */
   history?: ChatMessage[];
-  /** 可选的自定义系统提示词，为空时使用后端默认值 */
-  system_prompt?: string;
 }
 
 /**

@@ -95,3 +95,37 @@ class Settings(BaseSettings):
 
 # 全局单例
 settings = Settings()
+
+import asyncio
+from typing import Dict, Any
+
+class GlobalConfigContainer:
+    """
+    全局动态配置容器
+    
+    做什么：维护动态配置状态，接收 Go 的 gRPC 推送时更新配置并触发底层 LLM Client 的重新初始化。
+    """
+    def __init__(self):
+        self._config: Dict[str, Any] = {}
+        self._lock = asyncio.Lock()
+        
+    async def update_config(self, new_config: Dict[str, Any]):
+        """
+        更新配置并触发重载
+        """
+        async with self._lock:
+            self._config.update(new_config)
+            
+            # 更新 settings 单例中的对应字段
+            if "llm_api_key" in new_config:
+                settings.openai_api_key = new_config["llm_api_key"]
+                
+            # 触发 LLM Client 重载
+            from app.llm.client import llm_client
+            llm_client.reload_config()
+            
+            from app.logger import get_logger
+            logger = get_logger(__name__)
+            logger.info("全局配置已更新，LLM Client 已重载")
+
+global_config_container = GlobalConfigContainer()

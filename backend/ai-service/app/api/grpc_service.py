@@ -2,14 +2,13 @@
 Luna AI gRPC 通信服务实现
 
 做什么：实现 gRPC 通信服务，处理 Ping 健康检查和 ChatStream 流式对话请求。
-         流式对话支持多轮历史记录、自定义系统提示词、TTFT 监控和全面的异常容错。
+         流式对话支持多轮历史记录、TTFT 监控和全面的异常容错。
 为什么这样做：作为 Go Runtime 与 Python AI Service 之间的通信桥梁，确保消息的可靠透传。
 输入输出：
     - Ping(): 健康检查，返回 Pong 响应
     - ChatStream(): 流式对话，返回 AsyncGenerator[ChatStreamResponse]
 边界条件：
     - ChatRequest.history 为空时表示首次对话
-    - ChatRequest.system_prompt 为空时使用默认提示词
     - 客户端断开连接时立即停止流式输出
 异常行为：
     - context.cancelled() 返回 True 时终止流
@@ -26,7 +25,6 @@ from app.api import communication_pb2_grpc
 from app.logger import get_logger
 from app.llm.client import llm_client, compression_llm_client
 from app.llm.stream_parser import StreamParser
-from app.agent.prompts import render_summarize_prompt
 from app.constants import Role
 
 logger = get_logger(__name__)
@@ -90,7 +88,6 @@ class CommunicationServiceServicer(
             - 输出：AsyncGenerator[ChatStreamResponse, None]
         边界条件：
             - request.history 为空时表示无历史记录
-            - request.system_prompt 为空时 Python 侧使用默认提示词
             - 客户端断开时（context.cancelled() == True）终止流
         异常行为：
             - 解析 history 失败时使用空历史（兜底策略）
@@ -98,7 +95,8 @@ class CommunicationServiceServicer(
         """
         trace_id = request.trace_id
         message = request.message
-        system_prompt = request.system_prompt or ""
+        # 直接从 Go 端获取渲染好的完整 system_prompt
+        system_prompt = request.system_prompt
 
         # 解析历史记录
         # proto 的 repeated ChatMessage 字段需要逐条解析
@@ -121,7 +119,7 @@ class CommunicationServiceServicer(
             f"[TraceID:{trace_id}] 收到 ChatStream 请求, "
             f"message: {message[:100]}, "
             f"history_count: {history_count}, "
-            f"has_custom_prompt: {bool(system_prompt)}"
+            f"system_prompt_length: {len(system_prompt)}"
         )
 
         # 记录 TTFT（首字延迟）起始时间
@@ -131,7 +129,6 @@ class CommunicationServiceServicer(
         # 初始化流式解析器，用于提取 emotion 和切分 reply 句子
         parser = StreamParser(trace_id)
 
-        # TODO: 持久化逻辑应该转移到GO端
         try:
             # 使用带上下文管理的流式接口
             async for chunk_data in llm_client.stream_chat_with_context(
@@ -139,9 +136,6 @@ class CommunicationServiceServicer(
                 history=history,
                 current_message=message,
                 trace_id=trace_id,
-                core_summary=request.core_summary,
-                key_facts=request.key_facts,
-                memory_snippets=request.short_term_memory,
             ):
                 # 检查客户端是否已断开连接
                 # 注意：grpc.aio.ServicerContext 使用 cancelled() 而非 is_active()
@@ -245,33 +239,24 @@ class CommunicationServiceServicer(
         """
         处理后台摘要压缩请求
 
-        做什么：接收 SummarizeContextRequest，调用 LLM 生成摘要，解析 JSON 并校验非空后返回。
-        为什么这样做：确保 LLM 返回的摘要字段有效，避免空值覆盖 Redis 中的原有数据。
+        做什么：接收 SummarizeContextRequest，直接使用 Go 端渲染好的完整 summarize_prompt，
+                调用 LLM 生成摘要，解析 JSON 并校验非空后返回。
+        为什么这样做：Go 端负责模板渲染，Python 端仅负责调用 LLM 并解析结果。
         输入输出：
-            - 输入：SummarizeContextRequest {trace_id, current_core_summary, current_key_facts, messages_to_compress}
+            - 输入：SummarizeContextRequest {trace_id, summarize_prompt}
             - 输出：SummarizeContextResponse {trace_id, new_core_summary, new_key_facts}
         边界条件：
             - LLM 返回空字段时回退到当前值
             - JSON 解析失败时回退到当前值
         异常行为：
-            - 任何异常都返回原有摘要，确保系统稳定性
+            - 任何异常都返回空摘要，确保系统稳定性
         """
         trace_id = request.trace_id
         logger.info(f"[TraceID:{trace_id}] 收到 SummarizeContext 请求")
 
-        # 构造压缩 Prompt：将 messages_to_compress 转换为文本格式
-        messages_text = ""
-        for msg in request.messages_to_compress:
-            messages_text += f"{msg.role}: {msg.content}\n"
+        # 直接使用 Go 端渲染好的完整 summarize_prompt
+        full_prompt = request.summarize_prompt
 
-        # 使用模板渲染完整的单体提示词
-        full_prompt = render_summarize_prompt(
-            current_core_summary=request.current_core_summary,
-            current_key_facts=request.current_key_facts,
-            messages_text=messages_text
-        )
-
-        # 废弃角色拆分，直接作为单体 user 消息发送
         messages = [{"role": Role.USER.value, "content": full_prompt}]
 
         max_retries = 3
@@ -283,7 +268,7 @@ class CommunicationServiceServicer(
                     response_format={"type": "json_object"}
                 )
 
-                # 解析 JSON 并进行严格校验，兼容 markdown 代码块包装以及数组形式的 key_facts
+                # 解析 JSON 并进行严格校验，处理 markdown 代码块包装以及数组形式的 key_facts
                 try:
                     # 1. 移除可能的 markdown 代码块包装，例如 ```json {...}```
                     cleaned_text = result_text.strip()
@@ -322,16 +307,15 @@ class CommunicationServiceServicer(
                         if attempt < max_retries - 1:
                             continue
                         else:
-                            logger.warning(f"[TraceID:{trace_id}] 达到最大重试次数，回退到当前值")
-                            new_core_summary = request.current_core_summary
-                            new_key_facts = request.current_key_facts
+                            logger.warning(f"[TraceID:{trace_id}] 达到最大重试次数，回退到空值")
+                            new_core_summary = ""
+                            new_key_facts = ""
 
                     logger.info(f"[TraceID:{trace_id}] 摘要压缩完成")
                     return communication_pb2.SummarizeContextResponse(
                         trace_id=trace_id,
                         new_core_summary=new_core_summary,
                         new_key_facts=new_key_facts,
-                        # 兼容旧版 proto，new_short_term_memory 传空字符串
                     )
 
                 except json.JSONDecodeError:
@@ -342,11 +326,11 @@ class CommunicationServiceServicer(
                     if attempt < max_retries - 1:
                         continue
                     else:
-                        # JSON 解析失败时回退到当前值
+                        # JSON 解析失败时回退到空值
                         return communication_pb2.SummarizeContextResponse(
                             trace_id=trace_id,
-                            new_core_summary=request.current_core_summary,
-                            new_key_facts=request.current_key_facts,
+                            new_core_summary="",
+                            new_key_facts="",
                         )
 
             except Exception as e:
@@ -354,9 +338,39 @@ class CommunicationServiceServicer(
                 if attempt < max_retries - 1:
                     continue
                 else:
-                    # 发生异常时返回原有的摘要，确保系统稳定性
+                    # 发生异常时返回空摘要，确保系统稳定性
                     return communication_pb2.SummarizeContextResponse(
                         trace_id=trace_id,
-                        new_core_summary=request.current_core_summary,
-                        new_key_facts=request.current_key_facts,
+                        new_core_summary="",
+                        new_key_facts="",
                     )
+
+    async def SyncConfig(
+        self,
+        request: communication_pb2.SyncConfigRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.SyncConfigResponse:
+        """
+        处理配置同步请求
+        """
+        logger.info(f"收到 SyncConfig 请求, version_id: {request.version_id}")
+        
+        try:
+            from app.config import global_config_container
+            
+            # 解析 JSON 配置
+            config_data = json.loads(request.llm_config_json)
+            
+            # 更新全局配置容器
+            await global_config_container.update_config(config_data)
+            
+            return communication_pb2.SyncConfigResponse(
+                success=True,
+                error_message=""
+            )
+        except Exception as e:
+            logger.error(f"SyncConfig 处理异常: {e}")
+            return communication_pb2.SyncConfigResponse(
+                success=False,
+                error_message=str(e)
+            )

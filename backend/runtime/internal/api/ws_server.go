@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
 	"luna-ai/backend/runtime/internal/types"
 	"luna-ai/backend/runtime/internal/utils/snowflake"
@@ -69,7 +70,6 @@ type CMDUserInputPayload struct {
 	Message      string        `json:"message"`
 	MsgID        string        `json:"msgId"`
 	History      []ChatMessage `json:"history,omitempty"`
-	SystemPrompt string        `json:"system_prompt,omitempty"`
 }
 
 // ChatStreamPayload 定义 Chat 流式响应的 Payload
@@ -110,14 +110,16 @@ type WSServer struct {
 	aiClient  *AIClient
 	redisRepo *repository.ChatHistoryRedisRepo
 	pgRepo    *repository.ChatHistoryPGRepo
+	promptMgr *prompt.Manager
 }
 
 // NewWSServer 创建一个新的 WSServer 实例
-func NewWSServer(aiClient *AIClient, redisRepo *repository.ChatHistoryRedisRepo, pgRepo *repository.ChatHistoryPGRepo) *WSServer {
+func NewWSServer(aiClient *AIClient, redisRepo *repository.ChatHistoryRedisRepo, pgRepo *repository.ChatHistoryPGRepo, promptMgr *prompt.Manager) *WSServer {
 	return &WSServer{
 		aiClient:  aiClient,
 		redisRepo: redisRepo,
 		pgRepo:    pgRepo,
+		promptMgr: promptMgr,
 	}
 }
 
@@ -300,16 +302,34 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	}
 	memorySnippets := memorySnippetsBuilder.String()
 
-	// 构造 gRPC ChatRequest
-	// 注意：ShortTermMemory 字段用于注入 MEMORY_SNIPPETS，应来自 history List
+	// 组装完整的 System Prompt（由 Go 端完成全部渲染）
+	currentTime := time.Now().Format("2006-01-02 15:04:05 Monday")
+	promptVariables := map[string]string{
+		"CURRENT_TIME":    currentTime,
+		"CURRENT_MESSAGE": cmdPayload.Message,
+		"CORE_SUMMARY":    summary.CoreSummary,
+		"KEY_FACTS":       summary.KeyFacts,
+		"MEMORY_SNIPPETS": memorySnippets,
+	}
+
+	var fullSystemPrompt string
+	if s.promptMgr != nil {
+		var err error
+		fullSystemPrompt, err = s.promptMgr.AssembleChatPrompt(ctx, "chat", promptVariables)
+		if err != nil {
+			logger.Error(ctx, "组装 Chat Prompt 失败", zap.Error(err))
+		}
+	}
+	if fullSystemPrompt == "" {
+		fullSystemPrompt = prompt.FallbackChatPrompt(promptVariables)
+	}
+
+	// 构造 gRPC ChatRequest（已简化：由 Go 端直接传递完整 system_prompt）
 	req := &pb.ChatRequest{
-		TraceId:         msg.TraceID,
-		Message:         cmdPayload.Message,
-		History:         protoHistory,
-		SystemPrompt:    cmdPayload.SystemPrompt,
-		CoreSummary:     summary.CoreSummary,
-		KeyFacts:        summary.KeyFacts,
-		ShortTermMemory: memorySnippets,
+		TraceId:      msg.TraceID,
+		Message:      cmdPayload.Message,
+		History:      protoHistory,
+		SystemPrompt: fullSystemPrompt,
 	}
 
 	logger.Info(ctx, "发送流式对话请求到 AI 服务", zap.String("trace_id", msg.TraceID))
@@ -376,7 +396,9 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			fullAssistantEmotion = resp.Chunk
 
 		default:
-			// 未知类型，按 reply_chunk 处理（向前兼容）
+			// 未知消息类型，记录日志警告
+			logger.Warn(ctx, "收到未知的流式消息类型", zap.String("type", msgType), zap.String("trace_id", msg.TraceID))
+			// 仍按 reply_chunk 处理，避免丢失内容
 			fullAssistantContent += resp.Chunk
 		}
 
@@ -500,7 +522,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 }
 
 // triggerCompression 触发摘要压缩流程
-// 做什么：提取最旧的 N 条历史记录，调用 AI 服务生成摘要，校验非空后更新 Redis
+// 做什么：提取最旧的 N 条历史记录，由 Go 组装完整的 summarize prompt，调用 AI 服务生成摘要，校验非空后更新 Redis
 // 为什么这样做：确保摘要字段有效，防止空值覆盖 Redis 中的原有数据
 // 输入输出：
 //   - 输入：sessionID, traceID
@@ -539,30 +561,40 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		zap.Int("compress_count", compressCount),
 		zap.Int("total_history", len(history)))
 
-	messagesToCompress := make([]*pb.ChatMessage, 0, compressCount*2)
-	// 提取最旧的 compressCount 条记录
+	// 将需要压缩的历史记录格式化为文本
+	var messagesTextBuilder strings.Builder
 	for i := 0; i < compressCount; i++ {
 		interaction := history[i]
-		messagesToCompress = append(messagesToCompress, &pb.ChatMessage{
-			Role:    types.RoleUser,
-			Content: interaction.UserContent,
-		})
-		assistantMsg := &pb.ChatMessage{
-			Role:    types.RoleAssistant,
-			Content: interaction.AssistantContent,
+		messagesTextBuilder.WriteString(fmt.Sprintf("用户: %s\n", interaction.UserContent))
+		messagesTextBuilder.WriteString(fmt.Sprintf("Luna: %s\n", interaction.AssistantContent))
+		if interaction.Thought != "" {
+			messagesTextBuilder.WriteString(fmt.Sprintf("(内心独白: %s)\n", interaction.Thought))
 		}
-		if interaction.Error != "" {
-			assistantMsg.IsError = true
-			assistantMsg.ErrorDetails = interaction.Error
+		messagesTextBuilder.WriteString("\n")
+	}
+	messagesText := messagesTextBuilder.String()
+
+	// 在 Go 端组装完整的 Summarize Prompt
+	summarizeVariables := map[string]string{
+		"CURRENT_CORE_SUMMARY": summary.CoreSummary,
+		"CURRENT_KEY_FACTS":    summary.KeyFacts,
+		"MESSAGES_TEXT":        messagesText,
+	}
+
+	var fullSummarizePrompt string
+	if s.promptMgr != nil {
+		fullSummarizePrompt, err = s.promptMgr.AssembleSummarizePrompt(ctx, summarizeVariables)
+		if err != nil {
+			logger.Error(ctx, "组装 Summarize Prompt 失败", zap.Error(err))
 		}
-		messagesToCompress = append(messagesToCompress, assistantMsg)
+	}
+	if fullSummarizePrompt == "" {
+		fullSummarizePrompt = prompt.FallbackSummarizePrompt(summarizeVariables)
 	}
 
 	req := &pb.SummarizeContextRequest{
-		TraceId:            traceID,
-		CurrentCoreSummary: summary.CoreSummary,
-		CurrentKeyFacts:    summary.KeyFacts,
-		MessagesToCompress: messagesToCompress,
+		TraceId:         traceID,
+		SummarizePrompt: fullSummarizePrompt,
 	}
 
 	resp, err := s.aiClient.SummarizeContext(ctx, req)

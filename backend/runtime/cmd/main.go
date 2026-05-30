@@ -18,6 +18,7 @@ import (
 	"luna-ai/backend/runtime/internal/config"
 	"luna-ai/backend/runtime/internal/infrastructure"
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
 
 	"go.uber.org/zap"
@@ -77,12 +78,45 @@ func main() {
 		defer postgresClient.Close()
 		logger.Info(ctx, "PostgreSQL 连接成功", zap.String("database", cfg.Postgres.Database))
 		
-		// 自动迁移数据库表结构（使用 InteractionModel 替代旧的 ChatMessageModel）
-		if err := postgresClient.GetDB().AutoMigrate(&repository.InteractionModel{}); err != nil {
+		// 自动迁移数据库表结构
+		if err := postgresClient.GetDB().AutoMigrate(
+			&repository.InteractionModel{},
+			&repository.SystemConfig{},
+			&repository.PromptTemplate{},
+			&repository.PromptVersion{},
+		); err != nil {
 			logger.Error(ctx, "自动迁移数据库表结构失败", zap.Error(err))
 		} else {
 			logger.Info(ctx, "自动迁移数据库表结构成功")
 		}
+	}
+
+	// 初始化 CryptoService
+	cryptoSvc, err := config.NewCryptoService()
+	if err != nil {
+		logger.Error(ctx, "初始化 CryptoService 失败", zap.Error(err))
+		os.Exit(1)
+	}
+
+	// 初始化 EventBus
+	eventBus := config.NewEventBus()
+
+	// 初始化 ConfigManager
+	var configManager *config.ConfigManager
+	if postgresClient != nil {
+		configRepo := repository.NewConfigPGRepo(postgresClient)
+		configManager, err = config.NewConfigManager(configRepo, cryptoSvc, eventBus)
+		if err != nil {
+			logger.Error(ctx, "初始化 ConfigManager 失败", zap.Error(err))
+			os.Exit(1)
+		}
+	}
+
+	// 初始化 PromptManager
+	var promptManager *prompt.Manager
+	if postgresClient != nil {
+		promptRepo := repository.NewPromptPGRepo(postgresClient)
+		promptManager = prompt.NewManager(promptRepo)
 	}
 
 	// 5. 初始化 AI 客户端 - 连接 Python AI 服务
@@ -95,6 +129,21 @@ func main() {
 
 	// 6. 注册路由 - 设置 HTTP 路由处理器
 	mux := http.NewServeMux()
+
+	// 配置端点
+	if configManager != nil && aiClient != nil {
+		configHandler := api.NewConfigHandler(configManager, aiClient)
+		mux.HandleFunc("/api/config/update", configHandler.HandleUpdateConfig)
+		mux.HandleFunc("/api/config", configHandler.HandleGetConfig)
+	}
+
+	// Prompt 端点
+	if promptManager != nil {
+		promptHandler := api.NewPromptHandler(promptManager)
+		mux.HandleFunc("/api/prompt/template", promptHandler.HandleCreateTemplate)
+		mux.HandleFunc("/api/prompt/version", promptHandler.HandleCreateVersion)
+		mux.HandleFunc("/api/prompt/publish", promptHandler.HandlePublishVersion)
+	}
 
 	// 健康检查端点 - 包含三层健康状态检查
 	healthHandler := api.NewHealthHandler(aiClient, redisClient, postgresClient)
@@ -110,7 +159,7 @@ func main() {
 	if postgresClient != nil {
 		pgRepo = repository.NewChatHistoryPGRepo(postgresClient)
 	}
-	wsServer := api.NewWSServer(aiClient, redisRepo, pgRepo)
+	wsServer := api.NewWSServer(aiClient, redisRepo, pgRepo, promptManager)
 	mux.HandleFunc("/ws", wsServer.HandleWS)
 
 	// 定义 CORS 中间件，允许前端跨域请求 HTTP 接口

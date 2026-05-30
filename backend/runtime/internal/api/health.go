@@ -56,6 +56,7 @@ type HealthHandler struct {
 //   - aiClient: AI 服务 gRPC 客户端
 //   - redisClient: Redis 客户端（可为 nil）
 //   - postgresClient: PostgreSQL 客户端（可为 nil）
+//
 // 返回:
 //   - *HealthHandler: 健康检查处理器实例
 func NewHealthHandler(aiClient *AIClient, redisClient *infrastructure.RedisClient, postgresClient *infrastructure.PostgresClient) *HealthHandler {
@@ -264,12 +265,4 @@ func (h *HealthHandler) calculateOverallStatus(components []ComponentHealth) str
 		return types.HealthStatusDegraded
 	}
 	return types.HealthStatusHealthy
-}
-
-// HealthCheckHandler 处理健康检查请求（为兼容现有路由而保留的独立函数）
-func HealthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	// 创建一个基本的健康处理器实例，不包含任何依赖（如redis或postgres）
-	// 因为对于基本健康检查，我们只关心Go运行时和服务本身是否正常
-	basicHandler := NewHealthHandler(nil, nil, nil)
-	basicHandler.HandleHealthCheck(w, r)
 }

@@ -35,7 +35,6 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import settings
 from app.logger import get_logger
-from app.agent.prompts import get_system_prompt, render_runtime_prompt, render_memory_prompt
 from app.constants import Role
 from app.llm.context_manager import (
     format_messages_for_api,
@@ -193,6 +192,17 @@ class LLMClient:
 
     def __init__(self) -> None:
         """初始化 AsyncOpenAI 客户端"""
+        self.client = AsyncOpenAI(
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_api_base,
+        )
+        self.model_name = settings.model_name
+
+    def reload_config(self) -> None:
+        """
+        重新加载配置并重新初始化客户端
+        """
+        logger.info("LLM Client 正在重新加载配置...")
         self.client = AsyncOpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_api_base,
@@ -402,77 +412,25 @@ class LLMClient:
         history: List[Dict[str, str]],
         current_message: str,
         trace_id: str,
-        core_summary: str = "",
-        key_facts: str = "",
-        memory_snippets: str = "",
         **kwargs: Any
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        带上下文管理和 runtime 模板渲染的流式对话接口（外部调用推荐入口）
-
-        做什么：
-            1. 将 current_message 通过 render_runtime_prompt() 渲染，
-               注入 runtime.j2 模板中的思维链要求和 JSON 输出格式约束。
-            2. 使用 context_manager 进行 Token 截断。
-            3. 调用 LLM API 并流式返回。
-
-        为什么这样做：runtime.j2 包含输出格式规范（thought/emotion/reply JSON结构）
-                    和四维思维链要求，必须显式渲染后作为 user message 传入 API。
-
-        输入输出：
-            - 输入：
-                system_prompt: 系统提示词（为空时使用默认值）
-                history: 历史消息列表
-                current_message: 当前用户消息
-                trace_id: 追踪 ID
-                core_summary: 核心摘要
-                key_facts: 关键事实
-                memory_snippets: 记忆片段
-                **kwargs: 其他 API 参数
-            - 输出：AsyncGenerator，yield StreamChunkModel 的 dict
-        边界条件：
-            - system_prompt 为空时使用 app/agent/prompts.py 中的默认提示词
-            - history 可为空列表
-        异常行为：
-            - 截断失败时使用未截断的 messages（兜底策略）
-            - LLM 调用异常由 stream_chat 内部处理
+        带上下文管理的流式对话接口
         """
-        # 使用默认 System Prompt
-        effective_system_prompt = system_prompt if system_prompt else get_system_prompt()
-
-        # 渲染记忆上下文
-        memory_text = render_memory_prompt(
-            core_summary=core_summary,
-            key_facts=key_facts,
-            memory_snippets=memory_snippets,
-        )
-
-        # 渲染 runtime 提示词：将当前用户输入注入 runtime.j2 模板
-        # 输出包含思维链要求和 JSON 输出格式约束的完整 user message
-        runtime_text = render_runtime_prompt(
-            current_message=current_message,
-        )
-
-        # 组合最终的 user message 和 system prompt
-        # 修复：将记忆上下文拼接到全局系统提示词中，而不是用户消息中
-        effective_system_prompt = f"{effective_system_prompt}\n\n{memory_text}"
-
-        rendered_user_message = runtime_text
-
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
             truncated_messages = format_messages_for_api(
-                system_prompt=effective_system_prompt,
+                system_prompt=system_prompt,
                 history=history,
-                current_message=rendered_user_message,
+                current_message=current_message,
                 model_name=self.model_name,
             )
         except Exception as e:
             logger.error(f"[TraceID:{trace_id}] 上下文截断失败，使用原始消息: {e}")
             truncated_messages = [
-                {"role": Role.SYSTEM.value, "content": effective_system_prompt},
+                {"role": Role.SYSTEM.value, "content": system_prompt},
                 *history,
-                {"role": Role.USER.value, "content": rendered_user_message},
+                {"role": Role.USER.value, "content": current_message},
             ]
 
         # 2. 将截断后的结构化消息合并为单体完整提示词文本

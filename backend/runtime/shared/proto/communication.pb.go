@@ -226,17 +226,10 @@ type ChatRequest struct {
 	// 多轮对话历史记录列表，不包含当前 message
 	// 前端维护的历史记录，按时间正序排列（最旧的在最前）
 	History []*ChatMessage `protobuf:"bytes,3,rep,name=history,proto3" json:"history,omitempty"`
-	// 系统提示词，为空时 Python 侧使用默认提示词
-	SystemPrompt string `protobuf:"bytes,4,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
-	// 核心摘要
-	// 核心摘要
-	CoreSummary string `protobuf:"bytes,5,opt,name=core_summary,json=coreSummary,proto3" json:"core_summary,omitempty"`
-	// 关键事实
-	KeyFacts string `protobuf:"bytes,6,opt,name=key_facts,json=keyFacts,proto3" json:"key_facts,omitempty"`
-	// 短期记忆（用于渲染 memory.j2 模板的短期记忆文本）
-	ShortTermMemory string `protobuf:"bytes,7,opt,name=short_term_memory,json=shortTermMemory,proto3" json:"short_term_memory,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// 完整的系统提示词（包含 personality、memory、runtime 等所有上下文层）
+	SystemPrompt  string `protobuf:"bytes,4,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
@@ -297,40 +290,15 @@ func (x *ChatRequest) GetSystemPrompt() string {
 	return ""
 }
 
-func (x *ChatRequest) GetCoreSummary() string {
-	if x != nil {
-		return x.CoreSummary
-	}
-	return ""
-}
-
-func (x *ChatRequest) GetKeyFacts() string {
-	if x != nil {
-		return x.KeyFacts
-	}
-	return ""
-}
-
-func (x *ChatRequest) GetShortTermMemory() string {
-	if x != nil {
-		return x.ShortTermMemory
-	}
-	return ""
-}
-
 // SummarizeContext 请求消息
 type SummarizeContextRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	// 当前的 core_summary
-	CurrentCoreSummary string `protobuf:"bytes,2,opt,name=current_core_summary,json=currentCoreSummary,proto3" json:"current_core_summary,omitempty"`
-	// 当前的 key_facts
-	CurrentKeyFacts string `protobuf:"bytes,3,opt,name=current_key_facts,json=currentKeyFacts,proto3" json:"current_key_facts,omitempty"`
-	// 需要被压缩的旧消息列表
-	MessagesToCompress []*ChatMessage `protobuf:"bytes,4,rep,name=messages_to_compress,json=messagesToCompress,proto3" json:"messages_to_compress,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// 已渲染好的完整摘要压缩提示词
+	SummarizePrompt string `protobuf:"bytes,2,opt,name=summarize_prompt,json=summarizePrompt,proto3" json:"summarize_prompt,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SummarizeContextRequest) Reset() {
@@ -370,25 +338,11 @@ func (x *SummarizeContextRequest) GetTraceId() string {
 	return ""
 }
 
-func (x *SummarizeContextRequest) GetCurrentCoreSummary() string {
+func (x *SummarizeContextRequest) GetSummarizePrompt() string {
 	if x != nil {
-		return x.CurrentCoreSummary
+		return x.SummarizePrompt
 	}
 	return ""
-}
-
-func (x *SummarizeContextRequest) GetCurrentKeyFacts() string {
-	if x != nil {
-		return x.CurrentKeyFacts
-	}
-	return ""
-}
-
-func (x *SummarizeContextRequest) GetMessagesToCompress() []*ChatMessage {
-	if x != nil {
-		return x.MessagesToCompress
-	}
-	return nil
 }
 
 // SummarizeContext 响应消息
@@ -555,6 +509,112 @@ func (x *ChatStreamResponse) GetError() string {
 	return ""
 }
 
+// SyncConfigRequest 配置同步请求
+type SyncConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	VersionId     string                 `protobuf:"bytes,1,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
+	LlmConfigJson string                 `protobuf:"bytes,2,opt,name=llm_config_json,json=llmConfigJson,proto3" json:"llm_config_json,omitempty"` // 包含明文 API Key 的 JSON
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncConfigRequest) Reset() {
+	*x = SyncConfigRequest{}
+	mi := &file_communication_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncConfigRequest) ProtoMessage() {}
+
+func (x *SyncConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncConfigRequest.ProtoReflect.Descriptor instead.
+func (*SyncConfigRequest) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SyncConfigRequest) GetVersionId() string {
+	if x != nil {
+		return x.VersionId
+	}
+	return ""
+}
+
+func (x *SyncConfigRequest) GetLlmConfigJson() string {
+	if x != nil {
+		return x.LlmConfigJson
+	}
+	return ""
+}
+
+// SyncConfigResponse 配置同步响应
+type SyncConfigResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncConfigResponse) Reset() {
+	*x = SyncConfigResponse{}
+	mi := &file_communication_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncConfigResponse) ProtoMessage() {}
+
+func (x *SyncConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncConfigResponse.ProtoReflect.Descriptor instead.
+func (*SyncConfigResponse) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SyncConfigResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SyncConfigResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_communication_proto protoreflect.FileDescriptor
 
 const file_communication_proto_rawDesc = "" +
@@ -571,20 +631,15 @@ const file_communication_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x03 \x01(\bR\aisError\x12#\n" +
-	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\x89\x02\n" +
+	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\x9d\x01\n" +
 	"\vChatRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
-	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\x12!\n" +
-	"\fcore_summary\x18\x05 \x01(\tR\vcoreSummary\x12\x1b\n" +
-	"\tkey_facts\x18\x06 \x01(\tR\bkeyFacts\x12*\n" +
-	"\x11short_term_memory\x18\a \x01(\tR\x0fshortTermMemory\"\xe0\x01\n" +
+	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"_\n" +
 	"\x17SummarizeContextRequest\x12\x19\n" +
-	"\btrace_id\x18\x01 \x01(\tR\atraceId\x120\n" +
-	"\x14current_core_summary\x18\x02 \x01(\tR\x12currentCoreSummary\x12*\n" +
-	"\x11current_key_facts\x18\x03 \x01(\tR\x0fcurrentKeyFacts\x12L\n" +
-	"\x14messages_to_compress\x18\x04 \x03(\v2\x1a.communication.ChatMessageR\x12messagesToCompress\"\xb6\x01\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12)\n" +
+	"\x10summarize_prompt\x18\x02 \x01(\tR\x0fsummarizePrompt\"\xb6\x01\n" +
 	"\x18SummarizeContextResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12(\n" +
 	"\x10new_core_summary\x18\x02 \x01(\tR\x0enewCoreSummary\x12\"\n" +
@@ -597,12 +652,21 @@ const file_communication_proto_rawDesc = "" +
 	"\vis_finished\x18\x04 \x01(\bR\n" +
 	"isFinished\x12#\n" +
 	"\rfinish_reason\x18\x05 \x01(\tR\ffinishReason\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error2\x8b\x02\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\"Z\n" +
+	"\x11SyncConfigRequest\x12\x1d\n" +
+	"\n" +
+	"version_id\x18\x01 \x01(\tR\tversionId\x12&\n" +
+	"\x0fllm_config_json\x18\x02 \x01(\tR\rllmConfigJson\"S\n" +
+	"\x12SyncConfigResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\xde\x02\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +
 	"ChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12c\n" +
-	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
+	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponse\x12Q\n" +
+	"\n" +
+	"SyncConfig\x12 .communication.SyncConfigRequest\x1a!.communication.SyncConfigResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
 
 var (
 	file_communication_proto_rawDescOnce sync.Once
@@ -616,7 +680,7 @@ func file_communication_proto_rawDescGZIP() []byte {
 	return file_communication_proto_rawDescData
 }
 
-var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_communication_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: communication.PingRequest
 	(*PongResponse)(nil),             // 1: communication.PongResponse
@@ -625,21 +689,24 @@ var file_communication_proto_goTypes = []any{
 	(*SummarizeContextRequest)(nil),  // 4: communication.SummarizeContextRequest
 	(*SummarizeContextResponse)(nil), // 5: communication.SummarizeContextResponse
 	(*ChatStreamResponse)(nil),       // 6: communication.ChatStreamResponse
+	(*SyncConfigRequest)(nil),        // 7: communication.SyncConfigRequest
+	(*SyncConfigResponse)(nil),       // 8: communication.SyncConfigResponse
 }
 var file_communication_proto_depIdxs = []int32{
 	2, // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
-	2, // 1: communication.SummarizeContextRequest.messages_to_compress:type_name -> communication.ChatMessage
-	0, // 2: communication.CommunicationService.Ping:input_type -> communication.PingRequest
-	3, // 3: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
-	4, // 4: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
+	0, // 1: communication.CommunicationService.Ping:input_type -> communication.PingRequest
+	3, // 2: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
+	4, // 3: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
+	7, // 4: communication.CommunicationService.SyncConfig:input_type -> communication.SyncConfigRequest
 	1, // 5: communication.CommunicationService.Ping:output_type -> communication.PongResponse
 	6, // 6: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
 	5, // 7: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	8, // 8: communication.CommunicationService.SyncConfig:output_type -> communication.SyncConfigResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_communication_proto_init() }
@@ -653,7 +720,7 @@ func file_communication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_proto_rawDesc), len(file_communication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -17,7 +17,7 @@ func TestHealthCheckHandler(t *testing.T) {
 	req.Header.Set("X-Trace-ID", "test-trace-123")
 
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(HealthCheckHandler)
+	handler := http.HandlerFunc(NewHealthHandler(nil, nil, nil).HandleHealthCheck)
 
 	handler.ServeHTTP(rr, req)
 
