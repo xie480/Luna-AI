@@ -4,181 +4,77 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
+	"go.uber.org/zap"
 	"luna-ai/backend/runtime/internal/logger"
 	"luna-ai/backend/runtime/internal/repository"
 	"luna-ai/backend/runtime/internal/utils/snowflake"
-
-	"go.uber.org/zap"
 )
 
 // Manager 负责 Prompt 模板与版本的管理
 type Manager struct {
-	repo *repository.PromptPGRepo
+	repo       *repository.PromptPGRepo
+	cacheMgr   *CacheManager
 }
 
 // NewManager 创建 Manager
-func NewManager(repo *repository.PromptPGRepo) *Manager {
+func NewManager(repo *repository.PromptPGRepo, cacheMgr *CacheManager) *Manager {
 	return &Manager{
-		repo: repo,
+		repo:     repo,
+		cacheMgr: cacheMgr,
 	}
 }
 
-// AssembleChatPrompt 根据业务场景组装完整的 Chat System Prompt
+// AssemblePrompt 根据业务分类组装完整的 Prompt 字符串
 // 输入：
 //   - ctx: 上下文
-//   - category: 业务分类（如 "chat"）
-//   - variables: 注入模板的变量键值对
+//   - category: 业务分类（如 "chat" / "summary"）
+//   - variables: 模板变量键值对
 //
 // 输出：
-//   - 完整的 system_prompt 字符串
+//   - 组装后的完整 prompt 字符串（即使 db 和 redis 都不可用也返回一个基本提示文本）
 //   - 错误信息
-func (m *Manager) AssembleChatPrompt(ctx context.Context, category string, variables map[string]string) (string, error) {
-	templates, err := m.repo.GetTemplatesByCategory(ctx, category)
+func (m *Manager) AssemblePrompt(ctx context.Context, category string, variables map[string]string) (string, error) {
+	// 通过缓存层获取并将各 slot 注入占位符
+	prompt, err := m.cacheMgr.GetAssembledPrompt(ctx, category, variables)
 	if err != nil {
-		logger.Warn(ctx, "从数据库获取 Prompt 模板失败", zap.Error(err))
-		return err.Error(), nil
+		logger.Warn(ctx, "获取组装 Prompt 失败", zap.String("category", category), zap.Error(err))
+		// 返回一个最基本的安全兜底文本，避免系统完全不可用
+		return buildMinimalPrompt(variables), nil
 	}
 
-	// 按 SlotPosition 的顺序组装各层模板内容
-	// 组装顺序：system (人设) -> memory (记忆) -> runtime (运行时)
-	var systemParts []string
+	// 清理剩余未被注入的占位符
+	prompt = strings.ReplaceAll(prompt, PlaceholderSystem, "")
+	prompt = strings.ReplaceAll(prompt, PlaceholderMemory, "")
+	prompt = strings.ReplaceAll(prompt, PlaceholderRuntime, "")
 
-	for _, tmpl := range templates {
-		if tmpl.ActiveVersionID == "" {
-			continue
-		}
+	// 去除多余空行（清理因占位符移除而产生的连续空行）
+	prompt = cleanEmptyLines(prompt)
 
-		version, err := m.repo.GetVersion(ctx, tmpl.ActiveVersionID)
-		if err != nil {
-			logger.Warn(ctx, "获取模板版本失败，跳过", zap.String("template_name", tmpl.Name), zap.Error(err))
-			continue
-		}
+	logger.Info(ctx, "组装 Prompt 成功",
+		zap.String("category", category),
+		zap.Int("prompt_length", len(prompt)))
 
-		// 渲染模板：替换 {{ KEY }} 占位符
-		rendered := renderTemplate(version.Content, variables)
-
-		// 根据 slot_position 分类组装
-		if tmpl.SlotPosition == "system" || tmpl.SlotPosition == "memory" || tmpl.SlotPosition == "runtime" {
-			systemParts = append(systemParts, rendered)
-		}
-	}
-
-	// 组装完整的 system_prompt
-	fullPrompt := strings.TrimSpace(strings.Join(systemParts, "\n\n"))
-
-	logger.Info(ctx, "组装 Chat Prompt 成功",
-		zap.Int("template_count", len(systemParts)),
-		zap.Int("prompt_length", len(fullPrompt)))
-
-	return fullPrompt, nil
+	return prompt, nil
 }
 
-// AssembleSummarizePrompt 组装完整的 Summarize Prompt
-// 输入：
-//   - ctx: 上下文
-//   - variables: 注入模板的变量键值对
-//     需要包含: CURRENT_CORE_SUMMARY, CURRENT_KEY_FACTS, MESSAGES_TEXT
-//
-// 输出：
-//   - 完整的 summarize_prompt 字符串
-//   - 错误信息
-func (m *Manager) AssembleSummarizePrompt(ctx context.Context, variables map[string]string) (string, error) {
-	templates, err := m.repo.GetTemplatesByCategory(ctx, "summarize")
-	if err != nil {
-		logger.Warn(ctx, "从数据库获取 Summarize 模板失败，使用硬编码兜底", zap.Error(err))
-		return FallbackSummarizePrompt(variables), nil
-	}
-
-	for _, tmpl := range templates {
-		if tmpl.ActiveVersionID == "" {
-			continue
-		}
-		version, err := m.repo.GetVersion(ctx, tmpl.ActiveVersionID)
-		if err != nil {
-			continue
-		}
-		return renderTemplate(version.Content, variables), nil
-	}
-
-	// 兜底
-	logger.Warn(ctx, "组装 Summarize Prompt 失败，使用硬编码兜底")
-	return FallbackSummarizePrompt(variables), nil
-}
-
-// renderTemplate 简单渲染 {{ KEY }} 占位符为对应变量的值
-// 不兼容 Jinja2 语法，只支持 {{ VARIABLE_NAME }} 格式的简单替换
-func renderTemplate(template string, variables map[string]string) string {
-	result := template
-	for key, value := range variables {
-		placeholder := fmt.Sprintf("{{ %s }}", key)
-		result = strings.ReplaceAll(result, placeholder, value)
-	}
-	return result
-}
-
-// FallbackChatPrompt 硬编码兜底的 Chat Prompt
-func FallbackChatPrompt(variables map[string]string) string {
-	currentTime := variables["CURRENT_TIME"]
-	if currentTime == "" {
-		currentTime = time.Now().Format("2006-01-02 15:04:05 Monday")
-	}
-	currentMessage := variables["CURRENT_MESSAGE"]
-	coreSummary := variables["CORE_SUMMARY"]
-	keyFacts := variables["KEY_FACTS"]
-	memorySnippets := variables["MEMORY_SNIPPETS"]
-
+// buildMinimalPrompt 构建最基本的安全兜底提示文本
+func buildMinimalPrompt(variables map[string]string) string {
 	var b strings.Builder
-	b.WriteString(`你是一个名为 Luna 的 AI 助手。
-请使用 JSON 格式输出，包含 thought, emotion, reply 三个字段。
-
-当前系统时间：
-`)
-	b.WriteString(currentTime)
-	b.WriteString("\n\n")
-	b.WriteString("用户输入：\n")
-	b.WriteString(currentMessage)
-	b.WriteString("\n\n")
-
-	if coreSummary != "" {
-		b.WriteString("核心摘要：\n")
-		b.WriteString(coreSummary)
-		b.WriteString("\n\n")
-	}
-	if keyFacts != "" {
-		b.WriteString("关键事实：\n")
-		b.WriteString(keyFacts)
-		b.WriteString("\n\n")
-	}
-	if memorySnippets != "" {
-		b.WriteString("历史对话：\n")
-		b.WriteString(memorySnippets)
-		b.WriteString("\n\n")
-	}
-
+	b.WriteString("你是一个 AI 助手。\n\n")
+	b.WriteString("当前时间：")
+	b.WriteString(variables["CURRENT_TIME"])
+	b.WriteString("\n\n用户输入：")
+	b.WriteString(variables["CURRENT_MESSAGE"])
 	return b.String()
 }
 
-// FallbackSummarizePrompt 硬编码兜底的 Summarize Prompt
-func FallbackSummarizePrompt(variables map[string]string) string {
-	currentSummary := variables["CURRENT_CORE_SUMMARY"]
-	currentFacts := variables["CURRENT_KEY_FACTS"]
-	messagesText := variables["MESSAGES_TEXT"]
-
-	var b strings.Builder
-	b.WriteString(`请对以下对话内容进行摘要压缩。
-
-当前核心摘要：
-`)
-	b.WriteString(currentSummary)
-	b.WriteString("\n\n当前关键事实：\n")
-	b.WriteString(currentFacts)
-	b.WriteString("\n\n需要压缩的对话：\n")
-	b.WriteString(messagesText)
-	b.WriteString("\n\n请以 JSON 格式输出 core_summary 和 key_facts。")
-
-	return b.String()
+// cleanEmptyLines 清理连续多余的空行（3行以上压缩为2行）
+func cleanEmptyLines(input string) string {
+	for strings.Contains(input, "\n\n\n") {
+		input = strings.ReplaceAll(input, "\n\n\n", "\n\n")
+	}
+	return strings.TrimSpace(input)
 }
 
 // CreateTemplate 创建新的 Prompt 模板
@@ -232,6 +128,7 @@ func (m *Manager) CreateVersion(ctx context.Context, templateID, content, variab
 }
 
 // PublishVersion 发布版本（将其设为模板的 active_version_id）
+// 发布成功后自动使对应的 Redis 缓存失效
 func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID string) error {
 	tmpl, err := m.repo.GetTemplate(ctx, templateID)
 	if err != nil {
@@ -254,6 +151,13 @@ func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID stri
 	}
 
 	logger.Info(ctx, "发布 Prompt 版本成功", zap.String("template_id", templateID), zap.String("version_id", versionID))
+
+	// 版本发布后自动使缓存失效，下一次请求会从数据库重新加载
+	if m.cacheMgr != nil {
+		if cacheErr := m.cacheMgr.InvalidateCache(ctx, tmpl.Category); cacheErr != nil {
+			logger.Warn(ctx, "清除 Prompt 缓存失败", zap.String("category", tmpl.Category), zap.Error(cacheErr))
+		}
+	}
 
 	return nil
 }

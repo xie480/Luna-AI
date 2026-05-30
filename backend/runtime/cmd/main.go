@@ -14,14 +14,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+
 	"luna-ai/backend/runtime/internal/api"
 	"luna-ai/backend/runtime/internal/config"
 	"luna-ai/backend/runtime/internal/infrastructure"
 	"luna-ai/backend/runtime/internal/logger"
 	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
-
-	"go.uber.org/zap"
 )
 
 func main() {
@@ -112,11 +113,16 @@ func main() {
 		}
 	}
 
-	// 初始化 PromptManager
+	// 初始化 PromptManager（传入 redisClient，启用懒加载缓存）
 	var promptManager *prompt.Manager
 	if postgresClient != nil {
 		promptRepo := repository.NewPromptPGRepo(postgresClient)
-		promptManager = prompt.NewManager(promptRepo)
+		var redisClientForCache *redis.Client
+		if redisClient != nil {
+			redisClientForCache = redisClient.GetClient()
+		}
+		promptCache := prompt.NewCacheManager(redisClientForCache, promptRepo)
+		promptManager = prompt.NewManager(promptRepo, promptCache)
 	}
 
 	// 5. 初始化 AI 客户端 - 连接 Python AI 服务

@@ -302,7 +302,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	}
 	memorySnippets := memorySnippetsBuilder.String()
 
-	// 组装完整的 System Prompt（由 Go 端完成全部渲染）
+	// 组装完整的 System Prompt（由 Go 端通过缓存层完成全部渲染）
 	currentTime := time.Now().Format("2006-01-02 15:04:05 Monday")
 	promptVariables := map[string]string{
 		"CURRENT_TIME":    currentTime,
@@ -315,13 +315,10 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	var fullSystemPrompt string
 	if s.promptMgr != nil {
 		var err error
-		fullSystemPrompt, err = s.promptMgr.AssembleChatPrompt(ctx, "chat", promptVariables)
+		fullSystemPrompt, err = s.promptMgr.AssemblePrompt(ctx, "chat", promptVariables)
 		if err != nil {
 			logger.Error(ctx, "组装 Chat Prompt 失败", zap.Error(err))
 		}
-	}
-	if fullSystemPrompt == "" {
-		fullSystemPrompt = prompt.FallbackChatPrompt(promptVariables)
 	}
 
 	// 构造 gRPC ChatRequest（已简化：由 Go 端直接传递完整 system_prompt）
@@ -574,7 +571,7 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 	}
 	messagesText := messagesTextBuilder.String()
 
-	// 在 Go 端组装完整的 Summarize Prompt
+	// 在 Go 端组装完整的 Summarize Prompt（通过缓存层获取各 slot 并注入占位符）
 	summarizeVariables := map[string]string{
 		"CURRENT_CORE_SUMMARY": summary.CoreSummary,
 		"CURRENT_KEY_FACTS":    summary.KeyFacts,
@@ -583,13 +580,10 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 
 	var fullSummarizePrompt string
 	if s.promptMgr != nil {
-		fullSummarizePrompt, err = s.promptMgr.AssembleSummarizePrompt(ctx, summarizeVariables)
+		fullSummarizePrompt, err = s.promptMgr.AssemblePrompt(ctx, "summary", summarizeVariables)
 		if err != nil {
 			logger.Error(ctx, "组装 Summarize Prompt 失败", zap.Error(err))
 		}
-	}
-	if fullSummarizePrompt == "" {
-		fullSummarizePrompt = prompt.FallbackSummarizePrompt(summarizeVariables)
 	}
 
 	req := &pb.SummarizeContextRequest{
