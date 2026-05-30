@@ -7,9 +7,9 @@
 前端架构设计的核心目标包括：
 
 1.  **遵循 SSOT 原则**：前端不持久化任何配置或 Prompt 数据，所有状态均通过 WebSocket/HTTP 从 Go Runtime 获取，并监听 Go 的广播事件进行状态同步。
-2.  **安全交互体验**：提供安全的 API Key 输入面板（密码框掩码、脱敏展示），确保敏感信息在前端内存中生命周期最短，且绝不落盘。
+2.  **安全交互体验**：提供安全的 API Key 输入面板（密码框掩码、脱敏展示），确保敏感信息在前端内存中生命周期最短，且绝不落盘。后端仅返回是否已设置的布尔值，前端不接触明文。
 3.  **Prompt 资产可视化**：构建直观的 Prompt 模板与版本管理界面，支持 `[业务场景]_[槽位]` 规范的展示，提供版本 Diff 对比与一键发布（热配置）功能。
-4.  **实时调试能力**：提供开发者视角的调试面板，支持模拟上下文变量，预览 Jinja2 渲染后的完整 Prompt 字符串。
+4.  **实时调试能力**：提供开发者视角的调试面板，支持模拟上下文变量，预览 Jinja2 渲染后的完整 Prompt 字符串（依赖后端后续提供 Dry Run 接口）。
 
 ## 2. 前端技术栈规划
 
@@ -38,7 +38,7 @@ frontend/src/renderer/
 │   │   │   ├── PromptEditor.tsx   # 基于 Monaco 的代码编辑器
 │   │   │   └── DiffViewer.tsx     # 版本差异对比组件
 │   │   └── DebugPanel/            # 调试与预览模块
-│   │       └── PromptPreview.tsx  # 模拟上下文渲染预览
+│   │       └── PromptPreview.tsx  # 模拟上下文渲染预览 (待后端接口就绪)
 ├── services/
 │   ├── configService.ts           # 封装配置相关的 HTTP API 请求
 │   └── promptService.ts           # 封装 Prompt 相关的 HTTP API 请求
@@ -54,24 +54,24 @@ frontend/src/renderer/
 
 ### 4.1 `configStore.ts` (全局配置状态)
 
-负责维护从 Go 获取的最新配置快照，并监听 WebSocket 的 `config.changed` 事件实现热更新。
+负责维护从 Go 获取的最新配置快照（脱敏后），并监听 WebSocket 的 `config.changed` 事件实现热更新。
 
 ```typescript
 import { create } from 'zustand';
 import { wsManager } from '../services/wsManager';
-import { AppConfig } from '../types/config';
+import { SafeConfig } from '../types/config';
 
 interface ConfigState {
-  config: AppConfig | null;
+  config: SafeConfig | null;
   isLoading: boolean;
   error: string | null;
   fetchConfig: () => Promise<void>;
-  updateConfig: (updates: Partial<AppConfig>) => Promise<void>;
+  updateConfig: (updates: Record<string, any>) => Promise<void>;
 }
 
 export const useConfigStore = create<ConfigState>((set) => {
   // 监听 Go 后端的配置变更广播
-  wsManager.on('config.changed', (newConfig: AppConfig) => {
+  wsManager.on('config.changed', (newConfig: SafeConfig) => {
     set({ config: newConfig });
   });
 
@@ -82,7 +82,7 @@ export const useConfigStore = create<ConfigState>((set) => {
     fetchConfig: async () => {
       set({ isLoading: true });
       try {
-        // 调用 HTTP API 获取脱敏后的配置
+        // 调用 HTTP API 获取脱敏后的配置 (GET /api/v1/config)
         const res = await fetch('/api/v1/config');
         const data = await res.json();
         set({ config: data, isLoading: false });
@@ -91,9 +91,10 @@ export const useConfigStore = create<ConfigState>((set) => {
       }
     },
     updateConfig: async (updates) => {
-      // 发送更新请求，Go 端处理加密与落盘后会广播 config.changed
+      // 发送更新请求 (POST /api/v1/config)
       await fetch('/api/v1/config', {
-        method: 'PUT',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
       });
     },
@@ -106,8 +107,18 @@ export const useConfigStore = create<ConfigState>((set) => {
 ### 5.1 系统全局配置与加密密钥安全输入面板 (`GeneralConfig`)
 
 **设计逻辑**：
-*   API Key 必须以密码框形式输入，展示时仅显示掩码（如 `sk-****1234`）。
-*   前端不保存明文 Key，提交后立即清除组件内部的明文状态。
+*   API Key 必须以密码框形式输入。
+*   前端不保存明文 Key，展示时仅根据后端返回的 `has_llm_api_key` 状态显示“已设置”或“未设置”。
+*   提交后立即清除组件内部的明文状态。
+
+**数据模型定义 (`types/config.ts`)**：
+
+```typescript
+export interface SafeConfig {
+  has_llm_api_key: boolean;
+  // 其他非敏感配置项
+}
+```
 
 **关键组件示例 (`ApiKeyInput.tsx`)**：
 
@@ -120,12 +131,12 @@ export const ApiKeyInput: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
 
-  // 假设 config 中包含脱敏后的 key
-  const displayKey = config?.llm?.openai?.api_key || 'Not Set';
+  const isKeySet = config?.has_llm_api_key;
 
   const handleSave = async () => {
     if (inputValue) {
-      await updateConfig({ 'llm.openai.api_key': inputValue });
+      // 对应后端 config_handler.go 中的 llm_api_key 字段
+      await updateConfig({ 'llm_api_key': inputValue });
       setInputValue('');
       setIsEditing(false);
     }
@@ -133,7 +144,7 @@ export const ApiKeyInput: React.FC = () => {
 
   return (
     <div className="api-key-input">
-      <label>OpenAI API Key</label>
+      <label>LLM API Key</label>
       {isEditing ? (
         <>
           <input
@@ -147,7 +158,7 @@ export const ApiKeyInput: React.FC = () => {
         </>
       ) : (
         <>
-          <span>{displayKey}</span>
+          <span>{isKeySet ? '已设置 (********)' : '未设置'}</span>
           <button onClick={() => setIsEditing(true)}>Edit</button>
         </>
       )}
@@ -159,18 +170,21 @@ export const ApiKeyInput: React.FC = () => {
 ### 5.2 Prompt 模板与多版本管理可视化界面 (`PromptManager`)
 
 **设计逻辑**：
-*   **列表视图**：按业务场景（如 `chat`, `summarize`）分组展示模板，清晰标明三个标准槽位（`system`, `memory`, `runtime`）。
+*   **列表视图**：按业务场景（如 `chat`, `summary`）分组展示模板，清晰标明三个标准槽位（`system`, `memory`, `runtime`）。
 *   **版本历史**：选中模板后，展示其版本时间线，高亮当前 `Published` 版本。
-*   **编辑器**：提供代码编辑器编写 Jinja2 模板，支持保存为 `Draft` 或直接 `Publish`。
+*   **编辑器**：提供代码编辑器编写 Jinja2 模板，支持保存为新版本或直接发布。
 
 **数据模型定义 (`types/prompt.ts`)**：
 
 ```typescript
+export type SlotPosition = 'system' | 'memory' | 'runtime';
+export type PromptCategory = 'chat' | 'summary';
+
 export interface PromptTemplate {
   id: string;
-  name: string; // e.g., "chat_system"
-  category: string; // e.g., "chat"
-  slot_position: 'system' | 'memory' | 'runtime';
+  name: string;
+  category: PromptCategory;
+  slot_position: SlotPosition;
   is_system: boolean;
   active_version_id: string;
 }
@@ -180,10 +194,43 @@ export interface PromptVersion {
   template_id: string;
   version_num: number;
   content: string;
-  variables: string[];
+  variables: string; // 后端定义为 string，前端可存储逗号分隔的变量名或 JSON 字符串
   status: 'draft' | 'published' | 'archived';
   created_at: string;
 }
+```
+
+**数据服务层实现 (`services/promptService.ts`)**：
+
+```typescript
+export const promptService = {
+  createTemplate: async (name: string, category: string, slotPosition: string, isSystem: boolean) => {
+    const res = await fetch('/api/v1/prompts/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, category, slot_position: slotPosition, is_system: isSystem }),
+    });
+    return res.json();
+  },
+
+  createVersion: async (templateId: string, content: string, variables: string) => {
+    const res = await fetch('/api/v1/prompts/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId, content, variables }),
+    });
+    return res.json();
+  },
+
+  publishVersion: async (templateId: string, versionId: string) => {
+    const res = await fetch('/api/v1/prompts/versions/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId, version_id: versionId }),
+    });
+    return res.json();
+  }
+};
 ```
 
 **关键组件示例 (`PromptEditor.tsx` 伪代码)**：
@@ -204,9 +251,10 @@ export const PromptEditor: React.FC<Props> = ({ templateId, initialContent, onSa
 
   const handleCreateVersion = async () => {
     // 提取 Jinja2 变量 (简单正则示例)
-    const variables = Array.from(content.matchAll(/\{\{(.*?)\}\}/g)).map(m => m[1].trim());
+    const variablesArray = Array.from(content.matchAll(/\{\{(.*?)\}\}/g)).map(m => m[1].trim());
+    const variablesString = variablesArray.join(','); // 转换为后端期望的 string 格式
     
-    await promptService.createVersion(templateId, content, variables);
+    await promptService.createVersion(templateId, content, variablesString);
     onSaved();
   };
 
@@ -230,28 +278,11 @@ export const PromptEditor: React.FC<Props> = ({ templateId, initialContent, onSa
 *   允许开发者手动输入模拟的上下文变量（如 `user_name`, `current_time`）。
 *   调用 Go 提供的 Dry Run 接口，获取 Python 渲染后的完整 Prompt 字符串。
 *   展示最终组装的 `system`, `memory`, `runtime` 槽位内容，便于排查“大模型精神分裂”或变量缺失问题。
-
-**数据服务层实现 (`services/promptService.ts`)**：
-
-```typescript
-export const promptService = {
-  // ... 其他 CRUD 方法
-  
-  // 触发 Dry Run 预览
-  previewPrompt: async (agentId: string, contextVars: Record<string, string>) => {
-    const response = await fetch('/api/v1/prompts/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_id: agentId, context_variables: contextVars }),
-    });
-    return response.json(); // 返回渲染后的完整字符串
-  }
-};
-```
+*   *注意：当前后端尚未实现 Dry Run 接口，此模块作为后续规划预留。*
 
 ## 6. 实施步骤建议
 
 1.  **基础框架搭建**：在 `components/Settings` 下建立路由结构，引入 Zustand store。
-2.  **配置面板开发**：优先实现 `GeneralConfig`，打通与 Go 的 HTTP 获取和 WebSocket 热更新链路，验证 API Key 的安全输入与脱敏展示。
-3.  **Prompt 管理器开发**：实现 `PromptManager` 的列表与版本历史视图，集成 Monaco Editor。
-4.  **调试面板开发**：实现 `DebugPanel`，联调 Go 的 Dry Run 接口，完成渲染预览功能。
+2.  **配置面板开发**：优先实现 `GeneralConfig`，打通与 Go 的 HTTP 获取 (`GET /api/v1/config`) 和更新 (`POST /api/v1/config`) 链路，验证 API Key 的安全输入与脱敏展示 (`has_llm_api_key`)。
+3.  **Prompt 管理器开发**：实现 `PromptManager` 的列表与版本历史视图，集成 Monaco Editor，对接后端的模板创建、版本创建与发布接口。
+4.  **调试面板开发**：待后端 Dry Run 接口就绪后，实现 `DebugPanel`，完成渲染预览功能。
