@@ -66,10 +66,10 @@ type ChatMessage struct {
 // CMDUserInputPayload 定义前端 CMD_USER_INPUT 消息的 Payload
 // 前端发送的消息封装了会话 ID、消息 ID 等额外字段
 type CMDUserInputPayload struct {
-	SessionID    string        `json:"sessionId"`
-	Message      string        `json:"message"`
-	MsgID        string        `json:"msgId"`
-	History      []ChatMessage `json:"history,omitempty"`
+	SessionID string        `json:"sessionId"`
+	Message   string        `json:"message"`
+	MsgID     string        `json:"msgId"`
+	History   []ChatMessage `json:"history,omitempty"`
 }
 
 // ChatStreamPayload 定义 Chat 流式响应的 Payload
@@ -306,7 +306,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	currentTime := time.Now().Format("2006-01-02 15:04:05 Monday")
 	promptVariables := map[string]string{
 		"CURRENT_TIME":    currentTime,
-		"CURRENT_MESSAGE": cmdPayload.Message,
 		"CORE_SUMMARY":    summary.CoreSummary,
 		"KEY_FACTS":       summary.KeyFacts,
 		"MEMORY_SNIPPETS": memorySnippets,
@@ -524,9 +523,11 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 // 输入输出：
 //   - 输入：sessionID, traceID
 //   - 输出：无（异步执行，结果通过日志记录）
+//
 // 边界条件：
 //   - history 长度未超过阈值时不触发压缩
 //   - AI 服务返回空字段时放弃本次更新
+//
 // 异常行为：
 //   - 获取上下文失败时终止压缩
 //   - AI 服务调用失败时终止压缩

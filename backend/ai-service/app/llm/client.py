@@ -219,11 +219,20 @@ class LLMClient:
     async def _call_api_with_retry(
         self,
         prompt: str,
+        current_message: str,
         **kwargs: Any
     ) -> Any:
         logger.info("正在调用 LLM API（带重试机制）")
         # 内部统一封装为单体 user 消息
-        messages = [{"role": Role.USER.value, "content": prompt}]
+        messages = [{
+                        "role": Role.SYSTEM.value,
+                        "content": prompt
+                    },
+                    {
+                        "role": Role.USER.value,
+                        "content": current_message
+                    }
+                ]
         return await self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
@@ -235,13 +244,14 @@ class LLMClient:
         self,
         prompt: str,
         trace_id: str,
+        current_message: str,
         **kwargs: Any
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(f"[TraceID:{trace_id}] 开始调用 LLM API, model: {self.model_name}, prompt: {prompt}")
         buffer = LLMStreamBuffer()
 
         try:
-            response = await self._call_api_with_retry(prompt, **kwargs)
+            response = await self._call_api_with_retry(prompt, current_message, **kwargs)
 
             async for chunk in response:
                 # 检查是否收到结束信号（流结束且无 choices）
@@ -448,7 +458,7 @@ class LLMClient:
         full_combined_prompt = "\n\n".join(combined_prompt_parts)
 
         # 3. 以单体文本发起请求
-        async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, **kwargs):
+        async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, current_message, **kwargs):
             yield chunk_data
 
 
