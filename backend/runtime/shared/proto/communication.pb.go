@@ -233,10 +233,10 @@ type ChatRequest struct {
 	CoreSummary string `protobuf:"bytes,5,opt,name=core_summary,json=coreSummary,proto3" json:"core_summary,omitempty"`
 	// 关键事实
 	KeyFacts string `protobuf:"bytes,6,opt,name=key_facts,json=keyFacts,proto3" json:"key_facts,omitempty"`
-	// 记忆片段（用于渲染 memory.j2 模板的原始记忆文本）
-	MemorySnippets string `protobuf:"bytes,7,opt,name=memory_snippets,json=memorySnippets,proto3" json:"memory_snippets,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// 短期记忆（用于渲染 memory.j2 模板的短期记忆文本）
+	ShortTermMemory string `protobuf:"bytes,7,opt,name=short_term_memory,json=shortTermMemory,proto3" json:"short_term_memory,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
@@ -311,9 +311,9 @@ func (x *ChatRequest) GetKeyFacts() string {
 	return ""
 }
 
-func (x *ChatRequest) GetMemorySnippets() string {
+func (x *ChatRequest) GetShortTermMemory() string {
 	if x != nil {
-		return x.MemorySnippets
+		return x.ShortTermMemory
 	}
 	return ""
 }
@@ -399,9 +399,11 @@ type SummarizeContextResponse struct {
 	// 新的 core_summary
 	NewCoreSummary string `protobuf:"bytes,2,opt,name=new_core_summary,json=newCoreSummary,proto3" json:"new_core_summary,omitempty"`
 	// 新的 key_facts
-	NewKeyFacts   string `protobuf:"bytes,3,opt,name=new_key_facts,json=newKeyFacts,proto3" json:"new_key_facts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NewKeyFacts string `protobuf:"bytes,3,opt,name=new_key_facts,json=newKeyFacts,proto3" json:"new_key_facts,omitempty"`
+	// 新的 short_term_memory
+	NewShortTermMemory string `protobuf:"bytes,4,opt,name=new_short_term_memory,json=newShortTermMemory,proto3" json:"new_short_term_memory,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SummarizeContextResponse) Reset() {
@@ -451,6 +453,13 @@ func (x *SummarizeContextResponse) GetNewCoreSummary() string {
 func (x *SummarizeContextResponse) GetNewKeyFacts() string {
 	if x != nil {
 		return x.NewKeyFacts
+	}
+	return ""
+}
+
+func (x *SummarizeContextResponse) GetNewShortTermMemory() string {
+	if x != nil {
+		return x.NewShortTermMemory
 	}
 	return ""
 }
@@ -562,24 +571,25 @@ const file_communication_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x03 \x01(\bR\aisError\x12#\n" +
-	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\x86\x02\n" +
+	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\x89\x02\n" +
 	"\vChatRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
 	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\x12!\n" +
 	"\fcore_summary\x18\x05 \x01(\tR\vcoreSummary\x12\x1b\n" +
-	"\tkey_facts\x18\x06 \x01(\tR\bkeyFacts\x12'\n" +
-	"\x0fmemory_snippets\x18\a \x01(\tR\x0ememorySnippets\"\xe0\x01\n" +
+	"\tkey_facts\x18\x06 \x01(\tR\bkeyFacts\x12*\n" +
+	"\x11short_term_memory\x18\a \x01(\tR\x0fshortTermMemory\"\xe0\x01\n" +
 	"\x17SummarizeContextRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x120\n" +
 	"\x14current_core_summary\x18\x02 \x01(\tR\x12currentCoreSummary\x12*\n" +
 	"\x11current_key_facts\x18\x03 \x01(\tR\x0fcurrentKeyFacts\x12L\n" +
-	"\x14messages_to_compress\x18\x04 \x03(\v2\x1a.communication.ChatMessageR\x12messagesToCompress\"\x83\x01\n" +
+	"\x14messages_to_compress\x18\x04 \x03(\v2\x1a.communication.ChatMessageR\x12messagesToCompress\"\xb6\x01\n" +
 	"\x18SummarizeContextResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12(\n" +
 	"\x10new_core_summary\x18\x02 \x01(\tR\x0enewCoreSummary\x12\"\n" +
-	"\rnew_key_facts\x18\x03 \x01(\tR\vnewKeyFacts\"\xb5\x01\n" +
+	"\rnew_key_facts\x18\x03 \x01(\tR\vnewKeyFacts\x121\n" +
+	"\x15new_short_term_memory\x18\x04 \x01(\tR\x12newShortTermMemory\"\xb5\x01\n" +
 	"\x12ChatStreamResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +

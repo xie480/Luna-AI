@@ -453,11 +453,11 @@ class LLMClient:
             current_message=current_message,
         )
 
-        # 组合最终的 user message
-        if memory_text:
-            rendered_user_message = f"{memory_text}\n\n{runtime_text}"
-        else:
-            rendered_user_message = runtime_text
+        # 组合最终的 user message 和 system prompt
+        # 修复：将记忆上下文拼接到全局系统提示词中，而不是用户消息中
+        effective_system_prompt = f"{effective_system_prompt}\n\n{memory_text}"
+
+        rendered_user_message = runtime_text
 
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:

@@ -51,8 +51,8 @@ message ChatRequest {
   string core_summary = 5;
   // 关键事实
   string key_facts = 6;
-  // 记忆片段（用于渲染 memory.j2 模板的原始记忆文本）
-  string memory_snippets = 7;
+  // 短期记忆（用于渲染 memory.j2 模板的短期记忆文本）
+  string short_term_memory = 7;
 }
 
 // SummarizeContext 请求消息
@@ -75,6 +75,8 @@ message SummarizeContextResponse {
   string new_core_summary = 2;
   // 新的 key_facts
   string new_key_facts = 3;
+  // 新的 short_term_memory
+  string new_short_term_memory = 4;
 }
 
 // Chat 流式响应消息

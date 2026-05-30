@@ -31,8 +31,9 @@ type Interaction struct {
 
 // ChatSummary 表示聊天摘要
 type ChatSummary struct {
-	CoreSummary string `json:"core_summary"`
-	KeyFacts    string `json:"key_facts"`
+	CoreSummary     string `json:"core_summary"`
+	KeyFacts        string `json:"key_facts"`
+	ShortTermMemory string `json:"short_term_memory"`
 }
 
 // ChatHistoryRedisRepo 封装 Redis 短期记忆与摘要读写
@@ -86,8 +87,9 @@ func (r *ChatHistoryRedisRepo) GetContext(ctx context.Context, sessionID string)
 
 	summaryMap := summaryCmd.Val()
 	summary := ChatSummary{
-		CoreSummary: summaryMap["core_summary"],
-		KeyFacts:    summaryMap["key_facts"],
+		CoreSummary:     summaryMap["core_summary"],
+		KeyFacts:        summaryMap["key_facts"],
+		ShortTermMemory: summaryMap["short_term_memory"],
 	}
 
 	strs := historyCmd.Val()
@@ -107,7 +109,7 @@ func (r *ChatHistoryRedisRepo) UpdateSummaryAndTrim(ctx context.Context, session
 	summaryKey := r.buildSummaryKey(sessionID)
 
 	pipe := r.redis.GetClient().Pipeline()
-	pipe.HSet(ctx, summaryKey, "core_summary", summary.CoreSummary, "key_facts", summary.KeyFacts)
+	pipe.HSet(ctx, summaryKey, "core_summary", summary.CoreSummary, "key_facts", summary.KeyFacts, "short_term_memory", summary.ShortTermMemory)
 	// 保留从 trimCount 开始到末尾的元素
 	pipe.LTrim(ctx, historyKey, trimCount, -1)
 	_, err := pipe.Exec(ctx)

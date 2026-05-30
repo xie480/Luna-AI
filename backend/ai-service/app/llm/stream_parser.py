@@ -32,7 +32,8 @@ from typing import List, Tuple
 _CHECK_START_RE = re.compile(r'"check"\s*:\s*"')
 _THOUGHT_START_RE = re.compile(r'"thought"\s*:\s*"')
 # 正则：用于识别 thought 结束位置（下一个字段起始）
-_THOUGHT_END_RE = re.compile(r'"\s*,\s*"(?:emotion|thought)"')
+# 增加 reply 作为兜底，防止 emotion 缺失
+_THOUGHT_END_RE = re.compile(r'"\s*,\s*"(?:emotion|thought|reply)"')
 # 正则：用于一次性捕获 emotion 值（仅第一次出现时返回）
 _EMOTION_RE = re.compile(r'"emotion"\s*:\s*"([^"]+)"')
 # reply 字段起始标记
@@ -66,23 +67,9 @@ class StreamParser:
         self._reply_buffer: str = ""
         self._thought_buffer: str = ""
         self._thought_sent: bool = False
-        self._intermediate_buffer: str = ""  # 新增：用于缓冲 thought 结束到 reply 开始之间的碎片
-
-    def _flush_thought_to_emotion_reply(self) -> Tuple[bool, str]:
-        """
-        检查 thought_buffer 是否已结束（遇到下一个字段），
-        如果是，设置状态为 WAITING_EMOTION_REPLY 并返回 thought 之后的内容。
-
-        返回：(是否切换状态, thought 之后的内容)
-        """
-        m = _THOUGHT_END_RE.search(self._thought_buffer)
-        if m:
-            self._state = _ParseState.WAITING_EMOTION_REPLY
-            after_thought = self._thought_buffer[m.start():]
-            # 截断 thought_buffer 只保留 thought 内容
-            self._thought_buffer = self._thought_buffer[:m.start()]
-            return True, after_thought
-        return False, ""
+        self._intermediate_buffer: str = ""  # 用于缓冲 thought 结束到 reply 开始之间的碎片
+        self._search_buffer: str = ""        # 新增：全局搜索缓冲
+        self._pending_prefix: str = ""       # 新增：用于暂存省略号等前缀，避免死循环
 
     def _emit_thought(self) -> List[Tuple[str, str]]:
         """返回 thought 内容的输出消息（如果尚未发送且有内容）。"""
@@ -97,56 +84,43 @@ class StreamParser:
         if not chunk:
             return []
         msgs: List[Tuple[str, str]] = []
-        remaining = chunk
+        self._search_buffer += chunk
 
-        # ========== Phase 1: 等待并跳过 check 字段 ==========
-        if self._state == _ParseState.WAITING_CHECK:
-            m = _CHECK_START_RE.search(remaining)
-            if not m:
-                return msgs
-            # 跳过 check 起始标记
-            remaining = remaining[m.end():]
-            # 检查同一个 chunk 中是否紧跟了 thought 起始
-            m2 = _THOUGHT_START_RE.search(remaining)
-            if m2:
-                # 进入 thought 读取
-                self._state = _ParseState.READING_THOUGHT
-                self._thought_buffer += remaining[m2.end():]
-                # 检查 thought 是否已结束
-                switched, after = self._flush_thought_to_emotion_reply()
-                if switched:
-                    msgs.extend(self._process_emotion_reply(after))
-                return msgs
-            else:
-                # thought 在后续 chunk 中
+        while self._search_buffer:
+            if self._state == _ParseState.WAITING_CHECK:
+                m = _CHECK_START_RE.search(self._search_buffer)
+                if not m:
+                    break
+                self._search_buffer = self._search_buffer[m.end():]
                 self._state = _ParseState.WAITING_THOUGHT
-                return msgs
+                continue
 
-        # ========== Phase 2: 等待 thought 字段 ==========
-        if self._state == _ParseState.WAITING_THOUGHT:
-            m = _THOUGHT_START_RE.search(remaining)
-            if not m:
-                return msgs
-            self._state = _ParseState.READING_THOUGHT
-            self._thought_buffer += remaining[m.end():]
-            # 检查 thought 是否已结束
-            switched, after = self._flush_thought_to_emotion_reply()
-            if switched:
-                msgs.extend(self._process_emotion_reply(after))
-            return msgs
+            if self._state == _ParseState.WAITING_THOUGHT:
+                m = _THOUGHT_START_RE.search(self._search_buffer)
+                if not m:
+                    break
+                self._search_buffer = self._search_buffer[m.end():]
+                self._state = _ParseState.READING_THOUGHT
+                continue
 
-        # ========== Phase 3: 读取 thought 内容 ==========
-        if self._state == _ParseState.READING_THOUGHT:
-            self._thought_buffer += remaining
-            switched, after = self._flush_thought_to_emotion_reply()
-            if switched:
-                msgs.extend(self._process_emotion_reply(after))
-            return msgs
+            if self._state == _ParseState.READING_THOUGHT:
+                m = _THOUGHT_END_RE.search(self._search_buffer)
+                if not m:
+                    # thought 尚未结束，将大部分内容移入 thought_buffer，保留末尾部分以防截断结束标记
+                    if len(self._search_buffer) > 30:
+                        self._thought_buffer += self._search_buffer[:-30]
+                        self._search_buffer = self._search_buffer[-30:]
+                    break
+                
+                self._thought_buffer += self._search_buffer[:m.start()]
+                self._search_buffer = self._search_buffer[m.start():]
+                self._state = _ParseState.WAITING_EMOTION_REPLY
+                continue
 
-        # ========== Phase 4: 处理 emotion 和 reply ==========
-        if self._state == _ParseState.WAITING_EMOTION_REPLY:
-            msgs.extend(self._process_emotion_reply(remaining))
-            return msgs
+            if self._state == _ParseState.WAITING_EMOTION_REPLY:
+                msgs.extend(self._process_emotion_reply(self._search_buffer))
+                self._search_buffer = ""
+                break
 
         return msgs
 
@@ -183,24 +157,6 @@ class StreamParser:
             
         return msgs
 
-    def _extract_emotion(self, chunk: str) -> str | None:
-        if self._emotion_sent:
-            return None
-        m = _EMOTION_RE.search(chunk)
-        if m:
-            self._emotion_sent = True
-            return m.group(1)
-        return None
-
-    def _feed_reply(self, chunk: str) -> None:
-        if not self._reply_started:
-            m = _REPLY_START_RE.search(chunk)
-            if m:
-                self._reply_started = True
-                self._reply_buffer += chunk[m.end():]
-        else:
-            self._reply_buffer += chunk
-
     def _pop_sentence(self) -> List[Tuple[str, str]]:
         """从 reply 缓存中切分出完整的句子，并过滤末尾平白标点。"""
         msgs: List[Tuple[str, str]] = []
@@ -208,35 +164,49 @@ class StreamParser:
             m = _SENTENCE_BOUNDARY_RE.search(self._reply_buffer)
             if not m:
                 break
+            
             idx = m.end()
+            # 找到连续标点的结尾，例如 "……" 或 "!!!"
+            while idx < len(self._reply_buffer) and _SENTENCE_BOUNDARY_RE.match(self._reply_buffer[idx]):
+                idx += 1
+                
             sentence = self._reply_buffer[:idx]
             self._reply_buffer = self._reply_buffer[idx:]
 
-            # 【问题2优化】标点过滤逻辑：剔除末尾的逗号和句号，保留！、？、～、……
-            sentence = sentence.strip()
-            sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
+            # 拼接之前暂存的前缀
+            full_sentence = self._pending_prefix + sentence
+            self._pending_prefix = ""
+
+            sentence_stripped = full_sentence.strip()
+            sentence_cleaned = _TRAILING_PUNCTUATION_RE.sub('', sentence_stripped)
             
-            # 修复首字符重复追加问题：如果切分出来的句子全是省略号，且后续还有内容，
-            # 则将其合并到下一个句子中，避免单独作为一个 chunk 发送
-            if _ELLIPSIS_RE.match(sentence) and self._reply_buffer:
-                self._reply_buffer = sentence + self._reply_buffer
+            # 修复死循环：将省略号暂存到 _pending_prefix 中，而不是塞回 _reply_buffer
+            if _ELLIPSIS_RE.match(sentence_cleaned) and self._reply_buffer:
+                self._pending_prefix = full_sentence
                 continue
                 
-            if sentence:
-                msgs.append(("reply_chunk", sentence))
+            if sentence_cleaned:
+                msgs.append(("reply_chunk", sentence_cleaned))
         return msgs
 
     def flush(self) -> List[Tuple[str, str]]:
         """在流结束时调用，返回 thought 和剩余 reply 内容。"""
+        if self._state == _ParseState.READING_THOUGHT:
+            self._thought_buffer += self._search_buffer
+            self._search_buffer = ""
+            
         msgs: List[Tuple[str, str]] = []
         msgs.extend(self._emit_thought())
-        if self._reply_buffer:
+        
+        remaining = self._pending_prefix + self._reply_buffer
+        if remaining:
             # 【问题2优化】对末尾剩余内容同样执行标点过滤
-            sentence = self._reply_buffer.strip()
+            sentence = remaining.strip()
             sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
             if sentence:
                 msgs.append(("reply_chunk", sentence))
             self._reply_buffer = ""
+            self._pending_prefix = ""
         return msgs
 
     def reset(self) -> None:
@@ -246,4 +216,6 @@ class StreamParser:
         self._reply_buffer = ""
         self._thought_buffer = ""
         self._thought_sent = False
-        self._intermediate_buffer = ""  # 重置缓冲池
+        self._intermediate_buffer = ""
+        self._search_buffer = ""
+        self._pending_prefix = ""

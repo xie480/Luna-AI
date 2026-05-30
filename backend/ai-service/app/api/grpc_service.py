@@ -140,7 +140,7 @@ class CommunicationServiceServicer(
                 trace_id=trace_id,
                 core_summary=request.core_summary,
                 key_facts=request.key_facts,
-                memory_snippets=request.memory_snippets,
+                short_term_memory=request.short_term_memory,
             ):
                 # 检查客户端是否已断开连接
                 # 注意：grpc.aio.ServicerContext 使用 cancelled() 而非 is_active()
@@ -157,6 +157,9 @@ class CommunicationServiceServicer(
                         f"[TraceID:{trace_id}] 首字延迟 (TTFT): {ttft:.0f}ms"
                     )
                     is_first_chunk = False
+
+                raw_chunk = chunk_data.get("chunk", "")
+                logger.debug(f"[TraceID:{trace_id}] 原始输出: {raw_chunk}")
 
                 # 使用 StreamParser 解析原始 LLM 输出块，提取 emotion 和切分 reply
                 msgs = parser.feed(chunk_data.get("chunk", ""))
@@ -271,16 +274,19 @@ class CommunicationServiceServicer(
                 result_json = json.loads(result_text)
                 new_core_summary = result_json.get("core_summary", request.current_core_summary)
                 new_key_facts = result_json.get("key_facts", request.current_key_facts)
+                new_short_term_memory = result_json.get("short_term_memory", "")
             except json.JSONDecodeError:
                 logger.error(f"[TraceID:{trace_id}] 压缩模型返回的不是有效的 JSON: {result_text}")
                 new_core_summary = request.current_core_summary
                 new_key_facts = request.current_key_facts
+                new_short_term_memory = ""
 
             logger.info(f"[TraceID:{trace_id}] 摘要压缩完成")
             return communication_pb2.SummarizeContextResponse(
                 trace_id=trace_id,
                 new_core_summary=new_core_summary,
                 new_key_facts=new_key_facts,
+                new_short_term_memory=new_short_term_memory,
             )
 
         except Exception as e:
@@ -290,4 +296,5 @@ class CommunicationServiceServicer(
                 trace_id=trace_id,
                 new_core_summary=request.current_core_summary,
                 new_key_facts=request.current_key_facts,
+                new_short_term_memory="",
             )

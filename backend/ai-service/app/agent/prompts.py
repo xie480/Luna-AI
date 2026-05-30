@@ -55,7 +55,7 @@ def get_system_prompt() -> str:
 
 
 # ============================================================
-# 运行时上下文提示词
+# 记忆上下文提示词
 # ============================================================
 
 def render_memory_prompt(
@@ -73,11 +73,8 @@ def render_memory_prompt(
         key_facts: 关键事实
         memory_snippets: 记忆片段
 
-    返回：渲染后的记忆提示词字符串。若无记忆内容则返回空字符串。
+    返回：渲染后的记忆提示词字符串。
     """
-    if not (core_summary or key_facts or memory_snippets):
-        return ""
-
     return _get_tm().render(
         TEMPLATE_MEMORY,
         CORE_SUMMARY=core_summary or "无",
@@ -85,7 +82,9 @@ def render_memory_prompt(
         MEMORY_SNIPPETS=memory_snippets or "无",
     )
 
-
+# ============================================================
+# 运行时提示词
+# ============================================================
 def render_runtime_prompt(
     current_message: str,
 ) -> str:
