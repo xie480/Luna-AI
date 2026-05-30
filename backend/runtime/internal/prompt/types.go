@@ -49,8 +49,12 @@ var SlotPositions = []SlotPosition{SlotSystem, SlotMemory, SlotRuntime}
 func renderTemplate(template string, variables map[string]string) string {
 	result := template
 	for key, value := range variables {
-		placeholder := fmt.Sprintf("{{ %s }}", key)
-		result = strings.ReplaceAll(result, placeholder, value)
+		// 替换带空格的格式 {{ KEY }}
+		placeholderWithSpace := fmt.Sprintf("{{ %s }}", key)
+		result = strings.ReplaceAll(result, placeholderWithSpace, value)
+		// 替换不带空格的格式 {{KEY}}
+		placeholderWithoutSpace := fmt.Sprintf("{{%s}}", key)
+		result = strings.ReplaceAll(result, placeholderWithoutSpace, value)
 	}
 	return result
 }

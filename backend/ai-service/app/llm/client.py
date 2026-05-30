@@ -450,12 +450,9 @@ class LLMClient:
             content = msg.get("content", "")
             if role == Role.SYSTEM.value:
                 combined_prompt_parts.append(content)
-            elif role == Role.USER.value:
-                combined_prompt_parts.append(content)
-            elif role == Role.ASSISTANT.value:
-                combined_prompt_parts.append(content)
 
         full_combined_prompt = "\n\n".join(combined_prompt_parts)
+
 
         # 3. 以单体文本发起请求
         async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, current_message, **kwargs):
