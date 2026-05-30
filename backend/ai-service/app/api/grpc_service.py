@@ -140,7 +140,7 @@ class CommunicationServiceServicer(
                 trace_id=trace_id,
                 core_summary=request.core_summary,
                 key_facts=request.key_facts,
-                short_term_memory=request.short_term_memory,
+                memory_snippets=request.short_term_memory,
             ):
                 # 检查客户端是否已断开连接
                 # 注意：grpc.aio.ServicerContext 使用 cancelled() 而非 is_active()

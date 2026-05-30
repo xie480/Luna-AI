@@ -206,10 +206,14 @@ class WSManager {
 
     if (msgType === 'emotion_update') {
       // 情绪更新：更新 Live2D 表情状态（streaming_rendering_plan.md §3.2）
-      systemStore.setEmotion(payload.chunk as any);
+      // 标准化情绪字符串：去除首尾空格，转换为首字母大写
+      const rawEmotion = payload.chunk as string;
+      const normalizedEmotion = rawEmotion ? rawEmotion.trim() : 'neutral';
+      systemStore.setEmotion(normalizedEmotion as any);
+      systemStore.addSystemLog(`[WS] 收到情绪更新: ${rawEmotion} -> ${normalizedEmotion}`);
       // 同步触发全局事件供 Live2D 消费（与 EVT_EMOTION_UPDATE 路径一致）
       window.dispatchEvent(
-        new CustomEvent('luna:emotion-update', { detail: { emotion: payload.chunk } })
+        new CustomEvent('luna:emotion-update', { detail: { emotion: normalizedEmotion } })
       );
       return;
     }

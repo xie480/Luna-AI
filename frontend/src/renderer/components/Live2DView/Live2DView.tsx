@@ -375,13 +375,43 @@ export const Live2DView: React.FC = () => {
 
     let isCancelled = false;
 
+    /**
+     * 标准化情绪字符串：
+     * 1. 去除首尾空格
+     * 2. 转换为首字母大写的 PascalCase 格式
+     * 3. 如果不在 EMOTION_EXPRESSIONS 列表中，返回 null
+     */
+    const normalizeEmotion = (emotion: string): string | null => {
+      if (!emotion) return null;
+      
+      // 去除首尾空格
+      const trimmed = emotion.trim();
+      
+      // 转换为首字母大写（PascalCase）
+      // 例如：'happy' -> 'Happy', 'SAD' -> 'Sad'
+      const normalized = trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+      
+      // 检查是否在 EMOTION_EXPRESSIONS 列表中
+      if (normalized in EMOTION_EXPRESSIONS) {
+        return normalized;
+      }
+      
+      // 不在列表中，返回 null
+      return null;
+    };
+
     const applyExpressions = async () => {
       try {
-        // 根据情绪映射表应用对应的表情列表
-        if (currentEmotion === 'neutral') {
+        // 标准化情绪字符串
+        const normalizedEmotion = normalizeEmotion(currentEmotion);
+        
+        // 如果情绪为空或不在列表中，使用默认的 neutral 表情
+        if (!normalizedEmotion || normalizedEmotion === 'neutral') {
           model.expression('neutral');
+          addSystemLog(`[Live2D] 应用默认表情: neutral (原始情绪: ${currentEmotion})`);
         } else {
-          const expressions = EMOTION_EXPRESSIONS[currentEmotion as keyof typeof EMOTION_EXPRESSIONS] ?? [];
+          const expressions = EMOTION_EXPRESSIONS[normalizedEmotion as keyof typeof EMOTION_EXPRESSIONS];
+          addSystemLog(`[Live2D] 应用情绪表情: ${normalizedEmotion} -> ${expressions.length} 个表情`);
           for (const exp of expressions) {
             if (isCancelled) break;
             try {
@@ -390,11 +420,13 @@ export const Live2DView: React.FC = () => {
               await new Promise(resolve => setTimeout(resolve, 50));
             } catch (e) {
               console.warn(`[Live2D] 表情 ${exp} 应用失败`, e);
+              addSystemLog(`[Live2D] 表情 ${exp} 应用失败: ${e}`);
             }
           }
         }
       } catch (e) {
         console.warn(`[Live2D] 无法应用情绪状态 ${currentEmotion}`, e);
+        addSystemLog(`[Live2D] 无法应用情绪状态 ${currentEmotion}: ${e}`);
       }
     };
 
@@ -403,7 +435,7 @@ export const Live2DView: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [model, currentEmotion]);
+  }, [model, currentEmotion, addSystemLog]);
 
   // 保存立绘配置
   const handleSaveTransform = () => {

@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -272,7 +274,30 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		protoHistory = append(protoHistory, assistantMsg)
 	}
 
+	// 【修复】将 history Interaction 列表格式化为文本，用于注入 MEMORY_SNIPPETS
+	// 格式：每条 Interaction 包含用户消息和助手回复
+	var memorySnippetsBuilder strings.Builder
+	for i, h := range recentHistory {
+		memorySnippetsBuilder.WriteString(fmt.Sprintf("[对话 %d]\n", i+1))
+		memorySnippetsBuilder.WriteString(fmt.Sprintf("用户: %s\n", h.UserContent))
+		if h.AssistantContent != "" {
+			memorySnippetsBuilder.WriteString(fmt.Sprintf("Luna: %s\n", h.AssistantContent))
+		}
+		if h.Thought != "" {
+			memorySnippetsBuilder.WriteString(fmt.Sprintf("(内心独白: %s)\n", h.Thought))
+		}
+		if h.Emotion != "" {
+			memorySnippetsBuilder.WriteString(fmt.Sprintf("(心情: %s)\n", h.Emotion))
+		}
+		if h.Error != "" {
+			memorySnippetsBuilder.WriteString(fmt.Sprintf("(错误: %s)\n", h.Error))
+		}
+		memorySnippetsBuilder.WriteString("\n")
+	}
+	memorySnippets := memorySnippetsBuilder.String()
+
 	// 构造 gRPC ChatRequest
+	// 注意：ShortTermMemory 字段用于注入 MEMORY_SNIPPETS，应来自 history List
 	req := &pb.ChatRequest{
 		TraceId:         msg.TraceID,
 		Message:         cmdPayload.Message,
@@ -280,7 +305,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		SystemPrompt:    cmdPayload.SystemPrompt,
 		CoreSummary:     summary.CoreSummary,
 		KeyFacts:        summary.KeyFacts,
-		ShortTermMemory: summary.ShortTermMemory,
+		ShortTermMemory: memorySnippets,
 	}
 
 	logger.Info(ctx, "发送流式对话请求到 AI 服务", zap.String("trace_id", msg.TraceID))
