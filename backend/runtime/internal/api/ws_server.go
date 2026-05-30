@@ -292,6 +292,10 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		if h.Error != "" {
 			memorySnippetsBuilder.WriteString(fmt.Sprintf("(错误: %s)\n", h.Error))
 		}
+		if h.Timestamp != 0 {
+			timestamp := time.Unix(h.Timestamp, 0)
+			memorySnippetsBuilder.WriteString(fmt.Sprintf("(时间: %s)\n", timestamp.Format("2006-01-02 15:04:05 Monday")))
+		}
 		memorySnippetsBuilder.WriteString("\n")
 	}
 	memorySnippets := memorySnippetsBuilder.String()
