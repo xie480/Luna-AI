@@ -12,6 +12,10 @@
  * - 接收消息时自动提取并同步 trace_id 到 systemStore
  * - 新增 EVT_TELEMETRY_TRACE / EVT_TELEMETRY_METRICS 消息处理
  * - send() 方法优先使用 systemStore.currentTraceID 作为 TraceID 源
+ *
+ * Phase 5 增强（近期记忆）：
+ * - EVT_INIT_STATE 处理时，将 recentQA 更新到 sessionStore
+ * - CHAT_STREAM 结束时，延迟 1 秒触发 addRecentQA
  */
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore } from '../stores/systemStore';
@@ -26,6 +30,8 @@ import {
   EmotionUpdatePayload,
   ReplyChunkPayload,
   ChatMessage,
+  InitStatePayload,
+  InteractionQA,
 } from '../../shared/types';
 
 /**
@@ -40,6 +46,11 @@ class WSManager {
   private baseReconnectDelay: number = 1000; // 基础重连延迟 1 秒
   private port: number = 8080; // Go Runtime 默认端口
   private isManualDisconnect: boolean = false; // 标记是否为主动断开
+
+  // Phase 5: 记录当前正在交互的用户消息，用于流结束后插入近期记忆
+  private pendingUserMessage: string = '';
+  private pendingUserMsgId: string = '';
+  private pendingAssistantContent: string = '';
 
   /**
    * 建立 WebSocket 连接
@@ -174,7 +185,7 @@ class WSManager {
 
       case WS_MSG_TYPE.EVT_INIT_STATE:
         // 初始状态同步
-        this.handleInitState(msg.payload);
+        this.handleInitState(msg.payload as InitStatePayload);
         break;
 
       case WS_MSG_TYPE.EVT_PLAN_SNAPSHOT:
@@ -265,7 +276,10 @@ class WSManager {
         sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
       }
 
-      // 如果流结束，更新消息状态
+      // Phase 5: 累积助手回复内容，用于流结束后插入近期记忆
+      this.pendingAssistantContent += payload.chunk;
+
+      // 如果流结束，更新消息状态，并延迟 1 秒插入近期记忆
       if (payload.is_finished) {
         const status = payload.error ? 'error' : 'completed';
         if (currentSessionId) {
@@ -274,15 +288,46 @@ class WSManager {
         if (payload.error) {
           systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
         }
+
+        // Phase 5: 延迟 1 秒后将本轮 Q&A 插入近期记忆
+        this.delayedAddRecentQA();
       }
     }
   }
 
   /**
+   * Phase 5: 延迟 1 秒后将当前对话插入近期记忆面板
+   * 做什么：等待气泡渲染全部完成后，将本轮 Q&A 插入 sessionStore 的 recentQA 列表。
+   * 为什么这样做：确保插入时机在视觉渲染完成后，避免突兀。
+   * 边界条件：pendingUserMessage 为空时不插入（无用户消息的流结束场景）。
+   */
+  private delayedAddRecentQA(): void {
+    if (!this.pendingUserMessage && !this.pendingAssistantContent) {
+      return;
+    }
+
+    setTimeout(() => {
+      const newQA: InteractionQA = {
+        msgId: this.pendingUserMsgId,
+        userContent: this.pendingUserMessage,
+        assistantContent: this.pendingAssistantContent,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      useSessionStore.getState().addRecentQA(newQA);
+
+      // 清理临时状态，准备下一轮对话
+      this.pendingUserMessage = '';
+      this.pendingUserMsgId = '';
+      this.pendingAssistantContent = '';
+    }, 1000);
+  }
+
+  /**
    * 处理初始状态同步
    * 连接成功后 Go 推送的完整状态快照
+   * Phase 5 改造：仅处理 sessionId 和 recentQA，移除旧版 messages/plan/memory 处理
    */
-  private handleInitState(payload: any): void {
+  private handleInitState(payload: InitStatePayload): void {
     const sessionStore = useSessionStore.getState();
     const systemStore = useSystemStore.getState();
 
@@ -292,17 +337,8 @@ class WSManager {
       sessionStore.setSessionId(payload.sessionId);
     }
 
-    if (payload.messages) {
-      // 批量设置消息
-      sessionStore.appendMessage(payload.sessionId, payload.messages);
-    }
-
-    if (payload.activePlan) {
-      sessionStore.updatePlan(payload.activePlan);
-    }
-
-    if (payload.memory) {
-      sessionStore.updateMemory(payload.memory);
+    if (payload.recentQA) {
+      sessionStore.setRecentQA(payload.recentQA);
     }
   }
 
@@ -346,6 +382,12 @@ class WSManager {
 
     // 【问题5修复】统一标识符生成规范，消息 ID 移除任何类型的前缀，全面采用雪花算法
     const userMsgId = generateId();
+
+    // Phase 5: 记录当前用户输入，用于流结束后插入近期记忆
+    this.pendingUserMessage = message;
+    this.pendingUserMsgId = userMsgId;
+    this.pendingAssistantContent = '';
+
     sessionStore.appendMessage(sessionId, {
       messageId: userMsgId,
       sessionId,

@@ -52,3 +52,5 @@ logs/
 data/
 *.sqlite
 *.db
+
+proxy.py

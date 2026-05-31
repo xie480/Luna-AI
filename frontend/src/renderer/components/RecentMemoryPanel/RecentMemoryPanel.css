@@ -1,0 +1,131 @@
+/**
+ * 近期记忆面板样式
+ * 位置：右上角，侧栏按钮下方
+ * 样式：半透明毛玻璃效果，字体较小，颜色柔和
+ */
+.recent-memory-panel {
+  position: absolute;
+  top: 60px; /* 在侧栏触发按钮下方 */
+  right: 16px;
+  width: 240px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: rgba(20, 20, 30, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px 14px;
+  z-index: 30;
+  pointer-events: auto;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.recent-memory-panel:hover {
+  background: rgba(20, 20, 30, 0.8);
+}
+
+/* 面板标题 */
+.recent-memory-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.recent-memory-panel .panel-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* 单条 QA 条目 */
+.recent-memory-panel .qa-item {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border-left: 2px solid rgba(160, 130, 255, 0.3);
+  animation: fadeInSlide 0.4s ease-out;
+}
+
+.recent-memory-panel .qa-item:last-child {
+  margin-bottom: 0;
+}
+
+/* 用户文本 */
+.recent-memory-panel .user-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(160, 180, 255, 0.6);
+  margin-bottom: 2px;
+}
+
+.recent-memory-panel .user-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.4;
+  margin-bottom: 4px;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Luna 文本 */
+.recent-memory-panel .luna-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(180, 220, 255, 0.6);
+  margin-bottom: 2px;
+}
+
+.recent-memory-panel .luna-text {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.4;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 空状态 */
+.recent-memory-panel .empty-state {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  padding: 16px 0;
+}
+
+/* 淡入滑动动画 */
+@keyframes fadeInSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 滚动条样式 */
+.recent-memory-panel::-webkit-scrollbar {
+  width: 3px;
+}
+
+.recent-memory-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.recent-memory-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}

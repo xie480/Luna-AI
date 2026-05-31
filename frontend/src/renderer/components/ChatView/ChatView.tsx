@@ -2,6 +2,8 @@
  * Luna AI 聊天视图组件
  * 主界面核心组件，负责展示用户与 AI 的交互消息
  * 严格遵循 Go Runtime 为唯一状态权威的原则，所有状态来自 Zustand Store
+ *
+ * Phase 5 新增：引入 RecentMemoryPanel 右上角近期记忆面板
  */
 import React from 'react';
 import { Live2DView } from '../Live2DView/Live2DView';
@@ -9,6 +11,7 @@ import { BackgroundLayer } from '../BackgroundLayer/BackgroundLayer';
 import { TopStatusPanel } from '../TopStatusPanel/TopStatusPanel';
 import { BubbleStack } from '../BubbleStack/BubbleStack';
 import { InputArea } from '../InputArea/InputArea';
+import { RecentMemoryPanel } from '../RecentMemoryPanel/RecentMemoryPanel';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import './ChatView.css';
 
@@ -29,6 +32,9 @@ export const ChatView: React.FC = () => {
           <Live2DView />
         </ErrorBoundary>
       </div>
+
+      {/* 近期记忆面板层 z-index: 25 — 位于交互层之上，右上角 */}
+      <RecentMemoryPanel />
 
       {/* 交互层 z-index: 20 */}
       <div className="interaction-layer">

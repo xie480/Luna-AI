@@ -4,6 +4,7 @@
  * 注意：前端状态仅为 Go 推送状态的投影，禁止乐观更新
  */
 import { create } from 'zustand';
+import { InteractionQA } from '../../shared/types';
 
 /**
  * 聊天消息结构
@@ -65,6 +66,8 @@ interface SessionState {
   currentSessionId: string | null;
   // 消息记录，Key 为 sessionId
   messages: Record<string, ChatMessage[]>;
+  // 近期记忆（最后 3 轮 Q&A，用于右上角面板展示）
+  recentQA: InteractionQA[];
   // 当前活跃的任务计划
   activePlan: PlanSnapshot | null;
   // 记忆快照
@@ -75,6 +78,8 @@ interface SessionState {
   appendMessage: (sessionId: string, msg: ChatMessage) => void;
   updateMessageChunk: (sessionId: string, msgId: string, chunk: string) => void;
   updateMessageStatus: (sessionId: string, msgId: string, status: ChatMessage['status']) => void;
+  setRecentQA: (qaList: InteractionQA[]) => void;
+  addRecentQA: (qa: InteractionQA) => void;
   updatePlan: (plan: PlanSnapshot) => void;
   updateNodeStatus: (nodeId: string, status: TaskNodeState['status'], progress?: number) => void;
   updateMemory: (memory: MemorySnapshot) => void;
@@ -88,6 +93,7 @@ interface SessionState {
 export const useSessionStore = create<SessionState>((set) => ({
   currentSessionId: null,
   messages: {},
+  recentQA: [],
   activePlan: null,
   memory: null,
 
@@ -144,6 +150,20 @@ export const useSessionStore = create<SessionState>((set) => ({
           [sessionId]: updatedMessages,
         },
       };
+    }),
+
+  // 设置近期记忆列表（用于初始加载时从 Go 端获取）
+  setRecentQA: (qaList) => set({ recentQA: qaList }),
+
+  // 追加单条近期记忆（保持最多 3 条）
+  // 新条目追加到末尾，超出 3 条时移除最旧的一条
+  addRecentQA: (qa) =>
+    set((state) => {
+      const newList = [...state.recentQA, qa];
+      if (newList.length > 3) {
+        newList.shift();
+      }
+      return { recentQA: newList };
     }),
 
   // 更新任务计划快照

@@ -110,3 +110,25 @@ export interface ReplyChunkPayload {
   chunk: string;
   is_finished: boolean;
 }
+
+/**
+ * 单轮问答结构，用于近期记忆展示
+ * 做什么：定义前端展示的单轮问答数据结构。
+ * 为什么这样做：用于在 UI 上展示最近的对话记录，供用户快速回顾。
+ */
+export interface InteractionQA {
+  msgId: string;
+  userContent: string;
+  assistantContent: string;
+  timestamp: number;
+}
+
+/**
+ * 初始状态同步事件 Payload —— 对应 EVT_INIT_STATE
+ * 做什么：承载后端下发的当前会话初始状态，包括近期记忆等。
+ * 为什么这样做：用于前端刷新或重启后恢复 UI 上下文（仅展示最后3轮 Q&A）。
+ */
+export interface InitStatePayload {
+  sessionId: string;
+  recentQA: InteractionQA[];
+}

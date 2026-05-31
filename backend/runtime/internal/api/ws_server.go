@@ -82,6 +82,22 @@ type ChatStreamPayload struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// InteractionQA 用于前端展示的单轮问答结构
+// Phase 5 新增：存储在 Redis 中最近 3 轮 Q&A，用于右上角近期记忆面板展示
+type InteractionQA struct {
+	MsgID            string `json:"msgId"`
+	UserContent      string `json:"userContent"`
+	AssistantContent string `json:"assistantContent"`
+	Timestamp        int64  `json:"timestamp"`
+}
+
+// InitStatePayload 定义前端 EVT_INIT_STATE 消息的 Payload
+// Phase 5 精简：仅包含 sessionId 和 recentQA（最后 3 轮 Q&A），移除旧版的 messages/plan/memory
+type InitStatePayload struct {
+	SessionID string          `json:"sessionId"`
+	RecentQA  []InteractionQA `json:"recentQA"`
+}
+
 // WSConnection 封装 websocket.Conn，提供并发安全的写操作
 type WSConnection struct {
 	conn *websocket.Conn
@@ -179,10 +195,66 @@ func (s *WSServer) handleMessage(ctx context.Context, conn *WSConnection, msg WS
 	}
 }
 
+// handleSyncInitState 处理前端初始状态同步请求
+// Phase 5 改造：从 Redis 获取最近 3 轮 Q&A，下发给前端用于右上角近期记忆面板展示
+// 做什么：解析前端请求，从 Redis 拉取当前会话的 Interaction 列表，截取最后 3 条返回
+// 为什么这样做：让前端重启后能展示近期对话记忆，同时避免全量历史同步，保持界面清爽
+// 输入输出：
+//   - 输入：前端 CMD_SYNC_INIT_STATE 消息（可携带 sessionId）
+//   - 输出：通过 EVT_INIT_STATE 消息下发 InitStatePayload（sessionId + recentQA）
+//
+// 边界条件：
+//   - 默认使用当天日期 (YYYYMMDD) 作为 SessionID
+//   - Redis 中无历史记录时返回空的 recentQA 数组
+//
+// 异常行为：
+//   - Redis 连接失败时返回空初始状态（前端正常展示，无近期记忆）
 func (s *WSServer) handleSyncInitState(ctx context.Context, conn *WSConnection, msg WSMessage) {
-	// 构造初始状态响应
-	// 暂时返回一个空的初始状态
-	payloadBytes := []byte(`{"sessionId": "default-session", "messages": [], "activePlan": null, "memory": null}`)
+	// 1. 解析请求获取 SessionID（如果没有则使用当天日期作为默认值）
+	var reqPayload struct {
+		SessionID string `json:"sessionId"`
+	}
+	sessionID := time.Now().Format("20060102") // 默认使用当天日期，如 "20250531"
+	if err := json.Unmarshal(msg.Payload, &reqPayload); err == nil && reqPayload.SessionID != "" {
+		sessionID = reqPayload.SessionID
+	}
+
+	// 2. 从 Redis 获取上下文（只需要历史 Interaction 列表，不需要 summary）
+	var recentHistory []repository.Interaction
+	if s.redisRepo != nil {
+		_, recentHistory, _ = s.redisRepo.GetContext(ctx, sessionID)
+	}
+
+	// 3. 截取最后 3 条记录（仅返回最后 3 轮 Q&A）
+	startIndex := 0
+	if len(recentHistory) > 3 {
+		startIndex = len(recentHistory) - 3
+	}
+	last3History := recentHistory[startIndex:]
+
+	// 4. 转换为 InteractionQA 结构
+	recentQA := make([]InteractionQA, 0, len(last3History))
+	for _, h := range last3History {
+		recentQA = append(recentQA, InteractionQA{
+			MsgID:            h.MsgID,
+			UserContent:      h.UserContent,
+			AssistantContent: h.AssistantContent,
+			Timestamp:        h.Timestamp,
+		})
+	}
+
+	// 5. 组装 Payload 并发送
+	payload := InitStatePayload{
+		SessionID: sessionID,
+		RecentQA:  recentQA,
+	}
+
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		logger.Error(ctx, "序列化 InitStatePayload 失败", zap.Error(err))
+		s.sendError(conn, msg.TraceID, 5000, "Internal server error")
+		return
+	}
 
 	respMsg := WSMessage{
 		Type:    types.WSMsgTypeEvtInitState,
