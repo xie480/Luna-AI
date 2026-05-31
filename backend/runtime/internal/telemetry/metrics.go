@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -83,4 +84,32 @@ func InitMetrics() {
 // GetMetricsBuffer 获取全局监控指标缓冲区
 func GetMetricsBuffer() *RingBuffer {
 	return globalMetricsBuffer
+}
+
+// StartMetricsCollector 启动监控指标收集器
+func StartMetricsCollector(ctx context.Context) {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			buffer := GetMetricsBuffer()
+			if buffer != nil {
+				// 模拟收集系统指标，实际应用中应使用 gopsutil 等库获取真实数据
+				// 这里为了演示，生成一些随机波动的数据
+				point := MetricPoint{
+					Timestamp:           time.Now(),
+					SystemCPUUsage:      float64(time.Now().UnixNano()%100) / 100.0 * 100, // 0-100%
+					SystemMemoryUsage:   float64(time.Now().UnixNano()%1024) + 1024,       // 1024-2048 MB
+					GoGoroutinesCount:   int(time.Now().UnixNano()%50) + 10,               // 10-60
+					LLMTokenConsumption: int(time.Now().UnixNano()%500),                   // 0-500
+					ToolCallFailureRate: float64(time.Now().UnixNano()%5) / 100.0,         // 0-5%
+				}
+				buffer.Push(point)
+			}
+		}
+	}
 }

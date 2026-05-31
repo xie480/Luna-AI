@@ -23,6 +23,21 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 're
 export type EmotionState = keyof typeof EMOTION_EXPRESSIONS | 'neutral';
 
 /**
+ * 前端异常条目
+ * 用于记录前端运行时异常，供诊断面板查阅
+ */
+export interface FrontendErrorEntry {
+  id: string;            // Snowflake ID
+  timestamp: number;
+  level: 'ERROR' | 'WARN' | 'CRITICAL';
+  source: string;        // 异常来源，如 'react_renderer', 'websocket', 'live2d'
+  message: string;
+  stack?: string;
+  trace_id?: string;     // 关联的 TraceID
+  component_stack?: string; // React 组件栈（Error Boundary 捕获）
+}
+
+/**
  * 系统状态切片
  */
 interface SystemState {
@@ -47,6 +62,14 @@ interface SystemState {
   // 服装配置状态（实时保存到 localStorage）
   clothingConfig: Record<string, boolean>;
 
+  // === 可观测性相关增强 ===
+  // 前端异常缓冲区（环形缓冲，最多保留 100 条）
+  frontendErrors: FrontendErrorEntry[];
+  // 诊断面板是否打开（与独立调试面板联动）
+  isDiagnosticOpen: boolean;
+  // 当前 TraceID（由 wsManager 自动维护，用于异常上报关联）
+  currentTraceID: string | null;
+
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
   toggleLeftSidebar: () => void;
@@ -63,6 +86,11 @@ interface SystemState {
   hideGlobalMessage: () => void;
   // 设置服装配置项，同时持久化到 localStorage
   setClothingConfig: (id: string, enabled: boolean) => void;
+  // 可观测性 Actions
+  addFrontendError: (entry: FrontendErrorEntry) => void;
+  clearFrontendErrors: () => void;
+  setDiagnosticOpen: (isOpen: boolean) => void;
+  setCurrentTraceID: (traceId: string | null) => void;
 }
 
 /**
@@ -96,6 +124,10 @@ export const useSystemStore = create<SystemState>((set) => ({
   globalMessage: null,
   // 初始化服装配置，从 localStorage 读取或使用空对象
   clothingConfig: loadClothingConfig(),
+  // 可观测性初始状态
+  frontendErrors: [],
+  isDiagnosticOpen: false,
+  currentTraceID: null,
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
@@ -162,4 +194,23 @@ export const useSystemStore = create<SystemState>((set) => ({
       }
       return { clothingConfig: newConfig };
     }),
+
+  // 添加前端异常（环形缓冲，最多 100 条）
+  addFrontendError: (entry) =>
+    set((state) => {
+      const newErrors = [...state.frontendErrors, entry];
+      if (newErrors.length > 100) {
+        newErrors.shift(); // 移除最旧的一条
+      }
+      return { frontendErrors: newErrors };
+    }),
+
+  // 清空前端异常
+  clearFrontendErrors: () => set({ frontendErrors: [] }),
+
+  // 设置诊断面板开关
+  setDiagnosticOpen: (isOpen) => set({ isDiagnosticOpen: isOpen }),
+
+  // 设置当前 TraceID
+  setCurrentTraceID: (traceId) => set({ currentTraceID: traceId }),
 }));

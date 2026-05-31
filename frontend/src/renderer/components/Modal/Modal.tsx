@@ -3,6 +3,8 @@
  * 用于在屏幕正中央展示任务流、记忆、Prompt管理、设置、日志等面板内容
  * 替代原有的右侧边栏弹出逻辑
  * 支持鼠标拖拽移动位置 + 四角四边边框缩放 + 无背景变暗效果
+ *
+ * 注意：DebugPanel 诊断面板已移至 index.tsx 顶层渲染，与本组件解耦
  */
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { useSystemStore, ModalPanelType } from '../../stores/systemStore';

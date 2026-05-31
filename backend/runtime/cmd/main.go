@@ -107,6 +107,7 @@ func main() {
 
 	// 初始化监控指标
 	telemetry.InitMetrics()
+	go telemetry.StartMetricsCollector(ctx)
 
 	// 初始化 CryptoService
 	cryptoSvc, err := config.NewCryptoService()

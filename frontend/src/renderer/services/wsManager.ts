@@ -8,9 +8,14 @@
  *   以 CustomEvent 桥接到 BubbleStack（气泡渲染）和 Live2DView（情绪同步）。
  * - EVT_EMOTION_UPDATE / EVT_REPLY_CHUNK 作为独立消息类型直接处理。
  *
+ * Phase 4 增强（可观测性）：
+ * - 接收消息时自动提取并同步 trace_id 到 systemStore
+ * - 新增 EVT_TELEMETRY_TRACE / EVT_TELEMETRY_METRICS 消息处理
+ * - send() 方法优先使用 systemStore.currentTraceID 作为 TraceID 源
  */
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore } from '../stores/systemStore';
+import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/telemetryStore';
 import { WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
 import {
@@ -110,6 +115,12 @@ class WSManager {
     const sessionStore = useSessionStore.getState();
     const systemStore = useSystemStore.getState();
 
+    // Phase 4 增强：如果 Go 端返回的消息携带了 trace_id，同步到 systemStore
+    // 确保后端的 TraceID 覆盖前端的初版（后端是权威）
+    if (msg.trace_id && msg.trace_id !== systemStore.currentTraceID) {
+      systemStore.setCurrentTraceID(msg.trace_id);
+    }
+
     // 将消息类型转换为联合类型进行比较
     const msgType = msg.type as WSMsgType;
 
@@ -190,6 +201,23 @@ class WSManager {
         // 调试日志推送
         const logPayload = msg.payload as any;
         systemStore.addSystemLog(logPayload.message || String(logPayload));
+        break;
+
+      // === Phase 4 新增：可观测性相关 ===
+      case WS_MSG_TYPE.EVT_TELEMETRY_TRACE:
+        // Go 推送的链路 Span（仅在诊断面板开启时推送）
+        const spanPayload = msg.payload as TelemetrySpan;
+        useTelemetryStore.getState().setTraceSpans(
+          [...useTelemetryStore.getState().traceSpans, spanPayload]
+        );
+        break;
+
+      case WS_MSG_TYPE.EVT_TELEMETRY_METRICS:
+        // Go 推送的实时监控指标（每秒推送一次）
+        const metricsPayload = msg.payload as MetricsDataPoint;
+        const telemetryStore = useTelemetryStore.getState();
+        const updatedMetrics = [...telemetryStore.metrics, metricsPayload].slice(-60);
+        telemetryStore.setMetrics(updatedMetrics);
         break;
 
       default:
@@ -281,16 +309,23 @@ class WSManager {
   /**
    * 发送消息到 Go Runtime
    * @param data 消息数据对象
+   *
+   * Phase 4 增强：
+   * 优先使用 systemStore 中维护的全局 TraceID（由 useTraceContext 设置）
+   * 如果不存在则新生成一个
    */
   public send(data: { type: string; payload: unknown }): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const currentTraceID = useSystemStore.getState().currentTraceID;
+      const traceID = currentTraceID || `tr-${generateId()}`;
+
       const message = JSON.stringify({
         ...data,
         timestamp: Date.now(),
-        trace_id: `tr-${generateId()}`,
+        trace_id: traceID,
       });
       this.ws.send(message);
-      useSystemStore.getState().addSystemLog(`发送消息: ${data.type}`);
+      useSystemStore.getState().addSystemLog(`发送消息: ${data.type}, trace_id=${traceID}`);
     } else {
       useSystemStore.getState().addSystemLog('WebSocket 未连接，无法发送消息');
     }

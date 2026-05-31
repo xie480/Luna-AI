@@ -2,6 +2,12 @@
  * Luna AI 左侧边栏组件
  * 提供类似 ChatGPT 的左侧导航菜单
  * 点击菜单项时打开居中模态窗口展示对应内容
+ *
+ * 互斥规则：
+ * - 诊断面板 ('debug') 与模态窗口严格互斥
+ * - 点击诊断面板时自动关闭模态窗口
+ * - 点击其他菜单项时自动关闭诊断面板
+ * - 确保同一时间只有一个面板处于激活可见状态
  */
 import React, { useState } from 'react';
 import { useSystemStore, ModalPanelType } from '../../stores/systemStore';
@@ -11,7 +17,7 @@ import './Sidebar.css';
  * 菜单项配置
  */
 interface MenuItem {
-  id: ModalPanelType | 'live2d-config';
+  id: ModalPanelType | 'live2d-config' | 'debug';
   label: string;
   icon: React.ReactNode;
   subItems?: {
@@ -106,30 +112,52 @@ const MENU_ITEMS: MenuItem[] = [
       </svg>
     ),
   },
+  {
+    id: 'debug',
+    label: '诊断面板',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+        <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+      </svg>
+    ),
+  },
 ];
 
 /**
  * 左侧边栏组件
  * 支持平滑展开/收起动画
- * 点击菜单项打开模态窗口
+ * 点击菜单项打开模态窗口或诊断面板
+ * 严格保证同一时间只有一个面板处于激活可见状态
  */
 export const Sidebar: React.FC = () => {
   // 从 Store 获取状态
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
-  const openModal = useSystemStore.getState().openModal;
   const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
-  
+
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
 
   /**
    * 处理菜单项点击
-   * 打开对应的模态窗口面板或展开子菜单
+   * 严格实施互斥规则：
+   * 1. 点击诊断面板 → 关闭模态窗口，打开诊断面板
+   * 2. 点击其他菜单项 → 关闭诊断面板，打开对应的模态窗口
+   * 3. 点击子菜单项 → 仅设置 Live2D 配置模式，不涉及面板切换
    */
   const handleMenuClick = (item: MenuItem): void => {
     if (item.subItems) {
       setExpandedMenu(expandedMenu === item.id ? null : item.id);
+      return;
+    }
+
+    if (item.id === 'debug') {
+      // 打开诊断面板时，确保模态窗口已关闭
+      useSystemStore.getState().closeModal();
+      useSystemStore.getState().setDiagnosticOpen(true);
     } else {
-      openModal(item.id as ModalPanelType);
+      // 打开其他模态窗口时，确保诊断面板已关闭
+      useSystemStore.getState().setDiagnosticOpen(false);
+      useSystemStore.getState().openModal(item.id as ModalPanelType);
     }
   };
 

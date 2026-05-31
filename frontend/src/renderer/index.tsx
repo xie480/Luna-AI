@@ -7,10 +7,12 @@
  * 1. 主界面仅展示聊天界面，保持极简
  * 2. 左侧边栏提供导航菜单，点击菜单项打开居中模态窗口
  * 3. 所有状态来自 Go Runtime 推送，前端仅为状态投影
+ * 4. 诊断面板 DebugPanel 独立渲染，与模态窗口互斥
  */
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import * as PIXI from 'pixi.js';
+import { generateId } from '../shared/utils/snowflake';
 
 // 导入全局样式
 import './styles/global.css';
@@ -20,6 +22,7 @@ import { ChatView } from './components/ChatView/ChatView';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { SidebarTrigger } from './components/SidebarTrigger/SidebarTrigger';
 import { Modal } from './components/Modal/Modal';
+import DebugPanel from './components/Settings/DebugPanel';
 
 // 导入服务和 Store
 import { wsManager } from './services/wsManager';
@@ -31,8 +34,45 @@ import { useSystemStore } from './stores/systemStore';
 window.PIXI = PIXI;
 
 /**
+ * 初始化全局异常监听
+ * 捕获 React ErrorBoundary 无法捕获的异常（如 setTimeout、Promise rejection）
+ */
+function initGlobalErrorListeners(): void {
+  // 捕获未处理的 Promise rejection
+  window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    const systemStore = useSystemStore.getState();
+    systemStore.addFrontendError({
+      id: generateId(),
+      timestamp: Date.now(),
+      level: 'ERROR',
+      source: 'global_promise',
+      message: event.reason?.message || '未处理的 Promise 异常',
+      stack: event.reason?.stack,
+      trace_id: systemStore.currentTraceID || undefined,
+    });
+  });
+
+  // 捕获全局 JS 运行时异常
+  window.onerror = (message, source, lineno, colno, error): boolean => {
+    const systemStore = useSystemStore.getState();
+    systemStore.addFrontendError({
+      id: generateId(),
+      timestamp: Date.now(),
+      level: 'CRITICAL',
+      source: 'global_runtime',
+      message: typeof message === 'string' ? message : '全局运行时异常',
+      stack: error?.stack,
+      trace_id: systemStore.currentTraceID || undefined,
+    });
+    // 返回 true 阻止默认浏览器错误处理
+    return true;
+  };
+}
+
+/**
  * Luna AI 主应用组件
  * 采用极简布局：主界面为纯聊天区，左侧边栏提供导航，模态窗口展示功能面板
+ * DebugPanel 诊断面板独立于 Modal 渲染，二者互斥
  */
 // eslint-disable-next-line react-refresh/only-export-components
 const App: React.FC = () => {
@@ -87,6 +127,9 @@ const App: React.FC = () => {
       {/* 模态窗口：居中展示功能面板 */}
       <Modal />
 
+      {/* 诊断面板：独立于模态窗口渲染，通过 isDiagnosticOpen 控制显隐 */}
+      <DebugPanel />
+
       {/* 全局消息提示 */}
       {globalMessage && (
         <div className="global-message-toast">
@@ -96,6 +139,9 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+// 初始化全局异常监听
+initGlobalErrorListeners();
 
 // 挂载 React 应用到 DOM
 const rootElement = document.getElementById('root');

@@ -23,16 +23,33 @@ func NewTelemetryHandler(db *gorm.DB) *TelemetryHandler {
 }
 
 // GetTraces 获取链路详情
-// GET /api/v1/telemetry/traces/:trace_id
+// GET /api/v1/telemetry/traces
 func (h *TelemetryHandler) GetTraces(w http.ResponseWriter, r *http.Request) {
-	traceID := r.URL.Query().Get("trace_id")
-	if traceID == "" {
-		http.Error(w, "Missing trace_id", http.StatusBadRequest)
-		return
+	query := h.db.Model(&telemetry.TraceSpan{})
+
+	if traceID := r.URL.Query().Get("trace_id"); traceID != "" {
+		query = query.Where("trace_id = ?", traceID)
+	}
+
+	// 分页
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsedLimit, err := strconv.Atoi(l); err == nil && parsedLimit > 0 {
+			limit = parsedLimit
+		}
+	}
+	offset := 0
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsedOffset, err := strconv.Atoi(o); err == nil && parsedOffset >= 0 {
+			offset = parsedOffset
+		}
 	}
 
 	var spans []telemetry.TraceSpan
-	if err := h.db.Where("trace_id = ?", traceID).Order("start_time ASC").Find(&spans).Error; err != nil {
+	var total int64
+
+	query.Count(&total)
+	if err := query.Order("start_time DESC").Limit(limit).Offset(offset).Find(&spans).Error; err != nil {
 		http.Error(w, "Failed to fetch traces", http.StatusInternalServerError)
 		return
 	}
@@ -40,7 +57,10 @@ func (h *TelemetryHandler) GetTraces(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(types.Response{
 		Code: types.CodeSuccess,
-		Data: spans,
+		Data: map[string]interface{}{
+			"total": total,
+			"spans": spans,
+		},
 	})
 }
 

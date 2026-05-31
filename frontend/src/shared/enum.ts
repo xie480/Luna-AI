@@ -55,6 +55,14 @@ export const WS_MSG_TYPE = {
   // 流式渲染事件类型 —— 参考 streaming_rendering_plan.md §3.1
   EVT_EMOTION_UPDATE: "EVT_EMOTION_UPDATE",
   EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK",
+
+  // === Phase 4 新增：可观测性相关 ===
+  // Go -> Electron: 链路 Span 数据（启用诊断面板时推送）
+  EVT_TELEMETRY_TRACE: "EVT_TELEMETRY_TRACE",
+  // Go -> Electron: 监控指标数据点（启用诊断面板时每秒推送）
+  EVT_TELEMETRY_METRICS: "EVT_TELEMETRY_METRICS",
+  // Electron -> Go: 启用/禁用实时追踪推送
+  CMD_SET_TELEMETRY_MODE: "CMD_SET_TELEMETRY_MODE",
 } as const;
 
 /**

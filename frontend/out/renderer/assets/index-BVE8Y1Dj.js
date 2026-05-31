@@ -9067,7 +9067,7 @@ var objectInspect = function inspect_(obj, options, depth, seen2) {
     var ys = arrObjKeys(obj, inspect2);
     var isPlainObject = gPO ? gPO(obj) === Object.prototype : obj instanceof Object || obj.constructor === Object;
     var protoTag = obj instanceof Object ? "" : "null prototype";
-    var stringTag = !isPlainObject && toStringTag && Object(obj) === obj && toStringTag in obj ? $slice.call(toStr(obj), 8, -1) : protoTag ? "Object" : "";
+    var stringTag = !isPlainObject && toStringTag && Object(obj) === obj && toStringTag in obj ? $slice.call(toStr$1(obj), 8, -1) : protoTag ? "Object" : "";
     var constructorTag = isPlainObject || typeof obj.constructor !== "function" ? "" : obj.constructor.name ? obj.constructor.name + " " : "";
     var tag = constructorTag + (stringTag || protoTag ? "[" + $join.call($concat$1.call([], stringTag || [], protoTag || []), ": ") + "] " : "");
     if (ys.length === 0) {
@@ -9092,25 +9092,25 @@ function canTrustToString(obj) {
   return !toStringTag || !(typeof obj === "object" && (toStringTag in obj || typeof obj[toStringTag] !== "undefined"));
 }
 function isArray$3(obj) {
-  return toStr(obj) === "[object Array]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object Array]" && canTrustToString(obj);
 }
 function isDate(obj) {
-  return toStr(obj) === "[object Date]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object Date]" && canTrustToString(obj);
 }
 function isRegExp$1(obj) {
-  return toStr(obj) === "[object RegExp]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object RegExp]" && canTrustToString(obj);
 }
 function isError(obj) {
-  return toStr(obj) === "[object Error]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object Error]" && canTrustToString(obj);
 }
 function isString(obj) {
-  return toStr(obj) === "[object String]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object String]" && canTrustToString(obj);
 }
 function isNumber(obj) {
-  return toStr(obj) === "[object Number]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object Number]" && canTrustToString(obj);
 }
 function isBoolean(obj) {
-  return toStr(obj) === "[object Boolean]" && canTrustToString(obj);
+  return toStr$1(obj) === "[object Boolean]" && canTrustToString(obj);
 }
 function isSymbol(obj) {
   if (hasShammedSymbols) {
@@ -9146,7 +9146,7 @@ var hasOwn$1 = Object.prototype.hasOwnProperty || function(key) {
 function has$3(obj, key) {
   return hasOwn$1.call(obj, key);
 }
-function toStr(obj) {
+function toStr$1(obj) {
   return objectToString.call(obj);
 }
 function nameOf(f2) {
@@ -9454,7 +9454,7 @@ var syntax = SyntaxError;
 var uri = URIError;
 var abs$1 = Math.abs;
 var floor$1 = Math.floor;
-var max$1 = Math.max;
+var max$2 = Math.max;
 var min$1 = Math.min;
 var pow$1 = Math.pow;
 var round$2 = Math.round;
@@ -9583,99 +9583,78 @@ function requireObject_getPrototypeOf() {
   Object_getPrototypeOf = $Object2.getPrototypeOf || null;
   return Object_getPrototypeOf;
 }
-var implementation;
-var hasRequiredImplementation;
-function requireImplementation() {
-  if (hasRequiredImplementation) return implementation;
-  hasRequiredImplementation = 1;
-  var ERROR_MESSAGE = "Function.prototype.bind called on incompatible ";
-  var toStr2 = Object.prototype.toString;
-  var max2 = Math.max;
-  var funcType = "[object Function]";
-  var concatty = function concatty2(a, b) {
-    var arr = [];
-    for (var i = 0; i < a.length; i += 1) {
-      arr[i] = a[i];
+var ERROR_MESSAGE = "Function.prototype.bind called on incompatible ";
+var toStr = Object.prototype.toString;
+var max$1 = Math.max;
+var funcType = "[object Function]";
+var concatty = function concatty2(a, b) {
+  var arr = [];
+  for (var i = 0; i < a.length; i += 1) {
+    arr[i] = a[i];
+  }
+  for (var j = 0; j < b.length; j += 1) {
+    arr[j + a.length] = b[j];
+  }
+  return arr;
+};
+var slicy = function slicy2(arrLike, offset) {
+  var arr = [];
+  for (var i = offset, j = 0; i < arrLike.length; i += 1, j += 1) {
+    arr[j] = arrLike[i];
+  }
+  return arr;
+};
+var joiny = function(arr, joiner) {
+  var str = "";
+  for (var i = 0; i < arr.length; i += 1) {
+    str += arr[i];
+    if (i + 1 < arr.length) {
+      str += joiner;
     }
-    for (var j = 0; j < b.length; j += 1) {
-      arr[j + a.length] = b[j];
-    }
-    return arr;
-  };
-  var slicy = function slicy2(arrLike, offset) {
-    var arr = [];
-    for (var i = offset, j = 0; i < arrLike.length; i += 1, j += 1) {
-      arr[j] = arrLike[i];
-    }
-    return arr;
-  };
-  var joiny = function(arr, joiner) {
-    var str = "";
-    for (var i = 0; i < arr.length; i += 1) {
-      str += arr[i];
-      if (i + 1 < arr.length) {
-        str += joiner;
-      }
-    }
-    return str;
-  };
-  implementation = function bind2(that) {
-    var target = this;
-    if (typeof target !== "function" || toStr2.apply(target) !== funcType) {
-      throw new TypeError(ERROR_MESSAGE + target);
-    }
-    var args = slicy(arguments, 1);
-    var bound;
-    var binder = function() {
-      if (this instanceof bound) {
-        var result = target.apply(
-          this,
-          concatty(args, arguments)
-        );
-        if (Object(result) === result) {
-          return result;
-        }
-        return this;
-      }
-      return target.apply(
-        that,
+  }
+  return str;
+};
+var implementation$1 = function bind(that) {
+  var target = this;
+  if (typeof target !== "function" || toStr.apply(target) !== funcType) {
+    throw new TypeError(ERROR_MESSAGE + target);
+  }
+  var args = slicy(arguments, 1);
+  var bound;
+  var binder = function() {
+    if (this instanceof bound) {
+      var result = target.apply(
+        this,
         concatty(args, arguments)
       );
-    };
-    var boundLength = max2(0, target.length - args.length);
-    var boundArgs = [];
-    for (var i = 0; i < boundLength; i++) {
-      boundArgs[i] = "$" + i;
+      if (Object(result) === result) {
+        return result;
+      }
+      return this;
     }
-    bound = Function("binder", "return function (" + joiny(boundArgs, ",") + "){ return binder.apply(this,arguments); }")(binder);
-    if (target.prototype) {
-      var Empty = function Empty2() {
-      };
-      Empty.prototype = target.prototype;
-      bound.prototype = new Empty();
-      Empty.prototype = null;
-    }
-    return bound;
+    return target.apply(
+      that,
+      concatty(args, arguments)
+    );
   };
-  return implementation;
-}
-var functionBind;
-var hasRequiredFunctionBind;
-function requireFunctionBind() {
-  if (hasRequiredFunctionBind) return functionBind;
-  hasRequiredFunctionBind = 1;
-  var implementation2 = requireImplementation();
-  functionBind = Function.prototype.bind || implementation2;
-  return functionBind;
-}
-var functionCall;
-var hasRequiredFunctionCall;
-function requireFunctionCall() {
-  if (hasRequiredFunctionCall) return functionCall;
-  hasRequiredFunctionCall = 1;
-  functionCall = Function.prototype.call;
-  return functionCall;
-}
+  var boundLength = max$1(0, target.length - args.length);
+  var boundArgs = [];
+  for (var i = 0; i < boundLength; i++) {
+    boundArgs[i] = "$" + i;
+  }
+  bound = Function("binder", "return function (" + joiny(boundArgs, ",") + "){ return binder.apply(this,arguments); }")(binder);
+  if (target.prototype) {
+    var Empty = function Empty2() {
+    };
+    Empty.prototype = target.prototype;
+    bound.prototype = new Empty();
+    Empty.prototype = null;
+  }
+  return bound;
+};
+var implementation = implementation$1;
+var functionBind = Function.prototype.bind || implementation;
+var functionCall = Function.prototype.call;
 var functionApply;
 var hasRequiredFunctionApply;
 function requireFunctionApply() {
@@ -9685,14 +9664,14 @@ function requireFunctionApply() {
   return functionApply;
 }
 var reflectApply = typeof Reflect !== "undefined" && Reflect && Reflect.apply;
-var bind$2 = requireFunctionBind();
+var bind$2 = functionBind;
 var $apply$1 = requireFunctionApply();
-var $call$2 = requireFunctionCall();
+var $call$2 = functionCall;
 var $reflectApply = reflectApply;
 var actualApply = $reflectApply || bind$2.call($call$2, $apply$1);
-var bind$1 = requireFunctionBind();
+var bind$1 = functionBind;
 var $TypeError$4 = type;
-var $call$1 = requireFunctionCall();
+var $call$1 = functionCall;
 var $actualApply = actualApply;
 var callBindApplyHelpers = function callBindBasic(args) {
   if (args.length < 1 || typeof args[0] !== "function") {
@@ -9758,8 +9737,8 @@ function requireHasown() {
   hasRequiredHasown = 1;
   var call = Function.prototype.call;
   var $hasOwn = Object.prototype.hasOwnProperty;
-  var bind2 = requireFunctionBind();
-  hasown = bind2.call(call, $hasOwn);
+  var bind3 = functionBind;
+  hasown = bind3.call(call, $hasOwn);
   return hasown;
 }
 var undefined$1;
@@ -9773,7 +9752,7 @@ var $TypeError$3 = type;
 var $URIError = uri;
 var abs = abs$1;
 var floor = floor$1;
-var max = max$1;
+var max = max$2;
 var min = min$1;
 var pow = pow$1;
 var round$1 = round$2;
@@ -9807,7 +9786,7 @@ var getProto = requireGetProto();
 var $ObjectGPO = requireObject_getPrototypeOf();
 var $ReflectGPO = requireReflect_getPrototypeOf();
 var $apply = requireFunctionApply();
-var $call = requireFunctionCall();
+var $call = functionCall;
 var needsEval = {};
 var TypedArray = typeof Uint8Array === "undefined" || !getProto ? undefined$1 : getProto(Uint8Array);
 var INTRINSICS = {
@@ -9978,13 +9957,13 @@ var LEGACY_ALIASES = {
   "%WeakMapPrototype%": ["WeakMap", "prototype"],
   "%WeakSetPrototype%": ["WeakSet", "prototype"]
 };
-var bind = requireFunctionBind();
+var bind2 = functionBind;
 var hasOwn = requireHasown();
-var $concat = bind.call($call, Array.prototype.concat);
-var $spliceApply = bind.call($apply, Array.prototype.splice);
-var $replace = bind.call($call, String.prototype.replace);
-var $strSlice = bind.call($call, String.prototype.slice);
-var $exec = bind.call($call, RegExp.prototype.exec);
+var $concat = bind2.call($call, Array.prototype.concat);
+var $spliceApply = bind2.call($apply, Array.prototype.splice);
+var $replace = bind2.call($call, String.prototype.replace);
+var $strSlice = bind2.call($call, String.prototype.slice);
+var $exec = bind2.call($call, RegExp.prototype.exec);
 var rePropName = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
 var reEscapeChar = /\\(\\)?/g;
 var stringToPath = function stringToPath2(string) {
@@ -36834,6 +36813,73 @@ const PIXI = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty
   uniformParsers,
   utils
 }, Symbol.toStringTag, { value: "Module" }));
+class Snowflake {
+  // Epoch is set to 2024-01-01 00:00:00 UTC
+  static EPOCH = 1704067200000n;
+  static NODE_BITS = 10n;
+  static SEQUENCE_BITS = 12n;
+  static MAX_NODE = -1n ^ -1n << Snowflake.NODE_BITS;
+  static MAX_SEQUENCE = -1n ^ -1n << Snowflake.SEQUENCE_BITS;
+  static NODE_SHIFT = Snowflake.SEQUENCE_BITS;
+  static TIMESTAMP_SHIFT = Snowflake.SEQUENCE_BITS + Snowflake.NODE_BITS;
+  nodeId;
+  sequence = 0n;
+  lastTimestamp = -1n;
+  /**
+   * Creates a new Snowflake generator
+   * @param nodeId Node ID (0-1023)
+   */
+  constructor(nodeId) {
+    const id2 = BigInt(nodeId);
+    if (id2 < 0n || id2 > Snowflake.MAX_NODE) {
+      throw new Error(`Node ID must be between 0 and ${Snowflake.MAX_NODE}`);
+    }
+    this.nodeId = id2;
+  }
+  /**
+   * Generates a new unique ID
+   * @returns A 64-bit integer as a string to prevent precision loss in JS
+   */
+  generate() {
+    let timestamp = this.getCurrentTimestamp();
+    if (timestamp < this.lastTimestamp) {
+      throw new Error("Clock moved backwards. Refusing to generate id");
+    }
+    if (timestamp === this.lastTimestamp) {
+      this.sequence = this.sequence + 1n & Snowflake.MAX_SEQUENCE;
+      if (this.sequence === 0n) {
+        timestamp = this.waitNextMillis(this.lastTimestamp);
+      }
+    } else {
+      this.sequence = 0n;
+    }
+    this.lastTimestamp = timestamp;
+    const id2 = timestamp - Snowflake.EPOCH << Snowflake.TIMESTAMP_SHIFT | this.nodeId << Snowflake.NODE_SHIFT | this.sequence;
+    return id2.toString();
+  }
+  getCurrentTimestamp() {
+    return BigInt(Date.now());
+  }
+  waitNextMillis(lastTimestamp) {
+    let timestamp = this.getCurrentTimestamp();
+    while (timestamp <= lastTimestamp) {
+      timestamp = this.getCurrentTimestamp();
+    }
+    return timestamp;
+  }
+}
+let globalNode = null;
+function initGlobalNode(nodeId) {
+  if (!globalNode) {
+    globalNode = new Snowflake(nodeId);
+  }
+}
+function generateId() {
+  if (!globalNode) {
+    initGlobalNode(1);
+  }
+  return globalNode.generate();
+}
 const scriptRel = function detectScriptRel() {
   const relList = typeof document !== "undefined" && document.createElement("link").relList;
   return relList && relList.supports && relList.supports("modulepreload") ? "modulepreload" : "preload";
@@ -37125,6 +37171,10 @@ const useSystemStore = create$1((set) => ({
   globalMessage: null,
   // 初始化服装配置，从 localStorage 读取或使用空对象
   clothingConfig: loadClothingConfig(),
+  // 可观测性初始状态
+  frontendErrors: [],
+  isDiagnosticOpen: false,
+  currentTraceID: null,
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   // 切换左侧边栏展开状态
@@ -37173,7 +37223,21 @@ const useSystemStore = create$1((set) => ({
     } catch (e) {
     }
     return { clothingConfig: newConfig };
-  })
+  }),
+  // 添加前端异常（环形缓冲，最多 100 条）
+  addFrontendError: (entry) => set((state) => {
+    const newErrors = [...state.frontendErrors, entry];
+    if (newErrors.length > 100) {
+      newErrors.shift();
+    }
+    return { frontendErrors: newErrors };
+  }),
+  // 清空前端异常
+  clearFrontendErrors: () => set({ frontendErrors: [] }),
+  // 设置诊断面板开关
+  setDiagnosticOpen: (isOpen) => set({ isDiagnosticOpen: isOpen }),
+  // 设置当前 TraceID
+  setCurrentTraceID: (traceId) => set({ currentTraceID: traceId })
 }));
 let _model = null;
 function getLive2dModel() {
@@ -37315,7 +37379,7 @@ const Live2DView = () => {
     let pixiApp = null;
     let isCancelled = false;
     __vitePreload(async () => {
-      const { Live2DModel } = await import("./cubism4.es-ByOTyUG2.js");
+      const { Live2DModel } = await import("./cubism4.es-C5_RU50O.js");
       return { Live2DModel };
     }, true ? [] : void 0, import.meta.url).then(({ Live2DModel }) => {
       if (isCancelled) return;
@@ -37357,7 +37421,7 @@ const Live2DView = () => {
     const load = async () => {
       try {
         const { Live2DModel } = await __vitePreload(async () => {
-          const { Live2DModel: Live2DModel2 } = await import("./cubism4.es-ByOTyUG2.js");
+          const { Live2DModel: Live2DModel2 } = await import("./cubism4.es-C5_RU50O.js");
           return { Live2DModel: Live2DModel2 };
         }, true ? [] : void 0, import.meta.url);
         const live2dModel = await Live2DModel.from(
@@ -41994,6 +42058,32 @@ const useSessionStore = create$1((set) => ({
     }
   }))
 }));
+const useTelemetryStore = create$1((set) => ({
+  isOpen: false,
+  currentTraceId: null,
+  traceSpans: [],
+  isLoadingTrace: false,
+  auditLogs: [],
+  auditLogTotal: 0,
+  auditLogPage: 1,
+  auditLogPageSize: 50,
+  auditLogFilters: {},
+  isLoadingAuditLogs: false,
+  metrics: [],
+  metricsRange: "1h",
+  isLoadingMetrics: false,
+  setOpen: (isOpen) => set({ isOpen }),
+  setCurrentTraceId: (currentTraceId) => set({ currentTraceId }),
+  setTraceSpans: (traceSpans) => set({ traceSpans }),
+  setLoadingTrace: (isLoadingTrace) => set({ isLoadingTrace }),
+  setAuditLogs: (logs, total) => set({ auditLogs: logs, auditLogTotal: total }),
+  setAuditLogFilter: (filters2) => set((state) => ({ auditLogFilters: { ...state.auditLogFilters, ...filters2 }, auditLogPage: 1 })),
+  setAuditLogPage: (page) => set({ auditLogPage: page }),
+  setLoadingAuditLogs: (isLoadingAuditLogs) => set({ isLoadingAuditLogs }),
+  setMetrics: (metrics) => set({ metrics }),
+  setMetricsRange: (metricsRange) => set({ metricsRange }),
+  setLoadingMetrics: (isLoadingMetrics) => set({ isLoadingMetrics })
+}));
 const WS_MSG_TYPE = {
   // 基础消息类型
   PING: "PING",
@@ -42011,75 +42101,13 @@ const WS_MSG_TYPE = {
   EVT_DEBUG_LOG: "EVT_DEBUG_LOG",
   // 流式渲染事件类型 —— 参考 streaming_rendering_plan.md §3.1
   EVT_EMOTION_UPDATE: "EVT_EMOTION_UPDATE",
-  EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK"
+  EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK",
+  // === Phase 4 新增：可观测性相关 ===
+  // Go -> Electron: 链路 Span 数据（启用诊断面板时推送）
+  EVT_TELEMETRY_TRACE: "EVT_TELEMETRY_TRACE",
+  // Go -> Electron: 监控指标数据点（启用诊断面板时每秒推送）
+  EVT_TELEMETRY_METRICS: "EVT_TELEMETRY_METRICS"
 };
-class Snowflake {
-  // Epoch is set to 2024-01-01 00:00:00 UTC
-  static EPOCH = 1704067200000n;
-  static NODE_BITS = 10n;
-  static SEQUENCE_BITS = 12n;
-  static MAX_NODE = -1n ^ -1n << Snowflake.NODE_BITS;
-  static MAX_SEQUENCE = -1n ^ -1n << Snowflake.SEQUENCE_BITS;
-  static NODE_SHIFT = Snowflake.SEQUENCE_BITS;
-  static TIMESTAMP_SHIFT = Snowflake.SEQUENCE_BITS + Snowflake.NODE_BITS;
-  nodeId;
-  sequence = 0n;
-  lastTimestamp = -1n;
-  /**
-   * Creates a new Snowflake generator
-   * @param nodeId Node ID (0-1023)
-   */
-  constructor(nodeId) {
-    const id2 = BigInt(nodeId);
-    if (id2 < 0n || id2 > Snowflake.MAX_NODE) {
-      throw new Error(`Node ID must be between 0 and ${Snowflake.MAX_NODE}`);
-    }
-    this.nodeId = id2;
-  }
-  /**
-   * Generates a new unique ID
-   * @returns A 64-bit integer as a string to prevent precision loss in JS
-   */
-  generate() {
-    let timestamp = this.getCurrentTimestamp();
-    if (timestamp < this.lastTimestamp) {
-      throw new Error("Clock moved backwards. Refusing to generate id");
-    }
-    if (timestamp === this.lastTimestamp) {
-      this.sequence = this.sequence + 1n & Snowflake.MAX_SEQUENCE;
-      if (this.sequence === 0n) {
-        timestamp = this.waitNextMillis(this.lastTimestamp);
-      }
-    } else {
-      this.sequence = 0n;
-    }
-    this.lastTimestamp = timestamp;
-    const id2 = timestamp - Snowflake.EPOCH << Snowflake.TIMESTAMP_SHIFT | this.nodeId << Snowflake.NODE_SHIFT | this.sequence;
-    return id2.toString();
-  }
-  getCurrentTimestamp() {
-    return BigInt(Date.now());
-  }
-  waitNextMillis(lastTimestamp) {
-    let timestamp = this.getCurrentTimestamp();
-    while (timestamp <= lastTimestamp) {
-      timestamp = this.getCurrentTimestamp();
-    }
-    return timestamp;
-  }
-}
-let globalNode = null;
-function initGlobalNode(nodeId) {
-  if (!globalNode) {
-    globalNode = new Snowflake(nodeId);
-  }
-}
-function generateId() {
-  if (!globalNode) {
-    initGlobalNode(1);
-  }
-  return globalNode.generate();
-}
 class WSManager {
   ws = null;
   reconnectTimer = null;
@@ -42153,6 +42181,9 @@ class WSManager {
   handleMessage(msg) {
     const sessionStore = useSessionStore.getState();
     const systemStore = useSystemStore.getState();
+    if (msg.trace_id && msg.trace_id !== systemStore.currentTraceID) {
+      systemStore.setCurrentTraceID(msg.trace_id);
+    }
     const msgType = msg.type;
     switch (msgType) {
       case WS_MSG_TYPE.PONG:
@@ -42209,6 +42240,18 @@ class WSManager {
       case WS_MSG_TYPE.EVT_DEBUG_LOG:
         const logPayload = msg.payload;
         systemStore.addSystemLog(logPayload.message || String(logPayload));
+        break;
+      case WS_MSG_TYPE.EVT_TELEMETRY_TRACE:
+        const spanPayload = msg.payload;
+        useTelemetryStore.getState().setTraceSpans(
+          [...useTelemetryStore.getState().traceSpans, spanPayload]
+        );
+        break;
+      case WS_MSG_TYPE.EVT_TELEMETRY_METRICS:
+        const metricsPayload = msg.payload;
+        const telemetryStore = useTelemetryStore.getState();
+        const updatedMetrics = [...telemetryStore.metrics, metricsPayload].slice(-60);
+        telemetryStore.setMetrics(updatedMetrics);
         break;
       default:
         systemStore.addSystemLog(`收到未知消息类型: ${msg.type}`);
@@ -42280,16 +42323,22 @@ class WSManager {
   /**
    * 发送消息到 Go Runtime
    * @param data 消息数据对象
+   *
+   * Phase 4 增强：
+   * 优先使用 systemStore 中维护的全局 TraceID（由 useTraceContext 设置）
+   * 如果不存在则新生成一个
    */
   send(data) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const currentTraceID = useSystemStore.getState().currentTraceID;
+      const traceID = currentTraceID || `tr-${generateId()}`;
       const message = JSON.stringify({
         ...data,
         timestamp: Date.now(),
-        trace_id: `tr-${generateId()}`
+        trace_id: traceID
       });
       this.ws.send(message);
-      useSystemStore.getState().addSystemLog(`发送消息: ${data.type}`);
+      useSystemStore.getState().addSystemLog(`发送消息: ${data.type}, trace_id=${traceID}`);
     } else {
       useSystemStore.getState().addSystemLog("WebSocket 未连接，无法发送消息");
     }
@@ -42582,15 +42631,50 @@ const InputArea = () => {
     ) })
   ] });
 };
+class ErrorBoundary extends reactExports.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    const entry = {
+      id: generateId(),
+      timestamp: Date.now(),
+      level: "ERROR",
+      source: this.props.source,
+      message: error.message || "未知 React 渲染异常",
+      stack: error.stack,
+      trace_id: useSystemStore.getState().currentTraceID || void 0,
+      component_stack: errorInfo.componentStack || void 0
+    };
+    useSystemStore.getState().addFrontendError(entry);
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { style: { padding: 24, color: "#e74c3c", textAlign: "center" }, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+          "组件 ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { children: this.props.source }),
+          " 发生异常，系统已记录此错误。"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => this.setState({ hasError: false, error: null }), children: "重试" })
+      ] });
+    }
+    return this.props.children;
+  }
+}
 const ChatView = () => {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "chat-view", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(BackgroundLayer, {}),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "live2d-layer", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Live2DView, {}) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "interaction-layer", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "live2d-layer", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorBoundary, { source: "live2d_view", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Live2DView, {}) }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "interaction-layer", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ErrorBoundary, { source: "chat_view", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(TopStatusPanel, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx(BubbleStack, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx(InputArea, {})
-    ] })
+    ] }) })
   ] });
 };
 const MENU_ITEMS = [
@@ -42661,18 +42745,35 @@ const MENU_ITEMS = [
       /* @__PURE__ */ jsxRuntimeExports.jsx("circle", { cx: "12", cy: "12", r: "3" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" })
     ] })
+  },
+  {
+    id: "debug",
+    label: "诊断面板",
+    icon: /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { width: "18", height: "18", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M21.21 15.89A10 10 0 1 1 8 2.83" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("path", { d: "M22 12A10 10 0 0 0 12 2v10z" })
+    ] })
   }
 ];
 const Sidebar = () => {
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
-  const openModal = useSystemStore.getState().openModal;
+  useSystemStore.getState().openModal;
+  useSystemStore.getState().closeModal;
+  useSystemStore.getState().setDiagnosticOpen;
   const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
   const [expandedMenu, setExpandedMenu] = reactExports.useState(null);
   const handleMenuClick = (item) => {
     if (item.subItems) {
       setExpandedMenu(expandedMenu === item.id ? null : item.id);
+      return;
+    }
+    const store = useSystemStore.getState();
+    if (item.id === "debug") {
+      store.closeModal();
+      store.setDiagnosticOpen(true);
     } else {
-      openModal(item.id);
+      store.setDiagnosticOpen(false);
+      store.openModal(item.id);
     }
   };
   const handleSubMenuClick = (subId) => {
@@ -43045,7 +43146,7 @@ const ApiConfigPresetPanel = () => {
     activatePreset,
     fetchModels
   } = useApiConfigPresetStore();
-  const [selectedPresetId, setSelectedPresetId] = reactExports.useState("");
+  const [selectedPresetId, setSelectedPresetId] = reactExports.useState(null);
   const [largeConfig, setLargeConfig] = reactExports.useState({ ...DEFAULT_MODEL_CONFIG });
   const [mediumConfig, setMediumConfig] = reactExports.useState({ ...DEFAULT_MODEL_CONFIG });
   const [smallConfig, setSmallConfig] = reactExports.useState({ ...DEFAULT_MODEL_CONFIG });
@@ -43073,9 +43174,14 @@ const ApiConfigPresetPanel = () => {
     }
   }, [presets]);
   reactExports.useEffect(() => {
-    if (presets.length > 0 && !selectedPresetId) {
-      const active = presets.find((p) => p.is_active) || presets[0];
-      handleSelectPreset(active.id);
+    if (presets.length > 0) {
+      if (selectedPresetId === null) {
+        const active = presets.find((p) => p.is_active) || presets[0];
+        handleSelectPreset(active.id);
+      } else if (selectedPresetId !== "" && !presets.find((p) => p.id === selectedPresetId)) {
+        const active = presets.find((p) => p.is_active) || presets[0];
+        handleSelectPreset(active.id);
+      }
     }
   }, [presets, selectedPresetId, handleSelectPreset]);
   const handleNewPreset = () => {
@@ -43096,7 +43202,7 @@ const ApiConfigPresetPanel = () => {
     if (!newPresetName.trim()) return;
     try {
       const id2 = await savePreset({
-        id: selectedPresetId,
+        id: selectedPresetId || "",
         name: newPresetName.trim(),
         large_model_config: largeConfig,
         medium_model_config: mediumConfig,
@@ -43211,7 +43317,7 @@ const ApiConfigPresetPanel = () => {
         "select",
         {
           className: "preset-select",
-          value: selectedPresetId,
+          value: selectedPresetId || "",
           onChange: (e) => handleSelectPreset(e.target.value),
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", disabled: true, children: "-- 新预设 --" }),
@@ -44815,8 +44921,8 @@ const PromptPanel = () => {
     ] })
   ] });
 };
-const MIN_WIDTH = 400;
-const MIN_HEIGHT = 300;
+const MIN_WIDTH$1 = 400;
+const MIN_HEIGHT$1 = 300;
 const PANEL_TITLES = {
   dag: "任务流",
   memory: "记忆",
@@ -44895,17 +45001,17 @@ const Modal = () => {
         let newLeft = rs.left;
         let newTop = rs.top;
         if (dir.includes("e")) {
-          newW = Math.max(MIN_WIDTH, rs.w + dx);
+          newW = Math.max(MIN_WIDTH$1, rs.w + dx);
         }
         if (dir.includes("w")) {
-          newW = Math.max(MIN_WIDTH, rs.w - dx);
+          newW = Math.max(MIN_WIDTH$1, rs.w - dx);
           newLeft = rs.left + (rs.w - newW);
         }
         if (dir.includes("s")) {
-          newH = Math.max(MIN_HEIGHT, rs.h + dy);
+          newH = Math.max(MIN_HEIGHT$1, rs.h + dy);
         }
         if (dir.includes("n")) {
-          newH = Math.max(MIN_HEIGHT, rs.h - dy);
+          newH = Math.max(MIN_HEIGHT$1, rs.h - dy);
           newTop = rs.top + (rs.h - newH);
         }
         setModalSize({ w: newW, h: newH });
@@ -45034,7 +45140,605 @@ const Modal = () => {
     }
   ) });
 };
+const TELEMETRY_BASE = "http://127.0.0.1:8080/api/v1/telemetry";
+async function fetchTraceByID(traceId) {
+  const response = await fetch(`${TELEMETRY_BASE}/traces/${encodeURIComponent(traceId)}`, {
+    signal: AbortSignal.timeout(5e3)
+    // 5 秒超时
+  });
+  if (!response.ok) {
+    throw new Error(`获取链路追踪失败: ${response.status}`);
+  }
+  const json = await response.json();
+  return Array.isArray(json.spans) ? json.spans : [];
+}
+async function fetchAuditLogs(params) {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page));
+  query.set("page_size", String(params.pageSize));
+  if (params.action_type) query.set("action_type", params.action_type);
+  if (params.status) query.set("status", params.status);
+  if (params.start_time) query.set("start_time", params.start_time);
+  if (params.end_time) query.set("end_time", params.end_time);
+  const response = await fetch(`${TELEMETRY_BASE}/audit_logs?${query.toString()}`, {
+    signal: AbortSignal.timeout(5e3)
+  });
+  if (!response.ok) {
+    throw new Error(`获取审计日志失败: ${response.status}`);
+  }
+  const json = await response.json();
+  return {
+    data: Array.isArray(json.data) ? json.data : [],
+    total: typeof json.total === "number" ? json.total : 0
+  };
+}
+async function fetchMetrics(range2) {
+  const response = await fetch(`${TELEMETRY_BASE}/metrics?range=${range2}`, {
+    signal: AbortSignal.timeout(5e3)
+  });
+  if (!response.ok) {
+    throw new Error(`获取监控指标失败: ${response.status}`);
+  }
+  const json = await response.json();
+  return Array.isArray(json.data) ? json.data : [];
+}
+const TraceViewer = () => {
+  const [inputTraceId, setInputTraceId] = reactExports.useState("");
+  const { currentTraceId, traceSpans, isLoadingTrace, setCurrentTraceId, setTraceSpans, setLoadingTrace } = useTelemetryStore();
+  const allMessages = useSessionStore((s) => s.messages);
+  const recentTraceIds = reactExports.useMemo(() => {
+    const ids = /* @__PURE__ */ new Set();
+    Object.values(allMessages).forEach((msgs) => {
+      msgs.forEach((msg) => {
+        if (msg.metadata?.trace_id) {
+          ids.add(msg.metadata.trace_id);
+        }
+        if (msg.messageId && msg.messageId.startsWith("tr-")) {
+          ids.add(msg.messageId);
+        }
+      });
+    });
+    return Array.from(ids).slice(-20).reverse();
+  }, [allMessages]);
+  const handleSearch = reactExports.useCallback(async (traceId) => {
+    const targetId = traceId || inputTraceId.trim();
+    if (!targetId) return;
+    setCurrentTraceId(targetId);
+    setLoadingTrace(true);
+    try {
+      const spans = await fetchTraceByID(targetId);
+      setTraceSpans(spans);
+    } catch (err) {
+      console.error("获取链路追踪失败:", err);
+    } finally {
+      setLoadingTrace(false);
+    }
+  }, [inputTraceId, setCurrentTraceId, setLoadingTrace, setTraceSpans]);
+  const maxDuration = Math.max(...traceSpans.map((s) => s.duration_ms), 1);
+  const spanMap = /* @__PURE__ */ new Map();
+  traceSpans.forEach((s) => spanMap.set(s.span_id, s));
+  const rootSpans = traceSpans.filter(
+    (s) => !s.parent_span_id || !spanMap.has(s.parent_span_id)
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "trace-viewer", children: [
+    recentTraceIds.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "trace-recent", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "trace-recent-title", children: "最近 TraceID（点击查询）：" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "trace-recent-list", children: recentTraceIds.map((id2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          className: "trace-recent-item",
+          onClick: () => handleSearch(id2),
+          children: id2.length > 16 ? `${id2.slice(0, 16)}...` : id2
+        },
+        id2
+      )) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "trace-recent-divider" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "trace-search", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "text",
+          placeholder: "输入 TraceID 查询链路...",
+          value: inputTraceId,
+          onChange: (e) => setInputTraceId(e.target.value),
+          onKeyDown: (e) => e.key === "Enter" && handleSearch()
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => handleSearch(), disabled: isLoadingTrace, children: isLoadingTrace ? "查询中..." : "查询" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "trace-spans", children: [
+      traceSpans.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "trace-empty", children: recentTraceIds.length > 0 ? "请点击上方 TraceID 或手动输入进行查询" : "暂无链路追踪数据。请在对话后刷新查看。" }),
+      rootSpans.map((span) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        SpanNode,
+        {
+          span,
+          allSpans: traceSpans,
+          spanMap,
+          maxDuration,
+          depth: 0
+        },
+        span.span_id
+      ))
+    ] })
+  ] });
+};
+const SpanNode = ({ span, allSpans, spanMap, maxDuration, depth }) => {
+  const children = allSpans.filter((s) => s.parent_span_id === span.span_id);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "span-node", style: { marginLeft: depth * 24 }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `span-row ${span.status === "ERROR" ? "span-error" : ""}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "span-name", children: span.name }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "span-duration-bar-bg", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "div",
+        {
+          className: "span-duration-bar",
+          style: { width: `${span.duration_ms / maxDuration * 100}%` }
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "span-duration", children: span.duration_ms > 1e3 ? `${(span.duration_ms / 1e3).toFixed(2)}s` : `${span.duration_ms}ms` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `span-status ${span.status.toLowerCase()}`, children: span.status }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "span-service", children: span.service })
+    ] }),
+    children.map((child) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SpanNode,
+      {
+        span: child,
+        allSpans,
+        spanMap,
+        maxDuration,
+        depth: depth + 1
+      },
+      child.span_id
+    ))
+  ] });
+};
+const AuditLogViewer = () => {
+  const {
+    auditLogs,
+    auditLogTotal,
+    auditLogPage,
+    auditLogPageSize,
+    auditLogFilters,
+    isLoadingAuditLogs,
+    setAuditLogs,
+    setAuditLogFilter,
+    setAuditLogPage,
+    setLoadingAuditLogs
+  } = useTelemetryStore();
+  const safeAuditLogs = Array.isArray(auditLogs) ? auditLogs : [];
+  const loadData = reactExports.useCallback(async () => {
+    setLoadingAuditLogs(true);
+    try {
+      const result = await fetchAuditLogs({
+        page: auditLogPage,
+        pageSize: auditLogPageSize,
+        ...auditLogFilters
+      });
+      setAuditLogs(result.data, result.total);
+    } catch (err) {
+      console.error("获取审计日志失败:", err);
+    } finally {
+      setLoadingAuditLogs(false);
+    }
+  }, [auditLogPage, auditLogPageSize, auditLogFilters, setAuditLogs, setLoadingAuditLogs]);
+  reactExports.useEffect(() => {
+    loadData();
+  }, [loadData]);
+  const totalPages = Math.max(1, Math.ceil(auditLogTotal / auditLogPageSize));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "audit-log-viewer", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "audit-filters", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: auditLogFilters.action_type || "",
+          onChange: (e) => setAuditLogFilter({ action_type: e.target.value || void 0 }),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "所有操作类型" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "TOOL_CALL", children: "工具调用" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "MEMORY_COMMIT", children: "记忆提交" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "STATE_CHANGE", children: "状态变更" })
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          value: auditLogFilters.status || "",
+          onChange: (e) => setAuditLogFilter({ status: e.target.value || void 0 }),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "所有状态" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "SUCCESS", children: "成功" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "FAILED", children: "失败" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "DENIED", children: "已拒绝" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "TIMEOUT", children: "超时" })
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "audit-table", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "时间" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "操作" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "风险等级" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "状态" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "TraceID" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { children: "详情" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: safeAuditLogs.map((log) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: `risk-${log.risk_level.toLowerCase()}`, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: new Date(log.timestamp).toLocaleString() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "operation-name", children: log.operation }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "action-type", children: log.action_type })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `risk-badge ${log.risk_level.toLowerCase()}`, children: log.risk_level }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `status-badge ${log.status.toLowerCase()}`, children: log.status }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            className: "trace-link",
+            onClick: () => {
+              useTelemetryStore.getState().setCurrentTraceId(log.trace_id);
+              useTelemetryStore.getState().setOpen(true);
+            },
+            children: [
+              log.trace_id.slice(0, 12),
+              "..."
+            ]
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { children: [
+          log.error_msg && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "error-msg", children: log.error_msg }),
+          log.requires_approval && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `approval-badge ${log.user_approved ? "approved" : "denied"}`, children: log.user_approved ? "已授权" : "未授权" })
+        ] })
+      ] }, log.id)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "audit-pagination", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          disabled: auditLogPage <= 1,
+          onClick: () => setAuditLogPage(Math.max(1, auditLogPage - 1)),
+          children: "上一页"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        "第 ",
+        auditLogPage,
+        " / ",
+        totalPages,
+        " 页（共 ",
+        auditLogTotal,
+        " 条）"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          disabled: auditLogPage >= totalPages,
+          onClick: () => setAuditLogPage(Math.min(totalPages, auditLogPage + 1)),
+          children: "下一页"
+        }
+      )
+    ] })
+  ] });
+};
+const MetricsChart = () => {
+  const canvasRef = reactExports.useRef(null);
+  const { metrics, metricsRange, isLoadingMetrics, setMetrics, setMetricsRange, setLoadingMetrics } = useTelemetryStore();
+  const [activeTab, setActiveTab] = reactExports.useState("cpu");
+  reactExports.useEffect(() => {
+    const loadMetrics = async () => {
+      setLoadingMetrics(true);
+      try {
+        const data = await fetchMetrics(metricsRange);
+        setMetrics(data);
+      } catch (err) {
+        console.error("获取监控指标失败:", err);
+      } finally {
+        setLoadingMetrics(false);
+      }
+    };
+    loadMetrics();
+  }, [metricsRange, setMetrics, setLoadingMetrics]);
+  reactExports.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || metrics.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
+    const padding = { top: 20, right: 20, bottom: 30, left: 50 };
+    const plotWidth = width - padding.left - padding.right;
+    const plotHeight = height - padding.top - padding.bottom;
+    const getMetricValue = (m2) => {
+      switch (activeTab) {
+        case "cpu":
+          return m2.system_cpu_usage || 0;
+        case "memory":
+          return m2.system_memory_usage || 0;
+        case "goroutines":
+          return m2.go_goroutines_count || 0;
+        case "tokens":
+          return m2.llm_token_consumption || 0;
+        case "tools":
+          return m2.tool_call_failure_rate || 0;
+        default:
+          return 0;
+      }
+    };
+    const values = metrics.map(getMetricValue);
+    const maxVal = Math.max(...values, 10);
+    const minVal = 0;
+    ctx.strokeStyle = "#4fc3f7";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    metrics.forEach((point, index2) => {
+      const x = padding.left + index2 / Math.max(1, metrics.length - 1) * plotWidth;
+      const val = getMetricValue(point);
+      const y2 = padding.top + plotHeight - (val - minVal) / (maxVal - minVal) * plotHeight;
+      index2 === 0 ? ctx.moveTo(x, y2) : ctx.lineTo(x, y2);
+    });
+    ctx.stroke();
+    ctx.strokeStyle = "#2d2d44";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding.left, padding.top);
+    ctx.lineTo(padding.left, height - padding.bottom);
+    ctx.lineTo(width - padding.right, height - padding.bottom);
+    ctx.stroke();
+    ctx.fillStyle = "#888";
+    ctx.font = "12px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(maxVal.toFixed(1), padding.left - 8, padding.top + 4);
+    ctx.fillText("0", padding.left - 8, height - padding.bottom + 4);
+  }, [metrics, activeTab]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metrics-chart", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metrics-range-selector", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: metricsRange === "1h" ? "active" : "", onClick: () => setMetricsRange("1h"), children: "最近 1 小时" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: metricsRange === "6h" ? "active" : "", onClick: () => setMetricsRange("6h"), children: "最近 6 小时" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: metricsRange === "24h" ? "active" : "", onClick: () => setMetricsRange("24h"), children: "最近 24 小时" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "metrics-tabs", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: activeTab === "cpu" ? "active" : "", onClick: () => setActiveTab("cpu"), children: "CPU 使用率" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: activeTab === "memory" ? "active" : "", onClick: () => setActiveTab("memory"), children: "内存 (MB)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: activeTab === "goroutines" ? "active" : "", onClick: () => setActiveTab("goroutines"), children: "协程数" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: activeTab === "tokens" ? "active" : "", onClick: () => setActiveTab("tokens"), children: "Token 消耗" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { className: activeTab === "tools" ? "active" : "", onClick: () => setActiveTab("tools"), children: "工具失败率" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("canvas", { ref: canvasRef, width: 600, height: 300, style: { width: "100%", height: 300 } }),
+    isLoadingMetrics && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metrics-loading", children: "加载中..." }),
+    metrics.length === 0 && !isLoadingMetrics && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "metrics-empty", style: { position: "absolute", top: "60%", left: "50%", transform: "translate(-50%, -50%)", color: "#666" }, children: "暂无监控数据" })
+  ] });
+};
+const MIN_WIDTH = 400;
+const MIN_HEIGHT = 300;
+const DebugPanelInner = ({ isOpen }) => {
+  const [activeTab, setActiveTab] = reactExports.useState("trace");
+  const panelRef = reactExports.useRef(null);
+  const [isDragging, setIsDragging] = reactExports.useState(false);
+  const dragOffset = reactExports.useRef({ x: 0, y: 0 });
+  const [panelPosition, setPanelPosition] = reactExports.useState(null);
+  const [isResizing, setIsResizing] = reactExports.useState(false);
+  const resizeDirection = reactExports.useRef(null);
+  const resizeStart = reactExports.useRef({ x: 0, y: 0, w: 0, h: 0, left: 0, top: 0 });
+  const [panelSize, setPanelSize] = reactExports.useState({ w: 800, h: 600 });
+  reactExports.useEffect(() => {
+    if (isOpen) {
+      setPanelPosition(null);
+      setPanelSize({ w: 800, h: 600 });
+    }
+  }, [isOpen]);
+  reactExports.useRef({
+    move: null,
+    up: null
+  });
+  const handleHeaderMouseDown = reactExports.useCallback((e) => {
+    if (e.button !== 0) return;
+    const target = e.target;
+    if (target.closest(".debug-panel-close")) return;
+    if (target.closest(".debug-resize-handle")) return;
+    setIsDragging(true);
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (rect) {
+      dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+    e.preventDefault();
+  }, []);
+  const handleResizeStart = reactExports.useCallback(
+    (dir) => (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setIsResizing(true);
+      resizeDirection.current = dir;
+      const rect = panelRef.current.getBoundingClientRect();
+      resizeStart.current = {
+        x: e.clientX,
+        y: e.clientY,
+        w: rect.width,
+        h: rect.height,
+        left: rect.left,
+        top: rect.top
+      };
+    },
+    []
+  );
+  reactExports.useEffect(() => {
+    const cleanup = () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+    const handleMouseMove = (e) => {
+      if (!panelRef.current) return;
+      const dragging = isDraggingRef.current;
+      const resizing = isResizingRef.current;
+      if (dragging) {
+        const newX = e.clientX - dragOffset.current.x;
+        const newY = e.clientY - dragOffset.current.y;
+        setPanelPosition({ x: newX, y: newY });
+      }
+      if (resizing && resizeDirection.current) {
+        const dir = resizeDirection.current;
+        const rs = resizeStart.current;
+        let dx = e.clientX - rs.x;
+        let dy = e.clientY - rs.y;
+        let newW = rs.w;
+        let newH = rs.h;
+        let newLeft = rs.left;
+        let newTop = rs.top;
+        if (dir.includes("e")) newW = Math.max(MIN_WIDTH, rs.w + dx);
+        if (dir.includes("w")) {
+          newW = Math.max(MIN_WIDTH, rs.w - dx);
+          newLeft = rs.left + (rs.w - newW);
+        }
+        if (dir.includes("s")) newH = Math.max(MIN_HEIGHT, rs.h + dy);
+        if (dir.includes("n")) {
+          newH = Math.max(MIN_HEIGHT, rs.h - dy);
+          newTop = rs.top + (rs.h - newH);
+        }
+        setPanelSize({ w: newW, h: newH });
+        setPanelPosition({ x: newLeft, y: newTop });
+      }
+    };
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setIsResizing(false);
+    };
+    isDraggingRef.current = isDragging;
+    isResizingRef.current = isResizing;
+    if (isDragging || isResizing) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return cleanup;
+  }, [isDragging, isResizing]);
+  const isDraggingRef = reactExports.useRef(isDragging);
+  isDraggingRef.current = isDragging;
+  const isResizingRef = reactExports.useRef(isResizing);
+  isResizingRef.current = isResizing;
+  if (!isOpen) return null;
+  const tabs = [
+    { key: "trace", label: "链路追踪" },
+    { key: "audit", label: "审计日志" },
+    { key: "metrics", label: "监控指标" },
+    { key: "errors", label: "前端异常" }
+  ];
+  const renderResizeHandles = () => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-n", onMouseDown: handleResizeStart("n") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-s", onMouseDown: handleResizeStart("s") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-w", onMouseDown: handleResizeStart("w") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-e", onMouseDown: handleResizeStart("e") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-nw", onMouseDown: handleResizeStart("nw") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-ne", onMouseDown: handleResizeStart("ne") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-sw", onMouseDown: handleResizeStart("sw") }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-resize-handle rh-se", onMouseDown: handleResizeStart("se") })
+  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-panel-overlay", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: `debug-panel ${panelPosition ? "has-position" : ""}`,
+      ref: panelRef,
+      style: {
+        width: panelSize.w,
+        height: panelSize.h,
+        ...panelPosition ? { left: panelPosition.x, top: panelPosition.y } : {}
+      },
+      children: [
+        renderResizeHandles(),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "debug-panel-header debug-drag-handle",
+            onMouseDown: handleHeaderMouseDown,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "debug-panel-title", children: "诊断面板" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  className: "debug-panel-close",
+                  onClick: () => useSystemStore.getState().setDiagnosticOpen(false),
+                  children: "✕"
+                }
+              )
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "debug-panel-tabs", children: tabs.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            className: `debug-tab ${activeTab === tab.key ? "active" : ""}`,
+            onClick: () => setActiveTab(tab.key),
+            children: tab.label
+          },
+          tab.key
+        )) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "debug-panel-content", children: [
+          activeTab === "trace" && /* @__PURE__ */ jsxRuntimeExports.jsx(TraceViewer, {}),
+          activeTab === "audit" && /* @__PURE__ */ jsxRuntimeExports.jsx(AuditLogViewer, {}),
+          activeTab === "metrics" && /* @__PURE__ */ jsxRuntimeExports.jsx(MetricsChart, {}),
+          activeTab === "errors" && /* @__PURE__ */ jsxRuntimeExports.jsx(FrontendErrorViewer, {})
+        ] })
+      ]
+    }
+  ) });
+};
+const DebugPanel = () => {
+  const isDiagnosticOpen = useSystemStore((s) => s.isDiagnosticOpen);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(DebugPanelInner, { isOpen: isDiagnosticOpen });
+};
+const FrontendErrorViewer = () => {
+  const frontendErrors = useSystemStore((s) => s.frontendErrors);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "frontend-error-viewer", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "error-header", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+        "前端异常日志 (",
+        frontendErrors.length,
+        "/100)"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => useSystemStore.getState().clearFrontendErrors(), children: "清空" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-list", children: frontendErrors.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-empty", children: "暂无异常日志" }) : Array.isArray(frontendErrors) && frontendErrors.map((err) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `error-item level-${err.level.toLowerCase()}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "error-item-header", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "error-time", children: new Date(err.timestamp).toLocaleString() }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "error-level", children: err.level }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "error-source", children: err.source })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "error-message", children: err.message }),
+      err.trace_id && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "error-trace", children: [
+        "TraceID: ",
+        err.trace_id
+      ] }),
+      err.stack && /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "error-stack", children: err.stack }),
+      err.component_stack && /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "error-stack", children: err.component_stack })
+    ] }, err.id)) })
+  ] });
+};
 window.PIXI = PIXI;
+function initGlobalErrorListeners() {
+  window.addEventListener("unhandledrejection", (event) => {
+    const systemStore = useSystemStore.getState();
+    systemStore.addFrontendError({
+      id: generateId(),
+      timestamp: Date.now(),
+      level: "ERROR",
+      source: "global_promise",
+      message: event.reason?.message || "未处理的 Promise 异常",
+      stack: event.reason?.stack,
+      trace_id: systemStore.currentTraceID || void 0
+    });
+  });
+  window.onerror = (message, source, lineno, colno, error) => {
+    const systemStore = useSystemStore.getState();
+    systemStore.addFrontendError({
+      id: generateId(),
+      timestamp: Date.now(),
+      level: "CRITICAL",
+      source: "global_runtime",
+      message: typeof message === "string" ? message : "全局运行时异常",
+      stack: error?.stack,
+      trace_id: systemStore.currentTraceID || void 0
+    });
+    return true;
+  };
+}
 const App = () => {
   const setSessionId = useSessionStore((state) => state.setSessionId);
   const addSystemLog = useSystemStore((state) => state.addSystemLog);
@@ -45063,9 +45767,11 @@ const App = () => {
     /* @__PURE__ */ jsxRuntimeExports.jsx(SidebarTrigger, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Sidebar, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Modal, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(DebugPanel, {}),
     globalMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "global-message-toast", children: globalMessage })
   ] });
 };
+initGlobalErrorListeners();
 const rootElement = document.getElementById("root");
 if (rootElement) {
   const root = client.createRoot(rootElement);

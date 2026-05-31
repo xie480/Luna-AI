@@ -103,8 +103,8 @@ class GlobalConfigContainer:
             llm_client.reload_config()
             compression_llm_client.reload_config()
             
-            from app.logger import get_logger
-            logger = get_logger(__name__)
+            # 使用 loguru logger（app.logger 仅导出 logger 实例，没有 get_logger 函数）
+            from app.logger import logger
             logger.info("API 配置预设已更新，LLM Client 已重载")
 
     def get_model_config(self, size: str) -> Dict[str, Any]:
