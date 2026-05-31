@@ -2,23 +2,43 @@
  * 近期记忆面板样式
  * 位置：右上角，侧栏按钮下方
  * 样式：半透明毛玻璃效果，字体较小，颜色柔和
+ * 支持手动拖拽调整宽度（r 方向：rtl 确保从左侧拖拽）
  */
 .recent-memory-panel {
   position: absolute;
   top: 60px; /* 在侧栏触发按钮下方 */
   right: 16px;
   width: 240px;
+  min-width: 260px;
+  max-width: 600px;
   max-height: 360px;
-  overflow-y: auto;
   background: rgba(20, 20, 30, 0.65);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 12px 14px;
   z-index: 30;
   pointer-events: auto;
   transition: opacity 0.3s ease, transform 0.3s ease;
+  /* 允许水平拖拽调整大小 */
+  resize: horizontal;
+  /* 使用 rtl 使拖拽手柄在左侧，向右拖拽时宽度增加但面板保持在 right:16px 位置 */
+  direction: rtl;
+  /* 必须设置 overflow 才能使 resize 生效，但为了不影响内部滚动，这里只设置 hidden */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 内部滚动容器 */
+.recent-memory-panel-content {
+  direction: ltr;
+  padding: 12px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  /* 确保内容区不会覆盖 resize 手柄 */
+  margin-left: 8px;
 }
 
 .recent-memory-panel:hover {
@@ -26,7 +46,7 @@
 }
 
 /* 面板标题 */
-.recent-memory-panel .panel-header {
+.recent-memory-panel-content .panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -35,7 +55,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.recent-memory-panel .panel-title {
+.recent-memory-panel-content .panel-title {
   font-size: 12px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.5);
@@ -44,7 +64,7 @@
 }
 
 /* 单条 QA 条目 */
-.recent-memory-panel .qa-item {
+.recent-memory-panel-content .qa-item {
   margin-bottom: 10px;
   padding: 8px 10px;
   background: rgba(255, 255, 255, 0.03);
@@ -53,51 +73,47 @@
   animation: fadeInSlide 0.4s ease-out;
 }
 
-.recent-memory-panel .qa-item:last-child {
+.recent-memory-panel-content .qa-item:last-child {
   margin-bottom: 0;
 }
 
 /* 用户文本 */
-.recent-memory-panel .user-label {
+.recent-memory-panel-content .user-label {
   font-size: 10px;
   font-weight: 600;
   color: rgba(160, 180, 255, 0.6);
   margin-bottom: 2px;
 }
 
-.recent-memory-panel .user-text {
+.recent-memory-panel-content .user-text {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.75);
   line-height: 1.4;
   margin-bottom: 4px;
   word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: normal;
+  height: auto;
 }
 
 /* Luna 文本 */
-.recent-memory-panel .luna-label {
+.recent-memory-panel-content .luna-label {
   font-size: 10px;
   font-weight: 600;
   color: rgba(180, 220, 255, 0.6);
   margin-bottom: 2px;
 }
 
-.recent-memory-panel .luna-text {
+.recent-memory-panel-content .luna-text {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   line-height: 1.4;
   word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: normal;
+  height: auto;
 }
 
 /* 空状态 */
-.recent-memory-panel .empty-state {
+.recent-memory-panel-content .empty-state {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.3);
   text-align: center;
@@ -117,15 +133,21 @@
 }
 
 /* 滚动条样式 */
-.recent-memory-panel::-webkit-scrollbar {
+.recent-memory-panel-content::-webkit-scrollbar {
   width: 3px;
 }
 
-.recent-memory-panel::-webkit-scrollbar-track {
+.recent-memory-panel-content::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.recent-memory-panel::-webkit-scrollbar-thumb {
+.recent-memory-panel-content::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+/* 拖拽手柄区域样式 */
+.recent-memory-panel::-webkit-resizer {
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
 }

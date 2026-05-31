@@ -8,6 +8,9 @@
  * - 计算：根据每个气泡内的实际字数，动态计算并分配成正比的屏幕停留时间
  * - 优化：基于生命周期的平滑等待机制，不再强制淘汰最老气泡
  * - 修复：气泡必须严格按照渲染顺序依次消失，确保消失顺序与出现顺序严格一致
+ *
+ * Phase 5 增强：当所有气泡渲染并消失完成后，触发 luna:all-bubbles-complete 事件
+ * 用于通知外部模块（如 wsManager）可以安全地插入近期记忆，防止内容被截断
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import gsap from 'gsap';
@@ -53,6 +56,41 @@ export const useBubble = () => {
   const pendingRemovalQueueRef = useRef<PendingRemoval[]>([]);
   // 标记当前是否有气泡正在执行消失动画
   const removalInProgressRef = useRef(false);
+
+  // Phase 5: 标记所有气泡是否已完成渲染和消失
+  const hasPendingWorkRef = useRef(false);
+  const idleCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /**
+   * Phase 5: 检查是否有未完成的渲染/消失工作
+   * 当所有工作完成时，触发 luna:all-bubbles-complete 事件
+   */
+  const checkAllWorkDone = useCallback(() => {
+    const hasQueue = queueRef.current.length > 0;
+    const hasBubbles = bubblesRef.current.length > 0;
+    const hasPendingRemoval = pendingRemovalQueueRef.current.length > 0;
+    const isProcessing = isProcessingRef.current;
+    const isRemoving = removalInProgressRef.current;
+
+    // 如果没有气泡、没有队列、没有待消失、没有在处理中 → 全部完成
+    if (!hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving) {
+      // 触发全局事件，通知外部（如 wsManager）可以安全插入近期记忆
+      window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
+    }
+  }, []);
+
+  // Phase 5: 启动一个空闲轮询定时器，持续检查是否所有气泡工作已完成
+  useEffect(() => {
+    idleCheckTimerRef.current = setInterval(() => {
+      checkAllWorkDone();
+    }, 500);
+
+    return () => {
+      if (idleCheckTimerRef.current) {
+        clearInterval(idleCheckTimerRef.current);
+      }
+    };
+  }, [checkAllWorkDone]);
 
   // 同步最新状态到 ref，方便在异步循环中读取最新气泡数量
   useEffect(() => {
@@ -164,6 +202,7 @@ export const useBubble = () => {
       return;
     }
     isProcessingRef.current = true;
+    hasPendingWorkRef.current = true;
 
     while (queueRef.current.length > 0) {
       // 1. 检查当前活跃气泡数量（未处于 leaving 状态的）
@@ -215,6 +254,7 @@ export const useBubble = () => {
     }
 
     isProcessingRef.current = false;
+    hasPendingWorkRef.current = false;
   }, [scheduleRemoval]);
 
   /**

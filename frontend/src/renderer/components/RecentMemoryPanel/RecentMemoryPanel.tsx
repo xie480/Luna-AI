@@ -25,17 +25,19 @@ export const RecentMemoryPanel: React.FC = () => {
 
   return (
     <div className="recent-memory-panel">
-      <div className="panel-header">
-        <span className="panel-title">近期记忆</span>
-      </div>
-      {recentQA.map((qa) => (
-        <div key={qa.msgId} className="qa-item">
-          <div className="user-label">你</div>
-          <div className="user-text">{qa.userContent}</div>
-          <div className="luna-label">Luna</div>
-          <div className="luna-text">{qa.assistantContent}</div>
+      <div className="recent-memory-panel-content">
+        <div className="panel-header">
+          <span className="panel-title">近期记忆</span>
         </div>
-      ))}
+        {recentQA.map((qa) => (
+          <div key={qa.msgId} className="qa-item">
+            <div className="user-label">你</div>
+            <div className="user-text">{qa.userContent}</div>
+            <div className="luna-label">Luna</div>
+            <div className="luna-text">{qa.assistantContent}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

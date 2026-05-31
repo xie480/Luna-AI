@@ -15,11 +15,13 @@
  *
  * Phase 5 增强（近期记忆）：
  * - EVT_INIT_STATE 处理时，将 recentQA 更新到 sessionStore
- * - CHAT_STREAM 结束时，延迟 1 秒触发 addRecentQA
+ * - CHAT_STREAM 流结束后，不再自动触发 addRecentQA（废弃基于 is_finished 的延迟机制）
+ * - 改为监听 luna:all-bubbles-complete 自定义事件，由前端确认所有气泡渲染完成后才插入近期记忆
  */
 import { useSessionStore } from '../stores/sessionStore';
-import { useSystemStore } from '../stores/systemStore';
+import { useSystemStore, type EmotionState } from '../stores/systemStore';
 import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/telemetryStore';
+import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 import { WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
 import {
@@ -47,10 +49,43 @@ class WSManager {
   private port: number = 8080; // Go Runtime 默认端口
   private isManualDisconnect: boolean = false; // 标记是否为主动断开
 
-  // Phase 5: 记录当前正在交互的用户消息，用于流结束后插入近期记忆
+  // Phase 5: 记录当前正在交互的用户消息，用于气泡渲染完成后插入近期记忆
   private pendingUserMessage: string = '';
   private pendingUserMsgId: string = '';
   private pendingAssistantContent: string = '';
+  // 标记当前是否有等待插入的近期记忆数据
+  private hasPendingMemory: boolean = false;
+  // 标记是否已注册 luna:all-bubbles-complete 监听器
+  private isMemoryListenerRegistered: boolean = false;
+
+  /**
+   * Phase 5: 注册 luna:all-bubbles-complete 事件监听
+   * 当所有气泡渲染和消失动画完成时，插入近期记忆
+   * 只注册一次，避免重复监听
+   */
+  private registerAllBubblesCompleteListener(): void {
+    if (this.isMemoryListenerRegistered) return;
+    this.isMemoryListenerRegistered = true;
+
+    window.addEventListener('luna:all-bubbles-complete', () => {
+      // 检查是否有待插入的近期记忆数据
+      if (!this.hasPendingMemory) return;
+
+      const newQA: InteractionQA = {
+        msgId: this.pendingUserMsgId,
+        userContent: this.pendingUserMessage,
+        assistantContent: this.pendingAssistantContent,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      useSessionStore.getState().addRecentQA(newQA);
+
+      // 清理临时状态，准备下一轮对话
+      this.pendingUserMessage = '';
+      this.pendingUserMsgId = '';
+      this.pendingAssistantContent = '';
+      this.hasPendingMemory = false;
+    });
+  }
 
   /**
    * 建立 WebSocket 连接
@@ -218,9 +253,9 @@ class WSManager {
       case WS_MSG_TYPE.EVT_TELEMETRY_TRACE:
         // Go 推送的链路 Span（仅在诊断面板开启时推送）
         const spanPayload = msg.payload as TelemetrySpan;
-        useTelemetryStore.getState().setTraceSpans(
-          [...useTelemetryStore.getState().traceSpans, spanPayload]
-        );
+        const telemetryStore = useTelemetryStore.getState();
+        const updatedSpans = [...telemetryStore.traceSpans, spanPayload];
+        telemetryStore.setTraceSpans(updatedSpans, updatedSpans.length);
         break;
 
       case WS_MSG_TYPE.EVT_TELEMETRY_METRICS:
@@ -239,6 +274,9 @@ class WSManager {
   /**
    * 处理聊天流式输出（CHAT_STREAM 消息）
    * 按 payload.type 拆分为情绪更新和回复文本块
+   *
+   * Phase 5 重构：不再在 is_finished 时自动触发 addRecentQA，
+   * 改为由 luna:all-bubbles-complete 事件驱动
    */
   private handleChatStream(payload: ChatStreamPayload): void {
     const systemStore = useSystemStore.getState();
@@ -249,11 +287,18 @@ class WSManager {
       // 标准化情绪字符串：去除首尾空格，转换为首字母大写
       const rawEmotion = payload.chunk as string;
       const normalizedEmotion = rawEmotion ? rawEmotion.trim() : 'neutral';
-      systemStore.setEmotion(normalizedEmotion as any);
-      systemStore.addSystemLog(`[WS] 收到情绪更新: ${rawEmotion} -> ${normalizedEmotion}`);
+      
+      // 类型检查：确保 emotion 是有效的 EmotionState
+      const validEmotions = ['neutral', ...Object.keys(EMOTION_EXPRESSIONS)] as const;
+      const emotionValue = validEmotions.includes(normalizedEmotion as any) 
+        ? normalizedEmotion as EmotionState 
+        : 'neutral'; // 默认值
+      
+      systemStore.setEmotion(emotionValue);
+      systemStore.addSystemLog(`[WS] 收到情绪更新: ${rawEmotion} -> ${emotionValue}`);
       // 同步触发全局事件供 Live2D 消费（与 EVT_EMOTION_UPDATE 路径一致）
       window.dispatchEvent(
-        new CustomEvent('luna:emotion-update', { detail: { emotion: normalizedEmotion } })
+        new CustomEvent('luna:emotion-update', { detail: { emotion: emotionValue } })
       );
       return;
     }
@@ -276,10 +321,10 @@ class WSManager {
         sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
       }
 
-      // Phase 5: 累积助手回复内容，用于流结束后插入近期记忆
+      // Phase 5: 累积助手回复内容，用于气泡渲染完成后插入近期记忆
       this.pendingAssistantContent += payload.chunk;
 
-      // 如果流结束，更新消息状态，并延迟 1 秒插入近期记忆
+      // 如果流结束，更新消息状态并标记有等待插入的近期记忆数据
       if (payload.is_finished) {
         const status = payload.error ? 'error' : 'completed';
         if (currentSessionId) {
@@ -289,37 +334,10 @@ class WSManager {
           systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
         }
 
-        // Phase 5: 延迟 1 秒后将本轮 Q&A 插入近期记忆
-        this.delayedAddRecentQA();
+        // Phase 5: 标记有待插入的记忆数据，等待 luna:all-bubbles-complete 事件触发后真正插入
+        this.hasPendingMemory = true;
       }
     }
-  }
-
-  /**
-   * Phase 5: 延迟 1 秒后将当前对话插入近期记忆面板
-   * 做什么：等待气泡渲染全部完成后，将本轮 Q&A 插入 sessionStore 的 recentQA 列表。
-   * 为什么这样做：确保插入时机在视觉渲染完成后，避免突兀。
-   * 边界条件：pendingUserMessage 为空时不插入（无用户消息的流结束场景）。
-   */
-  private delayedAddRecentQA(): void {
-    if (!this.pendingUserMessage && !this.pendingAssistantContent) {
-      return;
-    }
-
-    setTimeout(() => {
-      const newQA: InteractionQA = {
-        msgId: this.pendingUserMsgId,
-        userContent: this.pendingUserMessage,
-        assistantContent: this.pendingAssistantContent,
-        timestamp: Math.floor(Date.now() / 1000),
-      };
-      useSessionStore.getState().addRecentQA(newQA);
-
-      // 清理临时状态，准备下一轮对话
-      this.pendingUserMessage = '';
-      this.pendingUserMsgId = '';
-      this.pendingAssistantContent = '';
-    }, 1000);
   }
 
   /**
@@ -380,13 +398,17 @@ class WSManager {
       return;
     }
 
+    // 注册 luna:all-bubbles-complete 事件监听（只在首次调用时注册一次）
+    this.registerAllBubblesCompleteListener();
+
     // 【问题5修复】统一标识符生成规范，消息 ID 移除任何类型的前缀，全面采用雪花算法
     const userMsgId = generateId();
 
-    // Phase 5: 记录当前用户输入，用于流结束后插入近期记忆
+    // Phase 5: 记录当前用户输入，用于气泡渲染完成后插入近期记忆
     this.pendingUserMessage = message;
     this.pendingUserMsgId = userMsgId;
     this.pendingAssistantContent = '';
+    this.hasPendingMemory = false;
 
     sessionStore.appendMessage(sessionId, {
       messageId: userMsgId,
