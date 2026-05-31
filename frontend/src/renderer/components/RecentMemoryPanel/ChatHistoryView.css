@@ -34,7 +34,7 @@
 }
 
 .chat-header {
-  padding: 40px 16px 12px; /* 顶部留出灵动岛的空间 */
+  padding: 0px 16px 12px; /* 紧贴在 phone-header 下方 */
   background: rgba(18, 18, 18, 0.8);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);

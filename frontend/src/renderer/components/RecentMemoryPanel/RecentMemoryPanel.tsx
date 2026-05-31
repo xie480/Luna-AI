@@ -37,9 +37,11 @@ export const RecentMemoryPanel: React.FC = () => {
     }
   }, [recentQA, currentView]);
 
+  const { selectedDate } = useHistoryStore();
+
   return (
     <div className="recent-memory-wrapper">
-      <div className={`recent-memory-panel ${currentView === 'CALENDAR' ? 'calendar-view' : ''}`}>
+      <div className={`recent-memory-panel ${currentView === 'CALENDAR' ? 'calendar-view' : ''} ${selectedDate ? 'phone-view' : ''}`}>
         <HistoryNavigation />
         
         {currentView === 'RECENT' ? (
@@ -58,25 +60,21 @@ export const RecentMemoryPanel: React.FC = () => {
             )}
           </div>
         ) : (
-          <CalendarPanel />
+          <div className={`flip-scene ${selectedDate ? 'is-flipped' : ''}`}>
+            <div className="flip-card">
+              {/* 正面：月视图日历 */}
+              <div className="flip-face flip-front">
+                <CalendarPanel />
+              </div>
+              
+              {/* 反面：手机界面 */}
+              <div className="flip-face flip-back">
+                <PhoneMockup />
+              </div>
+            </div>
+          </div>
         )}
       </div>
-      
-      {/* 手机界面布局剥离：在日历面板外部独立渲染 */}
-      {currentView === 'CALENDAR' && <PhoneMockupContainer />}
-    </div>
-  );
-};
-
-// 独立的手机容器组件
-const PhoneMockupContainer: React.FC = () => {
-  const { selectedDate } = useHistoryStore();
-  
-  if (!selectedDate) return null;
-  
-  return (
-    <div className="phone-mockup-external-container">
-      <PhoneMockup />
     </div>
   );
 };

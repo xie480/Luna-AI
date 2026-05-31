@@ -43,6 +43,80 @@
 .recent-memory-panel.calendar-view {
   max-height: none;
   height: auto;
+  /* 确保翻转时不会因为内容溢出而出现滚动条 */
+  overflow: visible;
+  transition: all 0.3s ease;
+}
+
+/* 手机视图下，宽度自动适应手机界面的宽度 */
+.recent-memory-panel.phone-view {
+  width: 348px; /* 320px (手机宽度) + 28px (padding) */
+  min-width: 348px;
+}
+
+/* 3D 翻转场景 */
+.flip-scene {
+  perspective: 1000px;
+  width: 100%;
+  position: relative;
+  direction: ltr; /* 强制 LTR，防止 RTL 导致定位偏移 */
+}
+
+.flip-card {
+  width: 100%;
+  position: relative;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+  transform-origin: top center; /* 固定顶部为旋转中心，防止高度突变导致视觉跳跃 */
+}
+
+.flip-scene.is-flipped .flip-card {
+  transform: rotateY(180deg);
+}
+
+.flip-face {
+  width: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.flip-front {
+  /* 正面默认状态 */
+  position: relative;
+  z-index: 2;
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+}
+
+.flip-scene.is-flipped .flip-front {
+  /* 翻转后隐藏正面，防止遮挡，并设为绝对定位使其不撑开高度 */
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  transition: visibility 0s linear 0.3s; /* 在翻转动画一半时彻底隐藏 */
+}
+
+.flip-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: rotateY(180deg);
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  visibility: hidden;
+  transition: visibility 0s linear 0.3s;
+}
+
+.flip-scene.is-flipped .flip-back {
+  /* 翻转后显示反面，设为相对定位以撑开高度 */
+  position: relative;
+  visibility: visible;
+  transition: visibility 0s linear 0s;
+  z-index: 3;
 }
 
 /* 内部滚动容器 */
@@ -169,21 +243,3 @@
   border-radius: 2px;
 }
 
-.phone-mockup-external-container {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  margin-top: 16px;
-}
-
-@keyframes slideUpFade {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}

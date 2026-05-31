@@ -1,6 +1,7 @@
 .phone-mockup {
   width: 100%;
   max-width: 320px;
+  /* 恢复 aspect-ratio 以保持手机比例，高度由宽度自动计算 */
   aspect-ratio: 9 / 19.5;
   margin: 0 auto;
   position: relative;
@@ -63,4 +64,39 @@
   position: relative;
   display: flex;
   flex-direction: column;
+}
+
+.phone-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px 0;
+  height: 44px; /* 匹配灵动岛高度区域 */
+  flex-shrink: 0;
+}
+
+.back-btn {
+  background: transparent;
+  border: none;
+  color: #a082ff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  margin-left: -4px;
+  z-index: 20;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.back-btn:hover {
+  color: #b39cff;
+}
+
+.back-btn svg {
+  margin-right: 2px;
+}
+
+.dynamic-island-placeholder {
+  flex: 1;
 }
