@@ -39,19 +39,27 @@
   flex-direction: column;
 }
 
-/* 日历视图下取消高度限制，允许自适应撑开 */
+/* 日历视图下取消高度限制，允许自适应撑开，并严格固定宽度 */
 .recent-memory-panel.calendar-view {
   max-height: none;
   height: auto;
+  /* 严格固定宽度，防止被内部内容撑开或拉伸 */
+  width: 260px;
+  min-width: 260px;
+  max-width: 260px;
+  flex-shrink: 0;
   /* 确保翻转时不会因为内容溢出而出现滚动条 */
   overflow: visible;
   transition: all 0.3s ease;
+  /* 禁用拖拽调整大小 */
+  resize: none;
 }
 
 /* 手机视图下，宽度自动适应手机界面的宽度 */
 .recent-memory-panel.phone-view {
   width: 348px; /* 320px (手机宽度) + 28px (padding) */
   min-width: 348px;
+  max-width: 348px;
 }
 
 /* 3D 翻转场景 */
