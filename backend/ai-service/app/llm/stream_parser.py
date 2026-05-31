@@ -202,6 +202,8 @@ class StreamParser:
         if remaining:
             # 【问题2优化】对末尾剩余内容同样执行标点过滤
             sentence = remaining.strip()
+            # 移除可能残留的 JSON 结束符
+            sentence = sentence.replace('"}', '').replace('"', '').replace('}', '')
             sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
             if sentence:
                 msgs.append(("reply_chunk", sentence))
