@@ -8,12 +8,9 @@
  *   以 CustomEvent 桥接到 BubbleStack（气泡渲染）和 Live2DView（情绪同步）。
  * - EVT_EMOTION_UPDATE / EVT_REPLY_CHUNK 作为独立消息类型直接处理。
  *
- * Phase 3 扩展（配置热更新）：
- * - EVT_CONFIG_CHANGED → 更新 configStore 中的配置快照，实现前端配置热重载。
  */
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore } from '../stores/systemStore';
-import { useConfigStore } from '../stores/configStore';
 import { WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
 import {
@@ -193,11 +190,6 @@ class WSManager {
         // 调试日志推送
         const logPayload = msg.payload as any;
         systemStore.addSystemLog(logPayload.message || String(logPayload));
-        break;
-
-      case WS_MSG_TYPE.EVT_CONFIG_CHANGED:
-        // Phase 3: 配置变更推送 —— 更新 configStore 实现前端热重载
-        useConfigStore.getState().setConfigFromWS(msg.payload as any);
         break;
 
       default:

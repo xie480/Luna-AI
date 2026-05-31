@@ -24,22 +24,6 @@ func (InteractionModel) TableName() string {
 	return "interactions"
 }
 
-// SystemConfig 对应 PostgreSQL 中的 system_config 表（动态配置）
-type SystemConfig struct {
-	ID          string    `gorm:"column:id;primaryKey;type:varchar(64)"`
-	Key         string    `gorm:"column:key;type:varchar(255);not null;uniqueIndex"`
-	Value       string    `gorm:"column:value;type:text;not null"`
-	IsEncrypted bool      `gorm:"column:is_encrypted;type:boolean;not null;default:false"`
-	Description string    `gorm:"column:description;type:text"`
-	CreatedAt   time.Time `gorm:"column:created_at;type:timestamp with time zone;default:CURRENT_TIMESTAMP"`
-	UpdatedAt   time.Time `gorm:"column:updated_at;type:timestamp with time zone;default:CURRENT_TIMESTAMP"`
-}
-
-// TableName 指定表名
-func (SystemConfig) TableName() string {
-	return "system_config"
-}
-
 // PromptTemplate 对应 PostgreSQL 中的 prompt_templates 表（提示词模板元数据）
 type PromptTemplate struct {
 	ID              string    `gorm:"column:id;primaryKey;type:varchar(64)" json:"id"`

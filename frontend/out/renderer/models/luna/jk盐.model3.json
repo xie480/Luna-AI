@@ -1,0 +1,42 @@
+{
+	"Version": 3,
+		"FileReferences": {
+		"Moc": "jk盐.moc3",
+		"Textures": [
+			"jk盐.8192/texture_00.png",
+			"jk盐.8192/texture_01.png"
+		],
+		"Physics": "jk盐.physics3.json",
+		"UserData": "jk盐.userdata3.json",
+		"DisplayInfo": "jk盐.cdi3.json",
+		"Expressions": [
+			{ "Name": "脸黑", "File": "脸黑.exp3.json" },
+			{ "Name": "脸红-痴汉嘴（兼容吐舌", "File": "脸红-痴汉嘴（兼容吐舌.exp3.json" },
+			{ "Name": "脸红", "File": "脸红.exp3.json" },
+			{ "Name": "脸红2隐藏", "File": "脸红2隐藏.exp3.json" },
+			{ "Name": "眼-爱心眼", "File": "眼-爱心眼.exp3.json" },
+			{ "Name": "眼-哭哭", "File": "眼-哭哭.exp3.json" },
+			{ "Name": "眼-泪眼汪汪", "File": "眼-泪眼汪汪.exp3.json" },
+			{ "Name": "眼-平静死鱼眼", "File": "眼-平静死鱼眼.exp3.json" },
+			{ "Name": "眼-生气", "File": "眼-生气.exp3.json" },
+			{ "Name": "眼-星星眼", "File": "眼-星星眼.exp3.json" },
+			{ "Name": "眼-眩晕流汗", "File": "眼-眩晕流汗.exp3.json" },
+			{ "Name": "嘴-平静v形（不可张开", "File": "嘴-平静v形（不可张开.exp3.json" }
+		]
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		},
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeROpen",
+				"ParamEyeLOpen"
+			]
+		}
+	]
+}

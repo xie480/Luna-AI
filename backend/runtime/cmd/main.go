@@ -82,7 +82,6 @@ func main() {
 		// 自动迁移数据库表结构
 		if err := postgresClient.GetDB().AutoMigrate(
 			&repository.InteractionModel{},
-			&repository.SystemConfig{},
 			&repository.PromptTemplate{},
 			&repository.PromptVersion{},
 			&repository.ApiConfigPreset{},
@@ -98,20 +97,6 @@ func main() {
 	if err != nil {
 		logger.Error(ctx, "初始化 CryptoService 失败", zap.Error(err))
 		os.Exit(1)
-	}
-
-	// 初始化 EventBus
-	eventBus := config.NewEventBus()
-
-	// 初始化 ConfigManager
-	var configManager *config.ConfigManager
-	if postgresClient != nil {
-		configRepo := repository.NewConfigPGRepo(postgresClient)
-		configManager, err = config.NewConfigManager(configRepo, cryptoSvc, eventBus)
-		if err != nil {
-			logger.Error(ctx, "初始化 ConfigManager 失败", zap.Error(err))
-			os.Exit(1)
-		}
 	}
 
 	// 初始化 PromptManager（传入 redisClient，启用懒加载缓存）
@@ -136,13 +121,6 @@ func main() {
 
 	// 6. 注册路由 - 设置 HTTP 路由处理器
 	mux := http.NewServeMux()
-
-	// 配置端点（Go 1.22+ 方法路由模式）
-	if configManager != nil && aiClient != nil {
-		configHandler := api.NewConfigHandler(configManager, aiClient)
-		mux.HandleFunc("GET /api/v1/config", configHandler.HandleGetConfig)
-		mux.HandleFunc("POST /api/v1/config", configHandler.HandleUpdateConfig)
-	}
 
 	// API 配置预设端点
 	if postgresClient != nil && aiClient != nil {
