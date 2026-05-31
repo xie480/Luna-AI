@@ -189,9 +189,137 @@ func (s *WSServer) handleMessage(ctx context.Context, conn *WSConnection, msg WS
 		go s.handleChatRequest(ctx, conn, msg)
 	case types.WSMsgTypeCmdSyncInitState:
 		s.handleSyncInitState(ctx, conn, msg)
+	case types.WSMsgTypeReqGetCalendarMetadata:
+		s.handleGetCalendarMetadata(ctx, conn, msg)
+	case types.WSMsgTypeReqGetChatHistory:
+		s.handleGetChatHistory(ctx, conn, msg)
 	default:
 		logger.Warn(ctx, "未知的消息类型", zap.String("type", msg.Type))
 		s.sendError(conn, msg.TraceID, 4001, "Unknown message type")
+	}
+}
+
+// handleGetCalendarMetadata 处理获取日历元数据的请求
+func (s *WSServer) handleGetCalendarMetadata(ctx context.Context, conn *WSConnection, msg WSMessage) {
+	var reqPayload struct {
+		YearMonth string `json:"year_month"`
+	}
+	if err := json.Unmarshal(msg.Payload, &reqPayload); err != nil || reqPayload.YearMonth == "" {
+		logger.Error(ctx, "解析 REQ_GET_CALENDAR_METADATA Payload 失败", zap.Error(err))
+		s.sendError(conn, msg.TraceID, 4004, "Invalid REQ_GET_CALENDAR_METADATA payload")
+		return
+	}
+
+	// 1. 直接从 PostgreSQL 获取
+	var activeDates []string
+	var err error
+	if s.pgRepo != nil {
+		activeDates, err = s.pgRepo.GetActiveDatesByMonth(ctx, reqPayload.YearMonth)
+		if err != nil {
+			logger.Error(ctx, "从 PostgreSQL 获取活跃日期失败", zap.Error(err))
+			s.sendError(conn, msg.TraceID, 5002, "Failed to fetch calendar metadata from database")
+			return
+		}
+	} else {
+		activeDates = []string{} // 降级为空
+	}
+
+	// 3. 组装响应
+	respPayload := struct {
+		YearMonth   string   `json:"year_month"`
+		ActiveDates []string `json:"active_dates"`
+	}{
+		YearMonth:   reqPayload.YearMonth,
+		ActiveDates: activeDates,
+	}
+
+	payloadBytes, _ := json.Marshal(respPayload)
+	respMsg := WSMessage{
+		Type:    types.WSMsgTypeResCalendarMetadata,
+		TraceID: msg.TraceID,
+		Payload: payloadBytes,
+	}
+
+	if err := conn.WriteJSON(respMsg); err != nil {
+		logger.Error(ctx, "发送 RES_CALENDAR_METADATA 消息失败", zap.Error(err))
+	}
+}
+
+// handleGetChatHistory 处理获取指定日期详细聊天记录的请求
+func (s *WSServer) handleGetChatHistory(ctx context.Context, conn *WSConnection, msg WSMessage) {
+	var reqPayload struct {
+		Date string `json:"date"`
+	}
+	if err := json.Unmarshal(msg.Payload, &reqPayload); err != nil || reqPayload.Date == "" {
+		logger.Error(ctx, "解析 REQ_GET_CHAT_HISTORY Payload 失败", zap.Error(err))
+		s.sendError(conn, msg.TraceID, 4005, "Invalid REQ_GET_CHAT_HISTORY payload")
+		return
+	}
+
+	// 必须从 PG 获取详细记录
+	var interactions []repository.InteractionModel
+	var err error
+	if s.pgRepo != nil {
+		interactions, err = s.pgRepo.GetInteractionsByDate(ctx, reqPayload.Date)
+		if err != nil {
+			logger.Error(ctx, "从 PostgreSQL 获取详细聊天记录失败", zap.Error(err))
+			s.sendError(conn, msg.TraceID, 5003, "Failed to fetch chat history from database")
+			return
+		}
+	}
+
+	// 转换为前端需要的格式
+	// 注意：这里将一条 Interaction 拆分为 User 和 Assistant 两条消息
+	type FrontendChatMessage struct {
+		ID        string `json:"id"`
+		Role      string `json:"role"`
+		Content   string `json:"content"`
+		CreatedAt string `json:"created_at"`
+	}
+
+	var messages []FrontendChatMessage
+	for _, interaction := range interactions {
+		// 用户消息
+		messages = append(messages, FrontendChatMessage{
+			ID:        interaction.MessageID, // 使用原始的 MessageID
+			Role:      types.RoleUser,
+			Content:   interaction.UserContent,
+			CreatedAt: interaction.CreatedAt.Format(time.RFC3339),
+		})
+		
+		// 助手消息
+		// 如果有错误，将错误信息作为内容返回，或者根据前端需求处理
+		content := interaction.AssistantContent
+		if interaction.Error != "" {
+			content = interaction.Error // 简化处理，实际可能需要解析 JSON
+		}
+		
+		messages = append(messages, FrontendChatMessage{
+			ID:        interaction.ID, // 使用 Interaction 的 ID 作为助手消息的 ID
+			Role:      types.RoleAssistant,
+			Content:   content,
+			CreatedAt: interaction.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	// 组装响应
+	respPayload := struct {
+		Date     string                `json:"date"`
+		Messages []FrontendChatMessage `json:"messages"`
+	}{
+		Date:     reqPayload.Date,
+		Messages: messages,
+	}
+
+	payloadBytes, _ := json.Marshal(respPayload)
+	respMsg := WSMessage{
+		Type:    types.WSMsgTypeResChatHistory,
+		TraceID: msg.TraceID,
+		Payload: payloadBytes,
+	}
+
+	if err := conn.WriteJSON(respMsg); err != nil {
+		logger.Error(ctx, "发送 RES_CHAT_HISTORY 消息失败", zap.Error(err))
 	}
 }
 

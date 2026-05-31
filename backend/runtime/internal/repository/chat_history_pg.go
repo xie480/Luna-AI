@@ -46,3 +46,55 @@ func (r *ChatHistoryPGRepo) GetInteractionsBySessionID(ctx context.Context, sess
 	}
 	return interactions, nil
 }
+
+// GetInteractionsByDate 查询指定日期的所有交互记录
+// 做什么：根据传入的日期（YYYY-MM-DD），查询该日 00:00:00 至 23:59:59 的所有记录，按时间升序排列
+// 为什么这样做：为前端聊天记录展示区提供详细的持久化数据
+// 输入输出：
+//   - 输入：date (YYYY-MM-DD)
+//   - 输出：[]InteractionModel, error
+func (r *ChatHistoryPGRepo) GetInteractionsByDate(ctx context.Context, date string) ([]InteractionModel, error) {
+	var interactions []InteractionModel
+	
+	// 构建当天的起止时间字符串
+	startTime := fmt.Sprintf("%s 00:00:00", date)
+	endTime := fmt.Sprintf("%s 23:59:59", date)
+
+	err := r.db.WithContext(ctx).
+		Where("created_at >= ? AND created_at <= ?", startTime, endTime).
+		Order("created_at ASC").
+		Find(&interactions).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("从 PostgreSQL 查询指定日期交互记录失败: %w", err)
+	}
+	return interactions, nil
+}
+
+// GetActiveDatesByMonth 聚合查询指定月份中有交互记录的日期列表
+// 做什么：查询指定月份（YYYY-MM）内，存在交互记录的所有不重复的日期（DD）
+// 为什么这样做：当 Redis 缓存未命中时，从 PG 重建日历元数据
+// 输入输出：
+//   - 输入：yearMonth (YYYY-MM)
+//   - 输出：[]string (日期列表，如 ["01", "15"]), error
+func (r *ChatHistoryPGRepo) GetActiveDatesByMonth(ctx context.Context, yearMonth string) ([]string, error) {
+	var dates []string
+	
+	// 构建当月的起止时间字符串
+	startTime := fmt.Sprintf("%s-01 00:00:00", yearMonth)
+	endTime := fmt.Sprintf("%s-31 23:59:59", yearMonth) // 简单处理，31号涵盖所有月份
+
+	// 使用 GORM 的 Pluck 查询格式化后的日期
+	// 注意：这里使用了 PostgreSQL 特有的 TO_CHAR 函数。如果需要兼容 SQLite，可能需要调整。
+	// 考虑到 agent.md 中明确主存储为 PostgreSQL 15+，这里直接使用 PG 语法。
+	err := r.db.WithContext(ctx).
+		Model(&InteractionModel{}).
+		Select("DISTINCT TO_CHAR(created_at, 'DD')").
+		Where("created_at >= ? AND created_at <= ?", startTime, endTime).
+		Pluck("TO_CHAR(created_at, 'DD')", &dates).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("从 PostgreSQL 聚合查询活跃日期失败: %w", err)
+	}
+	return dates, nil
+}
