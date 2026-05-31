@@ -9,7 +9,7 @@
  *   - recentQA 为空时渲染空状态提示
  *   - 最多展示 3 条记录，超出时自动移除最旧的
  */
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import './RecentMemoryPanel.css';
 
@@ -18,6 +18,19 @@ import './RecentMemoryPanel.css';
  */
 export const RecentMemoryPanel: React.FC = () => {
   const recentQA = useSessionStore((state) => state.recentQA);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // 初始加载及数据更新时自动滚动到底部
+  useEffect(() => {
+    if (contentRef.current) {
+      // 使用 requestAnimationFrame 确保在 DOM 渲染完成后获取到最新的 scrollHeight
+      requestAnimationFrame(() => {
+        if (contentRef.current) {
+          contentRef.current.scrollTop = contentRef.current.scrollHeight;
+        }
+      });
+    }
+  }, [recentQA]);
 
   if (recentQA.length === 0) {
     return null;
@@ -25,10 +38,10 @@ export const RecentMemoryPanel: React.FC = () => {
 
   return (
     <div className="recent-memory-panel">
-      <div className="recent-memory-panel-content">
-        <div className="panel-header">
-          <span className="panel-title">近期记忆</span>
-        </div>
+      <div className="panel-header">
+        <span className="panel-title">近期记忆</span>
+      </div>
+      <div className="recent-memory-panel-content" ref={contentRef}>
         {recentQA.map((qa) => (
           <div key={qa.msgId} className="qa-item">
             <div className="user-label">你</div>

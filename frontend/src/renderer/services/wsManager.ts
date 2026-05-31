@@ -197,10 +197,19 @@ class WSManager {
       case WS_MSG_TYPE.EVT_EMOTION_UPDATE:
         // 独立情绪更新事件
         const emotionPayload = msg.payload as EmotionUpdatePayload;
-        systemStore.setEmotion(emotionPayload.emotion);
+        // 类型检查：确保 emotion 是有效的 EmotionState
+        const validEmotions = ['neutral', ...Object.keys(EMOTION_EXPRESSIONS)] as const;
+        type ValidEmotion = typeof validEmotions[number];
+        
+        const rawEmotion = emotionPayload.emotion;
+        const emotionValue: EmotionState = validEmotions.includes(rawEmotion as ValidEmotion)
+          ? (rawEmotion as EmotionState)
+          : 'neutral'; // 默认值
+        
+        systemStore.setEmotion(emotionValue);
         // 同步触发全局事件供 Live2D 消费
         window.dispatchEvent(
-          new CustomEvent('luna:emotion-update', { detail: { emotion: emotionPayload.emotion } })
+          new CustomEvent('luna:emotion-update', { detail: { emotion: emotionValue } })
         );
         break;
 
@@ -253,17 +262,17 @@ class WSManager {
       case WS_MSG_TYPE.EVT_TELEMETRY_TRACE:
         // Go 推送的链路 Span（仅在诊断面板开启时推送）
         const spanPayload = msg.payload as TelemetrySpan;
-        const telemetryStore = useTelemetryStore.getState();
-        const updatedSpans = [...telemetryStore.traceSpans, spanPayload];
-        telemetryStore.setTraceSpans(updatedSpans, updatedSpans.length);
+        const telemetryStoreTrace = useTelemetryStore.getState();
+        const updatedSpans = [...telemetryStoreTrace.traceSpans, spanPayload];
+        telemetryStoreTrace.setTraceSpans(updatedSpans, updatedSpans.length);
         break;
 
       case WS_MSG_TYPE.EVT_TELEMETRY_METRICS:
         // Go 推送的实时监控指标（每秒推送一次）
         const metricsPayload = msg.payload as MetricsDataPoint;
-        const telemetryStore = useTelemetryStore.getState();
-        const updatedMetrics = [...telemetryStore.metrics, metricsPayload].slice(-60);
-        telemetryStore.setMetrics(updatedMetrics);
+        const telemetryStoreMetrics = useTelemetryStore.getState();
+        const updatedMetrics = [...telemetryStoreMetrics.metrics, metricsPayload].slice(-60);
+        telemetryStoreMetrics.setMetrics(updatedMetrics);
         break;
 
       default:

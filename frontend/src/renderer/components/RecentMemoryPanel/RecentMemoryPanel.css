@@ -17,6 +17,8 @@
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
+  padding: 12px 14px;
+  padding-bottom: 8px;
   z-index: 30;
   pointer-events: auto;
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -33,29 +35,31 @@
 /* 内部滚动容器 */
 .recent-memory-panel-content {
   direction: ltr;
-  padding: 12px 14px;
   overflow-y: auto;
   overflow-x: hidden;
   flex: 1;
   /* 确保内容区不会覆盖 resize 手柄 */
   margin-left: 8px;
+  padding-right: 4px;
 }
 
 .recent-memory-panel:hover {
   background: rgba(20, 20, 30, 0.8);
 }
 
-/* 面板标题 */
-.recent-memory-panel-content .panel-header {
+/* 面板标题（固定在顶部） */
+.recent-memory-panel .panel-header {
+  direction: ltr;
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
 
-.recent-memory-panel-content .panel-title {
+.recent-memory-panel .panel-title {
   font-size: 12px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.5);
