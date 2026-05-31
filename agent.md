@@ -3,7 +3,7 @@
 ## 1. 项目定位
 
 **Luna 是什么：**
-Luna 是一款本地优先、隐私安全的“陪伴式人格 + 长期记忆 + 主动行为”全栈 AI 桌面助理。其核心不仅是对话，而是建立自然语言理解 → 智能决策 → 工作流规划 → 工具执行 → 状态跟踪 → 长期记忆更新 → 主动交互 → 可恢复执行的完整闭环。
+Luna 是一款本地优先、隐私安全的"陪伴式人格 + 长期记忆 + 主动行为"全栈 AI 桌面助理。其核心不仅是对话，而是建立自然语言理解 → 智能决策 → 工作流规划 → 工具执行 → 状态跟踪 → 长期记忆更新 → 主动交互 → 可恢复执行的完整闭环。
 
 **Luna 不是什么：**
 
@@ -19,7 +19,7 @@ Luna 面向**普通个人本地使用，而不是企业使用**。
 - 核心场景为个人电脑（Windows/macOS）桌面环境的长程陪伴与个人事务助理。
 - 架构设计优先考虑个人设备的单机隔离性、本地存储的隐私性以及桌面端原生的交互体验，不涉及复杂的多租户（SaaS）、企业级 RBAC 权限或高并发集群部署场景。
 
-*(注：参与本项目的开发人员、AI 代码代理在做技术选型时，必须以“单机桌面级运行效率与数据绝对控制权”为第一考量。)*
+*(注：参与本项目的开发人员、AI 代码代理在做技术选型时，必须以"单机桌面级运行效率与数据绝对控制权"为第一考量。)*
 
 ## 3. 使用的技术栈及其版本
 
@@ -94,7 +94,7 @@ Luna 面向**普通个人本地使用，而不是企业使用**。
 |                  | **Phase 1：三层通信骨架打通**           | 跑通 Electron → Go → Python 的最小通信链路。 | • Electron 启动并建立到 Go 的 WebSocket 单向数据流连接。<br>• Go 通过 gRPC/HTTP RPC 连通 Python，实现无状态的消息透传。<br>• 定义最小消息协议：Ping / Pong / Error / Health。<br>• 本地 Redis、PostgreSQL 完成基础可用部署（暂不涉及复杂业务建表）。<br>• 三层都能健康检查联调，确保前后端与智能层的连通性。                                                         | • 前端发一个 Ping<br>• Go 收到后转发给 Python<br>• Python 回 PONG<br>• 前端 UI 能显示 PONG            | **注意**：这一步只验证链路，不做任何智能、不做任何状态机、不做任何记忆。                  | 已完成                             | [`backend/docs/system/数据存储与同步方案.md`](backend/docs/system/数据存储与同步方案.md)<br>[`backend/docs/system/日志、监控与审计方案.md`](backend/docs/system/日志、监控与审计方案.md)<br>[`frontend/docs/system/桌面端交互与前端架构方案.md`](frontend/docs/system/桌面端交互与前端架构方案.md) |
 |                  | **Phase 2：基础流式问答能力**           | 先把"能像聊天产品一样说话"做出来。                 | • Python 接入统一大模型调用层（OpenAI Compatible API），屏蔽底层厂商差异。<br>• 支持本地 vLLM/Ollama 与云端 API 切换，内置基础重试机制。<br>• Go 负责流式代理、消息转发及 TTFT（首字延迟）核心指标记录。<br>• Electron 依据 Go 下发的 `CurrentNodeId` 负责气泡流式渲染。<br>• 统一流式消息结构与结束标记，强制要求 Python 侧通过 Pydantic 校验 JSON 结构化输出。<br>• 设计结构化核心系统提示词，明确 Luna 角色定位、任务目标、回复风格和行为约束。<br>• 实现多轮对话上下文历史记录管理与 Token 边界截断策略。<br>• 实现流式输出缓冲平滑机制（合并小 Token 为语义完整的短句后输出）。<br>• 实现网络异常及中断的分层捕获与容错处理。 | • 可以稳定进行普通 LLM 对话<br>• 支持流式输出<br>• 支持多轮对话上下文感知<br>• 支持 Token 边界截断<br>• 流式输出平滑，前端无逐字闪烁<br>• 网络中断有友好降级提示<br>• 不接工具、不接记忆、不接 RAG                                  | **为什么重要**：验证的是"AI 输入输出管道"是否稳定，而不是智能是否足够复杂。              | 已完成（增强）                             | [`backend/docs/system/大模型接入与统一调用层设计.md`](backend/docs/system/大模型接入与统一调用层设计.md)<br>[`frontend/docs/system/桌面端交互与前端架构方案.md`](frontend/docs/system/桌面端交互与前端架构方案.md)<br>[`backend/docs/plans/phase2_plan.md`](backend/docs/plans/phase2_plan.md) |
 |                  | **Phase 3：配置、Prompt 与密钥管理**    | 消除硬编码，让系统具备可配置能力。                  | • 引入 OS Keychain 存储主密钥，结合 AES-256-GCM 在 PostgreSQL 中加密存储 API Key。<br>• PostgreSQL 存储 Prompt 模板与模型动态配置，实现 Append-Only 历史版本记录快照。<br>• Go 维护 ConfigManager，通过内部 Event Bus 分发配置变更事件。<br>• Go 通过 gRPC Push 通知 Python 层热重载配置，实现动静分离。<br>• 先实现 JSON/YAML MVP 版本的 Prompt 插槽装配，再向数据库迁移。 | • 前端修改系统 Prompt 后下一次对话立即生效<br>• 无需重启整个系统<br>• 敏感信息不落明文                               | **注意**：Prompt 版本必须可回滚，不能只保留"当前值"。                       | 已完成                             | [`backend/docs/system/配置与环境管理方案.md`](backend/docs/system/配置与环境管理方案.md)<br>[`backend/docs/system/PromptTemplate 与提示词版本管理方案.md`](backend/docs/system/PromptTemplate%20与提示词版本管理方案.md)<br>[`backend/docs/system/权限与安全方案.md`](backend/docs/system/权限与安全方案.md) |
-|                  | **Phase 4：最小可观测性与审计链路**        | 让系统从一开始就能被追踪。                      | • TraceID (`InteractionID`) 贯穿三层全链路。<br>• 记录请求入站、模型调用（含 TTFT 与耗时预估）、工具调用、状态变化。<br>• PostgreSQL 引入 `audit_logs` 表，结合 WAL 机制记录防篡改的关键审计事件。<br>• Python 侧输出日志强制对敏感信息进行 Regex 脱敏（替换为 `[REDACTED]`）。<br>• 在 Electron 提供基础调试面板，支持按 TraceID 查询链路。                                  | • 任意请求都能查到完整生命周期<br>• 能定位失败源头（前端/Go/Python/模型）<br>• 后续排障不需要猜                         | **为什么放这里**：可观测性拖到最后会让后续加能力变成黑盒，必须提前。                    | 未完成                             | [`backend/docs/system/日志、监控与审计方案.md`](backend/docs/system/日志、监控与审计方案.md)<br>[`backend/docs/system/权限与安全方案.md`](backend/docs/system/权限与安全方案.md)<br>[`frontend/docs/system/桌面端交互与前端架构方案.md`](frontend/docs/system/桌面端交互与前端架构方案.md) |
+|                  | **Phase 4：最小可观测性与审计链路**        | 让系统从一开始就能被追踪。                      | • TraceID (`InteractionID`) 贯穿三层全链路。<br>• 记录请求入站、模型调用（含 TTFT 与耗时预估）、工具调用、状态变化。<br>• PostgreSQL 引入 `audit_logs` 表，结合 WAL 机制记录防篡改的关键审计事件。<br>• Python 侧输出日志强制对敏感信息进行 Regex 脱敏（替换为 `[REDACTED]`）。<br>• 在 Electron 提供基础调试面板，支持按 TraceID 查询链路。                                  | • 任意请求都能查到完整生命周期<br>• 能定位失败源头（前端/Go/Python/模型）<br>• 后续排障不需要猜                         | **为什么放这里**：可观测性拖到最后会让后续加能力变成黑盒，必须提前。                    | 已完成                             | [`backend/docs/system/日志、监控与审计方案.md`](backend/docs/system/日志、监控与审计方案.md)<br>[`backend/docs/system/权限与安全方案.md`](backend/docs/system/权限与安全方案.md)<br>[`frontend/docs/system/桌面端交互与前端架构方案.md`](frontend/docs/system/桌面端交互与前端架构方案.md) |
 | **卷二：记忆与知识底座**   | **Phase 5：短期会话记忆与上下文窗口管理**     | 先让系统记住"当前会话正在发生什么"。                | • Redis 维护短期上下文窗口，隔离日常闲聊与任务执行日志。<br>• 记录最近消息、临时状态、当前任务上下文。<br>• 定义上下文过长时的裁剪策略，防止 Token 溢出导致注意力丢失。<br>• 支持会话恢复时的最小上下文重建，基于 Go 引擎的最新会话拉取请求。                                                                                                                              | • 对话中系统能正确引用前文<br>• 重启后会话短期上下文可按策略恢复<br>• 上下文不会无限膨胀                                  | **注意**：短期记忆不等于长期记忆，不要混用。                                | 未完成                             | [`backend/docs/system/多层记忆系统设计.md`](backend/docs/system/多层记忆系统设计.md)<br>[`backend/docs/system/数据存储与同步方案.md`](backend/docs/system/数据存储与同步方案.md) |
 |                  | **Phase 6：长期记忆写入与恢复**          | 让系统真正"记得住"。                        | • Python (`AnalyzeMemory`) 负责记忆提取、冲突对比、结构化更新指令生成。<br>• Go 负责 Memory Write Commit 的事务落盘，执行软删除或追加到 PostgreSQL。<br>• 实现关系型 PostgreSQL 与向量库 Qdrant 的同步写入，Go 提供降级重试防脑裂。<br>• 定义记忆写入的用户授权确认条件（Gating）、去重策略与版本回溯能力。                                                                   | • 告知偏好后，重启系统仍能识别并记住<br>• 记忆写入可追溯、可撤销、可更新                                             | **关键原则**：长期记忆不能由模型"想写就写"，必须经过 Go 的提交控制。                 | 未完成                             | [`backend/docs/system/多层记忆系统设计.md`](backend/docs/system/多层记忆系统设计.md)<br>[`backend/docs/system/数据存储与同步方案.md`](backend/docs/system/数据存储与同步方案.md)<br>[`backend/docs/system/用户画像与偏好建模方案.md`](backend/docs/system/用户画像与偏好建模方案.md) |
 |                  | **Phase 7：RAG 知识检索增强**         | 让系统能基于外部知识回答问题。                    | • 部署本地 Qdrant，打通文档切片、Embedding、检索流程。<br>• 实现动态 RAG 路由机制：按需划分为 Search、Modular 与 Agentic 检索。<br>• Go 工作流中维护 RAG 子图（Sub-DAG）状态机。<br>• Python 负责实际检索与融合，Go 负责合并各源的 Evidence 及置信度并注入 Prompt。                                                                                | • 导入文档后可回答具体问题<br>• 答案能引用检索结果<br>• 低相关结果不会污染最终回答                                     | **注意**：RAG 是"证据注入"，不是"记忆替代"。                            | 未完成                             | [`backend/docs/system/知识库检索增强生成方案.md`](backend/docs/system/知识库检索增强生成方案.md)<br>[`backend/docs/system/多层记忆系统设计.md`](backend/docs/system/多层记忆系统设计.md) |
@@ -192,7 +192,7 @@ Luna 面向**普通个人本地使用，而不是企业使用**。
 
 1. **调度逻辑绝对收口**：禁止把任务状态、调度逻辑散落在前端 React 组件或 Python 服务中。Go 是唯一的 Single Source of Truth。前端看到的状态只是 Go 通过 WebSocket 推送的镜像。
 2. **禁止越级调用**：前端绝不允许直接访问大模型 API，也绝不允许直连 Python 服务。一切交互必须经由 Go WebSocket 网关流转。
-3. **接口契约至上**：禁止在没有 `/shared/proto` 或 JSON Schema 定义的情况下直接修改接口参数进行“临时联调”。
+3. **接口契约至上**：禁止在没有 `/shared/proto` 或 JSON Schema 定义的情况下直接修改接口参数进行"临时联调"。
 
 ### 6.3 健壮性与异步处理
 
@@ -204,7 +204,7 @@ Luna 面向**普通个人本地使用，而不是企业使用**。
 
 1. **隐私边界**：坚守本地优先。所有用户的配置、长期记忆、密钥必须保存在本地 PostgreSQL（推荐 OS Keychain 加密），严禁打印敏感凭证到日志中。
 2. **主动行为边界**：AI 主动发起的任何操作，若涉及修改/删除文件、网络请求等高风险动作，Go Runtime 必须强行挂起任务（`PENDING_USER_APPROVAL`），并要求前端展示授权卡片，未获用户授权绝不允许放行。
-3. **长期记忆一致性**：任务执行中产生的“事实记忆”和“用户偏好”更新，必须暂存于 Staging 区，只有当工作流最终标记为 `SUCCESS` 时才能提交到数据库，防止错误路径污染记忆。
+3. **长期记忆一致性**：任务执行中产生的"事实记忆"和"用户偏好"更新，必须暂存于 Staging 区，只有当工作流最终标记为 `SUCCESS` 时才能提交到数据库，防止错误路径污染记忆。
 
 ### 6.5 可观测性与调试
 

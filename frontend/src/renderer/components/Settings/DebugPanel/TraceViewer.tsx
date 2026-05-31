@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useTelemetryStore, TelemetrySpan } from '../../../stores/telemetryStore';
-import { useSessionStore } from '../../../stores/sessionStore';
 import { fetchTraces } from '../../../services/telemetryService';
 
 /**

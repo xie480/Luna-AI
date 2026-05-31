@@ -56,6 +56,48 @@ func InitSchema(db *gorm.DB) error {
 		return err
 	}
 
+	// 创建防篡改触发器 (PostgreSQL specific)
+	// 限制只能更新 status, error_msg, user_approved 字段，且只能删除 3 个月前的数据
+	tamperProtectionSQL := `
+	CREATE OR REPLACE FUNCTION prevent_audit_log_tampering()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		IF TG_OP = 'DELETE' THEN
+			-- 允许清理函数删除 3 个月前的数据
+			IF OLD.timestamp >= NOW() - INTERVAL '3 months' THEN
+				RAISE EXCEPTION 'Cannot delete recent audit logs (tamper protection)';
+			END IF;
+			RETURN OLD;
+		ELSIF TG_OP = 'UPDATE' THEN
+			-- 仅允许更新状态相关字段
+			IF NEW.id != OLD.id OR
+			   NEW.trace_id != OLD.trace_id OR
+			   NEW.timestamp != OLD.timestamp OR
+			   NEW.plan_id != OLD.plan_id OR
+			   NEW.node_id != OLD.node_id OR
+			   NEW.action_type != OLD.action_type OR
+			   NEW.resource != OLD.resource OR
+			   NEW.operation != OLD.operation OR
+			   NEW.payload != OLD.payload OR
+			   NEW.risk_level != OLD.risk_level OR
+			   NEW.requires_approval != OLD.requires_approval THEN
+				RAISE EXCEPTION 'Cannot modify critical fields of audit logs (tamper protection)';
+			END IF;
+			RETURN NEW;
+		END IF;
+		RETURN NULL;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS audit_log_tamper_protection ON audit_logs;
+	CREATE TRIGGER audit_log_tamper_protection
+	BEFORE UPDATE OR DELETE ON audit_logs
+	FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_tampering();
+	`
+	if err := db.Exec(tamperProtectionSQL).Error; err != nil {
+		return err
+	}
+
 	// 创建清理函数 (PostgreSQL specific)
 	cleanupAuditLogsSQL := `
 	CREATE OR REPLACE FUNCTION cleanup_audit_logs()
