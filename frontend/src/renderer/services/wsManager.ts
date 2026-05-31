@@ -290,7 +290,7 @@ class WSManager {
       case WS_MSG_TYPE.RES_CALENDAR_METADATA: {
         const metaPayload = msg.payload as { year_month: string; active_dates: string[] };
         import('../stores/historyStore').then(({ useHistoryStore }) => {
-          useHistoryStore.getState().setCalendarMetadata(metaPayload.year_month, metaPayload.active_dates);
+          useHistoryStore.getState().setCalendarMetadata(metaPayload.year_month, metaPayload.active_dates || []);
         });
         break;
       }
@@ -379,6 +379,10 @@ class WSManager {
           const historyState = useHistoryStore.getState();
           const now = new Date();
           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          
+          // 只要有新消息，今天就应该有记录，更新日历元数据
+          historyState.addCalendarRecord(todayStr);
+
           if (historyState.selectedDate === todayStr) {
             historyState.fetchChatHistory(todayStr);
           }

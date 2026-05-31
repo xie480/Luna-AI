@@ -30,6 +30,7 @@ interface HistoryState {
   // 供 WS 接收到数据后调用的内部方法
   setCalendarMetadata: (yearMonth: string, activeDates: string[]) => void;
   setChatHistory: (date: string, messages: HistoryChatMessage[]) => void;
+  addCalendarRecord: (date: string) => void;
 }
 
 // 获取当前年月 YYYY-MM
@@ -119,5 +120,14 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       }
       return { isLoadingHistory: false };
     });
+  },
+
+  addCalendarRecord: (date) => {
+    set((state) => ({
+      calendarMetadata: {
+        ...state.calendarMetadata,
+        [date]: true,
+      },
+    }));
   },
 }));

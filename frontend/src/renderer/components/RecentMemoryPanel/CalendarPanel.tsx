@@ -134,7 +134,10 @@ export const CalendarPanel: React.FC = () => {
 
   const handleDateClick = (day: number) => {
     const dateStr = `${currentYearMonth}-${String(day).padStart(2, '0')}`;
-    if (calendarMetadata[dateStr]) {
+    // 只要有记录，或者是今天，都可以点击
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    if (calendarMetadata[dateStr] || dateStr === todayStr) {
       // 如果点击的是当前已选中的日期，则取消选中（关闭手机界面）
       if (selectedDate === dateStr) {
         setSelectedDate(null);
@@ -213,10 +216,13 @@ export const CalendarPanel: React.FC = () => {
             const isSelected = selectedDate === dateStr;
             const isToday = isCurrentMonth && day === todayDate;
 
+            // 今天始终允许点击，即使暂时没有记录
+            const isClickable = hasRecord || isToday;
+
             return (
-              <div 
-                key={day} 
-                className={`day-cell ${hasRecord ? 'has-record' : 'no-record'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+              <div
+                key={day}
+                className={`day-cell ${isClickable ? 'has-record' : 'no-record'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                 onClick={() => handleDateClick(day)}
               >
                 <span className="day-number">{day}</span>
