@@ -5,6 +5,8 @@
   /* 移除固定高度和滚动条，允许内容自然撑开 */
   height: auto;
   overflow: visible;
+  /* 修正从父级继承的 rtl 方向，确保日历从左向右正常排列 */
+  direction: ltr;
 }
 
 .calendar-header {
@@ -35,70 +37,137 @@
   transform: scale(1.05);
 }
 
+.current-month-display-wrapper {
+  position: relative;
+}
+
 .current-month-display {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  gap: 4px;
   font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
-}
-
-.select-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-.select-wrapper::after {
-  content: '';
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 4px solid rgba(255, 255, 255, 0.5);
-  pointer-events: none;
-}
-
-.year-select,
-.month-select {
-  appearance: none;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
-  padding: 4px 20px 4px 8px;
-  border-radius: 6px;
-  font-family: inherit;
   cursor: pointer;
-  outline: none;
-  transition: all 0.2s ease;
+  padding: 4px 12px;
+  border-radius: 8px;
+  transition: background 0.2s ease;
 }
 
-.year-select {
+.current-month-display:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.year-text {
   font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
   font-weight: 500;
 }
 
-.month-select {
-  font-size: 16px;
+.month-text {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.9);
   font-weight: 700;
+  letter-spacing: 1px;
 }
 
-.year-select:hover,
-.month-select:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(160, 130, 255, 0.5);
+.picker-arrow {
+  margin-left: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  transition: transform 0.3s ease;
 }
 
-.year-select:focus,
-.month-select:focus {
-  border-color: #a082ff;
-  box-shadow: 0 0 0 2px rgba(160, 130, 255, 0.2);
+.picker-arrow.open {
+  transform: rotate(180deg);
 }
 
-.year-select option,
-.month-select option {
-  background: #1a1a24;
+.wheel-picker-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 30, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  gap: 12px;
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: popoverFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.wheel-picker-container {
+  position: relative;
+  height: 180px;
+  width: 80px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+}
+
+.wheel-picker-selection-overlay {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 36px;
+  transform: translateY(-50%);
+  background: rgba(160, 130, 255, 0.15);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wheel-picker-scroll {
+  height: 100%;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none; /* Firefox */
+}
+
+.wheel-picker-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
+.wheel-picker-padding {
+  height: calc(50% - 18px);
+}
+
+.wheel-picker-item {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.4);
+  scroll-snap-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  position: relative;
+  z-index: 2;
+}
+
+.wheel-picker-item:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.wheel-picker-item.selected {
   color: #fff;
+  font-weight: 600;
+  font-size: 16px;
 }
 
 .calendar-grid {

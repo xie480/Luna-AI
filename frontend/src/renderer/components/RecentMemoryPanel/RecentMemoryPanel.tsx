@@ -37,13 +37,8 @@ export const RecentMemoryPanel: React.FC = () => {
     }
   }, [recentQA, currentView]);
 
-  // 即使 recentQA 为空，如果处于日历视图也需要渲染
-  if (recentQA.length === 0 && currentView === 'RECENT') {
-    return null;
-  }
-
   return (
-    <>
+    <div className="recent-memory-wrapper">
       <div className={`recent-memory-panel ${currentView === 'CALENDAR' ? 'calendar-view' : ''}`}>
         <HistoryNavigation />
         
@@ -69,7 +64,7 @@ export const RecentMemoryPanel: React.FC = () => {
       
       {/* 手机界面布局剥离：在日历面板外部独立渲染 */}
       {currentView === 'CALENDAR' && <PhoneMockupContainer />}
-    </>
+    </div>
   );
 };
 
