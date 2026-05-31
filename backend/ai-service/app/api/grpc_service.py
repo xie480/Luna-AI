@@ -22,12 +22,10 @@ import grpc
 import json
 from app.api import communication_pb2
 from app.api import communication_pb2_grpc
-from app.logger import get_logger
+from app.logger import logger
 from app.llm.client import llm_client, compression_llm_client
 from app.llm.stream_parser import StreamParser
 from app.constants import Role
-
-logger = get_logger(__name__)
 
 
 class CommunicationServiceServicer(

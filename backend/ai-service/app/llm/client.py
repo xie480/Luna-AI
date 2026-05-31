@@ -34,7 +34,7 @@ from tenacity import (
 from pydantic import BaseModel, ValidationError
 
 from app.config import settings
-from app.logger import get_logger
+from app.logger import logger
 from app.constants import Role
 from app.llm.context_manager import (
     format_messages_for_api,
@@ -42,8 +42,6 @@ from app.llm.context_manager import (
     MAX_CONTEXT_TOKENS,
     RESERVED_OUTPUT_TOKENS,
 )
-
-logger = get_logger(__name__)
 
 
 # ============================================================

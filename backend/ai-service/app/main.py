@@ -12,10 +12,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'api'))
 from app.api.health import router as health_router
 from app.api import communication_pb2_grpc
 from app.api.grpc_service import CommunicationServiceServicer
+from app.api.interceptor import TelemetryInterceptor
 from app.config import settings
-from app.logger import get_logger
-
-logger = get_logger(__name__)
+from app.logger import logger
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,7 +28,7 @@ app.include_router(health_router)
 
 async def serve_grpc():
     """启动 gRPC 服务"""
-    server = grpc.aio.server()
+    server = grpc.aio.server(interceptors=[TelemetryInterceptor()])
     communication_pb2_grpc.add_CommunicationServiceServicer_to_server(
         CommunicationServiceServicer(), server
     )

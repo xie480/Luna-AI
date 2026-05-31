@@ -1,8 +1,9 @@
 import json
-import logging
+import sys
 from io import StringIO
 
-from app.logger import JSONFormatter, trace_id_var
+from loguru import logger
+from app.logger import trace_id_var, format_record, setup_logger
 
 
 def test_logger_format_and_trace_id() -> None:
@@ -15,17 +16,9 @@ def test_logger_format_and_trace_id() -> None:
     异常行为：如果 JSON 解析失败，测试将报错。
     """
     # 1. 设置 logger 和 buffer
-    logger = logging.getLogger("test_logger")
-    logger.setLevel(logging.INFO)
-    
-    # 清除已有的 handlers
-    logger.handlers.clear()
-    
+    logger.remove()
     buf = StringIO()
-    handler = logging.StreamHandler(buf)
-    formatter = JSONFormatter()
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logger.add(buf, format=format_record, level="INFO")
     
     # 2. 设置 trace_id
     token = trace_id_var.set("test-trace-123")

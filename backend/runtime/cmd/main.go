@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 
 	"luna-ai/backend/runtime/internal/api"
 	"luna-ai/backend/runtime/internal/config"
@@ -23,6 +22,7 @@ import (
 	"luna-ai/backend/runtime/internal/logger"
 	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
+	"luna-ai/backend/runtime/internal/telemetry"
 	pb "luna-ai/backend/runtime/shared/proto"
 )
 
@@ -54,31 +54,29 @@ func main() {
 		log.Printf("初始化日志系统失败: %v\n", err)
 		os.Exit(1)
 	}
-	// 程序结束前确保所有日志都被写入到输出
-	defer logger.Sync()
 
 	ctx := context.Background()
 	// 记录服务启动日志，包含监听的端口号
-	logger.Info(ctx, "正在启动 Luna 运行时服务", zap.Int("port", cfg.Server.Port))
+	logger.Info(ctx, "正在启动 Luna 运行时服务", "port", cfg.Server.Port)
 
 	// 3. 初始化 Redis 连接 - 用于 DAG 工作流状态同步与 Event Bus
 	redisClient, err := infrastructure.NewRedisClient(cfg.RedisAddr(), cfg.Redis.Password, cfg.Redis.DB)
 	if err != nil {
-		logger.Warn(ctx, "Redis 连接失败，将使用降级模式运行", zap.Error(err))
+		logger.Warn(ctx, "Redis 连接失败，将使用降级模式运行", "error", err)
 		// Redis 连接失败不阻止服务启动，后续可降级处理
 	} else {
 		defer redisClient.Close()
-		logger.Info(ctx, "Redis 连接成功", zap.String("addr", cfg.RedisAddr()))
+		logger.Info(ctx, "Redis 连接成功", "addr", cfg.RedisAddr())
 	}
 
 	// 4. 初始化 PostgreSQL 连接 - 用于配置、记忆、状态持久化
 	postgresClient, err := infrastructure.NewPostgresClient(cfg.PostgresConnStr())
 	if err != nil {
-		logger.Warn(ctx, "PostgreSQL 连接失败，将使用降级模式运行", zap.Error(err))
+		logger.Warn(ctx, "PostgreSQL 连接失败，将使用降级模式运行", "error", err)
 		// PostgreSQL 连接失败不阻止服务启动，后续可降级处理
 	} else {
 		defer postgresClient.Close()
-		logger.Info(ctx, "PostgreSQL 连接成功", zap.String("database", cfg.Postgres.Database))
+		logger.Info(ctx, "PostgreSQL 连接成功", "database", cfg.Postgres.Database)
 		
 		// 自动迁移数据库表结构
 		if err := postgresClient.GetDB().AutoMigrate(
@@ -87,16 +85,33 @@ func main() {
 			&repository.PromptVersion{},
 			&repository.ApiConfigPreset{},
 		); err != nil {
-			logger.Error(ctx, "自动迁移数据库表结构失败", zap.Error(err))
+			logger.Error(ctx, "自动迁移数据库表结构失败", "error", err)
 		} else {
 			logger.Info(ctx, "自动迁移数据库表结构成功")
 		}
+
+		// 初始化 Telemetry Schema
+		if err := telemetry.InitSchema(postgresClient.GetDB()); err != nil {
+			logger.Error(ctx, "初始化 Telemetry Schema 失败", "error", err)
+		} else {
+			logger.Info(ctx, "初始化 Telemetry Schema 成功")
+		}
+
+		// 初始化 Telemetry Worker
+		telemetry.InitWorker(postgresClient.GetDB())
+		go telemetry.GetWorker().Run(ctx)
+
+		// 启动清理任务
+		go telemetry.RunCleanup(ctx, postgresClient.GetDB())
 	}
+
+	// 初始化监控指标
+	telemetry.InitMetrics()
 
 	// 初始化 CryptoService
 	cryptoSvc, err := config.NewCryptoService()
 	if err != nil {
-		logger.Error(ctx, "初始化 CryptoService 失败", zap.Error(err))
+		logger.Error(ctx, "初始化 CryptoService 失败", "error", err)
 		os.Exit(1)
 	}
 
@@ -115,7 +130,7 @@ func main() {
 	// 5. 初始化 AI 客户端 - 连接 Python AI 服务
 	aiClient, err := api.NewAIClient(cfg.AIService.Address)
 	if err != nil {
-		logger.Error(ctx, "初始化 AI 客户端失败", zap.Error(err))
+		logger.Error(ctx, "初始化 AI 客户端失败", "error", err)
 		os.Exit(1)
 	}
 	defer aiClient.Close()
@@ -178,11 +193,11 @@ func main() {
 
 		// 加载激活的配置并触发初始同步
 		if err := configMgr.LoadActiveConfig(ctx); err != nil {
-			logger.Error(ctx, "加载激活配置失败", zap.Error(err))
+			logger.Error(ctx, "加载激活配置失败", "error", err)
 		} else {
 			snapshot := configMgr.GetActiveConfig()
 			if snapshot != nil && snapshot.PresetID != "" {
-				logger.Info(ctx, "加载到激活配置，准备触发初始同步", zap.String("preset_id", snapshot.PresetID))
+				logger.Info(ctx, "加载到激活配置，准备触发初始同步", "preset_id", snapshot.PresetID)
 				
 				// 异步等待 AI 服务就绪后同步配置
 				go func() {
@@ -216,6 +231,14 @@ func main() {
 		mux.HandleFunc("POST /api/v1/prompts/version", promptHandler.HandleCreateVersion)
 		mux.HandleFunc("POST /api/v1/prompts/publish", promptHandler.HandlePublishVersion)
 		mux.HandleFunc("POST /api/v1/prompts/rollback", promptHandler.HandleRollbackVersion)
+	}
+
+	// Telemetry 端点
+	if postgresClient != nil {
+		telemetryHandler := api.NewTelemetryHandler(postgresClient.GetDB())
+		mux.HandleFunc("GET /api/v1/telemetry/traces", telemetryHandler.GetTraces)
+		mux.HandleFunc("GET /api/v1/telemetry/audit_logs", telemetryHandler.GetAuditLogs)
+		mux.HandleFunc("GET /api/v1/telemetry/metrics", telemetryHandler.GetMetrics)
 	}
 
 	// 健康检查端点 - 包含三层健康状态检查
@@ -258,7 +281,7 @@ func main() {
 	// 在独立的 goroutine 中启动服务器，避免阻塞主程序流程
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error(ctx, "启动服务器失败", zap.Error(err))
+			logger.Error(ctx, "启动服务器失败", "error", err)
 			os.Exit(1)
 		}
 	}()
@@ -277,7 +300,7 @@ func main() {
 
 	// 尝试优雅地关闭服务器，等待正在进行的请求处理完毕
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error(ctx, "服务器强制关闭", zap.Error(err))
+		logger.Error(ctx, "服务器强制关闭", "error", err)
 	}
 
 	logger.Info(ctx, "服务器已退出")

@@ -18,9 +18,7 @@ Luna AI 上下文历史管理与截断策略模块
 
 from typing import Dict, List, Optional, Tuple
 
-from app.logger import get_logger
-
-logger = get_logger(__name__)
+from app.logger import logger
 
 # ============================================================
 # 默认常量配置
