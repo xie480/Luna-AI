@@ -119,6 +119,18 @@ func (m *Manager) CreateVersion(ctx context.Context, templateID, content, variab
 		nextVersionNum = versions[0].VersionNum + 1
 	}
 
+	// 确保 variables 是有效的 JSON 数组字符串
+	if variables == "" {
+		variables = "[]"
+	} else if !strings.HasPrefix(variables, "[") {
+		// 如果前端传过来的是逗号分隔的字符串，转换为 JSON 数组
+		vars := strings.Split(variables, ",")
+		for i, v := range vars {
+			vars[i] = fmt.Sprintf(`"%s"`, strings.TrimSpace(v))
+		}
+		variables = fmt.Sprintf("[%s]", strings.Join(vars, ","))
+	}
+
 	version := &repository.PromptVersion{
 		ID:         snowflake.GenerateStringID(),
 		TemplateID: templateID,
@@ -140,34 +152,127 @@ func (m *Manager) CreateVersion(ctx context.Context, templateID, content, variab
 // PublishVersion 发布版本（将其设为模板的 active_version_id）
 // 发布成功后自动使对应的 Redis 缓存失效
 func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID string) error {
-	tmpl, err := m.repo.GetTemplate(ctx, templateID)
-	if err != nil {
-		return err
-	}
-
-	// 验证版本是否存在
-	version, err := m.repo.GetVersion(ctx, versionID)
-	if err != nil {
-		return err
-	}
-
-	if version.TemplateID != templateID {
-		return fmt.Errorf("版本 %s 不属于模板 %s", versionID, templateID)
-	}
-
-	tmpl.ActiveVersionID = versionID
-	if err := m.repo.UpdateTemplate(ctx, tmpl); err != nil {
-		return err
-	}
-
-	logger.Info(ctx, "发布 Prompt 版本成功", zap.String("template_id", templateID), zap.String("version_id", versionID))
-
-	// 版本发布后自动使缓存失效，下一次请求会从数据库重新加载
-	if m.cacheMgr != nil {
-		if cacheErr := m.cacheMgr.InvalidateCache(ctx, tmpl.Category); cacheErr != nil {
-			logger.Warn(ctx, "清除 Prompt 缓存失败", zap.String("category", tmpl.Category), zap.Error(cacheErr))
+	return m.repo.RunInTransaction(ctx, func(txRepo *repository.PromptPGRepo) error {
+		tmpl, err := txRepo.GetTemplate(ctx, templateID)
+		if err != nil {
+			return err
 		}
-	}
 
-	return nil
+		// 验证版本是否存在
+		version, err := txRepo.GetVersion(ctx, versionID)
+		if err != nil {
+			return err
+		}
+
+		if version.TemplateID != templateID {
+			return fmt.Errorf("版本 %s 不属于模板 %s", versionID, templateID)
+		}
+
+		// 将之前处于 published 状态的版本更新为 deprecated
+		versions, err := txRepo.GetVersionsByTemplate(ctx, templateID)
+		if err != nil {
+			return err
+		}
+		for _, v := range versions {
+			if v.Status == "published" && v.ID != versionID {
+				v.Status = "deprecated"
+				if err := txRepo.UpdateVersion(ctx, &v); err != nil {
+					return err
+				}
+			}
+		}
+
+		// 更新当前版本状态为 published
+		version.Status = "published"
+		if err := txRepo.UpdateVersion(ctx, version); err != nil {
+			return err
+		}
+
+		// 更新模板的 active_version_id
+		tmpl.ActiveVersionID = versionID
+		if err := txRepo.UpdateTemplate(ctx, tmpl); err != nil {
+			return err
+		}
+
+		logger.Info(ctx, "发布 Prompt 版本成功", zap.String("template_id", templateID), zap.String("version_id", versionID))
+
+		// 版本发布后自动使缓存失效，下一次请求会从数据库重新加载
+		if m.cacheMgr != nil {
+			if cacheErr := m.cacheMgr.InvalidateCache(ctx, tmpl.Category); cacheErr != nil {
+				logger.Warn(ctx, "清除 Prompt 缓存失败", zap.String("category", tmpl.Category), zap.Error(cacheErr))
+			}
+		}
+
+		return nil
+	})
+}
+
+// RollbackVersion 回滚版本
+// 物理删除当前处于 published 状态的最新版本，并将目标回滚版本的状态从 deprecated 恢复为 published
+func (m *Manager) RollbackVersion(ctx context.Context, templateID, targetVersionID string) error {
+	return m.repo.RunInTransaction(ctx, func(txRepo *repository.PromptPGRepo) error {
+		tmpl, err := txRepo.GetTemplate(ctx, templateID)
+		if err != nil {
+			return err
+		}
+
+		// 验证目标回滚版本是否存在
+		targetVersion, err := txRepo.GetVersion(ctx, targetVersionID)
+		if err != nil {
+			return err
+		}
+
+		if targetVersion.TemplateID != templateID {
+			return fmt.Errorf("版本 %s 不属于模板 %s", targetVersionID, templateID)
+		}
+
+		if targetVersion.Status != "deprecated" {
+			return fmt.Errorf("只能回滚到已废弃(deprecated)的版本，当前状态: %s", targetVersion.Status)
+		}
+
+		// 查找当前处于 published 状态的版本
+		var currentPublishedVersion *repository.PromptVersion
+		versions, err := txRepo.GetVersionsByTemplate(ctx, templateID)
+		if err != nil {
+			return err
+		}
+		for _, v := range versions {
+			if v.Status == "published" {
+				currentPublishedVersion = &v
+				break
+			}
+		}
+
+		if currentPublishedVersion == nil {
+			return fmt.Errorf("未找到当前已发布的版本")
+		}
+
+		// 物理删除当前已发布的版本
+		if err := txRepo.DeleteVersion(ctx, currentPublishedVersion.ID); err != nil {
+			return err
+		}
+
+		// 将目标回滚版本状态更新为 published
+		targetVersion.Status = "published"
+		if err := txRepo.UpdateVersion(ctx, targetVersion); err != nil {
+			return err
+		}
+
+		// 更新模板的 active_version_id
+		tmpl.ActiveVersionID = targetVersionID
+		if err := txRepo.UpdateTemplate(ctx, tmpl); err != nil {
+			return err
+		}
+
+		logger.Info(ctx, "回滚 Prompt 版本成功", zap.String("template_id", templateID), zap.String("target_version_id", targetVersionID), zap.String("deleted_version_id", currentPublishedVersion.ID))
+
+		// 版本回滚后自动使缓存失效
+		if m.cacheMgr != nil {
+			if cacheErr := m.cacheMgr.InvalidateCache(ctx, tmpl.Category); cacheErr != nil {
+				logger.Warn(ctx, "清除 Prompt 缓存失败", zap.String("category", tmpl.Category), zap.Error(cacheErr))
+			}
+		}
+
+		return nil
+	})
 }

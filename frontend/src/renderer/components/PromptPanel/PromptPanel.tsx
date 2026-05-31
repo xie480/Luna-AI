@@ -10,28 +10,30 @@ import { PromptEditor } from '../Settings/PromptManager/PromptEditor';
 import { DiffViewer } from '../Settings/PromptManager/DiffViewer';
 import { PromptPreview } from '../Settings/DebugPanel/PromptPreview';
 import { PromptTemplate, PromptVersion } from '../../types/prompt';
+import { usePromptStore } from '../../stores/promptStore';
 import './PromptPanel.css';
 
 type PromptTab = 'manage' | 'preview';
 
 export const PromptPanel: React.FC = () => {
+  const { templates, versions, selectedTemplateId, selectedVersionId, selectTemplate, selectVersion } = usePromptStore();
   const [activeTab, setActiveTab] = useState<PromptTab>('manage');
-  const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<PromptVersion | null>(null);
   const [compareVersion, setCompareVersion] = useState<PromptVersion | null>(null);
   const [isDiffMode, setIsDiffMode] = useState(false);
 
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || null;
+  const selectedVersion = versions.find(v => v.id === selectedVersionId) || null;
+
   const handleSelectTemplate = useCallback((template: PromptTemplate) => {
-    setSelectedTemplate(template);
-    setSelectedVersion(null);
+    selectTemplate(template.id);
     setCompareVersion(null);
     setIsDiffMode(false);
-  }, []);
+  }, [selectTemplate]);
 
   const handleSelectVersion = useCallback((version: PromptVersion) => {
-    setSelectedVersion(version);
+    selectVersion(version.id);
     setIsDiffMode(false);
-  }, []);
+  }, [selectVersion]);
 
   return (
     <div className="prompt-panel">

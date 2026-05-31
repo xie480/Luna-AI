@@ -33,6 +33,8 @@ interface PromptState {
   createVersion: (templateId: string, content: string, variables: string) => Promise<void>;
   /** 发布版本 */
   publishVersion: (templateId: string, versionId: string) => Promise<void>;
+  /** 回滚版本 */
+  rollbackVersion: (templateId: string, versionId: string) => Promise<void>;
 }
 
 export const usePromptStore = create<PromptState>((set, get) => ({
@@ -112,6 +114,21 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       }
     } catch (err: any) {
       set({ error: err.message || 'Failed to publish version' });
+      throw err;
+    }
+  },
+
+  rollbackVersion: async (templateId, versionId) => {
+    set({ error: null });
+    try {
+      await promptService.rollbackVersion(templateId, versionId);
+      // 重新获取模板列表和版本历史以更新状态
+      await get().fetchTemplates();
+      if (get().selectedTemplateId === templateId) {
+        await get().selectTemplate(templateId);
+      }
+    } catch (err: any) {
+      set({ error: err.message || 'Failed to rollback version' });
       throw err;
     }
   },

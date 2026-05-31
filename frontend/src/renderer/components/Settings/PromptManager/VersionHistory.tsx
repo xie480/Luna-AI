@@ -19,6 +19,7 @@ interface VersionHistoryProps {
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
   published: '已发布',
+  deprecated: '已废弃',
   archived: '已归档',
 };
 
@@ -27,15 +28,9 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   onSelectVersion,
   selectedVersionId,
 }) => {
-  const { versions, isLoadingVersions, selectTemplate, publishVersion, templates } = usePromptStore();
+  const { versions, isLoadingVersions, selectTemplate, publishVersion, rollbackVersion, templates } = usePromptStore();
   const [publishingId, setPublishingId] = useState<string | null>(null);
-
-  // 当模板 ID 变化时自动加载版本历史
-  useEffect(() => {
-    if (templateId) {
-      selectTemplate(templateId);
-    }
-  }, [templateId, selectTemplate]);
+  const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 
   const templateData = templateId ? templates.find(t => t.id === templateId) : null;
 
@@ -50,6 +45,21 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
       setPublishingId(null);
     }
   }, [templateId, publishVersion]);
+
+  const handleRollback = useCallback(async (versionId: string) => {
+    if (!templateId) return;
+    if (!window.confirm('回滚操作将删除当前已发布的最新版本，并恢复该旧版本。确定要继续吗？')) {
+      return;
+    }
+    setRollingBackId(versionId);
+    try {
+      await rollbackVersion(templateId, versionId);
+    } catch (err) {
+      // 错误由 store 层捕获并展示
+    } finally {
+      setRollingBackId(null);
+    }
+  }, [templateId, rollbackVersion]);
 
   if (!templateId) {
     return (
@@ -99,7 +109,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
                   {new Date(v.created_at).toLocaleString('zh-CN')}
                 </div>
                 <div className="version-actions">
-                  {v.status !== 'published' && (
+                  {v.status === 'draft' && (
                     <button
                       className="config-btn config-btn-primary config-btn-sm"
                       onClick={(e) => {
@@ -109,6 +119,18 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
                       disabled={publishingId === v.id}
                     >
                       {publishingId === v.id ? '发布中...' : '发布'}
+                    </button>
+                  )}
+                  {v.status === 'deprecated' && (
+                    <button
+                      className="config-btn config-btn-secondary config-btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRollback(v.id);
+                      }}
+                      disabled={rollingBackId === v.id}
+                    >
+                      {rollingBackId === v.id ? '回滚中...' : '回滚'}
                     </button>
                   )}
                 </div>

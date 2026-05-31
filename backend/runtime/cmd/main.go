@@ -163,6 +163,7 @@ func main() {
 		mux.HandleFunc("POST /api/v1/prompts/template", promptHandler.HandleCreateTemplate)
 		mux.HandleFunc("POST /api/v1/prompts/version", promptHandler.HandleCreateVersion)
 		mux.HandleFunc("POST /api/v1/prompts/publish", promptHandler.HandlePublishVersion)
+		mux.HandleFunc("POST /api/v1/prompts/rollback", promptHandler.HandleRollbackVersion)
 	}
 
 	// 健康检查端点 - 包含三层健康状态检查

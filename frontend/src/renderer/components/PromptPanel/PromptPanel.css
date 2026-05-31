@@ -30,3 +30,30 @@
   gap: 16px;
   overflow: hidden;
 }
+
+.prompt-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.editor-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.editor-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.readonly-line-decoration {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.readonly-line-margin {
+  background-color: rgba(255, 77, 79, 0.1);
+  border-left: 3px solid #ff4d4f;
+}

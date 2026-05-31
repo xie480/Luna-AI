@@ -164,3 +164,35 @@ func (h *PromptHandler) HandlePublishVersion(w http.ResponseWriter, r *http.Requ
 		Data: map[string]bool{"success": true},
 	})
 }
+
+// HandleRollbackVersion 处理回滚版本请求（POST /api/v1/prompts/rollback）
+func (h *PromptHandler) HandleRollbackVersion(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		TemplateID string `json:"template_id"`
+		VersionID  string `json:"version_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, response{
+			Code: 400,
+			Msg:  "请求体格式错误",
+		})
+		return
+	}
+
+	ctx := r.Context()
+	if err := h.promptManager.RollbackVersion(ctx, req.TemplateID, req.VersionID); err != nil {
+		logger.Error(ctx, "回滚版本失败", zap.Error(err))
+		writeJSON(w, http.StatusInternalServerError, response{
+			Code: 500,
+			Msg:  "回滚版本失败",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response{
+		Code: 0,
+		Msg:  "success",
+		Data: map[string]bool{"success": true},
+	})
+}

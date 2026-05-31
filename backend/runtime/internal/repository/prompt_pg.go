@@ -97,3 +97,27 @@ func (r *PromptPGRepo) CreateVersion(ctx context.Context, version *PromptVersion
 	}
 	return nil
 }
+
+// UpdateVersion 更新版本
+func (r *PromptPGRepo) UpdateVersion(ctx context.Context, version *PromptVersion) error {
+	if err := r.db.WithContext(ctx).Save(version).Error; err != nil {
+		return fmt.Errorf("更新版本失败: %w", err)
+	}
+	return nil
+}
+
+// DeleteVersion 删除版本
+func (r *PromptPGRepo) DeleteVersion(ctx context.Context, id string) error {
+	if err := r.db.WithContext(ctx).Delete(&PromptVersion{}, "id = ?", id).Error; err != nil {
+		return fmt.Errorf("删除版本失败: %w", err)
+	}
+	return nil
+}
+
+// RunInTransaction 在事务中执行操作
+func (r *PromptPGRepo) RunInTransaction(ctx context.Context, fn func(txRepo *PromptPGRepo) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := &PromptPGRepo{db: tx}
+		return fn(txRepo)
+	})
+}

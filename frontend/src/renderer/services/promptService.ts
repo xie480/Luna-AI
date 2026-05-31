@@ -79,7 +79,7 @@ export const promptService = {
     const ready = await probePromptsEndpoint();
     if (!ready) throw new Error('后端 Prompt 管理接口尚未就绪');
 
-    const res = await fetch(`${API_BASE}/templates`, {
+    const res = await fetch(`${API_BASE}/template`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, category, slot_position: slotPosition, is_system: isSystem }),
@@ -120,7 +120,7 @@ export const promptService = {
     const ready = await probePromptsEndpoint();
     if (!ready) throw new Error('后端 Prompt 管理接口尚未就绪');
 
-    const res = await fetch(`${API_BASE}/versions`, {
+    const res = await fetch(`${API_BASE}/version`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: templateId, content, variables }),
@@ -142,7 +142,7 @@ export const promptService = {
     const ready = await probePromptsEndpoint();
     if (!ready) throw new Error('后端 Prompt 管理接口尚未就绪');
 
-    const res = await fetch(`${API_BASE}/versions/publish`, {
+    const res = await fetch(`${API_BASE}/publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ template_id: templateId, version_id: versionId }),
@@ -154,5 +154,26 @@ export const promptService = {
     if (!res.ok) throw new Error(`发布版本失败: ${res.statusText}`);
     const data: ResponseModel = await res.json();
     if (data.code !== 0) throw new Error(data.msg || '发布版本失败');
+  },
+
+  /**
+   * 回滚指定版本
+   */
+  rollbackVersion: async (templateId: string, versionId: string): Promise<void> => {
+    const ready = await probePromptsEndpoint();
+    if (!ready) throw new Error('后端 Prompt 管理接口尚未就绪');
+
+    const res = await fetch(`${API_BASE}/rollback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId, version_id: versionId }),
+    });
+    if (res.status === 404) {
+      _isPromptsReady = false;
+      throw new Error('后端 Prompt 管理接口尚未就绪');
+    }
+    if (!res.ok) throw new Error(`回滚版本失败: ${res.statusText}`);
+    const data: ResponseModel = await res.json();
+    if (data.code !== 0) throw new Error(data.msg || '回滚版本失败');
   },
 };
