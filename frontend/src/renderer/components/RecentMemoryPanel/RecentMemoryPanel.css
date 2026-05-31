@@ -32,6 +32,12 @@
   flex-direction: column;
 }
 
+/* 日历视图下取消高度限制，允许自适应撑开 */
+.recent-memory-panel.calendar-view {
+  max-height: none;
+  height: auto;
+}
+
 /* 内部滚动容器 */
 .recent-memory-panel-content {
   direction: ltr;
@@ -154,4 +160,26 @@
 .recent-memory-panel::-webkit-resizer {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
+}
+
+.phone-mockup-external-container {
+  position: absolute;
+  top: calc(100% + 16px);
+  right: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 20;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

@@ -1,0 +1,66 @@
+.phone-mockup {
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 9 / 19.5;
+  margin: 0 auto;
+  position: relative;
+  filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.5));
+}
+
+.phone-frame {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  border-radius: 36px;
+  padding: 10px;
+  position: relative;
+  box-shadow: 
+    inset 0 0 0 2px #3a3a3c,
+    inset 0 0 0 6px #000,
+    inset 0 0 0 7px #1c1c1e,
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.dynamic-island {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90px;
+  height: 24px;
+  background: #000;
+  border-radius: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.camera-lens {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #111;
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+.sensor {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0a0a0a;
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  background: #121212;
+  border-radius: 28px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}

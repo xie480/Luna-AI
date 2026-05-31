@@ -31,7 +31,6 @@ import {
   ChatStreamPayload,
   EmotionUpdatePayload,
   ReplyChunkPayload,
-  ChatMessage,
   InitStatePayload,
   InteractionQA,
 } from '../../shared/types';
@@ -171,30 +170,33 @@ class WSManager {
     const msgType = msg.type as WSMsgType;
 
     switch (msgType) {
-      case WS_MSG_TYPE.PONG:
+      case WS_MSG_TYPE.PONG: {
         // Pong 响应
         const pongPayload = msg.payload as PongPayload;
         systemStore.addSystemLog(
           `收到 PONG: trace_id=${msg.trace_id}, source=${pongPayload.source}`
         );
         break;
+      }
 
-      case WS_MSG_TYPE.ERROR:
+      case WS_MSG_TYPE.ERROR: {
         // 错误消息
         const errorPayload = msg.payload as ErrorPayload;
         systemStore.addSystemLog(
           `收到 ERROR: trace_id=${msg.trace_id}, code=${errorPayload.code}, message=${errorPayload.message}`
         );
         break;
+      }
 
-      case WS_MSG_TYPE.CHAT_STREAM:
+      case WS_MSG_TYPE.CHAT_STREAM: {
         // 聊天流式输出 —— 内含 type 字段区分 emotion_update / reply_chunk
         const chatPayload = msg.payload as ChatStreamPayload;
         this.handleChatStream(chatPayload);
         break;
+      }
 
       // === 流式渲染独立事件（streaming_rendering_plan.md §3.1）===
-      case WS_MSG_TYPE.EVT_EMOTION_UPDATE:
+      case WS_MSG_TYPE.EVT_EMOTION_UPDATE: {
         // 独立情绪更新事件
         const emotionPayload = msg.payload as EmotionUpdatePayload;
         // 类型检查：确保 emotion 是有效的 EmotionState
@@ -212,8 +214,9 @@ class WSManager {
           new CustomEvent('luna:emotion-update', { detail: { emotion: emotionValue } })
         );
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_REPLY_CHUNK:
+      case WS_MSG_TYPE.EVT_REPLY_CHUNK: {
         // 独立回复文本块事件
         const replyPayload = msg.payload as ReplyChunkPayload;
         // 触发气泡显示事件
@@ -226,18 +229,21 @@ class WSManager {
           );
         }
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_INIT_STATE:
+      case WS_MSG_TYPE.EVT_INIT_STATE: {
         // 初始状态同步
         this.handleInitState(msg.payload as InitStatePayload);
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_PLAN_SNAPSHOT:
+      case WS_MSG_TYPE.EVT_PLAN_SNAPSHOT: {
         // 任务计划快照更新
         sessionStore.updatePlan(msg.payload as any);
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_NODE_STATUS_UPDATE:
+      case WS_MSG_TYPE.EVT_NODE_STATUS_UPDATE: {
         // 任务节点状态更新
         const nodePayload = msg.payload as any;
         sessionStore.updateNodeStatus(
@@ -246,34 +252,56 @@ class WSManager {
           nodePayload.progress
         );
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_MEMORY_UPDATED:
+      case WS_MSG_TYPE.EVT_MEMORY_UPDATED: {
         // 记忆快照更新
         sessionStore.updateMemory(msg.payload as any);
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_DEBUG_LOG:
+      case WS_MSG_TYPE.EVT_DEBUG_LOG: {
         // 调试日志推送
         const logPayload = msg.payload as any;
         systemStore.addSystemLog(logPayload.message || String(logPayload));
         break;
+      }
 
       // === Phase 4 新增：可观测性相关 ===
-      case WS_MSG_TYPE.EVT_TELEMETRY_TRACE:
+      case WS_MSG_TYPE.EVT_TELEMETRY_TRACE: {
         // Go 推送的链路 Span（仅在诊断面板开启时推送）
         const spanPayload = msg.payload as TelemetrySpan;
         const telemetryStoreTrace = useTelemetryStore.getState();
         const updatedSpans = [...telemetryStoreTrace.traceSpans, spanPayload];
         telemetryStoreTrace.setTraceSpans(updatedSpans, updatedSpans.length);
         break;
+      }
 
-      case WS_MSG_TYPE.EVT_TELEMETRY_METRICS:
+      case WS_MSG_TYPE.EVT_TELEMETRY_METRICS: {
         // Go 推送的实时监控指标（每秒推送一次）
         const metricsPayload = msg.payload as MetricsDataPoint;
         const telemetryStoreMetrics = useTelemetryStore.getState();
         const updatedMetrics = [...telemetryStoreMetrics.metrics, metricsPayload].slice(-60);
         telemetryStoreMetrics.setMetrics(updatedMetrics);
         break;
+      }
+
+      // === 聊天记录展示功能新增 ===
+      case WS_MSG_TYPE.RES_CALENDAR_METADATA: {
+        const metaPayload = msg.payload as { year_month: string; active_dates: string[] };
+        import('../stores/historyStore').then(({ useHistoryStore }) => {
+          useHistoryStore.getState().setCalendarMetadata(metaPayload.year_month, metaPayload.active_dates);
+        });
+        break;
+      }
+
+      case WS_MSG_TYPE.RES_CHAT_HISTORY: {
+        const historyPayload = msg.payload as { date: string; messages: any[] };
+        import('../stores/historyStore').then(({ useHistoryStore }) => {
+          useHistoryStore.getState().setChatHistory(historyPayload.date, historyPayload.messages);
+        });
+        break;
+      }
 
       default:
         systemStore.addSystemLog(`收到未知消息类型: ${msg.type}`);
@@ -345,6 +373,16 @@ class WSManager {
 
         // Phase 5: 标记有待插入的记忆数据，等待 luna:all-bubbles-complete 事件触发后真正插入
         this.hasPendingMemory = true;
+
+        // 当日聊天记录实时更新：如果当前日历面板选中的是今天，则重新拉取最新记录
+        import('../stores/historyStore').then(({ useHistoryStore }) => {
+          const historyState = useHistoryStore.getState();
+          const now = new Date();
+          const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          if (historyState.selectedDate === todayStr) {
+            historyState.fetchChatHistory(todayStr);
+          }
+        });
       }
     }
   }
@@ -367,6 +405,13 @@ class WSManager {
     if (payload.recentQA) {
       sessionStore.setRecentQA(payload.recentQA);
     }
+  }
+
+  /**
+   * 发送消息到 Go Runtime (供外部调用)
+   */
+  public sendMessage(type: string, payload: unknown): void {
+    this.send({ type, payload });
   }
 
   /**

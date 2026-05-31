@@ -1,0 +1,215 @@
+.calendar-panel-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* 移除固定高度和滚动条，允许内容自然撑开 */
+  height: auto;
+  overflow: visible;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 0 8px;
+}
+
+.month-nav-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.month-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.current-month-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.select-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.select-wrapper::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.year-select,
+.month-select {
+  appearance: none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 4px 20px 4px 8px;
+  border-radius: 6px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.year-select {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.month-select {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.year-select:hover,
+.month-select:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(160, 130, 255, 0.5);
+}
+
+.year-select:focus,
+.month-select:focus {
+  border-color: #a082ff;
+  box-shadow: 0 0 0 2px rgba(160, 130, 255, 0.2);
+}
+
+.year-select option,
+.month-select option {
+  background: #1a1a24;
+  color: #fff;
+}
+
+.calendar-grid {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: opacity 0.3s ease;
+}
+
+.calendar-grid.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.weekdays span {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 500;
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.day-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: 13px;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  user-select: none;
+}
+
+.day-cell.empty {
+  background: transparent;
+}
+
+.day-cell.no-record {
+  color: rgba(255, 255, 255, 0.2);
+  cursor: not-allowed;
+}
+
+.day-cell.has-record {
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.day-cell.has-record:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-1px);
+}
+
+.day-cell.selected {
+  background: rgba(160, 130, 255, 0.2) !important;
+  color: #fff;
+  border: 1px solid rgba(160, 130, 255, 0.5);
+  box-shadow: 0 0 10px rgba(160, 130, 255, 0.3);
+}
+
+.day-cell.today {
+  background: rgba(160, 130, 255, 0.15);
+  border: 1px solid rgba(160, 130, 255, 0.4);
+}
+
+.day-cell.today .day-number {
+  color: #a082ff;
+  font-weight: 800;
+}
+
+.day-cell.today::after {
+  content: '今日';
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 8px;
+  background: #a082ff;
+  color: #fff;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transform: scale(0.8);
+  box-shadow: 0 2px 4px rgba(160, 130, 255, 0.4);
+}
+
+.record-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  position: absolute;
+  bottom: 4px;
+  transition: all 0.2s ease;
+}
+
+.day-cell.selected .record-dot {
+  background: #fff;
+  box-shadow: 0 0 4px #fff;
+}
+
+/* 移除 phone-mockup-wrapper 样式，因为组件将被剥离 */
