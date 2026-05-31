@@ -345,19 +345,6 @@ class CommunicationServiceServicer(
                         new_key_facts="",
                     )
 
-    async def SyncConfig(
-        self,
-        request: communication_pb2.SyncConfigRequest,
-        context: grpc.ServicerContext,
-    ) -> communication_pb2.SyncConfigResponse:
-        """
-        处理配置同步请求 (已废弃)
-        """
-        logger.warning(f"收到已废弃的 SyncConfig 请求, version_id: {request.version_id}")
-        return communication_pb2.SyncConfigResponse(
-            success=False,
-            error_message="SyncConfig is deprecated, use SyncPresetConfig instead"
-        )
 
     async def SyncPresetConfig(
         self,

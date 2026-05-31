@@ -84,19 +84,6 @@ message ChatStreamResponse {
   string error = 6;
 }
 
-// SyncConfigRequest 配置同步请求 (已废弃，保留兼容性)
-message SyncConfigRequest {
-  string version_id = 1;
-  string llm_config_json = 2; // 包含明文 API Key 的 JSON
-}
-
-// SyncConfigResponse 配置同步响应 (已废弃，保留兼容性)
-message SyncConfigResponse {
-  bool success = 1;
-  string error_message = 2;
-}
-
-// 模型配置结构
 message ModelConfig {
   string base_url = 1;
   string api_key = 2; // 明文，仅在内存中流转
@@ -131,9 +118,5 @@ service CommunicationService {
   // SummarizeContext 方法，用于后台摘要压缩
   rpc SummarizeContext(SummarizeContextRequest) returns (SummarizeContextResponse);
 
-  // SyncConfig 方法，用于热更新配置 (已废弃)
-  rpc SyncConfig(SyncConfigRequest) returns (SyncConfigResponse);
-
-  // SyncPresetConfig 方法，用于同步 API 配置预设
   rpc SyncPresetConfig(SyncPresetConfigRequest) returns (SyncPresetConfigResponse);
 }

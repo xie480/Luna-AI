@@ -11,14 +11,36 @@ import (
 	"luna-ai/backend/runtime/internal/utils/snowflake"
 )
 
+// PromptRepository 定义 Prompt 仓储接口
+type PromptRepository interface {
+	ListTemplates(ctx context.Context) ([]repository.PromptTemplate, error)
+	GetTemplate(ctx context.Context, id string) (*repository.PromptTemplate, error)
+	GetTemplateByName(ctx context.Context, name string) (*repository.PromptTemplate, error)
+	GetTemplatesByCategory(ctx context.Context, category string) ([]repository.PromptTemplate, error)
+	CreateTemplate(ctx context.Context, template *repository.PromptTemplate) error
+	UpdateTemplate(ctx context.Context, template *repository.PromptTemplate) error
+	GetVersion(ctx context.Context, id string) (*repository.PromptVersion, error)
+	GetVersionsByTemplate(ctx context.Context, templateID string) ([]repository.PromptVersion, error)
+	CreateVersion(ctx context.Context, version *repository.PromptVersion) error
+	UpdateVersion(ctx context.Context, version *repository.PromptVersion) error
+	DeleteVersion(ctx context.Context, id string) error
+	RunInTransaction(ctx context.Context, fn func(txRepo interface{}) error) error
+}
+
+// PromptCache 定义 Prompt 缓存接口
+type PromptCache interface {
+	GetAssembledPrompt(ctx context.Context, category string, variables map[string]string) (string, error)
+	InvalidateCache(ctx context.Context, category string) error
+}
+
 // Manager 负责 Prompt 模板与版本的管理
 type Manager struct {
-	repo       *repository.PromptPGRepo
-	cacheMgr   *CacheManager
+	repo     PromptRepository
+	cacheMgr PromptCache
 }
 
 // NewManager 创建 Manager
-func NewManager(repo *repository.PromptPGRepo, cacheMgr *CacheManager) *Manager {
+func NewManager(repo PromptRepository, cacheMgr PromptCache) *Manager {
 	return &Manager{
 		repo:     repo,
 		cacheMgr: cacheMgr,
@@ -152,14 +174,15 @@ func (m *Manager) CreateVersion(ctx context.Context, templateID, content, variab
 // PublishVersion 发布版本（将其设为模板的 active_version_id）
 // 发布成功后自动使对应的 Redis 缓存失效
 func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID string) error {
-	return m.repo.RunInTransaction(ctx, func(txRepo *repository.PromptPGRepo) error {
-		tmpl, err := txRepo.GetTemplate(ctx, templateID)
+	return m.repo.RunInTransaction(ctx, func(txRepo interface{}) error {
+		repo := txRepo.(PromptRepository)
+		tmpl, err := repo.GetTemplate(ctx, templateID)
 		if err != nil {
 			return err
 		}
 
 		// 验证版本是否存在
-		version, err := txRepo.GetVersion(ctx, versionID)
+		version, err := repo.GetVersion(ctx, versionID)
 		if err != nil {
 			return err
 		}
@@ -169,14 +192,14 @@ func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID stri
 		}
 
 		// 将之前处于 published 状态的版本更新为 deprecated
-		versions, err := txRepo.GetVersionsByTemplate(ctx, templateID)
+		versions, err := repo.GetVersionsByTemplate(ctx, templateID)
 		if err != nil {
 			return err
 		}
 		for _, v := range versions {
 			if v.Status == "published" && v.ID != versionID {
 				v.Status = "deprecated"
-				if err := txRepo.UpdateVersion(ctx, &v); err != nil {
+				if err := repo.UpdateVersion(ctx, &v); err != nil {
 					return err
 				}
 			}
@@ -184,13 +207,13 @@ func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID stri
 
 		// 更新当前版本状态为 published
 		version.Status = "published"
-		if err := txRepo.UpdateVersion(ctx, version); err != nil {
+		if err := repo.UpdateVersion(ctx, version); err != nil {
 			return err
 		}
 
 		// 更新模板的 active_version_id
 		tmpl.ActiveVersionID = versionID
-		if err := txRepo.UpdateTemplate(ctx, tmpl); err != nil {
+		if err := repo.UpdateTemplate(ctx, tmpl); err != nil {
 			return err
 		}
 
@@ -210,14 +233,15 @@ func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID stri
 // RollbackVersion 回滚版本
 // 物理删除当前处于 published 状态的最新版本，并将目标回滚版本的状态从 deprecated 恢复为 published
 func (m *Manager) RollbackVersion(ctx context.Context, templateID, targetVersionID string) error {
-	return m.repo.RunInTransaction(ctx, func(txRepo *repository.PromptPGRepo) error {
-		tmpl, err := txRepo.GetTemplate(ctx, templateID)
+	return m.repo.RunInTransaction(ctx, func(txRepo interface{}) error {
+		repo := txRepo.(PromptRepository)
+		tmpl, err := repo.GetTemplate(ctx, templateID)
 		if err != nil {
 			return err
 		}
 
 		// 验证目标回滚版本是否存在
-		targetVersion, err := txRepo.GetVersion(ctx, targetVersionID)
+		targetVersion, err := repo.GetVersion(ctx, targetVersionID)
 		if err != nil {
 			return err
 		}
@@ -232,7 +256,7 @@ func (m *Manager) RollbackVersion(ctx context.Context, templateID, targetVersion
 
 		// 查找当前处于 published 状态的版本
 		var currentPublishedVersion *repository.PromptVersion
-		versions, err := txRepo.GetVersionsByTemplate(ctx, templateID)
+		versions, err := repo.GetVersionsByTemplate(ctx, templateID)
 		if err != nil {
 			return err
 		}
@@ -248,19 +272,19 @@ func (m *Manager) RollbackVersion(ctx context.Context, templateID, targetVersion
 		}
 
 		// 物理删除当前已发布的版本
-		if err := txRepo.DeleteVersion(ctx, currentPublishedVersion.ID); err != nil {
+		if err := repo.DeleteVersion(ctx, currentPublishedVersion.ID); err != nil {
 			return err
 		}
 
 		// 将目标回滚版本状态更新为 published
 		targetVersion.Status = "published"
-		if err := txRepo.UpdateVersion(ctx, targetVersion); err != nil {
+		if err := repo.UpdateVersion(ctx, targetVersion); err != nil {
 			return err
 		}
 
 		// 更新模板的 active_version_id
 		tmpl.ActiveVersionID = targetVersionID
-		if err := txRepo.UpdateTemplate(ctx, tmpl); err != nil {
+		if err := repo.UpdateTemplate(ctx, tmpl); err != nil {
 			return err
 		}
 

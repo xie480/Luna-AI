@@ -115,7 +115,7 @@ func (r *PromptPGRepo) DeleteVersion(ctx context.Context, id string) error {
 }
 
 // RunInTransaction 在事务中执行操作
-func (r *PromptPGRepo) RunInTransaction(ctx context.Context, fn func(txRepo *PromptPGRepo) error) error {
+func (r *PromptPGRepo) RunInTransaction(ctx context.Context, fn func(txRepo interface{}) error) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := &PromptPGRepo{db: tx}
 		return fn(txRepo)

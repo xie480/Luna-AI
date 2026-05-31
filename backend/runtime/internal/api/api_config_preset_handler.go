@@ -17,18 +17,20 @@ import (
 
 // ApiConfigPresetHandler 处理 API 配置预设相关的 HTTP 请求
 type ApiConfigPresetHandler struct {
-	repo      *repository.ConfigPresetPGRepo
-	cryptoSvc *config.CryptoService
-	aiClient  *AIClient
+    repo      *repository.ConfigPresetPGRepo
+    cryptoSvc *config.CryptoService
+    aiClient  *AIClient
+    configMgr *config.Manager
 }
 
 // NewApiConfigPresetHandler 创建 ApiConfigPresetHandler
-func NewApiConfigPresetHandler(repo *repository.ConfigPresetPGRepo, cryptoSvc *config.CryptoService, aiClient *AIClient) *ApiConfigPresetHandler {
-	return &ApiConfigPresetHandler{
-		repo:      repo,
-		cryptoSvc: cryptoSvc,
-		aiClient:  aiClient,
-	}
+func NewApiConfigPresetHandler(repo *repository.ConfigPresetPGRepo, cryptoSvc *config.CryptoService, aiClient *AIClient, cfgMgr *config.Manager) *ApiConfigPresetHandler {
+    return &ApiConfigPresetHandler{
+        repo:      repo,
+        cryptoSvc: cryptoSvc,
+        aiClient:  aiClient,
+        configMgr: cfgMgr,
+    }
 }
 
 // ModelConfig 定义模型配置的 JSON 结构
@@ -131,51 +133,21 @@ func (h *ApiConfigPresetHandler) HandleSavePreset(w http.ResponseWriter, r *http
 
 // HandleActivatePreset 激活预设并同步到 Python
 func (h *ApiConfigPresetHandler) HandleActivatePreset(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := r.PathValue("id")
-	if id == "" {
-		writeJSON(w, http.StatusBadRequest, response{Code: 400, Msg: "缺少预设 ID"})
-		return
-	}
+    ctx := r.Context()
+    id := r.PathValue("id")
+    if id == "" {
+        writeJSON(w, http.StatusBadRequest, response{Code: 400, Msg: "缺少预设 ID"})
+        return
+    }
 
-	// 1. 更新数据库激活状态
-	if err := h.repo.SetActive(ctx, id); err != nil {
-		logger.Error(ctx, "激活预设失败", zap.Error(err))
-		writeJSON(w, http.StatusInternalServerError, response{Code: 500, Msg: "激活预设失败"})
-		return
-	}
+    // 使用 ConfigManager 进行激活并同步（内部包含 DB 更新、内存快照和事件发布）
+    if err := h.configMgr.ActivatePreset(ctx, id); err != nil {
+        logger.Error(ctx, "激活预设失败", zap.Error(err))
+        writeJSON(w, http.StatusInternalServerError, response{Code: 500, Msg: "激活预设失败"})
+        return
+    }
 
-	// 2. 获取完整预设数据
-	preset, err := h.repo.GetByID(ctx, id)
-	if err != nil || preset == nil {
-		writeJSON(w, http.StatusInternalServerError, response{Code: 500, Msg: "获取预设数据失败"})
-		return
-	}
-
-	// 3. 解密并构造 gRPC 请求
-	largeModel, _ := h.decryptToProtoModelConfig(preset.LargeModelConfig)
-	mediumModel, _ := h.decryptToProtoModelConfig(preset.MediumModelConfig)
-	smallModel, _ := h.decryptToProtoModelConfig(preset.SmallModelConfig)
-
-	syncReq := &pb.SyncPresetConfigRequest{
-		SchemaVersion: "v1.0",
-		PresetId:      preset.ID,
-		LargeModel:    largeModel,
-		MediumModel:   mediumModel,
-		SmallModel:    smallModel,
-	}
-
-	// 4. 推送给 Python
-	if h.aiClient != nil {
-		resp, err := h.aiClient.client.SyncPresetConfig(ctx, syncReq)
-		if err != nil || !resp.Success {
-			logger.Error(ctx, "同步预设到 AI 服务失败", zap.Error(err))
-			writeJSON(w, http.StatusInternalServerError, response{Code: 500, Msg: "同步预设到 AI 服务失败"})
-			return
-		}
-	}
-
-	writeJSON(w, http.StatusOK, response{Code: 0, Msg: "success"})
+    writeJSON(w, http.StatusOK, response{Code: 0, Msg: "success"})
 }
 
 // FetchModelsRequest 定义获取模型列表的请求体

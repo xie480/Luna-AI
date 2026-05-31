@@ -25,7 +25,6 @@ const (
 	CommunicationService_Ping_FullMethodName             = "/communication.CommunicationService/Ping"
 	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
 	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
-	CommunicationService_SyncConfig_FullMethodName       = "/communication.CommunicationService/SyncConfig"
 	CommunicationService_SyncPresetConfig_FullMethodName = "/communication.CommunicationService/SyncPresetConfig"
 )
 
@@ -41,9 +40,6 @@ type CommunicationServiceClient interface {
 	ChatStream(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamResponse], error)
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error)
-	// SyncConfig 方法，用于热更新配置 (已废弃)
-	SyncConfig(ctx context.Context, in *SyncConfigRequest, opts ...grpc.CallOption) (*SyncConfigResponse, error)
-	// SyncPresetConfig 方法，用于同步 API 配置预设
 	SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error)
 }
 
@@ -94,16 +90,6 @@ func (c *communicationServiceClient) SummarizeContext(ctx context.Context, in *S
 	return out, nil
 }
 
-func (c *communicationServiceClient) SyncConfig(ctx context.Context, in *SyncConfigRequest, opts ...grpc.CallOption) (*SyncConfigResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SyncConfigResponse)
-	err := c.cc.Invoke(ctx, CommunicationService_SyncConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *communicationServiceClient) SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SyncPresetConfigResponse)
@@ -126,9 +112,6 @@ type CommunicationServiceServer interface {
 	ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error)
-	// SyncConfig 方法，用于热更新配置 (已废弃)
-	SyncConfig(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error)
-	// SyncPresetConfig 方法，用于同步 API 配置预设
 	SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
@@ -148,9 +131,6 @@ func (UnimplementedCommunicationServiceServer) ChatStream(*ChatRequest, grpc.Ser
 }
 func (UnimplementedCommunicationServiceServer) SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SummarizeContext not implemented")
-}
-func (UnimplementedCommunicationServiceServer) SyncConfig(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SyncConfig not implemented")
 }
 func (UnimplementedCommunicationServiceServer) SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SyncPresetConfig not implemented")
@@ -223,24 +203,6 @@ func _CommunicationService_SummarizeContext_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CommunicationService_SyncConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SyncConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CommunicationServiceServer).SyncConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: CommunicationService_SyncConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CommunicationServiceServer).SyncConfig(ctx, req.(*SyncConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _CommunicationService_SyncPresetConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SyncPresetConfigRequest)
 	if err := dec(in); err != nil {
@@ -273,10 +235,6 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SummarizeContext",
 			Handler:    _CommunicationService_SummarizeContext_Handler,
-		},
-		{
-			MethodName: "SyncConfig",
-			Handler:    _CommunicationService_SyncConfig_Handler,
 		},
 		{
 			MethodName: "SyncPresetConfig",

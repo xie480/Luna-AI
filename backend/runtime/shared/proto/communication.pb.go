@@ -509,113 +509,6 @@ func (x *ChatStreamResponse) GetError() string {
 	return ""
 }
 
-// SyncConfigRequest 配置同步请求 (已废弃，保留兼容性)
-type SyncConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	VersionId     string                 `protobuf:"bytes,1,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
-	LlmConfigJson string                 `protobuf:"bytes,2,opt,name=llm_config_json,json=llmConfigJson,proto3" json:"llm_config_json,omitempty"` // 包含明文 API Key 的 JSON
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SyncConfigRequest) Reset() {
-	*x = SyncConfigRequest{}
-	mi := &file_communication_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SyncConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SyncConfigRequest) ProtoMessage() {}
-
-func (x *SyncConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SyncConfigRequest.ProtoReflect.Descriptor instead.
-func (*SyncConfigRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *SyncConfigRequest) GetVersionId() string {
-	if x != nil {
-		return x.VersionId
-	}
-	return ""
-}
-
-func (x *SyncConfigRequest) GetLlmConfigJson() string {
-	if x != nil {
-		return x.LlmConfigJson
-	}
-	return ""
-}
-
-// SyncConfigResponse 配置同步响应 (已废弃，保留兼容性)
-type SyncConfigResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SyncConfigResponse) Reset() {
-	*x = SyncConfigResponse{}
-	mi := &file_communication_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SyncConfigResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SyncConfigResponse) ProtoMessage() {}
-
-func (x *SyncConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SyncConfigResponse.ProtoReflect.Descriptor instead.
-func (*SyncConfigResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *SyncConfigResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *SyncConfigResponse) GetErrorMessage() string {
-	if x != nil {
-		return x.ErrorMessage
-	}
-	return ""
-}
-
-// 模型配置结构
 type ModelConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BaseUrl       string                 `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
@@ -629,7 +522,7 @@ type ModelConfig struct {
 
 func (x *ModelConfig) Reset() {
 	*x = ModelConfig{}
-	mi := &file_communication_proto_msgTypes[9]
+	mi := &file_communication_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +534,7 @@ func (x *ModelConfig) String() string {
 func (*ModelConfig) ProtoMessage() {}
 
 func (x *ModelConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[9]
+	mi := &file_communication_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +547,7 @@ func (x *ModelConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelConfig.ProtoReflect.Descriptor instead.
 func (*ModelConfig) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{9}
+	return file_communication_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ModelConfig) GetBaseUrl() string {
@@ -706,7 +599,7 @@ type SyncPresetConfigRequest struct {
 
 func (x *SyncPresetConfigRequest) Reset() {
 	*x = SyncPresetConfigRequest{}
-	mi := &file_communication_proto_msgTypes[10]
+	mi := &file_communication_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -718,7 +611,7 @@ func (x *SyncPresetConfigRequest) String() string {
 func (*SyncPresetConfigRequest) ProtoMessage() {}
 
 func (x *SyncPresetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[10]
+	mi := &file_communication_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -731,7 +624,7 @@ func (x *SyncPresetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncPresetConfigRequest.ProtoReflect.Descriptor instead.
 func (*SyncPresetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{10}
+	return file_communication_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SyncPresetConfigRequest) GetSchemaVersion() string {
@@ -780,7 +673,7 @@ type SyncPresetConfigResponse struct {
 
 func (x *SyncPresetConfigResponse) Reset() {
 	*x = SyncPresetConfigResponse{}
-	mi := &file_communication_proto_msgTypes[11]
+	mi := &file_communication_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -792,7 +685,7 @@ func (x *SyncPresetConfigResponse) String() string {
 func (*SyncPresetConfigResponse) ProtoMessage() {}
 
 func (x *SyncPresetConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[11]
+	mi := &file_communication_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -805,7 +698,7 @@ func (x *SyncPresetConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncPresetConfigResponse.ProtoReflect.Descriptor instead.
 func (*SyncPresetConfigResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{11}
+	return file_communication_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SyncPresetConfigResponse) GetSuccess() bool {
@@ -859,14 +752,7 @@ const file_communication_proto_rawDesc = "" +
 	"\vis_finished\x18\x04 \x01(\bR\n" +
 	"isFinished\x12#\n" +
 	"\rfinish_reason\x18\x05 \x01(\tR\ffinishReason\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error\"Z\n" +
-	"\x11SyncConfigRequest\x12\x1d\n" +
-	"\n" +
-	"version_id\x18\x01 \x01(\tR\tversionId\x12&\n" +
-	"\x0fllm_config_json\x18\x02 \x01(\tR\rllmConfigJson\"S\n" +
-	"\x12SyncConfigResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x9d\x01\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\"\x9d\x01\n" +
 	"\vModelConfig\x12\x19\n" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x17\n" +
 	"\aapi_key\x18\x02 \x01(\tR\x06apiKey\x12\x19\n" +
@@ -884,14 +770,12 @@ const file_communication_proto_rawDesc = "" +
 	"smallModel\"Y\n" +
 	"\x18SyncPresetConfigResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\xc3\x03\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\xf0\x02\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +
 	"ChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12c\n" +
-	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponse\x12Q\n" +
-	"\n" +
-	"SyncConfig\x12 .communication.SyncConfigRequest\x1a!.communication.SyncConfigResponse\x12c\n" +
+	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponse\x12c\n" +
 	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
 
 var (
@@ -906,7 +790,7 @@ func file_communication_proto_rawDescGZIP() []byte {
 	return file_communication_proto_rawDescData
 }
 
-var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_communication_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: communication.PingRequest
 	(*PongResponse)(nil),             // 1: communication.PongResponse
@@ -915,32 +799,28 @@ var file_communication_proto_goTypes = []any{
 	(*SummarizeContextRequest)(nil),  // 4: communication.SummarizeContextRequest
 	(*SummarizeContextResponse)(nil), // 5: communication.SummarizeContextResponse
 	(*ChatStreamResponse)(nil),       // 6: communication.ChatStreamResponse
-	(*SyncConfigRequest)(nil),        // 7: communication.SyncConfigRequest
-	(*SyncConfigResponse)(nil),       // 8: communication.SyncConfigResponse
-	(*ModelConfig)(nil),              // 9: communication.ModelConfig
-	(*SyncPresetConfigRequest)(nil),  // 10: communication.SyncPresetConfigRequest
-	(*SyncPresetConfigResponse)(nil), // 11: communication.SyncPresetConfigResponse
+	(*ModelConfig)(nil),              // 7: communication.ModelConfig
+	(*SyncPresetConfigRequest)(nil),  // 8: communication.SyncPresetConfigRequest
+	(*SyncPresetConfigResponse)(nil), // 9: communication.SyncPresetConfigResponse
 }
 var file_communication_proto_depIdxs = []int32{
-	2,  // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
-	9,  // 1: communication.SyncPresetConfigRequest.large_model:type_name -> communication.ModelConfig
-	9,  // 2: communication.SyncPresetConfigRequest.medium_model:type_name -> communication.ModelConfig
-	9,  // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
-	0,  // 4: communication.CommunicationService.Ping:input_type -> communication.PingRequest
-	3,  // 5: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
-	4,  // 6: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
-	7,  // 7: communication.CommunicationService.SyncConfig:input_type -> communication.SyncConfigRequest
-	10, // 8: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
-	1,  // 9: communication.CommunicationService.Ping:output_type -> communication.PongResponse
-	6,  // 10: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
-	5,  // 11: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
-	8,  // 12: communication.CommunicationService.SyncConfig:output_type -> communication.SyncConfigResponse
-	11, // 13: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	2, // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
+	7, // 1: communication.SyncPresetConfigRequest.large_model:type_name -> communication.ModelConfig
+	7, // 2: communication.SyncPresetConfigRequest.medium_model:type_name -> communication.ModelConfig
+	7, // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
+	0, // 4: communication.CommunicationService.Ping:input_type -> communication.PingRequest
+	3, // 5: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
+	4, // 6: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
+	8, // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
+	1, // 8: communication.CommunicationService.Ping:output_type -> communication.PongResponse
+	6, // 9: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
+	5, // 10: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
+	9, // 11: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
+	8, // [8:12] is the sub-list for method output_type
+	4, // [4:8] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_communication_proto_init() }
@@ -954,7 +834,7 @@ func file_communication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_proto_rawDesc), len(file_communication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

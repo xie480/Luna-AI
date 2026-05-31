@@ -101,18 +101,19 @@ func (c *AIClient) SummarizeContext(ctx context.Context, req *pb.SummarizeContex
 	return resp, nil
 }
 
-// SyncConfig 发送配置同步请求到 AI 服务
-func (c *AIClient) SyncConfig(ctx context.Context, req *pb.SyncConfigRequest) (*pb.SyncConfigResponse, error) {
-	logger.Info(ctx, "发送 SyncConfig 请求到 AI 服务", zap.String("version_id", req.VersionId))
+// SyncPresetConfig 发送预设配置同步请求到 AI 服务
+func (c *AIClient) SyncPresetConfig(ctx context.Context, req *pb.SyncPresetConfigRequest) (*pb.SyncPresetConfigResponse, error) {
+	logger.Info(ctx, "发送 SyncPresetConfig 请求到 AI 服务", zap.String("preset_id", req.PresetId))
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	resp, err := c.client.SyncConfig(ctx, req)
+	resp, err := c.client.SyncPresetConfig(ctx, req)
 	if err != nil {
-		logger.Error(ctx, "SyncConfig 请求失败", zap.String("version_id", req.VersionId), zap.Error(err))
-		return nil, fmt.Errorf("sync config failed: %w", err)
+		logger.Error(ctx, "SyncPresetConfig 请求失败", zap.String("preset_id", req.PresetId), zap.Error(err))
+		return nil, fmt.Errorf("sync preset config failed: %w", err)
 	}
 
 	return resp, nil
 }
+

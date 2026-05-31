@@ -12,7 +12,6 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"luna-ai/backend/runtime/internal/logger"
-	"luna-ai/backend/runtime/internal/repository"
 )
 
 const (
@@ -38,12 +37,12 @@ type CachedPrompt struct {
 //   - 使用 singleflight 防止缓存击穿
 type CacheManager struct {
 	rdb         *redis.Client
-	pgRepo      *repository.PromptPGRepo
+	pgRepo      PromptRepository
 	singleGroup *singleflight.Group
 }
 
 // NewCacheManager 创建缓存管理器
-func NewCacheManager(rdb *redis.Client, pgRepo *repository.PromptPGRepo) *CacheManager {
+func NewCacheManager(rdb *redis.Client, pgRepo PromptRepository) *CacheManager {
 	return &CacheManager{
 		rdb:         rdb,
 		pgRepo:      pgRepo,

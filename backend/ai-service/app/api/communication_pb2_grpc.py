@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import communication_pb2 as communication__pb2
+import communication_pb2 as communication__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -50,11 +50,6 @@ class CommunicationServiceStub(object):
                 request_serializer=communication__pb2.SummarizeContextRequest.SerializeToString,
                 response_deserializer=communication__pb2.SummarizeContextResponse.FromString,
                 _registered_method=True)
-        self.SyncConfig = channel.unary_unary(
-                '/communication.CommunicationService/SyncConfig',
-                request_serializer=communication__pb2.SyncConfigRequest.SerializeToString,
-                response_deserializer=communication__pb2.SyncConfigResponse.FromString,
-                _registered_method=True)
         self.SyncPresetConfig = channel.unary_unary(
                 '/communication.CommunicationService/SyncPresetConfig',
                 request_serializer=communication__pb2.SyncPresetConfigRequest.SerializeToString,
@@ -87,16 +82,8 @@ class CommunicationServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SyncConfig(self, request, context):
-        """SyncConfig 方法，用于热更新配置 (已废弃)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def SyncPresetConfig(self, request, context):
-        """SyncPresetConfig 方法，用于同步 API 配置预设
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -118,11 +105,6 @@ def add_CommunicationServiceServicer_to_server(servicer, server):
                     servicer.SummarizeContext,
                     request_deserializer=communication__pb2.SummarizeContextRequest.FromString,
                     response_serializer=communication__pb2.SummarizeContextResponse.SerializeToString,
-            ),
-            'SyncConfig': grpc.unary_unary_rpc_method_handler(
-                    servicer.SyncConfig,
-                    request_deserializer=communication__pb2.SyncConfigRequest.FromString,
-                    response_serializer=communication__pb2.SyncConfigResponse.SerializeToString,
             ),
             'SyncPresetConfig': grpc.unary_unary_rpc_method_handler(
                     servicer.SyncPresetConfig,
@@ -212,33 +194,6 @@ class CommunicationService(object):
             '/communication.CommunicationService/SummarizeContext',
             communication__pb2.SummarizeContextRequest.SerializeToString,
             communication__pb2.SummarizeContextResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SyncConfig(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/communication.CommunicationService/SyncConfig',
-            communication__pb2.SyncConfigRequest.SerializeToString,
-            communication__pb2.SyncConfigResponse.FromString,
             options,
             channel_credentials,
             insecure,

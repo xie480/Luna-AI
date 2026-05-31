@@ -23,6 +23,7 @@ import (
 	"luna-ai/backend/runtime/internal/logger"
 	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
+	pb "luna-ai/backend/runtime/shared/proto"
 )
 
 func main() {
@@ -122,15 +123,58 @@ func main() {
 	// 6. 注册路由 - 设置 HTTP 路由处理器
 	mux := http.NewServeMux()
 
-	// API 配置预设端点
 	if postgresClient != nil && aiClient != nil {
 		presetRepo := repository.NewConfigPresetPGRepo(postgresClient)
-		presetHandler := api.NewApiConfigPresetHandler(presetRepo, cryptoSvc, aiClient)
+		// 初始化 EventBus 与 ConfigManager
+		eventBus := config.NewEventBus()
+		configMgr := config.NewManager(presetRepo, cryptoSvc, eventBus)
+		presetHandler := api.NewApiConfigPresetHandler(presetRepo, cryptoSvc, aiClient, configMgr)
 		mux.HandleFunc("GET /api/v1/config/presets", presetHandler.HandleGetPresets)
 		mux.HandleFunc("POST /api/v1/config/presets", presetHandler.HandleSavePreset)
 		mux.HandleFunc("POST /api/v1/config/presets/{id}/activate", presetHandler.HandleActivatePreset)
 		mux.HandleFunc("DELETE /api/v1/config/presets/{id}", presetHandler.HandleDeletePreset)
 		mux.HandleFunc("POST /api/v1/models/fetch", presetHandler.HandleFetchModels)
+
+		// 设置 EventBus 监听 ConfigChanged 事件，进行同步到 Python AI 服务
+		eventHandler := func(event config.Event) {
+			if event.Type == config.EventConfigChanged {
+				// 断言数据类型
+				snapshot, ok := event.Data.(*config.ActiveConfigSnapshot)
+				if !ok || snapshot == nil {
+					return
+				}
+				// 构造 gRPC 请求并发送
+				syncReq := &pb.SyncPresetConfigRequest{
+					SchemaVersion: "v1.0",
+					PresetId:      snapshot.PresetID,
+					LargeModel: &pb.ModelConfig{
+						BaseUrl:     snapshot.LargeModelConfig.BaseURL,
+						ApiKey:      snapshot.LargeModelConfig.APIKey,
+						ModelId:     snapshot.LargeModelConfig.ModelID,
+						MaxTokens:   snapshot.LargeModelConfig.MaxTokens,
+						Temperature: snapshot.LargeModelConfig.Temperature,
+					},
+					MediumModel: &pb.ModelConfig{
+						BaseUrl:     snapshot.MediumModelConfig.BaseURL,
+						ApiKey:      snapshot.MediumModelConfig.APIKey,
+						ModelId:     snapshot.MediumModelConfig.ModelID,
+						MaxTokens:   snapshot.MediumModelConfig.MaxTokens,
+						Temperature: snapshot.MediumModelConfig.Temperature,
+					},
+					SmallModel: &pb.ModelConfig{
+						BaseUrl:     snapshot.SmallModelConfig.BaseURL,
+						ApiKey:      snapshot.SmallModelConfig.APIKey,
+						ModelId:     snapshot.SmallModelConfig.ModelID,
+						MaxTokens:   snapshot.SmallModelConfig.MaxTokens,
+						Temperature: snapshot.SmallModelConfig.Temperature,
+					},
+				}
+				// 发送同步请求（忽略错误，日志已在 client 中记录）
+				_, _ = aiClient.SyncPresetConfig(context.Background(), syncReq)
+			}
+		}
+		// 订阅事件
+		eventBus.Subscribe(config.EventConfigChanged, eventHandler)
 	}
 
 	// Prompt 端点（Go 1.22+ 方法路由模式 + 路径参数）
