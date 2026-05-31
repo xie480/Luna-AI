@@ -157,7 +157,7 @@ export const TemplateList: React.FC<TemplateListProps> = ({
           <ul className="template-items">
             {categoryTemplates.map((t) => (
               <li
-                key={t.id}
+                key={t.id || t.name}
                 className={`template-item ${selectedTemplateId === t.id ? 'selected' : ''}`}
                 onClick={() => onSelectTemplate(t)}
               >

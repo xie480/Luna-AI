@@ -136,19 +136,21 @@ func main() {
 	// 6. 注册路由 - 设置 HTTP 路由处理器
 	mux := http.NewServeMux()
 
-	// 配置端点
+	// 配置端点（Go 1.22+ 方法路由模式）
 	if configManager != nil && aiClient != nil {
 		configHandler := api.NewConfigHandler(configManager, aiClient)
-		mux.HandleFunc("/api/config/update", configHandler.HandleUpdateConfig)
-		mux.HandleFunc("/api/config", configHandler.HandleGetConfig)
+		mux.HandleFunc("GET /api/v1/config", configHandler.HandleGetConfig)
+		mux.HandleFunc("POST /api/v1/config", configHandler.HandleUpdateConfig)
 	}
 
-	// Prompt 端点
+	// Prompt 端点（Go 1.22+ 方法路由模式 + 路径参数）
 	if promptManager != nil {
 		promptHandler := api.NewPromptHandler(promptManager)
-		mux.HandleFunc("/api/prompt/template", promptHandler.HandleCreateTemplate)
-		mux.HandleFunc("/api/prompt/version", promptHandler.HandleCreateVersion)
-		mux.HandleFunc("/api/prompt/publish", promptHandler.HandlePublishVersion)
+		mux.HandleFunc("GET /api/v1/prompts/templates/{id}/versions", promptHandler.HandleGetVersions)
+		mux.HandleFunc("GET /api/v1/prompts/templates", promptHandler.HandleGetTemplates)
+		mux.HandleFunc("POST /api/v1/prompts/template", promptHandler.HandleCreateTemplate)
+		mux.HandleFunc("POST /api/v1/prompts/version", promptHandler.HandleCreateVersion)
+		mux.HandleFunc("POST /api/v1/prompts/publish", promptHandler.HandlePublishVersion)
 	}
 
 	// 健康检查端点 - 包含三层健康状态检查

@@ -20,6 +20,15 @@ func NewPromptPGRepo(client *infrastructure.PostgresClient) *PromptPGRepo {
 	}
 }
 
+// ListTemplates 获取所有模板列表
+func (r *PromptPGRepo) ListTemplates(ctx context.Context) ([]PromptTemplate, error) {
+	var templates []PromptTemplate
+	if err := r.db.WithContext(ctx).Find(&templates).Error; err != nil {
+		return nil, fmt.Errorf("获取模板列表失败: %w", err)
+	}
+	return templates, nil
+}
+
 // GetTemplate 获取模板
 func (r *PromptPGRepo) GetTemplate(ctx context.Context, id string) (*PromptTemplate, error) {
 	var template PromptTemplate

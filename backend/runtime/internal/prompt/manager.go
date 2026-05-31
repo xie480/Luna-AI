@@ -77,6 +77,16 @@ func cleanEmptyLines(input string) string {
 	return strings.TrimSpace(input)
 }
 
+// ListTemplates 获取所有模板列表
+func (m *Manager) ListTemplates(ctx context.Context) ([]repository.PromptTemplate, error) {
+	return m.repo.ListTemplates(ctx)
+}
+
+// GetVersions 获取指定模板的所有版本
+func (m *Manager) GetVersions(ctx context.Context, templateID string) ([]repository.PromptVersion, error) {
+	return m.repo.GetVersionsByTemplate(ctx, templateID)
+}
+
 // CreateTemplate 创建新的 Prompt 模板
 func (m *Manager) CreateTemplate(ctx context.Context, name, category, slotPosition string, isSystem bool) (*repository.PromptTemplate, error) {
 	tmpl := &repository.PromptTemplate{

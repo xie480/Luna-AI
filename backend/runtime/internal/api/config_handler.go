@@ -23,45 +23,47 @@ func NewConfigHandler(cm *config.ConfigManager, aiClient *AIClient) *ConfigHandl
 	}
 }
 
-// HandleUpdateConfig 处理更新配置请求
+// HandleUpdateConfig 处理更新配置请求（POST /api/v1/config）
+// 由 Go 1.22+ 路由确保仅 POST 请求到达，不再冗余检查方法
 func (h *ConfigHandler) HandleUpdateConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, response{
+			Code: 400,
+			Msg:  "请求体格式错误",
+		})
 		return
 	}
 
 	ctx := r.Context()
 	if err := h.configManager.UpdateConfig(ctx, updates); err != nil {
 		logger.Error(ctx, "更新配置失败", zap.Error(err))
-		http.Error(w, "Failed to update config", http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, response{
+			Code: 500,
+			Msg:  "更新配置失败",
+		})
 		return
 	}
 
-	// 响应成功
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	writeJSON(w, http.StatusOK, response{
+		Code: 0,
+		Msg:  "success",
+		Data: map[string]bool{"success": true},
+	})
 }
 
-// HandleGetConfig 处理获取配置请求
+// HandleGetConfig 处理获取配置请求（GET /api/v1/config）
+// 由 Go 1.22+ 路由确保仅 GET 请求到达，不再冗余检查方法
 func (h *ConfigHandler) HandleGetConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	cfg := h.configManager.GetConfig()
-	
-	// 注意：不要返回明文的敏感信息，这里只返回掩码后的信息或非敏感信息
+
 	safeConfig := map[string]interface{}{
 		"has_llm_api_key": cfg.LLMAPIKey != "",
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(safeConfig)
+	writeJSON(w, http.StatusOK, response{
+		Code: 0,
+		Msg:  "success",
+		Data: safeConfig,
+	})
 }
