@@ -71,7 +71,9 @@ class TestStreamParserSentenceSplitting:
         msgs = parser.feed(chunk)
         reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
         assert len(reply_chunks) >= 1
-        assert "你好。" in reply_chunks[0]
+        # 句号会被 _TRAILING_PUNCTUATION_RE 过滤掉
+        assert "你好" in reply_chunks[0]
+        assert "你好。" not in reply_chunks[0]
 
     def test_split_by_chinese_punctuation(self):
         """测试按中文标点断句（问号、感叹号、逗号、省略号）"""
@@ -89,7 +91,9 @@ class TestStreamParserSentenceSplitting:
         chunk = '{"check":"c","thought":"t","emotion":"Sad","reply":"第一行\n第二行\n第三行"}'
         msgs = parser.feed(chunk)
         reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
-        assert any(c.endswith("\n") for c in reply_chunks)
+        # 换行符会被 strip() 过滤掉
+        assert "第一行" in reply_chunks
+        assert "第二行" in reply_chunks
 
     def test_partial_reply_single_chunk(self):
         """测试在一个 chunk 中收到完整 reply"""
@@ -98,8 +102,26 @@ class TestStreamParserSentenceSplitting:
         msgs = parser.feed(chunk)
         reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
         assert len(reply_chunks) >= 1
-        assert "好的。" in reply_chunks[0]
+        # 句号会被过滤掉
+        assert "好的" in reply_chunks[0]
+        assert "好的。" not in reply_chunks[0]
 
+
+    def test_json_closing_braces(self):
+        """测试 JSON 闭合符不会被输出"""
+        parser = StreamParser(trace_id="test-json-close-001")
+        chunk = '{"check":"c","thought":"t","emotion":"Happy","reply":"你好\n"\n}'
+        msgs = parser.feed(chunk)
+        reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
+        for c in reply_chunks:
+            assert "}" not in c
+            assert '"' not in c
+            
+        flush_msgs = parser.flush()
+        flush_reply_chunks = [c for t, c in flush_msgs if t == "reply_chunk"]
+        for c in flush_reply_chunks:
+            assert "}" not in c
+            assert '"' not in c
 
 class TestStreamParserEdgeCases:
     """StreamParser 边界情况测试"""

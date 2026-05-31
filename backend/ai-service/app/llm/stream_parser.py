@@ -178,6 +178,8 @@ class StreamParser:
             self._pending_prefix = ""
 
             sentence_stripped = full_sentence.strip()
+            # 移除可能残留的 JSON 结束符
+            sentence_stripped = sentence_stripped.replace('"}', '').replace('"', '').replace('}', '')
             sentence_cleaned = _TRAILING_PUNCTUATION_RE.sub('', sentence_stripped)
             
             # 修复死循环：将省略号暂存到 _pending_prefix 中，而不是塞回 _reply_buffer

@@ -175,6 +175,36 @@ func main() {
 		}
 		// 订阅事件
 		eventBus.Subscribe(config.EventConfigChanged, eventHandler)
+
+		// 加载激活的配置并触发初始同步
+		if err := configMgr.LoadActiveConfig(ctx); err != nil {
+			logger.Error(ctx, "加载激活配置失败", zap.Error(err))
+		} else {
+			snapshot := configMgr.GetActiveConfig()
+			if snapshot != nil && snapshot.PresetID != "" {
+				logger.Info(ctx, "加载到激活配置，准备触发初始同步", zap.String("preset_id", snapshot.PresetID))
+				
+				// 异步等待 AI 服务就绪后同步配置
+				go func() {
+					maxRetries := 15
+					for i := 0; i < maxRetries; i++ {
+						_, err := aiClient.Ping(context.Background(), "init-sync")
+						if err == nil {
+							eventBus.Publish(config.Event{
+								Type: config.EventConfigChanged,
+								Data: snapshot,
+							})
+							logger.Info(context.Background(), "初始配置同步成功")
+							return
+						}
+						time.Sleep(2 * time.Second)
+					}
+					logger.Error(context.Background(), "初始配置同步失败：AI 服务未就绪")
+				}()
+			} else {
+				logger.Info(ctx, "当前没有激活的配置预设")
+			}
+		}
 	}
 
 	// Prompt 端点（Go 1.22+ 方法路由模式 + 路径参数）
