@@ -22,7 +22,7 @@ export const ApiConfigPresetPanel: React.FC = () => {
     fetchModels,
   } = useApiConfigPresetStore();
 
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [largeConfig, setLargeConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
   const [mediumConfig, setMediumConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
   const [smallConfig, setSmallConfig] = useState<ModelConfig>({ ...DEFAULT_MODEL_CONFIG });
@@ -57,9 +57,14 @@ export const ApiConfigPresetPanel: React.FC = () => {
   }, [presets]);
 
   useEffect(() => {
-    if (presets.length > 0 && !selectedPresetId) {
-      const active = presets.find(p => p.is_active) || presets[0];
-      handleSelectPreset(active.id);
+    if (presets.length > 0) {
+      if (selectedPresetId === null) {
+        const active = presets.find(p => p.is_active) || presets[0];
+        handleSelectPreset(active.id);
+      } else if (selectedPresetId !== '' && !presets.find(p => p.id === selectedPresetId)) {
+        const active = presets.find(p => p.is_active) || presets[0];
+        handleSelectPreset(active.id);
+      }
     }
   }, [presets, selectedPresetId, handleSelectPreset]);
 
@@ -83,7 +88,7 @@ export const ApiConfigPresetPanel: React.FC = () => {
     if (!newPresetName.trim()) return;
     try {
       const id = await savePreset({
-        id: selectedPresetId,
+        id: selectedPresetId || '',
         name: newPresetName.trim(),
         large_model_config: largeConfig,
         medium_model_config: mediumConfig,
@@ -207,9 +212,9 @@ export const ApiConfigPresetPanel: React.FC = () => {
       {error && <div className="config-error">{error}</div>}
       
       <div className="preset-management-area">
-        <select 
+        <select
           className="preset-select"
-          value={selectedPresetId}
+          value={selectedPresetId || ''}
           onChange={e => handleSelectPreset(e.target.value)}
         >
           <option value="" disabled>-- 新预设 --</option>
