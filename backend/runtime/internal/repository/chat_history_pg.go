@@ -81,16 +81,16 @@ func (r *ChatHistoryPGRepo) GetActiveDatesByMonth(ctx context.Context, yearMonth
 	var dates []string
 	
 	// 构建当月的起止时间字符串
+	// 使用 PostgreSQL 的日期函数来处理月份的最后一天，避免 31 号在某些月份报错
 	startTime := fmt.Sprintf("%s-01 00:00:00", yearMonth)
-	endTime := fmt.Sprintf("%s-31 23:59:59", yearMonth) // 简单处理，31号涵盖所有月份
-
+	
 	// 使用 GORM 的 Pluck 查询格式化后的日期
 	// 注意：这里使用了 PostgreSQL 特有的 TO_CHAR 函数。如果需要兼容 SQLite，可能需要调整。
 	// 考虑到 agent.md 中明确主存储为 PostgreSQL 15+，这里直接使用 PG 语法。
 	err := r.db.WithContext(ctx).
 		Model(&InteractionModel{}).
 		Select("DISTINCT TO_CHAR(created_at, 'DD')").
-		Where("created_at >= ? AND created_at <= ?", startTime, endTime).
+		Where("created_at >= ?::timestamp AND created_at < (?::timestamp + interval '1 month')", startTime, startTime).
 		Pluck("TO_CHAR(created_at, 'DD')", &dates).Error
 
 	if err != nil {
