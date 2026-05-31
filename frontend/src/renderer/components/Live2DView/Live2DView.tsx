@@ -247,7 +247,11 @@ export const Live2DView: React.FC = () => {
       cancelled = true;
       if (currentModel) {
         container.removeChild(currentModel);
-        currentModel.destroy({ children: true, texture: true, baseTexture: true });
+        try {
+          currentModel.destroy({ children: true, texture: true, baseTexture: true });
+        } catch (e) {
+          console.warn('Error destroying Live2D model:', e);
+        }
         currentModel = null;
       }
       setModel(null);

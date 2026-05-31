@@ -351,26 +351,50 @@ class CommunicationServiceServicer(
         context: grpc.ServicerContext,
     ) -> communication_pb2.SyncConfigResponse:
         """
-        处理配置同步请求
+        处理配置同步请求 (已废弃)
         """
-        logger.info(f"收到 SyncConfig 请求, version_id: {request.version_id}")
+        logger.warning(f"收到已废弃的 SyncConfig 请求, version_id: {request.version_id}")
+        return communication_pb2.SyncConfigResponse(
+            success=False,
+            error_message="SyncConfig is deprecated, use SyncPresetConfig instead"
+        )
+
+    async def SyncPresetConfig(
+        self,
+        request: communication_pb2.SyncPresetConfigRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.SyncPresetConfigResponse:
+        """
+        处理 API 配置预设同步请求
+        """
+        logger.info(f"收到 SyncPresetConfig 请求, preset_id: {request.preset_id}, schema_version: {request.schema_version}")
         
         try:
             from app.config import global_config_container
             
-            # 解析 JSON 配置
-            config_data = json.loads(request.llm_config_json)
+            def proto_to_dict(model_config):
+                return {
+                    "base_url": model_config.base_url,
+                    "api_key": model_config.api_key,
+                    "model_id": model_config.model_id,
+                    "max_tokens": model_config.max_tokens,
+                    "temperature": model_config.temperature,
+                }
+
+            large_model = proto_to_dict(request.large_model)
+            medium_model = proto_to_dict(request.medium_model)
+            small_model = proto_to_dict(request.small_model)
             
             # 更新全局配置容器
-            await global_config_container.update_config(config_data)
+            await global_config_container.update_preset_config(large_model, medium_model, small_model)
             
-            return communication_pb2.SyncConfigResponse(
+            return communication_pb2.SyncPresetConfigResponse(
                 success=True,
                 error_message=""
             )
         except Exception as e:
-            logger.error(f"SyncConfig 处理异常: {e}")
-            return communication_pb2.SyncConfigResponse(
+            logger.error(f"SyncPresetConfig 处理异常: {e}")
+            return communication_pb2.SyncPresetConfigResponse(
                 success=False,
                 error_message=str(e)
             )

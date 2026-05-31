@@ -85,6 +85,7 @@ func main() {
 			&repository.SystemConfig{},
 			&repository.PromptTemplate{},
 			&repository.PromptVersion{},
+			&repository.ApiConfigPreset{},
 		); err != nil {
 			logger.Error(ctx, "自动迁移数据库表结构失败", zap.Error(err))
 		} else {
@@ -141,6 +142,17 @@ func main() {
 		configHandler := api.NewConfigHandler(configManager, aiClient)
 		mux.HandleFunc("GET /api/v1/config", configHandler.HandleGetConfig)
 		mux.HandleFunc("POST /api/v1/config", configHandler.HandleUpdateConfig)
+	}
+
+	// API 配置预设端点
+	if postgresClient != nil && aiClient != nil {
+		presetRepo := repository.NewConfigPresetPGRepo(postgresClient)
+		presetHandler := api.NewApiConfigPresetHandler(presetRepo, cryptoSvc, aiClient)
+		mux.HandleFunc("GET /api/v1/config/presets", presetHandler.HandleGetPresets)
+		mux.HandleFunc("POST /api/v1/config/presets", presetHandler.HandleSavePreset)
+		mux.HandleFunc("POST /api/v1/config/presets/{id}/activate", presetHandler.HandleActivatePreset)
+		mux.HandleFunc("DELETE /api/v1/config/presets/{id}", presetHandler.HandleDeletePreset)
+		mux.HandleFunc("POST /api/v1/models/fetch", presetHandler.HandleFetchModels)
 	}
 
 	// Prompt 端点（Go 1.22+ 方法路由模式 + 路径参数）

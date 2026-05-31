@@ -158,11 +158,23 @@ class CompressionLLMClient:
     """
 
     def __init__(self) -> None:
+        self.client = None
+        self.model_name = ""
+        self.reload_config()
+
+    def reload_config(self) -> None:
+        """
+        重新加载配置并重新初始化客户端
+        """
+        from app.config import global_config_container
+        config = global_config_container.get_model_config("small")
+        api_key = config.get("api_key") or "dummy"
+        base_url = config.get("base_url") or "https://api.openai.com/v1"
         self.client = AsyncOpenAI(
-            api_key=settings.compression_api_key or "dummy",
-            base_url=settings.compression_api_base,
+            api_key=api_key,
+            base_url=base_url,
         )
-        self.model_name = settings.compression_model_name
+        self.model_name = config.get("model_id") or "gpt-4o-mini"
 
     @retry(
         stop=stop_after_attempt(3),
@@ -173,12 +185,22 @@ class CompressionLLMClient:
     )
     async def summarize(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
         logger.info(f"正在调用压缩模型 API: {self.model_name}")
-        response = await self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            stream=False,
+        from app.config import global_config_container
+        config = global_config_container.get_model_config("small")
+        max_tokens = config.get("max_tokens")
+        temperature = config.get("temperature", 0.7)
+
+        call_kwargs = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": False,
+            "temperature": temperature,
             **kwargs
-        )
+        }
+        if max_tokens and max_tokens > 0:
+            call_kwargs["max_tokens"] = max_tokens
+
+        response = await self.client.chat.completions.create(**call_kwargs)
         return response.choices[0].message.content or ""
 
 
@@ -192,22 +214,25 @@ class LLMClient:
 
     def __init__(self) -> None:
         """初始化 AsyncOpenAI 客户端"""
-        self.client = AsyncOpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_api_base,
-        )
-        self.model_name = settings.model_name
+        self.client = None
+        self.model_name = ""
+        self.reload_config()
 
     def reload_config(self) -> None:
         """
         重新加载配置并重新初始化客户端
         """
         logger.info("LLM Client 正在重新加载配置...")
+        from app.config import global_config_container
+        # 默认使用中模型进行日常对话
+        config = global_config_container.get_model_config("medium")
+        api_key = config.get("api_key") or "dummy"
+        base_url = config.get("base_url") or "https://api.openai.com/v1"
         self.client = AsyncOpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_api_base,
+            api_key=api_key,
+            base_url=base_url,
         )
-        self.model_name = settings.model_name
+        self.model_name = config.get("model_id") or "gpt-3.5-turbo"
 
     @retry(
         stop=stop_after_attempt(3),
@@ -233,12 +258,23 @@ class LLMClient:
                         "content": current_message
                     }
                 ]
-        return await self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            stream=True,
+        
+        from app.config import global_config_container
+        config = global_config_container.get_model_config("medium")
+        max_tokens = config.get("max_tokens")
+        temperature = config.get("temperature", 0.7)
+
+        call_kwargs = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": True,
+            "temperature": temperature,
             **kwargs
-        )
+        }
+        if max_tokens and max_tokens > 0:
+            call_kwargs["max_tokens"] = max_tokens
+
+        return await self.client.chat.completions.create(**call_kwargs)
 
     async def stream_chat(
         self,

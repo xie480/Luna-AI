@@ -42,31 +42,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ============================================================
-    # LLM 接入配置
+    # LLM 接入配置 (已废弃，由 Go 端通过 gRPC 动态推送预设)
     # ============================================================
-
-    # OpenAI 兼容 API 的 Base URL
-    # 本地 Ollama: http://localhost:11434/v1
-    # 本地 vLLM:   http://localhost:8000/v1
-    # OpenAI:     https://api.openai.com/v1
-    openai_api_base: str = "https://api.openai.com/v1"
-
-    # API Key（本地模型可设为 "dummy" 或 "not-needed"）
-    openai_api_key: str = ""
-
-    # 模型名称
-    # OpenAI: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
-    # Ollama: llama3.1, qwen2.5, deepseek-r1
-    # vLLM:   Qwen/Qwen2.5-7B-Instruct
-    model_name: str = "gpt-3.5-turbo"
-
-    # ============================================================
-    # 压缩模型配置 (用于后台摘要压缩)
-    # ============================================================
-
-    compression_model_name: str = "gpt-4o-mini"
-    compression_api_base: str = "https://api.openai.com/v1"
-    compression_api_key: str = ""
+    # 彻底移除对 .env 中 LLM 配置的依赖
 
     # ============================================================
     # 上下文管理配置
@@ -77,10 +55,10 @@ class Settings(BaseSettings):
     #   - GPT-3.5-turbo: 16384
     #   - GPT-4o: 128000
     #   - Qwen2.5-7B: 32768
-    max_context_tokens: int = 8192
+    max_context_tokens: int = 128000
 
     # 为模型输出预留的 Token 数
-    reserved_output_tokens: int = 2048
+    reserved_output_tokens: int = 60000
 
     # ============================================================
     # 模型配置
@@ -106,26 +84,39 @@ class GlobalConfigContainer:
     做什么：维护动态配置状态，接收 Go 的 gRPC 推送时更新配置并触发底层 LLM Client 的重新初始化。
     """
     def __init__(self):
-        self._config: Dict[str, Any] = {}
+        self._large_model: Dict[str, Any] = {}
+        self._medium_model: Dict[str, Any] = {}
+        self._small_model: Dict[str, Any] = {}
         self._lock = asyncio.Lock()
         
-    async def update_config(self, new_config: Dict[str, Any]):
+    async def update_preset_config(self, large_model: Dict[str, Any], medium_model: Dict[str, Any], small_model: Dict[str, Any]):
         """
-        更新配置并触发重载
+        更新预设配置并触发重载
         """
         async with self._lock:
-            self._config.update(new_config)
+            self._large_model = large_model
+            self._medium_model = medium_model
+            self._small_model = small_model
             
-            # 更新 settings 单例中的对应字段
-            if "llm_api_key" in new_config:
-                settings.openai_api_key = new_config["llm_api_key"]
-                
             # 触发 LLM Client 重载
-            from app.llm.client import llm_client
+            from app.llm.client import llm_client, compression_llm_client
             llm_client.reload_config()
+            compression_llm_client.reload_config()
             
             from app.logger import get_logger
             logger = get_logger(__name__)
-            logger.info("全局配置已更新，LLM Client 已重载")
+            logger.info("API 配置预设已更新，LLM Client 已重载")
+
+    def get_model_config(self, size: str) -> Dict[str, Any]:
+        """
+        获取指定规格的模型配置
+        """
+        if size == "large":
+            return self._large_model
+        elif size == "medium":
+            return self._medium_model
+        elif size == "small":
+            return self._small_model
+        return self._medium_model # 默认返回中模型
 
 global_config_container = GlobalConfigContainer()

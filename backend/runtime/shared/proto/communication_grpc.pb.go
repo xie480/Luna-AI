@@ -26,6 +26,7 @@ const (
 	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
 	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
 	CommunicationService_SyncConfig_FullMethodName       = "/communication.CommunicationService/SyncConfig"
+	CommunicationService_SyncPresetConfig_FullMethodName = "/communication.CommunicationService/SyncPresetConfig"
 )
 
 // CommunicationServiceClient is the client API for CommunicationService service.
@@ -40,8 +41,10 @@ type CommunicationServiceClient interface {
 	ChatStream(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamResponse], error)
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error)
-	// SyncConfig 方法，用于热更新配置
+	// SyncConfig 方法，用于热更新配置 (已废弃)
 	SyncConfig(ctx context.Context, in *SyncConfigRequest, opts ...grpc.CallOption) (*SyncConfigResponse, error)
+	// SyncPresetConfig 方法，用于同步 API 配置预设
+	SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error)
 }
 
 type communicationServiceClient struct {
@@ -101,6 +104,16 @@ func (c *communicationServiceClient) SyncConfig(ctx context.Context, in *SyncCon
 	return out, nil
 }
 
+func (c *communicationServiceClient) SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncPresetConfigResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_SyncPresetConfig_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommunicationServiceServer is the server API for CommunicationService service.
 // All implementations must embed UnimplementedCommunicationServiceServer
 // for forward compatibility.
@@ -113,8 +126,10 @@ type CommunicationServiceServer interface {
 	ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error)
-	// SyncConfig 方法，用于热更新配置
+	// SyncConfig 方法，用于热更新配置 (已废弃)
 	SyncConfig(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error)
+	// SyncPresetConfig 方法，用于同步 API 配置预设
+	SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
 
@@ -136,6 +151,9 @@ func (UnimplementedCommunicationServiceServer) SummarizeContext(context.Context,
 }
 func (UnimplementedCommunicationServiceServer) SyncConfig(context.Context, *SyncConfigRequest) (*SyncConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SyncConfig not implemented")
+}
+func (UnimplementedCommunicationServiceServer) SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncPresetConfig not implemented")
 }
 func (UnimplementedCommunicationServiceServer) mustEmbedUnimplementedCommunicationServiceServer() {}
 func (UnimplementedCommunicationServiceServer) testEmbeddedByValue()                              {}
@@ -223,6 +241,24 @@ func _CommunicationService_SyncConfig_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommunicationService_SyncPresetConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncPresetConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).SyncPresetConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_SyncPresetConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).SyncPresetConfig(ctx, req.(*SyncPresetConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommunicationService_ServiceDesc is the grpc.ServiceDesc for CommunicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -241,6 +277,10 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncConfig",
 			Handler:    _CommunicationService_SyncConfig_Handler,
+		},
+		{
+			MethodName: "SyncPresetConfig",
+			Handler:    _CommunicationService_SyncPresetConfig_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
