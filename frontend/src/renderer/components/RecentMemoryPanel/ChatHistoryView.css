@@ -57,6 +57,8 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px;
+  /* 增加底部 padding，确保最后一条消息不被遮挡 */
+  padding-bottom: 72px;
   display: flex;
   flex-direction: column;
   gap: 16px;
