@@ -51,25 +51,25 @@ func NewCacheManager(rdb *redis.Client, pgRepo PromptRepository) *CacheManager {
 }
 
 // cacheKey 构建缓存键
-func cacheKey(category string) string {
-	return cacheKeyPrefix + category
+func cacheKey(category PromptCategory) string {
+	return cacheKeyPrefix + string(category)
 }
 
 // GetOrLoad 从缓存获取，缓存未命中时从数据库加载
 // 使用 singleflight 防止缓存击穿：同一时刻对同一个 category 的并发请求只会有一个穿透到数据库
-func (cm *CacheManager) GetOrLoad(ctx context.Context, category string) (*CachedPrompt, error) {
+func (cm *CacheManager) GetOrLoad(ctx context.Context, category PromptCategory) (*CachedPrompt, error) {
 	// 1. 尝试从 Redis 读取
 	if cm.rdb != nil {
 		cached, err := cm.rdb.Get(ctx, cacheKey(category)).Result()
 		if err == nil {
 			var cp CachedPrompt
 			if jsonErr := json.Unmarshal([]byte(cached), &cp); jsonErr == nil {
-				logger.Info(ctx, "从 Redis 缓存获取 Prompt 成功", zap.String("category", category))
+				logger.Info(ctx, "从 Redis 缓存获取 Prompt 成功", zap.String("category", string(category)))
 				return &cp, nil
 			}
 		} else if err != redis.Nil {
 			// Redis 错误不是 key 不存在，记录警告
-			logger.Warn(ctx, "Redis 读取 Prompt 缓存失败", zap.String("category", category), zap.Error(err))
+			logger.Warn(ctx, "Redis 读取 Prompt 缓存失败", zap.String("category", string(category)), zap.Error(err))
 		}
 	}
 
@@ -96,7 +96,7 @@ func (cm *CacheManager) GetOrLoad(ctx context.Context, category string) (*Cached
 				ttl = cacheEmptyTTL
 			}
 			if setErr := cm.rdb.Set(ctx, cacheKey(category), string(data), ttl).Err(); setErr != nil {
-				logger.Warn(ctx, "写入 Prompt 缓存到 Redis 失败", zap.String("category", category), zap.Error(setErr))
+				logger.Warn(ctx, "写入 Prompt 缓存到 Redis 失败", zap.String("category", string(category)), zap.Error(setErr))
 			}
 		}()
 	}
@@ -105,8 +105,8 @@ func (cm *CacheManager) GetOrLoad(ctx context.Context, category string) (*Cached
 }
 
 // loadFromDB 从 PostgreSQL 加载指定分类的模板，按 SlotPosition 分类提取内容
-func (cm *CacheManager) loadFromDB(ctx context.Context, category string) (*CachedPrompt, error) {
-	templates, err := cm.pgRepo.GetTemplatesByCategory(ctx, category)
+func (cm *CacheManager) loadFromDB(ctx context.Context, category PromptCategory) (*CachedPrompt, error) {
+	templates, err := cm.pgRepo.GetTemplatesByCategory(ctx, string(category))
 	if err != nil {
 		return nil, fmt.Errorf("加载分类 %s 的模板失败: %w", category, err)
 	}
@@ -137,7 +137,7 @@ func (cm *CacheManager) loadFromDB(ctx context.Context, category string) (*Cache
 	}
 
 	logger.Info(ctx, "从数据库加载 Prompt 模板成功",
-		zap.String("category", category),
+		zap.String("category", string(category)),
 		zap.Bool("has_system", cp.SystemContent != ""),
 		zap.Bool("has_memory", cp.MemoryContent != ""),
 		zap.Bool("has_runtime", cp.RuntimeContent != ""))
@@ -146,12 +146,12 @@ func (cm *CacheManager) loadFromDB(ctx context.Context, category string) (*Cache
 }
 
 // InvalidateCache 使指定分类的缓存失效
-func (cm *CacheManager) InvalidateCache(ctx context.Context, category string) error {
+func (cm *CacheManager) InvalidateCache(ctx context.Context, category PromptCategory) error {
 	if cm.rdb != nil {
 		if err := cm.rdb.Del(ctx, cacheKey(category)).Err(); err != nil {
 			return fmt.Errorf("清除 Prompt 缓存失败: %w", err)
 		}
-		logger.Info(ctx, "已清除 Prompt 缓存", zap.String("category", category))
+		logger.Info(ctx, "已清除 Prompt 缓存", zap.String("category", string(category)))
 	}
 	return nil
 }
@@ -160,7 +160,7 @@ func (cm *CacheManager) InvalidateCache(ctx context.Context, category string) er
 // 使用固定占位符模板 {system}\n\n{memory}\n\n{runtime}
 // 将各 slot 的模板内容注入到对应的占位符位置
 // 最终将未被注入的占位符替换为空字符串
-func (cm *CacheManager) GetAssembledPrompt(ctx context.Context, category string, variables map[string]string) (string, error) {
+func (cm *CacheManager) GetAssembledPrompt(ctx context.Context, category PromptCategory, variables map[string]string) (string, error) {
 	cp, err := cm.GetOrLoad(ctx, category)
 	if err != nil {
 		return "", err

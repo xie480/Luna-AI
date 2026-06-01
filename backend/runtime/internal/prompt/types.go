@@ -28,8 +28,10 @@ type PromptCategory string
 const (
 	// CategoryChat 对话场景（槽位: system, memory, runtime）
 	CategoryChat PromptCategory = "chat"
-	// CategorySummary 摘要压缩场景（槽位: system, memory, runtime）
-	CategorySummary PromptCategory = "summary"
+	// CategoryShortSummary 短期记忆摘要压缩场景（槽位: system, memory, runtime）
+	CategoryShortSummary PromptCategory = "short_summary"
+	// CategoryLongSummary 长期记忆摘要压缩场景（槽位: system, memory, runtime）
+	CategoryLongSummary PromptCategory = "long_summary"
 )
 
 // 占位符常量

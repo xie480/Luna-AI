@@ -560,7 +560,7 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	var fullSystemPrompt string
 	if s.promptMgr != nil {
 		var err error
-		fullSystemPrompt, err = s.promptMgr.AssemblePrompt(ctx, "chat", promptVariables)
+		fullSystemPrompt, err = s.promptMgr.AssemblePrompt(ctx, prompt.CategoryChat, promptVariables)
 		if err != nil {
 			logger.Error(ctx, "组装 Chat Prompt 失败", zap.Error(err))
 		}
@@ -782,7 +782,7 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 
 	var fullSummarizePrompt string
 	if s.promptMgr != nil {
-		fullSummarizePrompt, err = s.promptMgr.AssemblePrompt(ctx, "summary", summarizeVariables)
+		fullSummarizePrompt, err = s.promptMgr.AssemblePrompt(ctx, prompt.CategoryShortSummary, summarizeVariables)
 		if err != nil {
 			logger.Error(ctx, "组装 Summarize Prompt 失败", zap.Error(err))
 		}

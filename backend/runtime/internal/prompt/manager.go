@@ -29,8 +29,8 @@ type PromptRepository interface {
 
 // PromptCache 定义 Prompt 缓存接口
 type PromptCache interface {
-	GetAssembledPrompt(ctx context.Context, category string, variables map[string]string) (string, error)
-	InvalidateCache(ctx context.Context, category string) error
+	GetAssembledPrompt(ctx context.Context, category PromptCategory, variables map[string]string) (string, error)
+	InvalidateCache(ctx context.Context, category PromptCategory) error
 }
 
 // Manager 负责 Prompt 模板与版本的管理
@@ -50,17 +50,17 @@ func NewManager(repo PromptRepository, cacheMgr PromptCache) *Manager {
 // AssemblePrompt 根据业务分类组装完整的 Prompt 字符串
 // 输入：
 //   - ctx: 上下文
-//   - category: 业务分类（如 "chat" / "summary"）
+//   - category: 业务分类（如 CategoryChat / CategoryShortSummary）
 //   - variables: 模板变量键值对
 //
 // 输出：
 //   - 组装后的完整 prompt 字符串（即使 db 和 redis 都不可用也返回一个基本提示文本）
 //   - 错误信息
-func (m *Manager) AssemblePrompt(ctx context.Context, category string, variables map[string]string) (string, error) {
+func (m *Manager) AssemblePrompt(ctx context.Context, category PromptCategory, variables map[string]string) (string, error) {
 	// 通过缓存层获取并将各 slot 注入占位符
 	prompt, err := m.cacheMgr.GetAssembledPrompt(ctx, category, variables)
 	if err != nil {
-		logger.Warn(ctx, "获取组装 Prompt 失败", zap.String("category", category), zap.Error(err))
+		logger.Warn(ctx, "获取组装 Prompt 失败", zap.String("category", string(category)), zap.Error(err))
 		// 返回一个最基本的安全兜底文本，避免系统完全不可用
 		return buildMinimalPrompt(variables), nil
 	}
@@ -74,7 +74,7 @@ func (m *Manager) AssemblePrompt(ctx context.Context, category string, variables
 	prompt = cleanEmptyLines(prompt)
 
 	logger.Info(ctx, "组装 Prompt 成功",
-		zap.String("category", category),
+		zap.String("category", string(category)),
 		zap.Int("prompt_length", len(prompt)))
 
 	return prompt, nil
@@ -221,7 +221,7 @@ func (m *Manager) PublishVersion(ctx context.Context, templateID, versionID stri
 
 		// 版本发布后自动使缓存失效，下一次请求会从数据库重新加载
 		if m.cacheMgr != nil {
-			if cacheErr := m.cacheMgr.InvalidateCache(ctx, tmpl.Category); cacheErr != nil {
+			if cacheErr := m.cacheMgr.InvalidateCache(ctx, PromptCategory(tmpl.Category)); cacheErr != nil {
 				logger.Warn(ctx, "清除 Prompt 缓存失败", zap.String("category", tmpl.Category), zap.Error(cacheErr))
 			}
 		}
@@ -292,7 +292,7 @@ func (m *Manager) RollbackVersion(ctx context.Context, templateID, targetVersion
 
 		// 版本回滚后自动使缓存失效
 		if m.cacheMgr != nil {
-			if cacheErr := m.cacheMgr.InvalidateCache(ctx, tmpl.Category); cacheErr != nil {
+			if cacheErr := m.cacheMgr.InvalidateCache(ctx, PromptCategory(tmpl.Category)); cacheErr != nil {
 				logger.Warn(ctx, "清除 Prompt 缓存失败", zap.String("category", tmpl.Category), zap.Error(cacheErr))
 			}
 		}
