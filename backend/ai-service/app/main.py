@@ -21,14 +21,14 @@ from app.config import settings
 from app.logger import logger
 
 # ============================================================
-# 全局 Embedding 和 Rerank 模型路径配置
-# 通过环境变量或 .env 文件配置，例如：
-#   EMBEDDING_MODEL_PATH=D:/AI_Models/bge-base-zh-v1.5-model
-#   RERANK_MODEL_PATH=D:/AI_Models/bge-reranker-v2-m3-model
+# 模型路径通过 app.config.settings 统一管理（自动读取 .env 文件）
+# 配置项：
+#   embedding_model_path: Embedding 模型路径（对应 .env 中的 EMBEDDING_MODEL_PATH）
+#   rerank_model_path: Rerank 模型路径（对应 .env 中的 RERANK_MODEL_PATH）
 # 如果未配置，则跳过模型加载（仅影响记忆检索功能，不阻断其他服务）
 # ============================================================
-EMBEDDING_MODEL_PATH = os.getenv("EMBEDDING_MODEL_PATH", "")
-RERANK_MODEL_PATH = os.getenv("RERANK_MODEL_PATH", "")
+EMBEDDING_MODEL_PATH = settings.embedding_model_path
+RERANK_MODEL_PATH = settings.rerank_model_path
 
 
 def load_embedding_model() -> Optional[object]:
@@ -46,6 +46,10 @@ def load_embedding_model() -> Optional[object]:
     """
     if not EMBEDDING_MODEL_PATH:
         logger.warning("EMBEDDING_MODEL_PATH 未配置，跳过 Embedding 模型加载")
+        return None
+
+    if not os.path.exists(EMBEDDING_MODEL_PATH):
+        logger.warning(f"Embedding 模型路径不存在: {EMBEDDING_MODEL_PATH}，跳过加载")
         return None
 
     try:
@@ -80,12 +84,16 @@ def load_rerank_model() -> Optional[object]:
     输出：CrossEncoder 实例或 None（路径未配置时 / 路径无效时 / 包未安装时）
     边界条件：
         - 路径为空时跳过加载，不阻断服务启动
+        - 路径无效或模型损坏时捕获异常并返回 None，不阻断服务启动
         - trust_remote_code=True 支持自定义模型架构
         - max_length=1024 平衡性能与精度
-        - 路径无效或包未安装时捕获异常并返回 None
     """
     if not RERANK_MODEL_PATH:
         logger.warning("RERANK_MODEL_PATH 未配置，跳过 Rerank 模型加载")
+        return None
+
+    if not os.path.exists(RERANK_MODEL_PATH):
+        logger.warning(f"Rerank 模型路径不存在: {RERANK_MODEL_PATH}，跳过加载")
         return None
 
     try:

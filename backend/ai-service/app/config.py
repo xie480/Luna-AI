@@ -14,7 +14,15 @@ Luna AI 全局配置模块
     - 配置加载失败时抛出 Pydantic 校验异常
 """
 
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# .env 文件位于项目根目录（../../ 相对于 backend/ai-service/）
+# 通过 Path(__file__) 计算绝对路径，不受工作目录变化影响
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_ENV_FILE_PATH = str(_PROJECT_ROOT / '.env')
 
 
 class Settings(BaseSettings):
@@ -61,11 +69,26 @@ class Settings(BaseSettings):
     reserved_output_tokens: int = 60000
 
     # ============================================================
-    # 模型配置
+    # 模型路径配置（支持从 .env 文件读取）
+    # 例如：
+    #   EMBEDDING_MODEL_PATH=D:/AI_Models/bge-base-zh-v1.5-model
+    #   RERANK_MODEL_PATH=D:/AI_Models/bge-reranker-v2-m3-model
+    # 如果未配置，则跳过模型加载（仅影响记忆检索功能，不阻断其他服务）
+    # ============================================================
+
+    # Embedding 模型路径，用于向量化文本
+    # 使用 bge-base-zh-v1.5 或其他 SentenceTransformer 模型
+    embedding_model_path: str = ""
+    # Rerank 模型路径，用于重排序检索结果
+    # 使用 bge-reranker-v2-m3 或其他 CrossEncoder 模型
+    rerank_model_path: str = ""
+
+    # ============================================================
+    # Pydantic Settings 配置
     # ============================================================
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE_PATH,
         env_file_encoding="utf-8",
         extra="ignore",
     )
