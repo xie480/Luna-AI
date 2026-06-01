@@ -1,6 +1,6 @@
-import time
 import threading
-from typing import Optional
+import time
+
 
 class Snowflake:
     """
@@ -83,7 +83,7 @@ class Snowflake:
         return timestamp
 
 # Global instance for convenience
-_global_node: Optional[Snowflake] = None
+_global_node: Snowflake | None = None
 _init_lock = threading.Lock()
 
 def init_global_node(node_id: int) -> None:

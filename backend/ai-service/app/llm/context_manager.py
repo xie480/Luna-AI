@@ -16,7 +16,6 @@ Luna AI 上下文历史管理与截断策略模块
     - 总 Token 数超过模型限制时静默截断并记录日志
 """
 
-from typing import Dict, List, Optional, Tuple
 
 from app.logger import logger
 
@@ -83,7 +82,7 @@ def count_tokens(text: str, model_name: str = "gpt-3.5-turbo") -> int:
 
 
 def count_messages_tokens(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     model_name: str = "gpt-3.5-turbo"
 ) -> int:
     """
@@ -111,7 +110,7 @@ def count_messages_tokens(
 # 流式输出缓冲刷新机制
 # ============================================================
 
-def should_flush_buffer(buffer: str) -> Tuple[bool, str]:
+def should_flush_buffer(buffer: str) -> tuple[bool, str]:
     """
     判断是否需要刷新流式输出缓冲区
 
@@ -144,13 +143,13 @@ def should_flush_buffer(buffer: str) -> Tuple[bool, str]:
 
 def truncate_context(
     system_prompt: str,
-    history: List[Dict[str, str]],
+    history: list[dict[str, str]],
     current_message: str,
     max_tokens: int = MAX_CONTEXT_TOKENS,
     reserved_output: int = RESERVED_OUTPUT_TOKENS,
     min_rounds: int = MIN_CONVERSATION_ROUNDS,
     model_name: str = "gpt-3.5-turbo"
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """
     对多轮对话上下文进行滑动窗口截断
 
@@ -178,10 +177,10 @@ def truncate_context(
     max_input_tokens = max_tokens - reserved_output
 
     # 构造 System Prompt 消息
-    system_msg: Dict[str, str] = {"role": "system", "content": system_prompt}
+    system_msg: dict[str, str] = {"role": "system", "content": system_prompt}
 
     # 构造当前用户消息
-    user_msg: Dict[str, str] = {"role": "user", "content": current_message}
+    user_msg: dict[str, str] = {"role": "user", "content": current_message}
 
     # 如果历史记录为空，直接返回
     if not history:
@@ -190,7 +189,7 @@ def truncate_context(
 
     # 计算 system_prompt + 当前消息 + 全部历史的 Token 数
     # 优先尝试包含全部历史
-    candidate_messages: List[Dict[str, str]] = [system_msg] + history + [user_msg]
+    candidate_messages: list[dict[str, str]] = [system_msg] + history + [user_msg]
     total_tokens: int = count_messages_tokens(candidate_messages, model_name)
 
     # 如果总 Token 数在限制内，无需截断
@@ -210,12 +209,12 @@ def truncate_context(
     min_history_count: int = min_rounds * 2
 
     # 从最旧历史开始逐条移除，直到 Token 满足限制或仅剩最少历史
-    truncated_history: List[Dict[str, str]] = list(history)
+    truncated_history: list[dict[str, str]] = list(history)
     removed_count: int = 0
 
     while len(truncated_history) > min_history_count:
         # 临时计算截断后的 Token 数
-        test_messages: List[Dict[str, str]] = (
+        test_messages: list[dict[str, str]] = (
             [system_msg] + truncated_history + [user_msg]
         )
         test_tokens: int = count_messages_tokens(test_messages, model_name)
@@ -228,7 +227,7 @@ def truncate_context(
         removed_count += 1
 
     # 如果移除后仍超限制，但已到最小保留轮数，不再继续移除
-    final_messages: List[Dict[str, str]] = [system_msg] + truncated_history + [user_msg]
+    final_messages: list[dict[str, str]] = [system_msg] + truncated_history + [user_msg]
     final_tokens: int = count_messages_tokens(final_messages, model_name)
 
     logger.warning(
@@ -251,12 +250,12 @@ def truncate_context(
 
 def format_messages_for_api(
     system_prompt: str,
-    history: List[Dict[str, str]],
+    history: list[dict[str, str]],
     current_message: str,
     max_tokens: int = MAX_CONTEXT_TOKENS,
     reserved_output: int = RESERVED_OUTPUT_TOKENS,
     model_name: str = "gpt-3.5-turbo"
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """
     完整的消息格式化入口，整合上下文截断
 

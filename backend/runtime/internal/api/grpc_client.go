@@ -250,6 +250,22 @@ func (c *AIClient) Embedding(ctx context.Context, req *pb.EmbeddingRequest) (*pb
 	return resp, nil
 }
 
+// InputReconstruction 发送用户输入重构与路由解析请求到 AI 服务
+func (c *AIClient) InputReconstruction(ctx context.Context, req *pb.InputReconstructionRequest) (*pb.InputReconstructionResponse, error) {
+	logger.Info(ctx, "发送 InputReconstruction 请求到 AI 服务", "trace_id", req.TraceId)
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	resp, err := c.client.InputReconstruction(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "InputReconstruction 请求失败", "trace_id", req.TraceId, "error", err)
+		return nil, fmt.Errorf("input reconstruction failed: %w", err)
+	}
+
+	return resp, nil
+}
+
 // Rerank 发送文档重排打分请求到 AI 服务
 // 做什么：调用 Python AI 服务的 Rerank 方法，计算查询与候选文档的相关性分数
 // 为什么这样做：在向量检索（粗排）之后，通过 CrossEncoder 精排提升召回质量

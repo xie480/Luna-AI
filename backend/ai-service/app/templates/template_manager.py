@@ -17,10 +17,9 @@ Luna AI 提示词模板管理器模块
     - 模板渲染失败时记录错误并返回原始模板内容（带未替换的占位符）
 """
 
-import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from app.logger import get_logger
 
@@ -53,7 +52,7 @@ except ImportError:
 # ============================================================
 
 # 全局模板缓存，key=模板名（不含.j2后缀），value=原始模板内容
-_TEMPLATE_CACHE: Dict[str, str] = {}
+_TEMPLATE_CACHE: dict[str, str] = {}
 
 
 # ============================================================
@@ -243,7 +242,7 @@ class TemplateManager:
         """返回所有可用模板的名称列表"""
         return self._available_templates.copy()
 
-    def invalidate_cache(self, name: Optional[str] = None) -> None:
+    def invalidate_cache(self, name: str | None = None) -> None:
         """
         清除模板缓存
 
@@ -276,7 +275,7 @@ class TemplateManager:
 # ============================================================
 
 # 全局单例
-_template_manager_instance: Optional[TemplateManager] = None
+_template_manager_instance: TemplateManager | None = None
 
 
 def get_template_manager() -> TemplateManager:

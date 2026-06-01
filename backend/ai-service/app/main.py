@@ -1,10 +1,10 @@
 import asyncio
-import uvicorn
-import grpc
-import sys
 import os
-from typing import Optional
+import sys
 from contextlib import asynccontextmanager
+
+import grpc
+import uvicorn
 from fastapi import FastAPI
 
 # 注意：sentence_transformers 是重依赖（含 PyTorch），不在模块级导入。
@@ -13,9 +13,9 @@ from fastapi import FastAPI
 # 将 app/api 目录添加到 sys.path，解决 gRPC 生成文件的绝对导入问题
 sys.path.append(os.path.join(os.path.dirname(__file__), 'api'))
 
-from app.api.health import router as health_router
 from app.api import communication_pb2_grpc
 from app.api.grpc_service import CommunicationServiceServicer, set_embedding_model, set_rerank_model
+from app.api.health import router as health_router
 from app.api.interceptor import TelemetryInterceptor
 from app.config import settings
 from app.logger import logger
@@ -31,7 +31,7 @@ EMBEDDING_MODEL_PATH = settings.embedding_model_path
 RERANK_MODEL_PATH = settings.rerank_model_path
 
 
-def load_embedding_model() -> Optional[object]:
+def load_embedding_model() -> object | None:
     """
     加载 Embedding 模型（SentenceTransformer）
 
@@ -74,7 +74,7 @@ def load_embedding_model() -> Optional[object]:
         return None
 
 
-def load_rerank_model() -> Optional[object]:
+def load_rerank_model() -> object | None:
     """
     加载 Rerank 模型（CrossEncoder）
 

@@ -1,5 +1,7 @@
 import grpc
-from app.logger import trace_id_var, logger
+
+from app.logger import logger, trace_id_var
+
 
 class TelemetryInterceptor(grpc.aio.ServerInterceptor):
     """gRPC 服务端拦截器：提取 Go 侧注入的 TraceID 并绑定到 Loguru 上下文。"""
@@ -18,7 +20,7 @@ class TelemetryInterceptor(grpc.aio.ServerInterceptor):
                 logger.info(f"收到 gRPC 请求: {handler_call_details.method}")
                 return await continuation(handler_call_details)
         except Exception as e:
-            logger.error(f"gRPC 处理异常: {str(e)}")
+            logger.error(f"gRPC 处理异常: {e!s}")
             raise
         finally:
             trace_id_var.reset(token)

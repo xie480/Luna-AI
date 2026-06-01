@@ -48,6 +48,21 @@ message ChatRequest {
   string system_prompt = 4;
 }
 
+// InputReconstruction 请求消息
+message InputReconstructionRequest {
+  string trace_id = 1;
+  string user_input = 2;
+  string short_term_memory = 3;
+}
+
+// InputReconstruction 响应消息
+message InputReconstructionResponse {
+  string trace_id = 1;
+  string json_output = 2; // 序列化后的 InputReconstructionOutput JSON 字符串
+  bool success = 3;
+  string error_message = 4;
+}
+
 // ShortSummarize 请求消息
 message ShortSummarizeRequest {
   // 跟踪ID，用于请求追踪
@@ -198,4 +213,7 @@ service CommunicationService {
   // 做什么：接收查询和候选文档列表，返回每个文档的相关性分数
   // 为什么这样做：在向量检索后，通过 CrossEncoder 精排提升召回质量
   rpc Rerank(RerankRequest) returns (RerankResponse);
+
+  // InputReconstruction 方法，用于用户输入重构与路由解析
+  rpc InputReconstruction(InputReconstructionRequest) returns (InputReconstructionResponse);
 }

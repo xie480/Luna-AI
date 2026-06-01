@@ -21,28 +21,25 @@ Luna AI LLM 客户端封装模块
 """
 
 import asyncio
-from typing import AsyncGenerator, Dict, List, Optional, Any
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from openai import AsyncOpenAI, APIError, RateLimitError, APIConnectionError
+from openai import APIConnectionError, APIError, AsyncOpenAI, RateLimitError
+from pydantic import BaseModel, ValidationError
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
-from pydantic import BaseModel, ValidationError
 
-from app.config import settings
-from app.logger import logger
 from app.constants import Role
 from app.llm.context_manager import (
     format_messages_for_api,
     should_flush_buffer,
-    MAX_CONTEXT_TOKENS,
-    RESERVED_OUTPUT_TOKENS,
 )
-
+from app.logger import logger
 
 # ============================================================
 # 数据结构模型
@@ -64,8 +61,8 @@ class StreamChunkModel(BaseModel):
     """
     chunk: str
     is_finished: bool
-    finish_reason: Optional[str] = None
-    error: Optional[str] = None
+    finish_reason: str | None = None
+    error: str | None = None
 
 
 class LLMStreamBuffer:
@@ -87,7 +84,7 @@ class LLMStreamBuffer:
 
     def __init__(self) -> None:
         """初始化缓冲区"""
-        self._buffer: List[str] = []
+        self._buffer: list[str] = []
 
     def add(self, text: str) -> None:
         """
@@ -181,7 +178,7 @@ class CompressionLLMClient:
         reraise=True,
         before_sleep=before_sleep_log(logger, 20),
     )
-    async def summarize(self, messages: List[Dict[str, str]], **kwargs: Any) -> str:
+    async def summarize(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         logger.info(f"正在调用压缩模型 API: {self.model_name}")
         from app.config import global_config_container
         config = global_config_container.get_model_config("small")
@@ -280,7 +277,7 @@ class LLMClient:
         trace_id: str,
         current_message: str,
         **kwargs: Any
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         logger.info(f"[TraceID:{trace_id}] 开始调用 LLM API, model: {self.model_name}, prompt: {prompt}")
         buffer = LLMStreamBuffer()
 
@@ -453,11 +450,11 @@ class LLMClient:
     async def stream_chat_with_context(
         self,
         system_prompt: str,
-        history: List[Dict[str, str]],
+        history: list[dict[str, str]],
         current_message: str,
         trace_id: str,
         **kwargs: Any
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         带上下文管理的流式对话接口
         """

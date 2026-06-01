@@ -22,13 +22,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CommunicationService_Ping_FullMethodName             = "/communication.CommunicationService/Ping"
-	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
-	CommunicationService_ShortSummarize_FullMethodName   = "/communication.CommunicationService/ShortSummarize"
-	CommunicationService_SyncPresetConfig_FullMethodName = "/communication.CommunicationService/SyncPresetConfig"
-	CommunicationService_LongSummarize_FullMethodName    = "/communication.CommunicationService/LongSummarize"
-	CommunicationService_Embedding_FullMethodName        = "/communication.CommunicationService/Embedding"
-	CommunicationService_Rerank_FullMethodName           = "/communication.CommunicationService/Rerank"
+	CommunicationService_Ping_FullMethodName                = "/communication.CommunicationService/Ping"
+	CommunicationService_ChatStream_FullMethodName          = "/communication.CommunicationService/ChatStream"
+	CommunicationService_ShortSummarize_FullMethodName      = "/communication.CommunicationService/ShortSummarize"
+	CommunicationService_SyncPresetConfig_FullMethodName    = "/communication.CommunicationService/SyncPresetConfig"
+	CommunicationService_LongSummarize_FullMethodName       = "/communication.CommunicationService/LongSummarize"
+	CommunicationService_Embedding_FullMethodName           = "/communication.CommunicationService/Embedding"
+	CommunicationService_Rerank_FullMethodName              = "/communication.CommunicationService/Rerank"
+	CommunicationService_InputReconstruction_FullMethodName = "/communication.CommunicationService/InputReconstruction"
 )
 
 // CommunicationServiceClient is the client API for CommunicationService service.
@@ -54,6 +55,8 @@ type CommunicationServiceClient interface {
 	// 做什么：接收查询和候选文档列表，返回每个文档的相关性分数
 	// 为什么这样做：在向量检索后，通过 CrossEncoder 精排提升召回质量
 	Rerank(ctx context.Context, in *RerankRequest, opts ...grpc.CallOption) (*RerankResponse, error)
+	// InputReconstruction 方法，用于用户输入重构与路由解析
+	InputReconstruction(ctx context.Context, in *InputReconstructionRequest, opts ...grpc.CallOption) (*InputReconstructionResponse, error)
 }
 
 type communicationServiceClient struct {
@@ -143,6 +146,16 @@ func (c *communicationServiceClient) Rerank(ctx context.Context, in *RerankReque
 	return out, nil
 }
 
+func (c *communicationServiceClient) InputReconstruction(ctx context.Context, in *InputReconstructionRequest, opts ...grpc.CallOption) (*InputReconstructionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(InputReconstructionResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_InputReconstruction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommunicationServiceServer is the server API for CommunicationService service.
 // All implementations must embed UnimplementedCommunicationServiceServer
 // for forward compatibility.
@@ -166,6 +179,8 @@ type CommunicationServiceServer interface {
 	// 做什么：接收查询和候选文档列表，返回每个文档的相关性分数
 	// 为什么这样做：在向量检索后，通过 CrossEncoder 精排提升召回质量
 	Rerank(context.Context, *RerankRequest) (*RerankResponse, error)
+	// InputReconstruction 方法，用于用户输入重构与路由解析
+	InputReconstruction(context.Context, *InputReconstructionRequest) (*InputReconstructionResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
 
@@ -196,6 +211,9 @@ func (UnimplementedCommunicationServiceServer) Embedding(context.Context, *Embed
 }
 func (UnimplementedCommunicationServiceServer) Rerank(context.Context, *RerankRequest) (*RerankResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Rerank not implemented")
+}
+func (UnimplementedCommunicationServiceServer) InputReconstruction(context.Context, *InputReconstructionRequest) (*InputReconstructionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method InputReconstruction not implemented")
 }
 func (UnimplementedCommunicationServiceServer) mustEmbedUnimplementedCommunicationServiceServer() {}
 func (UnimplementedCommunicationServiceServer) testEmbeddedByValue()                              {}
@@ -337,6 +355,24 @@ func _CommunicationService_Rerank_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommunicationService_InputReconstruction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InputReconstructionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).InputReconstruction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_InputReconstruction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).InputReconstruction(ctx, req.(*InputReconstructionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommunicationService_ServiceDesc is the grpc.ServiceDesc for CommunicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -367,6 +403,10 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Rerank",
 			Handler:    _CommunicationService_Rerank_Handler,
+		},
+		{
+			MethodName: "InputReconstruction",
+			Handler:    _CommunicationService_InputReconstruction_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

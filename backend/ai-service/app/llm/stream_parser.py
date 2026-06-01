@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import re
 from enum import Enum, auto
-from typing import List, Tuple
 
 # 正则：用于匹配字段起始标记
 _CHECK_START_RE = re.compile(r'"check"\s*:\s*"')
@@ -71,7 +70,7 @@ class StreamParser:
         self._search_buffer: str = ""        # 新增：全局搜索缓冲
         self._pending_prefix: str = ""       # 新增：用于暂存省略号等前缀，避免死循环
 
-    def _emit_thought(self) -> List[Tuple[str, str]]:
+    def _emit_thought(self) -> list[tuple[str, str]]:
         """返回 thought 内容的输出消息（如果尚未发送且有内容）。"""
         if self._thought_sent or not self._thought_buffer:
             return []
@@ -79,11 +78,11 @@ class StreamParser:
         thought_text = self._thought_buffer.strip()
         return [("thought_content", thought_text)]
 
-    def feed(self, chunk: str) -> List[Tuple[str, str]]:
+    def feed(self, chunk: str) -> list[tuple[str, str]]:
         """喂入一个原始 chunk，返回解析得到的消息列表。"""
         if not chunk:
             return []
-        msgs: List[Tuple[str, str]] = []
+        msgs: list[tuple[str, str]] = []
         self._search_buffer += chunk
 
         while self._search_buffer:
@@ -124,12 +123,12 @@ class StreamParser:
 
         return msgs
 
-    def _process_emotion_reply(self, text: str) -> List[Tuple[str, str]]:
+    def _process_emotion_reply(self, text: str) -> list[tuple[str, str]]:
         """
         从文本中提取 emotion 和切分 reply。
         内部方法，允许多次调用以处理不同文本片段。
         """
-        msgs: List[Tuple[str, str]] = []
+        msgs: list[tuple[str, str]] = []
         
         if not self._reply_started:
             # 将碎片追加到缓冲池中，防止 JSON 键值对被 chunk 截断
@@ -157,9 +156,9 @@ class StreamParser:
             
         return msgs
 
-    def _pop_sentence(self) -> List[Tuple[str, str]]:
+    def _pop_sentence(self) -> list[tuple[str, str]]:
         """从 reply 缓存中切分出完整的句子，并过滤末尾平白标点。"""
-        msgs: List[Tuple[str, str]] = []
+        msgs: list[tuple[str, str]] = []
         while True:
             m = _SENTENCE_BOUNDARY_RE.search(self._reply_buffer)
             if not m:
@@ -191,13 +190,13 @@ class StreamParser:
                 msgs.append(("reply_chunk", sentence_cleaned))
         return msgs
 
-    def flush(self) -> List[Tuple[str, str]]:
+    def flush(self) -> list[tuple[str, str]]:
         """在流结束时调用，返回 thought 和剩余 reply 内容。"""
         if self._state == _ParseState.READING_THOUGHT:
             self._thought_buffer += self._search_buffer
             self._search_buffer = ""
             
-        msgs: List[Tuple[str, str]] = []
+        msgs: list[tuple[str, str]] = []
         msgs.extend(self._emit_thought())
         
         remaining = self._pending_prefix + self._reply_buffer

@@ -14,10 +14,9 @@ Luna AI 全局配置模块
     - 配置加载失败时抛出 Pydantic 校验异常
 """
 
-import os
 from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env 文件位于项目根目录（../../ 相对于 backend/ai-service/）
 # 通过 Path(__file__) 计算绝对路径，不受工作目录变化影响
@@ -98,7 +97,8 @@ class Settings(BaseSettings):
 settings = Settings()
 
 import asyncio
-from typing import Dict, Any
+from typing import Any
+
 
 class GlobalConfigContainer:
     """
@@ -107,12 +107,12 @@ class GlobalConfigContainer:
     做什么：维护动态配置状态，接收 Go 的 gRPC 推送时更新配置并触发底层 LLM Client 的重新初始化。
     """
     def __init__(self):
-        self._large_model: Dict[str, Any] = {}
-        self._medium_model: Dict[str, Any] = {}
-        self._small_model: Dict[str, Any] = {}
+        self._large_model: dict[str, Any] = {}
+        self._medium_model: dict[str, Any] = {}
+        self._small_model: dict[str, Any] = {}
         self._lock = asyncio.Lock()
         
-    async def update_preset_config(self, large_model: Dict[str, Any], medium_model: Dict[str, Any], small_model: Dict[str, Any]):
+    async def update_preset_config(self, large_model: dict[str, Any], medium_model: dict[str, Any], small_model: dict[str, Any]):
         """
         更新预设配置并触发重载
         """
@@ -122,7 +122,7 @@ class GlobalConfigContainer:
             self._small_model = small_model
             
             # 触发 LLM Client 重载
-            from app.llm.client import llm_client, compression_llm_client
+            from app.llm.client import compression_llm_client, llm_client
             llm_client.reload_config()
             compression_llm_client.reload_config()
             
@@ -130,7 +130,7 @@ class GlobalConfigContainer:
             from app.logger import logger
             logger.info("API 配置预设已更新，LLM Client 已重载")
 
-    def get_model_config(self, size: str) -> Dict[str, Any]:
+    def get_model_config(self, size: str) -> dict[str, Any]:
         """
         获取指定规格的模型配置
         """

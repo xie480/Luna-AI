@@ -290,6 +290,136 @@ func (x *ChatRequest) GetSystemPrompt() string {
 	return ""
 }
 
+// InputReconstruction 请求消息
+type InputReconstructionRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TraceId         string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	UserInput       string                 `protobuf:"bytes,2,opt,name=user_input,json=userInput,proto3" json:"user_input,omitempty"`
+	ShortTermMemory string                 `protobuf:"bytes,3,opt,name=short_term_memory,json=shortTermMemory,proto3" json:"short_term_memory,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *InputReconstructionRequest) Reset() {
+	*x = InputReconstructionRequest{}
+	mi := &file_communication_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InputReconstructionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InputReconstructionRequest) ProtoMessage() {}
+
+func (x *InputReconstructionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InputReconstructionRequest.ProtoReflect.Descriptor instead.
+func (*InputReconstructionRequest) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *InputReconstructionRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *InputReconstructionRequest) GetUserInput() string {
+	if x != nil {
+		return x.UserInput
+	}
+	return ""
+}
+
+func (x *InputReconstructionRequest) GetShortTermMemory() string {
+	if x != nil {
+		return x.ShortTermMemory
+	}
+	return ""
+}
+
+// InputReconstruction 响应消息
+type InputReconstructionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	JsonOutput    string                 `protobuf:"bytes,2,opt,name=json_output,json=jsonOutput,proto3" json:"json_output,omitempty"` // 序列化后的 InputReconstructionOutput JSON 字符串
+	Success       bool                   `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InputReconstructionResponse) Reset() {
+	*x = InputReconstructionResponse{}
+	mi := &file_communication_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InputReconstructionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InputReconstructionResponse) ProtoMessage() {}
+
+func (x *InputReconstructionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InputReconstructionResponse.ProtoReflect.Descriptor instead.
+func (*InputReconstructionResponse) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *InputReconstructionResponse) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *InputReconstructionResponse) GetJsonOutput() string {
+	if x != nil {
+		return x.JsonOutput
+	}
+	return ""
+}
+
+func (x *InputReconstructionResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *InputReconstructionResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 // ShortSummarize 请求消息
 type ShortSummarizeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -303,7 +433,7 @@ type ShortSummarizeRequest struct {
 
 func (x *ShortSummarizeRequest) Reset() {
 	*x = ShortSummarizeRequest{}
-	mi := &file_communication_proto_msgTypes[4]
+	mi := &file_communication_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -315,7 +445,7 @@ func (x *ShortSummarizeRequest) String() string {
 func (*ShortSummarizeRequest) ProtoMessage() {}
 
 func (x *ShortSummarizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[4]
+	mi := &file_communication_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -328,7 +458,7 @@ func (x *ShortSummarizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShortSummarizeRequest.ProtoReflect.Descriptor instead.
 func (*ShortSummarizeRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{4}
+	return file_communication_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ShortSummarizeRequest) GetTraceId() string {
@@ -362,7 +492,7 @@ type ShortSummarizeResponse struct {
 
 func (x *ShortSummarizeResponse) Reset() {
 	*x = ShortSummarizeResponse{}
-	mi := &file_communication_proto_msgTypes[5]
+	mi := &file_communication_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -374,7 +504,7 @@ func (x *ShortSummarizeResponse) String() string {
 func (*ShortSummarizeResponse) ProtoMessage() {}
 
 func (x *ShortSummarizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[5]
+	mi := &file_communication_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -387,7 +517,7 @@ func (x *ShortSummarizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShortSummarizeResponse.ProtoReflect.Descriptor instead.
 func (*ShortSummarizeResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{5}
+	return file_communication_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ShortSummarizeResponse) GetTraceId() string {
@@ -439,7 +569,7 @@ type ChatStreamResponse struct {
 
 func (x *ChatStreamResponse) Reset() {
 	*x = ChatStreamResponse{}
-	mi := &file_communication_proto_msgTypes[6]
+	mi := &file_communication_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +581,7 @@ func (x *ChatStreamResponse) String() string {
 func (*ChatStreamResponse) ProtoMessage() {}
 
 func (x *ChatStreamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[6]
+	mi := &file_communication_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +594,7 @@ func (x *ChatStreamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChatStreamResponse.ProtoReflect.Descriptor instead.
 func (*ChatStreamResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{6}
+	return file_communication_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ChatStreamResponse) GetTraceId() string {
@@ -522,7 +652,7 @@ type ModelConfig struct {
 
 func (x *ModelConfig) Reset() {
 	*x = ModelConfig{}
-	mi := &file_communication_proto_msgTypes[7]
+	mi := &file_communication_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -534,7 +664,7 @@ func (x *ModelConfig) String() string {
 func (*ModelConfig) ProtoMessage() {}
 
 func (x *ModelConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[7]
+	mi := &file_communication_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -547,7 +677,7 @@ func (x *ModelConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelConfig.ProtoReflect.Descriptor instead.
 func (*ModelConfig) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{7}
+	return file_communication_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ModelConfig) GetBaseUrl() string {
@@ -599,7 +729,7 @@ type SyncPresetConfigRequest struct {
 
 func (x *SyncPresetConfigRequest) Reset() {
 	*x = SyncPresetConfigRequest{}
-	mi := &file_communication_proto_msgTypes[8]
+	mi := &file_communication_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -611,7 +741,7 @@ func (x *SyncPresetConfigRequest) String() string {
 func (*SyncPresetConfigRequest) ProtoMessage() {}
 
 func (x *SyncPresetConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[8]
+	mi := &file_communication_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -624,7 +754,7 @@ func (x *SyncPresetConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncPresetConfigRequest.ProtoReflect.Descriptor instead.
 func (*SyncPresetConfigRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{8}
+	return file_communication_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SyncPresetConfigRequest) GetSchemaVersion() string {
@@ -673,7 +803,7 @@ type SyncPresetConfigResponse struct {
 
 func (x *SyncPresetConfigResponse) Reset() {
 	*x = SyncPresetConfigResponse{}
-	mi := &file_communication_proto_msgTypes[9]
+	mi := &file_communication_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +815,7 @@ func (x *SyncPresetConfigResponse) String() string {
 func (*SyncPresetConfigResponse) ProtoMessage() {}
 
 func (x *SyncPresetConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[9]
+	mi := &file_communication_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,7 +828,7 @@ func (x *SyncPresetConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncPresetConfigResponse.ProtoReflect.Descriptor instead.
 func (*SyncPresetConfigResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{9}
+	return file_communication_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SyncPresetConfigResponse) GetSuccess() bool {
@@ -726,7 +856,7 @@ type LongSummarizeRequest struct {
 
 func (x *LongSummarizeRequest) Reset() {
 	*x = LongSummarizeRequest{}
-	mi := &file_communication_proto_msgTypes[10]
+	mi := &file_communication_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -738,7 +868,7 @@ func (x *LongSummarizeRequest) String() string {
 func (*LongSummarizeRequest) ProtoMessage() {}
 
 func (x *LongSummarizeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[10]
+	mi := &file_communication_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -751,7 +881,7 @@ func (x *LongSummarizeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LongSummarizeRequest.ProtoReflect.Descriptor instead.
 func (*LongSummarizeRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{10}
+	return file_communication_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LongSummarizeRequest) GetSessionId() string {
@@ -778,7 +908,7 @@ type LongSummarizeResponse struct {
 
 func (x *LongSummarizeResponse) Reset() {
 	*x = LongSummarizeResponse{}
-	mi := &file_communication_proto_msgTypes[11]
+	mi := &file_communication_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +920,7 @@ func (x *LongSummarizeResponse) String() string {
 func (*LongSummarizeResponse) ProtoMessage() {}
 
 func (x *LongSummarizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[11]
+	mi := &file_communication_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +933,7 @@ func (x *LongSummarizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LongSummarizeResponse.ProtoReflect.Descriptor instead.
 func (*LongSummarizeResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{11}
+	return file_communication_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LongSummarizeResponse) GetSummary() string {
@@ -828,7 +958,7 @@ type EmbeddingRequest struct {
 
 func (x *EmbeddingRequest) Reset() {
 	*x = EmbeddingRequest{}
-	mi := &file_communication_proto_msgTypes[12]
+	mi := &file_communication_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +970,7 @@ func (x *EmbeddingRequest) String() string {
 func (*EmbeddingRequest) ProtoMessage() {}
 
 func (x *EmbeddingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[12]
+	mi := &file_communication_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +983,7 @@ func (x *EmbeddingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmbeddingRequest.ProtoReflect.Descriptor instead.
 func (*EmbeddingRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{12}
+	return file_communication_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EmbeddingRequest) GetText() string {
@@ -882,7 +1012,7 @@ type EmbeddingResponse struct {
 
 func (x *EmbeddingResponse) Reset() {
 	*x = EmbeddingResponse{}
-	mi := &file_communication_proto_msgTypes[13]
+	mi := &file_communication_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -894,7 +1024,7 @@ func (x *EmbeddingResponse) String() string {
 func (*EmbeddingResponse) ProtoMessage() {}
 
 func (x *EmbeddingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[13]
+	mi := &file_communication_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -907,7 +1037,7 @@ func (x *EmbeddingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmbeddingResponse.ProtoReflect.Descriptor instead.
 func (*EmbeddingResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{13}
+	return file_communication_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EmbeddingResponse) GetVectorJson() string {
@@ -956,7 +1086,7 @@ type RerankRequest struct {
 
 func (x *RerankRequest) Reset() {
 	*x = RerankRequest{}
-	mi := &file_communication_proto_msgTypes[14]
+	mi := &file_communication_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -968,7 +1098,7 @@ func (x *RerankRequest) String() string {
 func (*RerankRequest) ProtoMessage() {}
 
 func (x *RerankRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[14]
+	mi := &file_communication_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -981,7 +1111,7 @@ func (x *RerankRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RerankRequest.ProtoReflect.Descriptor instead.
 func (*RerankRequest) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{14}
+	return file_communication_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RerankRequest) GetQuery() string {
@@ -1017,7 +1147,7 @@ type RerankResponse struct {
 
 func (x *RerankResponse) Reset() {
 	*x = RerankResponse{}
-	mi := &file_communication_proto_msgTypes[15]
+	mi := &file_communication_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1029,7 +1159,7 @@ func (x *RerankResponse) String() string {
 func (*RerankResponse) ProtoMessage() {}
 
 func (x *RerankResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_communication_proto_msgTypes[15]
+	mi := &file_communication_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1042,7 +1172,7 @@ func (x *RerankResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RerankResponse.ProtoReflect.Descriptor instead.
 func (*RerankResponse) Descriptor() ([]byte, []int) {
-	return file_communication_proto_rawDescGZIP(), []int{15}
+	return file_communication_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RerankResponse) GetScores() []float64 {
@@ -1087,7 +1217,18 @@ const file_communication_proto_rawDesc = "" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
-	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"]\n" +
+	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"\x82\x01\n" +
+	"\x1aInputReconstructionRequest\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
+	"\n" +
+	"user_input\x18\x02 \x01(\tR\tuserInput\x12*\n" +
+	"\x11short_term_memory\x18\x03 \x01(\tR\x0fshortTermMemory\"\x98\x01\n" +
+	"\x1bInputReconstructionResponse\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1f\n" +
+	"\vjson_output\x18\x02 \x01(\tR\n" +
+	"jsonOutput\x12\x18\n" +
+	"\asuccess\x18\x03 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"]\n" +
 	"\x15ShortSummarizeRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12)\n" +
 	"\x10summarize_prompt\x18\x02 \x01(\tR\x0fsummarizePrompt\"\xb4\x01\n" +
@@ -1141,7 +1282,7 @@ const file_communication_proto_rawDesc = "" +
 	"\x0eRerankResponse\x12\x16\n" +
 	"\x06scores\x18\x01 \x03(\x01R\x06scores\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xdd\x04\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xcb\x05\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +
@@ -1150,7 +1291,8 @@ const file_communication_proto_rawDesc = "" +
 	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponse\x12Z\n" +
 	"\rLongSummarize\x12#.communication.LongSummarizeRequest\x1a$.communication.LongSummarizeResponse\x12N\n" +
 	"\tEmbedding\x12\x1f.communication.EmbeddingRequest\x1a .communication.EmbeddingResponse\x12E\n" +
-	"\x06Rerank\x12\x1c.communication.RerankRequest\x1a\x1d.communication.RerankResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
+	"\x06Rerank\x12\x1c.communication.RerankRequest\x1a\x1d.communication.RerankResponse\x12l\n" +
+	"\x13InputReconstruction\x12).communication.InputReconstructionRequest\x1a*.communication.InputReconstructionResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
 
 var (
 	file_communication_proto_rawDescOnce sync.Once
@@ -1164,46 +1306,50 @@ func file_communication_proto_rawDescGZIP() []byte {
 	return file_communication_proto_rawDescData
 }
 
-var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_communication_proto_goTypes = []any{
-	(*PingRequest)(nil),              // 0: communication.PingRequest
-	(*PongResponse)(nil),             // 1: communication.PongResponse
-	(*ChatMessage)(nil),              // 2: communication.ChatMessage
-	(*ChatRequest)(nil),              // 3: communication.ChatRequest
-	(*ShortSummarizeRequest)(nil),    // 4: communication.ShortSummarizeRequest
-	(*ShortSummarizeResponse)(nil),   // 5: communication.ShortSummarizeResponse
-	(*ChatStreamResponse)(nil),       // 6: communication.ChatStreamResponse
-	(*ModelConfig)(nil),              // 7: communication.ModelConfig
-	(*SyncPresetConfigRequest)(nil),  // 8: communication.SyncPresetConfigRequest
-	(*SyncPresetConfigResponse)(nil), // 9: communication.SyncPresetConfigResponse
-	(*LongSummarizeRequest)(nil),     // 10: communication.LongSummarizeRequest
-	(*LongSummarizeResponse)(nil),    // 11: communication.LongSummarizeResponse
-	(*EmbeddingRequest)(nil),         // 12: communication.EmbeddingRequest
-	(*EmbeddingResponse)(nil),        // 13: communication.EmbeddingResponse
-	(*RerankRequest)(nil),            // 14: communication.RerankRequest
-	(*RerankResponse)(nil),           // 15: communication.RerankResponse
+	(*PingRequest)(nil),                 // 0: communication.PingRequest
+	(*PongResponse)(nil),                // 1: communication.PongResponse
+	(*ChatMessage)(nil),                 // 2: communication.ChatMessage
+	(*ChatRequest)(nil),                 // 3: communication.ChatRequest
+	(*InputReconstructionRequest)(nil),  // 4: communication.InputReconstructionRequest
+	(*InputReconstructionResponse)(nil), // 5: communication.InputReconstructionResponse
+	(*ShortSummarizeRequest)(nil),       // 6: communication.ShortSummarizeRequest
+	(*ShortSummarizeResponse)(nil),      // 7: communication.ShortSummarizeResponse
+	(*ChatStreamResponse)(nil),          // 8: communication.ChatStreamResponse
+	(*ModelConfig)(nil),                 // 9: communication.ModelConfig
+	(*SyncPresetConfigRequest)(nil),     // 10: communication.SyncPresetConfigRequest
+	(*SyncPresetConfigResponse)(nil),    // 11: communication.SyncPresetConfigResponse
+	(*LongSummarizeRequest)(nil),        // 12: communication.LongSummarizeRequest
+	(*LongSummarizeResponse)(nil),       // 13: communication.LongSummarizeResponse
+	(*EmbeddingRequest)(nil),            // 14: communication.EmbeddingRequest
+	(*EmbeddingResponse)(nil),           // 15: communication.EmbeddingResponse
+	(*RerankRequest)(nil),               // 16: communication.RerankRequest
+	(*RerankResponse)(nil),              // 17: communication.RerankResponse
 }
 var file_communication_proto_depIdxs = []int32{
 	2,  // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
-	7,  // 1: communication.SyncPresetConfigRequest.large_model:type_name -> communication.ModelConfig
-	7,  // 2: communication.SyncPresetConfigRequest.medium_model:type_name -> communication.ModelConfig
-	7,  // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
+	9,  // 1: communication.SyncPresetConfigRequest.large_model:type_name -> communication.ModelConfig
+	9,  // 2: communication.SyncPresetConfigRequest.medium_model:type_name -> communication.ModelConfig
+	9,  // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
 	0,  // 4: communication.CommunicationService.Ping:input_type -> communication.PingRequest
 	3,  // 5: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
-	4,  // 6: communication.CommunicationService.ShortSummarize:input_type -> communication.ShortSummarizeRequest
-	8,  // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
-	10, // 8: communication.CommunicationService.LongSummarize:input_type -> communication.LongSummarizeRequest
-	12, // 9: communication.CommunicationService.Embedding:input_type -> communication.EmbeddingRequest
-	14, // 10: communication.CommunicationService.Rerank:input_type -> communication.RerankRequest
-	1,  // 11: communication.CommunicationService.Ping:output_type -> communication.PongResponse
-	6,  // 12: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
-	5,  // 13: communication.CommunicationService.ShortSummarize:output_type -> communication.ShortSummarizeResponse
-	9,  // 14: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
-	11, // 15: communication.CommunicationService.LongSummarize:output_type -> communication.LongSummarizeResponse
-	13, // 16: communication.CommunicationService.Embedding:output_type -> communication.EmbeddingResponse
-	15, // 17: communication.CommunicationService.Rerank:output_type -> communication.RerankResponse
-	11, // [11:18] is the sub-list for method output_type
-	4,  // [4:11] is the sub-list for method input_type
+	6,  // 6: communication.CommunicationService.ShortSummarize:input_type -> communication.ShortSummarizeRequest
+	10, // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
+	12, // 8: communication.CommunicationService.LongSummarize:input_type -> communication.LongSummarizeRequest
+	14, // 9: communication.CommunicationService.Embedding:input_type -> communication.EmbeddingRequest
+	16, // 10: communication.CommunicationService.Rerank:input_type -> communication.RerankRequest
+	4,  // 11: communication.CommunicationService.InputReconstruction:input_type -> communication.InputReconstructionRequest
+	1,  // 12: communication.CommunicationService.Ping:output_type -> communication.PongResponse
+	8,  // 13: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
+	7,  // 14: communication.CommunicationService.ShortSummarize:output_type -> communication.ShortSummarizeResponse
+	11, // 15: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
+	13, // 16: communication.CommunicationService.LongSummarize:output_type -> communication.LongSummarizeResponse
+	15, // 17: communication.CommunicationService.Embedding:output_type -> communication.EmbeddingResponse
+	17, // 18: communication.CommunicationService.Rerank:output_type -> communication.RerankResponse
+	5,  // 19: communication.CommunicationService.InputReconstruction:output_type -> communication.InputReconstructionResponse
+	12, // [12:20] is the sub-list for method output_type
+	4,  // [4:12] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -1220,7 +1366,7 @@ func file_communication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_proto_rawDesc), len(file_communication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

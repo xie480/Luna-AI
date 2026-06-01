@@ -19,25 +19,25 @@ Luna AI gRPC 通信服务实现
     - LLM 调用异常时返回结构化错误响应
 """
 
-import time
 import json
-from typing import TYPE_CHECKING, AsyncGenerator, Optional, List
+import time
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Optional
 
 import grpc
-import numpy as np
+
 # 使用 TYPE_CHECKING 条件导入 sentence_transformers 的类型：
 # - 类型检查时：可以看到完整的 SentenceTransformer / CrossEncoder 类型定义
 # - 运行时：不会导入 sentence_transformers（重依赖，可能未安装）
 # - 实际运行中，Embedding/Rerank 方法内部已有模型为 None 的守卫检查
 if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer, CrossEncoder
+    from sentence_transformers import CrossEncoder, SentenceTransformer
 
-from app.api import communication_pb2
-from app.api import communication_pb2_grpc
-from app.logger import logger
-from app.llm.client import llm_client, compression_llm_client
-from app.llm.stream_parser import StreamParser
+from app.api import communication_pb2, communication_pb2_grpc
 from app.constants import Role
+from app.llm.client import compression_llm_client, llm_client
+from app.llm.stream_parser import StreamParser
+from app.logger import logger
 
 # ============================================================
 # 全局 Embedding 和 Rerank 模型实例
@@ -528,6 +528,43 @@ class CommunicationServiceServicer(
             logger.exception("Embedding 向量化失败")
             return communication_pb2.EmbeddingResponse(
                 vector_json="[]",
+                success=False,
+                error_message=str(e)
+            )
+
+    async def InputReconstruction(
+        self,
+        request: communication_pb2.InputReconstructionRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.InputReconstructionResponse:
+        """
+        处理用户输入重构与路由解析请求
+        """
+        trace_id = request.trace_id
+        logger.info(f"[TraceID:{trace_id}] 收到 InputReconstruction 请求")
+
+        try:
+            from app.agent.input_reconstructor import InputReconstructorAgent
+            from app.llm.client import llm_client
+            
+            agent = InputReconstructorAgent(llm_client)
+            result = await agent.process(
+                trace_id=trace_id,
+                user_input=request.user_input,
+                short_term_memory=request.short_term_memory
+            )
+            
+            return communication_pb2.InputReconstructionResponse(
+                trace_id=trace_id,
+                json_output=result.model_dump_json(),
+                success=True,
+                error_message=""
+            )
+        except Exception as e:
+            logger.exception(f"[TraceID:{trace_id}] InputReconstruction 处理异常")
+            return communication_pb2.InputReconstructionResponse(
+                trace_id=trace_id,
+                json_output="",
                 success=False,
                 error_message=str(e)
             )

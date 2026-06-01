@@ -1,5 +1,6 @@
-from typing import List, Dict, Optional
+
 from jinja2 import Environment, StrictUndefined, TemplateError
+
 from app.api.communication_pb2 import PromptSlot
 from app.logger import get_logger
 
@@ -15,7 +16,7 @@ class PromptRenderer:
     def __init__(self):
         self.env = Environment(undefined=StrictUndefined)
 
-    def render_slot(self, slot: PromptSlot, variables: Dict[str, str]) -> Optional[str]:
+    def render_slot(self, slot: PromptSlot, variables: dict[str, str]) -> str | None:
         """
         渲染单个槽位
         """
@@ -30,7 +31,7 @@ class PromptRenderer:
                 logger.warning(f"跳过非必须槽位 {slot.slot_name}")
                 return None
 
-    def render_slots(self, slots: List[PromptSlot], variables: Dict[str, str]) -> Dict[str, str]:
+    def render_slots(self, slots: list[PromptSlot], variables: dict[str, str]) -> dict[str, str]:
         """
         渲染所有槽位，返回按 slot_name 组织的字典
         """
