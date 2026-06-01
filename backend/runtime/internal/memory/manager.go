@@ -138,9 +138,9 @@ func (m *Manager) emit(event MemoryEvent) {
 func (m *Manager) Init(ctx context.Context) error {
 	logger.Info(ctx, "正在初始化长期记忆系统")
 
-	// 1. 确保 Qdrant 集合存在（默认向量维度 1536）
+	// 1. 确保 Qdrant 集合存在（默认向量维度 768，适配 BGE-base-zh-v1.5）
 	if m.qdrantClient != nil && m.ltmQdrantRepo != nil {
-		if err := m.ltmQdrantRepo.EnsureCollection(ctx, 1536); err != nil {
+		if err := m.ltmQdrantRepo.EnsureCollection(ctx, 768); err != nil {
 			logger.Warn(ctx, "Qdrant 集合初始化失败，将使用降级模式", "error", err)
 		}
 	}
@@ -285,7 +285,7 @@ func (m *Manager) compressAndCommit(ctx context.Context, sessionID string) error
 
 		if embedErr != nil {
 			logger.Warn(ctx, "获取语义向量失败，使用零值向量写入 Qdrant（后续可对账补充）", "memory_id", memoryID, "error", embedErr)
-			embeddingVec = make([]float64, 1536)
+			embeddingVec = make([]float64, 768)
 		}
 
 		if err := m.ltmQdrantRepo.SaveWithVector(ctx, memoryID, sessionID, embeddingVec, repository.MemoryStatusActive); err != nil {
@@ -413,7 +413,12 @@ func (m *Manager) RetrieveLongTermMemories(ctx context.Context, queryText string
 
 	memoryIDs := make([]string, 0, len(results))
 	for _, result := range results {
-		memoryIDs = append(memoryIDs, result.ID)
+		if memID, ok := result.Payload["memory_id"].(string); ok {
+			memoryIDs = append(memoryIDs, memID)
+		} else {
+			// 兼容旧数据
+			memoryIDs = append(memoryIDs, fmt.Sprintf("%d", result.ID))
+		}
 	}
 
 	memories, err := m.ltmPGRepo.GetByIDs(ctx, memoryIDs)

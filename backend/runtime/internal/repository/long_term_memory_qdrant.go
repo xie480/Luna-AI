@@ -21,7 +21,7 @@ func NewLongTermMemoryQdrantRepo(client *infrastructure.QdrantClient) *LongTermM
 }
 
 // EnsureCollection 确保长期记忆集合存在
-// 向量维度：1536（默认与 OpenAI text-embedding-ada-002 对齐）
+// 向量维度：768（默认与 BGE-base-zh-v1.5 对齐）
 func (r *LongTermMemoryQdrantRepo) EnsureCollection(ctx context.Context, vectorSize int) error {
 	return r.client.EnsureCollection(ctx, infrastructure.QdrantCollectionLongTermMemories, vectorSize)
 }
@@ -39,10 +39,17 @@ func (r *LongTermMemoryQdrantRepo) SaveWithVector(ctx context.Context, memoryID 
 	if status == "" {
 		status = MemoryStatusActive
 	}
+	
+	// Qdrant ID 必须是 uint64 或 UUID，这里我们将 memoryID 存储在 payload 中，
+	// 并使用 snowflake ID 的 uint64 形式作为 Qdrant ID
+	var qdrantID uint64
+	fmt.Sscanf(memoryID, "%d", &qdrantID)
+	
 	point := infrastructure.UpsertPoint{
-		ID:     memoryID,
+		ID:     qdrantID,
 		Vector: vector,
 		Payload: map[string]interface{}{
+			"memory_id":  memoryID,
 			"session_id": sessionID,
 			"status":     string(status),
 		},
@@ -83,14 +90,18 @@ func (r *LongTermMemoryQdrantRepo) SearchByVector(ctx context.Context, vector []
 
 // SoftDeleteByMemoryID 根据记忆 ID 软删除向量（更新 payload 中的 status）
 func (r *LongTermMemoryQdrantRepo) SoftDeleteByMemoryID(ctx context.Context, memoryID string) error {
+	var qdrantID uint64
+	fmt.Sscanf(memoryID, "%d", &qdrantID)
+	
 	// Qdrant 不支持直接修改 payload 中单个字段，需重新 Upsert
 	// 使用空向量 + MemoryStatusDeleted 状态覆盖
 	point := infrastructure.UpsertPoint{
-		ID: memoryID,
+		ID: qdrantID,
 		// 使用零值向量覆盖：后续搜索时不会被匹配到（余弦相似度极低）
-		Vector: make([]float64, 1536),
+		Vector: make([]float64, 768),
 		Payload: map[string]interface{}{
-			"status": string(MemoryStatusDeleted),
+			"memory_id": memoryID,
+			"status":    string(MemoryStatusDeleted),
 		},
 	}
 	if err := r.client.Upsert(ctx, infrastructure.QdrantCollectionLongTermMemories, []infrastructure.UpsertPoint{point}); err != nil {

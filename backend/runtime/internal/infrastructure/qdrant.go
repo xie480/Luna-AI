@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -14,7 +15,7 @@ const QdrantCollectionLongTermMemories = "luna_long_term_memories"
 
 // QdrantSearchResult 定义 Qdrant 搜索结果结构
 type QdrantSearchResult struct {
-	ID      string                 `json:"id"`
+	ID      uint64                 `json:"id"`
 	Score   float64                `json:"score"`
 	Payload map[string]interface{} `json:"payload"`
 }
@@ -113,7 +114,7 @@ func (c *QdrantClient) collectionExists(ctx context.Context, collectionName stri
 
 // UpsertRequest 单个向量点请求
 type UpsertPoint struct {
-	ID      string                 `json:"id"`
+	ID      uint64                 `json:"id"`
 	Vector  []float64              `json:"vector"`
 	Payload map[string]interface{} `json:"payload"`
 }
@@ -185,9 +186,17 @@ func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector
 	}
 
 	// 将 Result 解析为 SearchResponse
+	// 注意：resp.Result 已经是 map[string]interface{}，我们需要将其重新序列化再反序列化
+	// 或者直接使用 map 结构
 	var searchResp SearchResponse
 	if err := resp.DecodeJSON(&searchResp); err != nil {
-		return nil, fmt.Errorf("解析 Qdrant Search 响应失败: %w", err)
+		// 尝试直接解析 resp.Result
+		resultBytes, _ := json.Marshal(resp.Result)
+		var results []QdrantSearchResult
+		if err2 := json.Unmarshal(resultBytes, &results); err2 != nil {
+			return nil, fmt.Errorf("解析 Qdrant Search 响应失败: %w", err)
+		}
+		searchResp.Result = results
 	}
 
 	logger.Info(ctx, "Qdrant Search 完成", "collection", collectionName, "hits", len(searchResp.Result))
@@ -196,7 +205,7 @@ func (c *QdrantClient) Search(ctx context.Context, collectionName string, vector
 
 // DeletePointsBody 删除请求体
 type DeletePointsBody struct {
-	Points []string `json:"points"`
+	Points []uint64 `json:"points"`
 }
 
 // DeletePoints 删除指定 ID 的向量点
@@ -206,7 +215,7 @@ type DeletePointsBody struct {
 //   - ids: 要删除的点 ID 列表
 //
 // 输出：error
-func (c *QdrantClient) DeletePoints(ctx context.Context, collectionName string, ids []string) error {
+func (c *QdrantClient) DeletePoints(ctx context.Context, collectionName string, ids []uint64) error {
 	if len(ids) == 0 {
 		return nil
 	}

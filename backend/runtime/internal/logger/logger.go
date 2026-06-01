@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -86,7 +87,8 @@ func Init(level string) error {
 	// 计划中提到 "提供高性能的结构化 JSON 日志"，我们统一使用 JSONHandler
 	
 	// 暂时只输出到文件，如果需要控制台输出，可以使用 io.MultiWriter
-	jsonHandler := slog.NewJSONHandler(fileWriter, opts)
+	multiWriter := io.MultiWriter(os.Stdout, fileWriter)
+	jsonHandler := slog.NewJSONHandler(multiWriter, opts)
 	
 	// 包装 ContextHandler
 	contextHandler := &ContextHandler{Handler: jsonHandler}
