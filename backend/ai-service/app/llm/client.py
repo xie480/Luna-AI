@@ -453,6 +453,7 @@ class LLMClient:
         history: list[dict[str, str]],
         current_message: str,
         trace_id: str,
+        disambiguated_text: str = "",
         **kwargs: Any
     ) -> AsyncGenerator[dict[str, Any], None]:
         """
@@ -484,9 +485,11 @@ class LLMClient:
 
         full_combined_prompt = "\n\n".join(combined_prompt_parts)
 
+        # 3. 替换 LLM 请求中的当前用户消息为重构后的无歧义文本
+        final_message = disambiguated_text if disambiguated_text else current_message
 
-        # 3. 以单体文本发起请求
-        async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, current_message, **kwargs):
+        # 4. 以单体文本发起请求
+        async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, final_message, **kwargs):
             yield chunk_data
 
 

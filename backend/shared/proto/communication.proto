@@ -46,13 +46,17 @@ message ChatRequest {
   repeated ChatMessage history = 3;
   // 完整的系统提示词（包含 personality、memory、runtime 等所有上下文层）
   string system_prompt = 4;
+  // 经过输入重构 Agent 处理后的无歧义文本，用于替换 LLM 请求中的当前用户消息
+  string disambiguated_text = 5;
 }
 
 // InputReconstruction 请求消息
 message InputReconstructionRequest {
   string trace_id = 1;
   string user_input = 2;
-  string short_term_memory = 3;
+  string system_prompt = 3;
+  string memory_prompt = 4;
+  string runtime_prompt = 5;
 }
 
 // InputReconstruction 响应消息

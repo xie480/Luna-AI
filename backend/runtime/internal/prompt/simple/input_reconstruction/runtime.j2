@@ -1,0 +1,85 @@
+### 用户原始输入
+{{ USER_INPUT }}
+
+### 消歧任务指南
+1. 结合上述上下文，将用户输入中的代词（如“那个”、“他”、“上次”）替换为具体的实体。
+2. 如果上下文中不存在该实体，请保留原样，并在 `unresolved_pronouns` 中记录原因，这将触发下游的长期记忆检索。
+3. 确保 `disambiguated_text` 是一句语义完整、自然流畅的话。
+
+### 检索路由解耦指南
+你需要将检索意图严格拆分为三个独立维度，并分别评估是否触发：
+1. **长期记忆 (Long-Term Memory)**：当需要回溯用户历史轨迹、个人偏好或补全未消歧实体时触发。
+2. **外部知识 (External Knowledge)**：仅当用户明确要求查阅外部客观文档、系统手册或垂类知识库时触发。
+3. **经验教训 (Experience Reflection)**：当用户表达负面情绪（如焦虑、后悔）、面临高危决策或主动要求复盘时触发，用于提取系统避坑指南。
+
+### 情绪特征提取指南 (V-A 模型)
+- **Valence (效价)**: -1.0 (极度负面/痛苦) 到 1.0 (极度正面/愉悦)。
+- **Arousal (唤醒度)**: 0.0 (极度平静/困倦) 到 1.0 (极度激动/紧张)。
+- 结合用户的输入语义，量化其情绪状态。
+
+### ⚠️ 严格枚举约束与输出格式要求 ⚠️
+你必须严格输出如下 JSON 结构。
+【致命约束】：针对带有枚举约束的字段，你的输出值必须绝对限制在以下提供的有效值列表中，严禁自行编造！否则将导致系统严重崩溃！
+
+* 允许的 primary_intent: [ {{ PRIMARY_INTENTS | join(', ') }} ]
+* 允许的 category: [ {{ CATEGORIES | join(', ') }} ]
+* 允许的 dag_route_hint: [ {{ DAG_ROUTE_HINTS | join(', ') }} ]
+* 允许的 required_retrieval_types: [ {{ RETRIEVAL_TYPES | join(', ') }} ]
+
+```json
+{
+  "trace_id": "必须与传入的 trace_id 保持一致",
+  "original_input": "用户的原始输入文本",
+  
+  "reconstruction": {
+    "disambiguated_text": "消歧后的完整文本。如果能在短期记忆中找到指代对象，会将其替换；如果找不到，会用 [未知实体] 等占位符标记。",
+    "unresolved_pronouns": [
+      {
+        "original": "在当前短期会话上下文中无法找到明确指代目标的代词",
+        "reason": "无法消歧的原因，例如：短期上下文缺失"
+      }
+    ]
+  },
+
+  "intent_routing": {
+    "primary_intent": "必须从允许的 primary_intent 列表中选择",
+    "category": "必须从允许的 category 列表中选择",
+    "dag_route_hint": "必须从允许的 dag_route_hint 列表中选择",
+    "required_retrieval_types": ["必须从允许的 required_retrieval_types 列表中选择"]
+  },
+
+  "retrieval_routing": {
+    "long_term_memory": {
+      "trigger": "布尔值，是否触发长期记忆检索",
+      "trigger_reason": "触发检索的具体原因描述",
+      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"],
+      "temporal_focus": {
+        "time_type": "时间指向类型，枚举值：PAST, FUTURE, CURRENT",
+        "reference_time": "具体的参考时间戳，如果没有则为 null"
+      },
+      "entity_mentions": ["提取出的核心实体词"]
+    },
+    
+    "external_knowledge": {
+      "trigger": "布尔值，是否触发外部知识检索",
+      "trigger_reason": "触发检索的具体原因描述",
+      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"]
+    },
+    
+    "experience_reflection": {
+      "trigger": "布尔值，是否触发经验教训检索",
+      "trigger_reason": "触发检索的具体原因描述",
+      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"],
+      "reflection_focus": "反思焦点，如 RISK_AVERSION, EFFICIENCY_OPTIMIZATION, COMMUNICATION_STYLE"
+    }
+  },
+
+  "emotion_state": {
+    "primary_emotion": "主导情绪标签，如 ANXIETY, JOY, ANGER",
+    "intensity": "情绪的强烈程度，范围 0.0 到 1.0",
+    "valence": "情绪效价（V-A 模型），范围 -1.0（极度负面）到 1.0（极度正面）",
+    "arousal": "情绪唤醒度（V-A 模型），范围 0.0（极度平静）到 1.0（极度激动）",
+    "emotion_trigger": "触发该情绪的具体原因或事件描述",
+    "esm_transition_hint": "给 Go 层情绪状态机的跃迁暗示，如 REQUIRE_COMFORT"
+  }
+}

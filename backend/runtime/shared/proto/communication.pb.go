@@ -227,9 +227,11 @@ type ChatRequest struct {
 	// 前端维护的历史记录，按时间正序排列（最旧的在最前）
 	History []*ChatMessage `protobuf:"bytes,3,rep,name=history,proto3" json:"history,omitempty"`
 	// 完整的系统提示词（包含 personality、memory、runtime 等所有上下文层）
-	SystemPrompt  string `protobuf:"bytes,4,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SystemPrompt string `protobuf:"bytes,4,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
+	// 经过输入重构 Agent 处理后的无歧义文本，用于替换 LLM 请求中的当前用户消息
+	DisambiguatedText string `protobuf:"bytes,5,opt,name=disambiguated_text,json=disambiguatedText,proto3" json:"disambiguated_text,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
@@ -290,14 +292,23 @@ func (x *ChatRequest) GetSystemPrompt() string {
 	return ""
 }
 
+func (x *ChatRequest) GetDisambiguatedText() string {
+	if x != nil {
+		return x.DisambiguatedText
+	}
+	return ""
+}
+
 // InputReconstruction 请求消息
 type InputReconstructionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TraceId         string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	UserInput       string                 `protobuf:"bytes,2,opt,name=user_input,json=userInput,proto3" json:"user_input,omitempty"`
-	ShortTermMemory string                 `protobuf:"bytes,3,opt,name=short_term_memory,json=shortTermMemory,proto3" json:"short_term_memory,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	UserInput     string                 `protobuf:"bytes,2,opt,name=user_input,json=userInput,proto3" json:"user_input,omitempty"`
+	SystemPrompt  string                 `protobuf:"bytes,3,opt,name=system_prompt,json=systemPrompt,proto3" json:"system_prompt,omitempty"`
+	MemoryPrompt  string                 `protobuf:"bytes,4,opt,name=memory_prompt,json=memoryPrompt,proto3" json:"memory_prompt,omitempty"`
+	RuntimePrompt string                 `protobuf:"bytes,5,opt,name=runtime_prompt,json=runtimePrompt,proto3" json:"runtime_prompt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InputReconstructionRequest) Reset() {
@@ -344,9 +355,23 @@ func (x *InputReconstructionRequest) GetUserInput() string {
 	return ""
 }
 
-func (x *InputReconstructionRequest) GetShortTermMemory() string {
+func (x *InputReconstructionRequest) GetSystemPrompt() string {
 	if x != nil {
-		return x.ShortTermMemory
+		return x.SystemPrompt
+	}
+	return ""
+}
+
+func (x *InputReconstructionRequest) GetMemoryPrompt() string {
+	if x != nil {
+		return x.MemoryPrompt
+	}
+	return ""
+}
+
+func (x *InputReconstructionRequest) GetRuntimePrompt() string {
+	if x != nil {
+		return x.RuntimePrompt
 	}
 	return ""
 }
@@ -1212,17 +1237,20 @@ const file_communication_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x03 \x01(\bR\aisError\x12#\n" +
-	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\x9d\x01\n" +
+	"\rerror_details\x18\x04 \x01(\tR\ferrorDetails\"\xcc\x01\n" +
 	"\vChatRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
-	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"\x82\x01\n" +
+	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\x12-\n" +
+	"\x12disambiguated_text\x18\x05 \x01(\tR\x11disambiguatedText\"\xc7\x01\n" +
 	"\x1aInputReconstructionRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1d\n" +
 	"\n" +
-	"user_input\x18\x02 \x01(\tR\tuserInput\x12*\n" +
-	"\x11short_term_memory\x18\x03 \x01(\tR\x0fshortTermMemory\"\x98\x01\n" +
+	"user_input\x18\x02 \x01(\tR\tuserInput\x12#\n" +
+	"\rsystem_prompt\x18\x03 \x01(\tR\fsystemPrompt\x12#\n" +
+	"\rmemory_prompt\x18\x04 \x01(\tR\fmemoryPrompt\x12%\n" +
+	"\x0eruntime_prompt\x18\x05 \x01(\tR\rruntimePrompt\"\x98\x01\n" +
 	"\x1bInputReconstructionResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x1f\n" +
 	"\vjson_output\x18\x02 \x01(\tR\n" +

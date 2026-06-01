@@ -32,6 +32,8 @@ const (
 	CategoryShortSummary PromptCategory = "short_summary"
 	// CategoryLongSummary 长期记忆摘要压缩场景（槽位: system, memory, runtime）
 	CategoryLongSummary PromptCategory = "long_summary"
+	// CategoryInputReconstruction 输入重构与路由场景（槽位: system, memory, runtime）
+	CategoryInputReconstruction PromptCategory = "input_reconstruction"
 )
 
 // 占位符常量

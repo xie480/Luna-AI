@@ -557,6 +557,82 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		"MEMORY_SNIPPETS": memorySnippets,
 	}
 
+	// 1. 组装 Input Reconstruction Prompt
+	var inputReconSystemPrompt, inputReconMemoryPrompt, inputReconRuntimePrompt string
+	if s.promptMgr != nil {
+		// 组装 Input Reconstruction 的三个槽位
+		inputReconSystemPrompt, _ = s.promptMgr.AssemblePrompt(ctx, prompt.CategoryInputReconstruction, map[string]string{})
+
+		inputReconMemoryPrompt, _ = s.promptMgr.AssemblePrompt(ctx, prompt.CategoryInputReconstruction, map[string]string{
+			"CORE_SUMMARY":    summary.CoreSummary,
+			"KEY_FACTS":       summary.KeyFacts,
+			"MEMORY_SNIPPETS": memorySnippets,
+		})
+
+		// 动态注入枚举值
+		primaryIntents := types.ValidPrimaryIntents()
+		categories := types.ValidIntentCategories()
+		dagRouteHints := types.ValidDagRouteHints()
+		retrievalTypes := types.ValidRetrievalTypes()
+
+		inputReconRuntimePrompt, _ = s.promptMgr.AssemblePrompt(ctx, prompt.CategoryInputReconstruction, map[string]string{
+			"USER_INPUT":      cmdPayload.Message,
+			"PRIMARY_INTENTS": `"` + strings.Join(primaryIntents, `", "`) + `"`,
+			"CATEGORIES":      `"` + strings.Join(categories, `", "`) + `"`,
+			"DAG_ROUTE_HINTS": `"` + strings.Join(dagRouteHints, `", "`) + `"`,
+			"RETRIEVAL_TYPES": `"` + strings.Join(retrievalTypes, `", "`) + `"`,
+		})
+	}
+
+	// 2. 调用 Input Reconstruction Agent
+	reconReq := &pb.InputReconstructionRequest{
+		TraceId:       msg.TraceID,
+		UserInput:     cmdPayload.Message,
+		SystemPrompt:  inputReconSystemPrompt,
+		MemoryPrompt:  inputReconMemoryPrompt,
+		RuntimePrompt: inputReconRuntimePrompt,
+	}
+
+	reconResp, err := s.aiClient.InputReconstruction(ctx, reconReq)
+	if err != nil {
+		logger.Error(ctx, "调用 AI 服务 InputReconstruction 失败", zap.Error(err))
+		s.sendError(conn, msg.TraceID, 5001, "AI service input reconstruction failed")
+		return
+	}
+
+	if !reconResp.Success {
+		logger.Error(ctx, "InputReconstruction 失败", zap.String("error", reconResp.ErrorMessage))
+		s.sendError(conn, msg.TraceID, 5001, "Input reconstruction failed: "+reconResp.ErrorMessage)
+		return
+	}
+
+	// 3. 解析 Input Reconstruction 结果并组装 Chat Prompt
+	var reconData struct {
+		EmotionState struct {
+			PrimaryEmotion string  `json:"primary_emotion"`
+			Intensity      float64 `json:"intensity"`
+			Valence        float64 `json:"valence"`
+			Arousal        float64 `json:"arousal"`
+			EmotionTrigger string  `json:"emotion_trigger"`
+		} `json:"emotion_state"`
+		Reconstruction struct {
+			DisambiguatedText string `json:"disambiguated_text"`
+		} `json:"reconstruction"`
+	}
+
+	if err := json.Unmarshal([]byte(reconResp.JsonOutput), &reconData); err != nil {
+		logger.Error(ctx, "解析 InputReconstruction JSON 失败", zap.Error(err))
+		// 降级处理：使用原始输入
+		reconData.Reconstruction.DisambiguatedText = cmdPayload.Message
+	}
+
+	// 注入情绪特征
+	promptVariables["EMOTION_PRIMARY"] = reconData.EmotionState.PrimaryEmotion
+	promptVariables["EMOTION_INTENSITY"] = fmt.Sprintf("%.2f", reconData.EmotionState.Intensity)
+	promptVariables["EMOTION_VALENCE"] = fmt.Sprintf("%.2f", reconData.EmotionState.Valence)
+	promptVariables["EMOTION_AROUSAL"] = fmt.Sprintf("%.2f", reconData.EmotionState.Arousal)
+	promptVariables["EMOTION_TRIGGER"] = reconData.EmotionState.EmotionTrigger
+
 	var fullSystemPrompt string
 	if s.promptMgr != nil {
 		var err error
@@ -567,10 +643,11 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	}
 
 	req := &pb.ChatRequest{
-		TraceId:      msg.TraceID,
-		Message:      cmdPayload.Message,
-		History:      protoHistory,
-		SystemPrompt: fullSystemPrompt,
+		TraceId:           msg.TraceID,
+		Message:           cmdPayload.Message,
+		History:           protoHistory,
+		SystemPrompt:      fullSystemPrompt,
+		DisambiguatedText: reconData.Reconstruction.DisambiguatedText,
 	}
 
 	logger.Info(ctx, "发送流式对话请求到 AI 服务", zap.String("trace_id", msg.TraceID))

@@ -146,6 +146,8 @@ class CommunicationServiceServicer(
         message = request.message
         # 直接从 Go 端获取渲染好的完整 system_prompt
         system_prompt = request.system_prompt
+        # 获取重构后的无歧义文本
+        disambiguated_text = request.disambiguated_text
 
         # 解析历史记录
         history = []
@@ -184,6 +186,7 @@ class CommunicationServiceServicer(
                 history=history,
                 current_message=message,
                 trace_id=trace_id,
+                disambiguated_text=disambiguated_text,
             ):
                 # 检查客户端是否已断开连接
                 if context.cancelled():
@@ -551,7 +554,9 @@ class CommunicationServiceServicer(
             result = await agent.process(
                 trace_id=trace_id,
                 user_input=request.user_input,
-                short_term_memory=request.short_term_memory
+                system_prompt=request.system_prompt,
+                memory_prompt=request.memory_prompt,
+                runtime_prompt=request.runtime_prompt
             )
             
             return communication_pb2.InputReconstructionResponse(
