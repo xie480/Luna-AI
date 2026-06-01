@@ -10,7 +10,7 @@ import (
 )
 
 // Config 定义全局配置结构
-// 包含服务器、日志、AI服务、Redis、PostgreSQL 等所有配置项
+// 包含服务器、日志、AI服务、Redis、PostgreSQL、Qdrant 等所有配置项
 type Config struct {
 	// HTTP 服务器配置
 	Server struct {
@@ -55,6 +55,12 @@ type Config struct {
 		// PostgreSQL 数据库名
 		Database string `yaml:"database"`
 	} `yaml:"postgres"`
+
+	// Qdrant 配置 - 用于向量检索
+	Qdrant struct {
+		// Qdrant HTTP API 地址
+		Address string `yaml:"address"`
+	} `yaml:"qdrant"`
 }
 
 // Load 加载配置
@@ -133,6 +139,11 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if database := getEnvString("DB_NAME"); database != "" {
 		cfg.Postgres.Database = database
+	}
+
+	// Qdrant 配置
+	if addr := getEnvString("QDRANT_ADDRESS"); addr != "" {
+		cfg.Qdrant.Address = addr
 	}
 }
 

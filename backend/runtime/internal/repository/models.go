@@ -4,6 +4,16 @@ import (
 	"time"
 )
 
+// MemoryStatus 定义长期记忆状态枚举
+type MemoryStatus string
+
+const (
+	// MemoryStatusActive 生效中
+	MemoryStatusActive MemoryStatus = "ACTIVE"
+	// MemoryStatusDeleted 软删除
+	MemoryStatusDeleted MemoryStatus = "DELETED"
+)
+
 // InteractionModel 对应 PostgreSQL 中的 interactions 表（问答聚合）
 // 将用户的一问与系统的一答严格绑定为一个完整的存储单元
 type InteractionModel struct {
@@ -55,6 +65,22 @@ type PromptVersion struct {
 // TableName 指定表名
 func (PromptVersion) TableName() string {
 	return "prompt_versions"
+}
+
+// LongTermMemory 对应 PostgreSQL 中的 long_term_memories 表（长期记忆）
+// 做什么：存储每日会话的深度压缩摘要，作为长期记忆的 Single Source of Truth
+type LongTermMemory struct {
+	ID        string       `gorm:"column:id;primaryKey;type:varchar(64)" json:"id"`
+	SessionID string       `gorm:"column:session_id;type:varchar(64);not null;index:idx_ltm_session_id" json:"session_id"`
+	Summary   string       `gorm:"column:summary;type:text;not null" json:"summary"`
+	Status    MemoryStatus `gorm:"column:status;type:varchar(20);not null;default:'ACTIVE'" json:"status"`
+	CreatedAt time.Time    `gorm:"column:created_at;type:timestamp with time zone;default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time    `gorm:"column:updated_at;type:timestamp with time zone;default:CURRENT_TIMESTAMP" json:"updated_at"`
+}
+
+// TableName 指定表名
+func (LongTermMemory) TableName() string {
+	return "long_term_memories"
 }
 
 // ApiConfigPreset 对应 PostgreSQL 中的 api_config_presets 表（API 配置预设）

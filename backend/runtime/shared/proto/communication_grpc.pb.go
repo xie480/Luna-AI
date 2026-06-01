@@ -26,6 +26,7 @@ const (
 	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
 	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
 	CommunicationService_SyncPresetConfig_FullMethodName = "/communication.CommunicationService/SyncPresetConfig"
+	CommunicationService_CompressHistory_FullMethodName  = "/communication.CommunicationService/CompressHistory"
 )
 
 // CommunicationServiceClient is the client API for CommunicationService service.
@@ -41,6 +42,8 @@ type CommunicationServiceClient interface {
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error)
 	SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error)
+	// CompressHistory 方法，用于历史记录压缩
+	CompressHistory(ctx context.Context, in *CompressHistoryRequest, opts ...grpc.CallOption) (*CompressHistoryResponse, error)
 }
 
 type communicationServiceClient struct {
@@ -100,6 +103,16 @@ func (c *communicationServiceClient) SyncPresetConfig(ctx context.Context, in *S
 	return out, nil
 }
 
+func (c *communicationServiceClient) CompressHistory(ctx context.Context, in *CompressHistoryRequest, opts ...grpc.CallOption) (*CompressHistoryResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompressHistoryResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_CompressHistory_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommunicationServiceServer is the server API for CommunicationService service.
 // All implementations must embed UnimplementedCommunicationServiceServer
 // for forward compatibility.
@@ -113,6 +126,8 @@ type CommunicationServiceServer interface {
 	// SummarizeContext 方法，用于后台摘要压缩
 	SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error)
 	SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error)
+	// CompressHistory 方法，用于历史记录压缩
+	CompressHistory(context.Context, *CompressHistoryRequest) (*CompressHistoryResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
 
@@ -134,6 +149,9 @@ func (UnimplementedCommunicationServiceServer) SummarizeContext(context.Context,
 }
 func (UnimplementedCommunicationServiceServer) SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SyncPresetConfig not implemented")
+}
+func (UnimplementedCommunicationServiceServer) CompressHistory(context.Context, *CompressHistoryRequest) (*CompressHistoryResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CompressHistory not implemented")
 }
 func (UnimplementedCommunicationServiceServer) mustEmbedUnimplementedCommunicationServiceServer() {}
 func (UnimplementedCommunicationServiceServer) testEmbeddedByValue()                              {}
@@ -221,6 +239,24 @@ func _CommunicationService_SyncPresetConfig_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommunicationService_CompressHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompressHistoryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).CompressHistory(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_CompressHistory_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).CompressHistory(ctx, req.(*CompressHistoryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommunicationService_ServiceDesc is the grpc.ServiceDesc for CommunicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -239,6 +275,10 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncPresetConfig",
 			Handler:    _CommunicationService_SyncPresetConfig_Handler,
+		},
+		{
+			MethodName: "CompressHistory",
+			Handler:    _CommunicationService_CompressHistory_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

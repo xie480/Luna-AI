@@ -107,6 +107,17 @@ message SyncPresetConfigResponse {
   string error_message = 2;
 }
 
+// 历史记录压缩请求
+message CompressHistoryRequest {
+  string session_id = 1;
+  string session_context = 2; // 结合了 summary 和 history 的完整上下文
+}
+
+// 历史记录压缩响应
+message CompressHistoryResponse {
+  string summary = 1; // 深度压缩后的会话摘要
+}
+
 // 通信服务定义
 service CommunicationService {
   // Ping 方法，用于健康检查和连接测试
@@ -119,4 +130,7 @@ service CommunicationService {
   rpc SummarizeContext(SummarizeContextRequest) returns (SummarizeContextResponse);
 
   rpc SyncPresetConfig(SyncPresetConfigRequest) returns (SyncPresetConfigResponse);
+
+  // CompressHistory 方法，用于历史记录压缩
+  rpc CompressHistory(CompressHistoryRequest) returns (CompressHistoryResponse);
 }

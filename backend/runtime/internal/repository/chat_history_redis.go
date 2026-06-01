@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"luna-ai/backend/runtime/internal/infrastructure"
 
@@ -101,6 +102,67 @@ func (r *ChatHistoryRedisRepo) GetContext(ctx context.Context, sessionID string)
 		}
 	}
 	return summary, history, nil
+}
+
+// GetAllSessionIDs 获取 Redis 中所有会话的 ID 列表
+// 做什么：扫描 Redis 中所有 luna:mem:chat:*:summary 模式的 key，提取会话 ID
+// 为什么这样做：启动时兜底检测需要找出所有历史会话
+// 输入输出：
+//   - 输出：[]string（所有会话 ID 列表）, error
+//
+// 边界条件：
+//   - Redis 中无任何会话时返回空列表
+//   - 只扫描 summary key，不扫描 history key（避免重复）
+// 异常行为：SCAN 失败时返回错误
+func (r *ChatHistoryRedisRepo) GetAllSessionIDs(ctx context.Context) ([]string, error) {
+	var sessionIDs []string
+	iter := r.redis.GetClient().Scan(ctx, 0, "luna:mem:chat:*:summary", 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		sessionID := r.extractSessionIDFromKey(key)
+		if sessionID != "" {
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("扫描 Redis 会话 ID 失败: %w", err)
+	}
+	return sessionIDs, nil
+}
+
+// extractSessionIDFromKey 从 Redis key 中提取会话 ID
+// 输入：key 格式 "luna:mem:chat:{sessionID}:summary"
+// 输出：sessionID 字符串
+func (r *ChatHistoryRedisRepo) extractSessionIDFromKey(key string) string {
+	// key 格式: luna:mem:chat:YYYYMMDD:summary
+	parts := strings.Split(key, ":")
+	if len(parts) >= 5 {
+		return parts[3] // 第 4 部分是 session ID
+	}
+	return ""
+}
+
+// DeleteSession 删除指定会话的所有 Redis 数据（history 和 summary）
+// 做什么：从 Redis 中物理删除历史会话的 history 列表和 summary 哈希
+// 为什么这样做：历史会话压缩入库后必须清理 Redis 中的原始数据
+// 输入输出：
+//   - 输入：sessionID 会话 ID
+//   - 输出：error
+//
+// 边界条件：会话不存在时不报错（幂等删除）
+// 异常行为：Redis 连接失败时返回错误
+func (r *ChatHistoryRedisRepo) DeleteSession(ctx context.Context, sessionID string) error {
+	historyKey := r.buildHistoryKey(sessionID)
+	summaryKey := r.buildSummaryKey(sessionID)
+
+	pipe := r.redis.GetClient().Pipeline()
+	pipe.Del(ctx, historyKey)
+	pipe.Del(ctx, summaryKey)
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("删除 Redis 会话数据失败 [session_id=%s]: %w", sessionID, err)
+	}
+	return nil
 }
 
 // UpdateSummaryAndTrim 更新摘要并移除已压缩的旧 Interaction 记录

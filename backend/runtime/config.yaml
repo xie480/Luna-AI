@@ -36,3 +36,8 @@ postgres:
   password: "postgres"
   # PostgreSQL 数据库名
   database: "luna"
+
+# Qdrant 配置 - 用于长期记忆向量检索
+qdrant:
+  # Qdrant HTTP API 地址
+  address: "http://localhost:6333"

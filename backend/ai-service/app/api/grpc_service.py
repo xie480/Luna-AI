@@ -7,6 +7,7 @@ Luna AI gRPC 通信服务实现
 输入输出：
     - Ping(): 健康检查，返回 Pong 响应
     - ChatStream(): 流式对话，返回 AsyncGenerator[ChatStreamResponse]
+    - CompressHistory(): 历史记录压缩，返回 CompressHistoryResponse
 边界条件：
     - ChatRequest.history 为空时表示首次对话
     - 客户端断开连接时立即停止流式输出
@@ -34,7 +35,7 @@ class CommunicationServiceServicer(
     """
     实现 gRPC 通信服务
 
-    做什么：处理来自 Go Runtime 的 gRPC 请求，提供 Ping 和 ChatStream 服务。
+    做什么：处理来自 Go Runtime 的 gRPC 请求，提供 Ping、ChatStream、CompressHistory 等服务。
     """
 
     def Ping(
@@ -97,7 +98,6 @@ class CommunicationServiceServicer(
         system_prompt = request.system_prompt
 
         # 解析历史记录
-        # proto 的 repeated ChatMessage 字段需要逐条解析
         history = []
         try:
             for hist_msg in request.history:
@@ -136,7 +136,6 @@ class CommunicationServiceServicer(
                 trace_id=trace_id,
             ):
                 # 检查客户端是否已断开连接
-                # 注意：grpc.aio.ServicerContext 使用 cancelled() 而非 is_active()
                 if context.cancelled():
                     logger.warning(
                         f"[TraceID:{trace_id}] 客户端已断开连接，终止流式输出"
@@ -145,7 +144,7 @@ class CommunicationServiceServicer(
 
                 # 计算 TTFT：首次收到非空 chunk 时记录延迟
                 if is_first_chunk and chunk_data.get("chunk"):
-                    ttft = (time.monotonic() - start_time) * 1000  # 转换为毫秒
+                    ttft = (time.monotonic() - start_time) * 1000
                     logger.info(
                         f"[TraceID:{trace_id}] 首字延迟 (TTFT): {ttft:.0f}ms"
                     )
@@ -154,10 +153,9 @@ class CommunicationServiceServicer(
                 raw_chunk = chunk_data.get("chunk", "")
                 logger.debug(f"[TraceID:{trace_id}] 原始输出: {raw_chunk}")
 
-                # 使用 StreamParser 解析原始 LLM 输出块，提取 emotion 和切分 reply
+                # 使用 StreamParser 解析原始 LLM 输出块
                 msgs = parser.feed(chunk_data.get("chunk", ""))
                 for msg_type, content in msgs:
-                    # 构造 gRPC 响应，通过 type 字段区分消息类型
                     response = communication_pb2.ChatStreamResponse(
                         trace_id=trace_id,
                         chunk=content,
@@ -165,7 +163,6 @@ class CommunicationServiceServicer(
                         finish_reason="",
                         error="",
                     )
-                    # 设置消息类型："emotion_update" 或 "reply_chunk"
                     response.type = msg_type
                     yield response
                     logger.info(
@@ -177,7 +174,6 @@ class CommunicationServiceServicer(
                 if chunk_data.get("is_finished", False):
                     flush_msgs = parser.flush()
                     if not flush_msgs:
-                        # 没有剩余内容，直接发送空结束消息
                         response = communication_pb2.ChatStreamResponse(
                             trace_id=trace_id,
                             chunk="",
@@ -208,7 +204,6 @@ class CommunicationServiceServicer(
                     break
 
         except Exception as e:
-            # 确保所有异常都被捕获，不会导致 gRPC 流意外中断
             logger.error(
                 f"[TraceID:{trace_id}] ChatStream 处理异常: "
                 f"{type(e).__name__}: {e}"
@@ -224,7 +219,6 @@ class CommunicationServiceServicer(
                 response.type = "reply_chunk"
                 yield response
             except Exception:
-                # 如果连发送错误响应都失败，忽略（流已关闭）
                 logger.error(
                     f"[TraceID:{trace_id}] 发送错误响应失败，流可能已关闭"
                 )
@@ -252,25 +246,19 @@ class CommunicationServiceServicer(
         trace_id = request.trace_id
         logger.info(f"[TraceID:{trace_id}] 收到 SummarizeContext 请求")
 
-        # 直接使用 Go 端渲染好的完整 summarize_prompt
         full_prompt = request.summarize_prompt
-
         messages = [{"role": Role.USER.value, "content": full_prompt}]
 
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # 调用压缩模型，强制 JSON 输出格式
                 result_text = await compression_llm_client.summarize(
                     messages=messages,
                     response_format={"type": "json_object"}
                 )
 
-                # 解析 JSON 并进行严格校验，处理 markdown 代码块包装以及数组形式的 key_facts
                 try:
-                    # 1. 移除可能的 markdown 代码块包装，例如 ```json {...}```
                     cleaned_text = result_text.strip()
-                    # 使用正则提取最内层的 JSON 对象
                     import re
                     json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", cleaned_text, re.DOTALL)
                     if json_match:
@@ -278,26 +266,21 @@ class CommunicationServiceServicer(
                     else:
                         json_str = cleaned_text
 
-                    # 2. 如果仍然包含多余的前缀/后缀，尝试定位首个 '{' 和最后一个 '}'
                     if not (json_str.startswith('{') and json_str.endswith('}')):
                         start_idx = json_str.find('{')
                         end_idx = json_str.rfind('}')
                         if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
                             json_str = json_str[start_idx:end_idx+1]
-                    # 解析 JSON
-                    result_json = json.loads(json_str)
 
-                    # 提取 core_summary 并去除首尾空白
+                    result_json = json.loads(json_str)
                     new_core_summary = str(result_json.get("core_summary", "")).strip()
 
-                    # 提取 key_facts：可能是字符串或列表，统一转为字符串，每条以换行分隔
                     raw_key_facts = result_json.get("key_facts", "")
                     if isinstance(raw_key_facts, list):
                         new_key_facts = "\n".join([str(item).strip() for item in raw_key_facts if str(item).strip()])
                     else:
                         new_key_facts = str(raw_key_facts).strip()
 
-                    # 校验非空：如果 LLM 返回 core_summary 或 key_facts 为空，则触发重试
                     if not new_core_summary or not new_key_facts:
                         logger.warning(
                             f"[TraceID:{trace_id}] 第 {attempt + 1} 次尝试：LLM 返回的 core_summary 或 key_facts 为空，准备重试"
@@ -324,7 +307,6 @@ class CommunicationServiceServicer(
                     if attempt < max_retries - 1:
                         continue
                     else:
-                        # JSON 解析失败时回退到空值
                         return communication_pb2.SummarizeContextResponse(
                             trace_id=trace_id,
                             new_core_summary="",
@@ -336,13 +318,88 @@ class CommunicationServiceServicer(
                 if attempt < max_retries - 1:
                     continue
                 else:
-                    # 发生异常时返回空摘要，确保系统稳定性
                     return communication_pb2.SummarizeContextResponse(
                         trace_id=trace_id,
                         new_core_summary="",
                         new_key_facts="",
                     )
 
+    async def CompressHistory(
+        self,
+        request: communication_pb2.CompressHistoryRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.CompressHistoryResponse:
+        """
+        处理历史记录压缩请求
+
+        做什么：接收 CompressHistoryRequest，对历史会话进行深度压缩与摘要提取。
+        为什么这样做：将完整的历史会话（含摘要和历史对话）压缩为结构化摘要，用于长期记忆持久化。
+        输入输出：
+            - 输入：CompressHistoryRequest {session_id, session_context}
+            - 输出：CompressHistoryResponse {summary}
+        边界条件：
+            - session_context 为空时返回空摘要
+            - LLM 返回空内容时返回空摘要
+        异常行为：
+            - LLM 调用异常时返回空摘要，不抛出异常（保障 Go 端稳定性）
+            - 重试策略：最多 3 次，指数退避
+        """
+        trace_id = request.session_id
+        logger.info(f"[SessionID:{trace_id}] 收到 CompressHistory 请求")
+
+        session_context = request.session_context.strip()
+        if not session_context:
+            logger.warning(f"[SessionID:{trace_id}] 会话上下文为空，跳过压缩")
+            return communication_pb2.CompressHistoryResponse(summary="")
+
+        # 构造压缩提示词：要求 LLM 对历史对话进行深度压缩
+        prompt = (
+            "你是一个高效的对话摘要引擎。请对以下历史会话进行深度压缩与摘要提取。\n\n"
+            "要求：\n"
+            "1. 提取用户的核心关注点、偏好和关键决策\n"
+            "2. 记录 Luna 提供的重要信息和建议\n"
+            "3. 以简洁的段落形式组织，保留关键细节\n"
+            "4. 摘要长度控制在 500 字以内\n"
+            "5. 用第三人称叙述\n\n"
+            f"需要压缩的历史会话：\n{session_context}\n\n"
+            "请直接输出压缩后的摘要文本，不要包含任何前缀或后缀说明。"
+        )
+
+        messages = [{"role": Role.USER.value, "content": prompt}]
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 调用压缩模型
+                result_text = await compression_llm_client.summarize(
+                    messages=messages,
+                    response_format={"type": "text"}
+                )
+
+                summary = result_text.strip()
+                if not summary:
+                    logger.warning(
+                        f"[SessionID:{trace_id}] 第 {attempt + 1} 次尝试：LLM 返回空摘要，准备重试"
+                    )
+                    if attempt < max_retries - 1:
+                        continue
+                    else:
+                        logger.warning(f"[SessionID:{trace_id}] 达到最大重试次数，返回空摘要")
+                        summary = ""
+
+                logger.info(
+                    f"[SessionID:{trace_id}] 历史压缩完成",
+                )
+                return communication_pb2.CompressHistoryResponse(summary=summary)
+
+            except Exception as e:
+                logger.error(
+                    f"[SessionID:{trace_id}] 第 {attempt + 1} 次尝试：CompressHistory 处理异常: {e}"
+                )
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    return communication_pb2.CompressHistoryResponse(summary="")
 
     async def SyncPresetConfig(
         self,
@@ -353,10 +410,10 @@ class CommunicationServiceServicer(
         处理 API 配置预设同步请求
         """
         logger.info(f"收到 SyncPresetConfig 请求, preset_id: {request.preset_id}, schema_version: {request.schema_version}")
-        
+
         try:
             from app.config import global_config_container
-            
+
             def proto_to_dict(model_config):
                 return {
                     "base_url": model_config.base_url,
@@ -369,10 +426,9 @@ class CommunicationServiceServicer(
             large_model = proto_to_dict(request.large_model)
             medium_model = proto_to_dict(request.medium_model)
             small_model = proto_to_dict(request.small_model)
-            
-            # 更新全局配置容器
+
             await global_config_container.update_preset_config(large_model, medium_model, small_model)
-            
+
             return communication_pb2.SyncPresetConfigResponse(
                 success=True,
                 error_message=""

@@ -59,7 +59,7 @@ func TelemetryUnaryClientInterceptor() grpc.UnaryClientInterceptor {
 				EndTime:      time.Now(),
 				DurationMs:   duration.Milliseconds(),
 				Status:       status,
-				Attributes:   "{}", // 可以根据 reply 提取更多属性
+				Attributes:   "{}",
 			})
 		}
 
@@ -81,9 +81,7 @@ func TelemetryStreamClientInterceptor() grpc.StreamClientInterceptor {
 
 		startTime := time.Now()
 		clientStream, err := streamer(ctx, desc, cc, method, opts...)
-		
-		// 注意：流式调用的耗时记录比较复杂，这里只记录流建立的耗时
-		// 实际的流处理耗时需要在业务层记录
+
 		duration := time.Since(startTime)
 		status := "OK"
 		if err != nil {
@@ -111,7 +109,7 @@ func TelemetryStreamClientInterceptor() grpc.StreamClientInterceptor {
 // NewAIClient 创建一个新的 AIClient 实例
 func NewAIClient(address string) (*AIClient, error) {
 	// 建立 gRPC 连接，注入拦截器
-	conn, err := grpc.NewClient(address, 
+	conn, err := grpc.NewClient(address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(TelemetryUnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(TelemetryStreamClientInterceptor()),
@@ -189,6 +187,36 @@ func (c *AIClient) SummarizeContext(ctx context.Context, req *pb.SummarizeContex
 		return nil, fmt.Errorf("summarize context failed: %w", err)
 	}
 
+	return resp, nil
+}
+
+// CompressHistory 发送历史记录压缩请求到 AI 服务
+// 做什么：调用 Python AI 服务的 CompressHistory 方法，对历史会话进行深度压缩与摘要提取
+// 为什么这样做：将历史记录压缩为结构化摘要，用于长期记忆持久化
+// 输入输出：
+//   - 输入：CompressHistoryRequest {session_id, session_context}
+//   - 输出：CompressHistoryResponse {summary}
+//
+// 边界条件：
+//   - session_context 必须包含完整的 summary + history
+//   - 超时时间设置为 60 秒（压缩可能需要较长时间）
+// 异常行为：
+//   - AI 服务不可用时返回错误
+//   - 返回空摘要时由调用方处理
+func (c *AIClient) CompressHistory(ctx context.Context, req *pb.CompressHistoryRequest) (*pb.CompressHistoryResponse, error) {
+	logger.Info(ctx, "发送 CompressHistory 请求到 AI 服务", "session_id", req.SessionId)
+
+	// 设置超时时间，历史压缩可能需要较长时间
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	resp, err := c.client.CompressHistory(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "CompressHistory 请求失败", "session_id", req.SessionId, "error", err)
+		return nil, fmt.Errorf("compress history failed: %w", err)
+	}
+
+	logger.Info(ctx, "收到 CompressHistory 响应", "session_id", req.SessionId, "summary_length", len(resp.Summary))
 	return resp, nil
 }
 

@@ -715,6 +715,104 @@ func (x *SyncPresetConfigResponse) GetErrorMessage() string {
 	return ""
 }
 
+// 历史记录压缩请求
+type CompressHistoryRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SessionContext string                 `protobuf:"bytes,2,opt,name=session_context,json=sessionContext,proto3" json:"session_context,omitempty"` // 结合了 summary 和 history 的完整上下文
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CompressHistoryRequest) Reset() {
+	*x = CompressHistoryRequest{}
+	mi := &file_communication_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompressHistoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompressHistoryRequest) ProtoMessage() {}
+
+func (x *CompressHistoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompressHistoryRequest.ProtoReflect.Descriptor instead.
+func (*CompressHistoryRequest) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CompressHistoryRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CompressHistoryRequest) GetSessionContext() string {
+	if x != nil {
+		return x.SessionContext
+	}
+	return ""
+}
+
+// 历史记录压缩响应
+type CompressHistoryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Summary       string                 `protobuf:"bytes,1,opt,name=summary,proto3" json:"summary,omitempty"` // 深度压缩后的会话摘要
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompressHistoryResponse) Reset() {
+	*x = CompressHistoryResponse{}
+	mi := &file_communication_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompressHistoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompressHistoryResponse) ProtoMessage() {}
+
+func (x *CompressHistoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompressHistoryResponse.ProtoReflect.Descriptor instead.
+func (*CompressHistoryResponse) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CompressHistoryResponse) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
 var File_communication_proto protoreflect.FileDescriptor
 
 const file_communication_proto_rawDesc = "" +
@@ -770,13 +868,20 @@ const file_communication_proto_rawDesc = "" +
 	"smallModel\"Y\n" +
 	"\x18SyncPresetConfigResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\xf0\x02\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"`\n" +
+	"\x16CompressHistoryRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
+	"\x0fsession_context\x18\x02 \x01(\tR\x0esessionContext\"3\n" +
+	"\x17CompressHistoryResponse\x12\x18\n" +
+	"\asummary\x18\x01 \x01(\tR\asummary2\xd2\x03\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +
 	"ChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12c\n" +
 	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponse\x12c\n" +
-	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
+	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponse\x12`\n" +
+	"\x0fCompressHistory\x12%.communication.CompressHistoryRequest\x1a&.communication.CompressHistoryResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
 
 var (
 	file_communication_proto_rawDescOnce sync.Once
@@ -790,7 +895,7 @@ func file_communication_proto_rawDescGZIP() []byte {
 	return file_communication_proto_rawDescData
 }
 
-var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_communication_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: communication.PingRequest
 	(*PongResponse)(nil),             // 1: communication.PongResponse
@@ -802,25 +907,29 @@ var file_communication_proto_goTypes = []any{
 	(*ModelConfig)(nil),              // 7: communication.ModelConfig
 	(*SyncPresetConfigRequest)(nil),  // 8: communication.SyncPresetConfigRequest
 	(*SyncPresetConfigResponse)(nil), // 9: communication.SyncPresetConfigResponse
+	(*CompressHistoryRequest)(nil),   // 10: communication.CompressHistoryRequest
+	(*CompressHistoryResponse)(nil),  // 11: communication.CompressHistoryResponse
 }
 var file_communication_proto_depIdxs = []int32{
-	2, // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
-	7, // 1: communication.SyncPresetConfigRequest.large_model:type_name -> communication.ModelConfig
-	7, // 2: communication.SyncPresetConfigRequest.medium_model:type_name -> communication.ModelConfig
-	7, // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
-	0, // 4: communication.CommunicationService.Ping:input_type -> communication.PingRequest
-	3, // 5: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
-	4, // 6: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
-	8, // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
-	1, // 8: communication.CommunicationService.Ping:output_type -> communication.PongResponse
-	6, // 9: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
-	5, // 10: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
-	9, // 11: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
-	8, // [8:12] is the sub-list for method output_type
-	4, // [4:8] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2,  // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
+	7,  // 1: communication.SyncPresetConfigRequest.large_model:type_name -> communication.ModelConfig
+	7,  // 2: communication.SyncPresetConfigRequest.medium_model:type_name -> communication.ModelConfig
+	7,  // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
+	0,  // 4: communication.CommunicationService.Ping:input_type -> communication.PingRequest
+	3,  // 5: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
+	4,  // 6: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
+	8,  // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
+	10, // 8: communication.CommunicationService.CompressHistory:input_type -> communication.CompressHistoryRequest
+	1,  // 9: communication.CommunicationService.Ping:output_type -> communication.PongResponse
+	6,  // 10: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
+	5,  // 11: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
+	9,  // 12: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
+	11, // 13: communication.CommunicationService.CompressHistory:output_type -> communication.CompressHistoryResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_communication_proto_init() }
@@ -834,7 +943,7 @@ func file_communication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_proto_rawDesc), len(file_communication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

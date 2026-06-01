@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/memory"
 	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
 	"luna-ai/backend/runtime/internal/types"
@@ -98,6 +99,14 @@ type InitStatePayload struct {
 	RecentQA  []InteractionQA `json:"recentQA"`
 }
 
+// MemorySyncPayload 定义 EVT_MEMORY_SYNC 消息的 Payload
+// Phase 6 新增：通知前端长期记忆已更新
+type MemorySyncPayload struct {
+	SessionID string `json:"sessionId"`
+	MemoryID  string `json:"memoryId"`
+	Status    string `json:"status"`
+}
+
 // WSConnection 封装 websocket.Conn，提供并发安全的写操作
 type WSConnection struct {
 	conn *websocket.Conn
@@ -122,20 +131,85 @@ func (c *WSConnection) RemoteAddr() string {
 }
 
 // WSServer 封装 WebSocket 服务
+// Phase 6 新增：集成 memoryManager 用于记忆事件通知
 type WSServer struct {
-	aiClient  *AIClient
-	redisRepo *repository.ChatHistoryRedisRepo
-	pgRepo    *repository.ChatHistoryPGRepo
-	promptMgr *prompt.Manager
+	aiClient      *AIClient
+	redisRepo     *repository.ChatHistoryRedisRepo
+	pgRepo        *repository.ChatHistoryPGRepo
+	promptMgr     *prompt.Manager
+	memoryManager *memory.Manager
+	// 当前连接的 WebSocket 客户端列表
+	clients   map[*WSConnection]bool
+	clientsMu sync.RWMutex
 }
 
 // NewWSServer 创建一个新的 WSServer 实例
-func NewWSServer(aiClient *AIClient, redisRepo *repository.ChatHistoryRedisRepo, pgRepo *repository.ChatHistoryPGRepo, promptMgr *prompt.Manager) *WSServer {
-	return &WSServer{
-		aiClient:  aiClient,
-		redisRepo: redisRepo,
-		pgRepo:    pgRepo,
-		promptMgr: promptMgr,
+// Phase 6 新增 memoryManager 参数，用于注册记忆事件监听
+func NewWSServer(aiClient *AIClient, redisRepo *repository.ChatHistoryRedisRepo, pgRepo *repository.ChatHistoryPGRepo, promptMgr *prompt.Manager, memoryManager *memory.Manager) *WSServer {
+	server := &WSServer{
+		aiClient:      aiClient,
+		redisRepo:     redisRepo,
+		pgRepo:        pgRepo,
+		promptMgr:     promptMgr,
+		memoryManager: memoryManager,
+		clients:       make(map[*WSConnection]bool),
+	}
+
+	// 注册记忆事件监听
+	if memoryManager != nil {
+		memoryManager.OnEvent(func(event memory.MemoryEvent) {
+			server.handleMemoryEvent(event)
+		})
+	}
+
+	return server
+}
+
+// handleMemoryEvent 处理记忆系统事件，广播给所有连接的客户端
+func (s *WSServer) handleMemoryEvent(event memory.MemoryEvent) {
+	switch event.Type {
+	case memory.EventMemorySync:
+		payload, ok := event.Payload.(map[string]interface{})
+		if !ok {
+			return
+		}
+
+		sessionID, _ := payload["session_id"].(string)
+		memoryID, _ := payload["memory_id"].(string)
+		status, _ := payload["status"].(string)
+
+		syncPayload := MemorySyncPayload{
+			SessionID: sessionID,
+			MemoryID:  memoryID,
+			Status:    status,
+		}
+
+		payloadBytes, err := json.Marshal(syncPayload)
+		if err != nil {
+			logger.Error(context.Background(), "序列化 MemorySyncPayload 失败", "error", err)
+			return
+		}
+
+		msg := WSMessage{
+			Type:    types.WSMsgTypeEvtMemorySync,
+			TraceID: snowflake.GenerateStringID(),
+			Payload: payloadBytes,
+		}
+
+		// 广播给所有连接的客户端
+		s.broadcast(msg)
+	}
+}
+
+// broadcast 广播消息到所有连接的客户端
+func (s *WSServer) broadcast(msg WSMessage) {
+	s.clientsMu.RLock()
+	defer s.clientsMu.RUnlock()
+
+	for conn := range s.clients {
+		if err := conn.WriteJSON(msg); err != nil {
+			logger.Error(context.Background(), "广播消息失败", "error", err)
+		}
 	}
 }
 
@@ -148,7 +222,18 @@ func (s *WSServer) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wsConn := &WSConnection{conn: conn}
-	defer wsConn.Close()
+
+	// 注册客户端
+	s.clientsMu.Lock()
+	s.clients[wsConn] = true
+	s.clientsMu.Unlock()
+
+	defer func() {
+		s.clientsMu.Lock()
+		delete(s.clients, wsConn)
+		s.clientsMu.Unlock()
+		wsConn.Close()
+	}()
 
 	logger.Info(ctx, "WebSocket 客户端已连接", zap.String("remote_addr", wsConn.RemoteAddr()))
 
@@ -210,7 +295,6 @@ func (s *WSServer) handleGetCalendarMetadata(ctx context.Context, conn *WSConnec
 		return
 	}
 
-	// 1. 直接从 PostgreSQL 获取
 	var activeDates []string
 	var err error
 	if s.pgRepo != nil {
@@ -221,10 +305,9 @@ func (s *WSServer) handleGetCalendarMetadata(ctx context.Context, conn *WSConnec
 			return
 		}
 	} else {
-		activeDates = []string{} // 降级为空
+		activeDates = []string{}
 	}
 
-	// 3. 组装响应
 	respPayload := struct {
 		YearMonth   string   `json:"year_month"`
 		ActiveDates []string `json:"active_dates"`
@@ -256,7 +339,6 @@ func (s *WSServer) handleGetChatHistory(ctx context.Context, conn *WSConnection,
 		return
 	}
 
-	// 必须从 PG 获取详细记录
 	var interactions []repository.InteractionModel
 	var err error
 	if s.pgRepo != nil {
@@ -268,8 +350,6 @@ func (s *WSServer) handleGetChatHistory(ctx context.Context, conn *WSConnection,
 		}
 	}
 
-	// 转换为前端需要的格式
-	// 注意：这里将一条 Interaction 拆分为 User 和 Assistant 两条消息
 	type FrontendChatMessage struct {
 		ID        string `json:"id"`
 		Role      string `json:"role"`
@@ -279,30 +359,26 @@ func (s *WSServer) handleGetChatHistory(ctx context.Context, conn *WSConnection,
 
 	var messages []FrontendChatMessage
 	for _, interaction := range interactions {
-		// 用户消息
 		messages = append(messages, FrontendChatMessage{
-			ID:        interaction.MessageID, // 使用原始的 MessageID
+			ID:        interaction.MessageID,
 			Role:      types.RoleUser,
 			Content:   interaction.UserContent,
 			CreatedAt: interaction.CreatedAt.Format(time.RFC3339),
 		})
-		
-		// 助手消息
-		// 如果有错误，将错误信息作为内容返回，或者根据前端需求处理
+
 		content := interaction.AssistantContent
 		if interaction.Error != "" {
-			content = interaction.Error // 简化处理，实际可能需要解析 JSON
+			content = interaction.Error
 		}
-		
+
 		messages = append(messages, FrontendChatMessage{
-			ID:        interaction.ID, // 使用 Interaction 的 ID 作为助手消息的 ID
+			ID:        interaction.ID,
 			Role:      types.RoleAssistant,
 			Content:   content,
 			CreatedAt: interaction.CreatedAt.Format(time.RFC3339),
 		})
 	}
 
-	// 组装响应
 	respPayload := struct {
 		Date     string                `json:"date"`
 		Messages []FrontendChatMessage `json:"messages"`
@@ -324,43 +400,26 @@ func (s *WSServer) handleGetChatHistory(ctx context.Context, conn *WSConnection,
 }
 
 // handleSyncInitState 处理前端初始状态同步请求
-// Phase 5 改造：从 Redis 获取最近 3 轮 Q&A，下发给前端用于右上角近期记忆面板展示
-// 做什么：解析前端请求，从 Redis 拉取当前会话的 Interaction 列表，截取最后 3 条返回
-// 为什么这样做：让前端重启后能展示近期对话记忆，同时避免全量历史同步，保持界面清爽
-// 输入输出：
-//   - 输入：前端 CMD_SYNC_INIT_STATE 消息（可携带 sessionId）
-//   - 输出：通过 EVT_INIT_STATE 消息下发 InitStatePayload（sessionId + recentQA）
-//
-// 边界条件：
-//   - 默认使用当天日期 (YYYYMMDD) 作为 SessionID
-//   - Redis 中无历史记录时返回空的 recentQA 数组
-//
-// 异常行为：
-//   - Redis 连接失败时返回空初始状态（前端正常展示，无近期记忆）
 func (s *WSServer) handleSyncInitState(ctx context.Context, conn *WSConnection, msg WSMessage) {
-	// 1. 解析请求获取 SessionID（如果没有则使用当天日期作为默认值）
 	var reqPayload struct {
 		SessionID string `json:"sessionId"`
 	}
-	sessionID := time.Now().Format("20060102") // 默认使用当天日期，如 "20250531"
+	sessionID := time.Now().Format("20060102")
 	if err := json.Unmarshal(msg.Payload, &reqPayload); err == nil && reqPayload.SessionID != "" {
 		sessionID = reqPayload.SessionID
 	}
 
-	// 2. 从 Redis 获取上下文（只需要历史 Interaction 列表，不需要 summary）
 	var recentHistory []repository.Interaction
 	if s.redisRepo != nil {
 		_, recentHistory, _ = s.redisRepo.GetContext(ctx, sessionID)
 	}
 
-	// 3. 截取最后 3 条记录（仅返回最后 3 轮 Q&A）
 	startIndex := 0
 	if len(recentHistory) > 3 {
 		startIndex = len(recentHistory) - 3
 	}
 	last3History := recentHistory[startIndex:]
 
-	// 4. 转换为 InteractionQA 结构
 	recentQA := make([]InteractionQA, 0, len(last3History))
 	for _, h := range last3History {
 		recentQA = append(recentQA, InteractionQA{
@@ -371,7 +430,6 @@ func (s *WSServer) handleSyncInitState(ctx context.Context, conn *WSConnection, 
 		})
 	}
 
-	// 5. 组装 Payload 并发送
 	payload := InitStatePayload{
 		SessionID: sessionID,
 		RecentQA:  recentQA,
@@ -403,7 +461,6 @@ func (s *WSServer) handlePing(ctx context.Context, conn *WSConnection, msg WSMes
 		return
 	}
 
-	// 转发给 AI 服务
 	resp, err := s.aiClient.Ping(ctx, msg.TraceID)
 	if err != nil {
 		logger.Error(ctx, "调用 AI 服务 Ping 失败", zap.Error(err))
@@ -411,7 +468,6 @@ func (s *WSServer) handlePing(ctx context.Context, conn *WSConnection, msg WSMes
 		return
 	}
 
-	// 构造 Pong 响应
 	pongPayload := PongPayload{
 		Timestamp: resp.Timestamp,
 		Source:    resp.Source,
@@ -442,7 +498,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		userMsgID = snowflake.GenerateStringID()
 	}
 
-	// 1. 仅从 Redis 获取上下文 (摘要 + 历史 Interaction 列表)，此时不保存当前用户消息
 	var summary repository.ChatSummary
 	var recentHistory []repository.Interaction
 	if s.redisRepo != nil {
@@ -453,18 +508,12 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 	}
 
-	// 【第三步修复】将历史 Interaction 列表展开为 protobuf 的 ChatMessage 列表
-	// 增加对失败回复的处理逻辑：如果助手历史回复存在错误状态，
-	// 将该条错误信息正常封装入 protobuf 列表中，同时在相应字段中明确标记为回复失败状态并附带失败原因
 	protoHistory := make([]*pb.ChatMessage, 0, len(recentHistory)*2)
 	for _, h := range recentHistory {
-		// 用户消息
 		protoHistory = append(protoHistory, &pb.ChatMessage{
 			Role:    types.RoleUser,
 			Content: h.UserContent,
 		})
-		// 助手回复：无论是否出错，都将回复内容正常封装
-		// 如果出错，通过 IsError 和 ErrorDetails 字段标记失败状态和原因
 		assistantMsg := &pb.ChatMessage{
 			Role:    types.RoleAssistant,
 			Content: h.AssistantContent,
@@ -476,8 +525,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		protoHistory = append(protoHistory, assistantMsg)
 	}
 
-	// 【修复】将 history Interaction 列表格式化为文本，用于注入 MEMORY_SNIPPETS
-	// 格式：每条 Interaction 包含用户消息和助手回复
 	var memorySnippetsBuilder strings.Builder
 	for i, h := range recentHistory {
 		memorySnippetsBuilder.WriteString(fmt.Sprintf("[对话 %d]\n", i+1))
@@ -502,7 +549,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	}
 	memorySnippets := memorySnippetsBuilder.String()
 
-	// 组装完整的 System Prompt（由 Go 端通过缓存层完成全部渲染）
 	currentTime := time.Now().Format("2006-01-02 15:04:05 Monday")
 	promptVariables := map[string]string{
 		"CURRENT_TIME":    currentTime,
@@ -520,7 +566,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 	}
 
-	// 构造 gRPC ChatRequest（已简化：由 Go 端直接传递完整 system_prompt）
 	req := &pb.ChatRequest{
 		TraceId:      msg.TraceID,
 		Message:      cmdPayload.Message,
@@ -530,7 +575,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 
 	logger.Info(ctx, "发送流式对话请求到 AI 服务", zap.String("trace_id", msg.TraceID))
 
-	// 2. 调用 AI 服务的 ChatStream
 	stream, err := s.aiClient.ChatStream(ctx, req)
 	if err != nil {
 		logger.Error(ctx, "调用 AI 服务 ChatStream 失败", zap.Error(err))
@@ -543,7 +587,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 	var fullAssistantContent string
 	var fullAssistantThought string
 	var fullAssistantEmotion string
-	// 【第二步优化】新增 streamError 变量捕获流式读取时产生的真实报错信息
 	var streamError error
 
 	for {
@@ -554,7 +597,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		if err != nil {
 			logger.Error(ctx, "接收 ChatStream 响应失败", zap.Error(err))
 			s.sendChatStreamError(conn, msg.TraceID, cmdPayload.MsgID, err.Error())
-			// 【第二步优化】在 break 前捕获真实报错信息，传递到持久化协程
 			streamError = err
 			break
 		}
@@ -565,7 +607,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			isFirstChunk = false
 		}
 
-		// 根据 gRPC 响应中的 type 字段进行不同的处理
 		msgType := resp.Type
 		if msgType == "" {
 			msgType = "reply_chunk"
@@ -574,31 +615,18 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		logger.Info(ctx, "接收 ChatStream 响应", zap.String("trace_id", msg.TraceID),
 			zap.String("type", msgType), zap.String("chunk", resp.Chunk))
 
-		// 根据消息类型进行不同的累积和转发逻辑
-		// type 字段支持的值：
-		//   - "reply_chunk"：正常的回复文本片段，累积到完整回复文本用于持久化
-		//   - "thought_content"：内心独白文本片段，累积到完整 thought 用于持久化，不转发给前端
-		//   - "emotion_update"：情绪更新消息，捕获情绪值用于持久化，仅用于 Live2D 表情同步
 		switch msgType {
 		case "reply_chunk":
 			fullAssistantContent += resp.Chunk
-
 		case "thought_content":
 			fullAssistantThought += resp.Chunk
-			// thought_content 不转发给前端（内心独白仅用于后端持久化）
-
 		case "emotion_update":
-			// 捕获情绪值用于持久化，实现宕机后情绪恢复
 			fullAssistantEmotion = resp.Chunk
-
 		default:
-			// 未知消息类型，记录日志警告
 			logger.Warn(ctx, "收到未知的流式消息类型", zap.String("type", msgType), zap.String("trace_id", msg.TraceID))
-			// 仍按 reply_chunk 处理，避免丢失内容
 			fullAssistantContent += resp.Chunk
 		}
 
-		// 转发给前端：仅转发 emotion_update 和 reply_chunk 类型，不转发 thought_content
 		if msgType != "thought_content" {
 			chatPayload := ChatStreamPayload{
 				Type:       msgType,
@@ -620,8 +648,6 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 				return
 			}
 		} else if resp.IsFinished {
-			// 【问题1修复】thought_content 携带 is_finished=true 时，强制发送空结束信号
-			// 防止前端收不到流结束事件，导致输入框持续 loading
 			chatPayload := ChatStreamPayload{
 				Type:       "reply_chunk",
 				Chunk:      "",
@@ -645,14 +671,11 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 		}
 	}
 
-	// 3. 流式响应结束，开启异步协程执行持久化与压缩触发
+	// 异步持久化
 	go func() {
-		// 使用脱离原请求生命周期的 Background Context
 		bgCtx := context.Background()
 		now := time.Now()
 
-		// 【第二步优化】动态捕获上层执行时产生的真实报错信息，替代写死的标准报错JSON
-		// 由持久化协程负责动态序列化并写入包含真实 details 的报错 JSON
 		errorJSON := ""
 		if streamError != nil {
 			errData := map[string]string{
@@ -674,16 +697,14 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			fullAssistantContent = errorJSON
 		}
 
-		// 构造 Interaction 聚合实体（一问一答绑定为完整存储单元）
 		interaction := repository.Interaction{
 			MsgID:            userMsgID,
 			UserContent:      cmdPayload.Message,
 			AssistantContent: fullAssistantContent,
 			Thought:          fullAssistantThought,
-			// 【问题4修复】持久化情绪字段，确保宕机后能恢复情绪上下文
-			Emotion:   fullAssistantEmotion,
-			Error:     errorJSON,
-			Timestamp: now.Unix(),
+			Emotion:          fullAssistantEmotion,
+			Error:            errorJSON,
+			Timestamp:        now.Unix(),
 		}
 
 		interactionModel := &repository.InteractionModel{
@@ -698,14 +719,12 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 			CreatedAt:        now,
 		}
 
-		// 异步写入 PG
 		if s.pgRepo != nil {
 			if err := s.pgRepo.SaveInteraction(bgCtx, interactionModel); err != nil {
 				logger.Error(bgCtx, "异步保存 Interaction 到 PG 失败", zap.Error(err))
 			}
 		}
 
-		// 异步写入 Redis 并触发压缩
 		if s.redisRepo != nil {
 			length, err := s.redisRepo.SaveInteraction(bgCtx, cmdPayload.SessionID, interaction)
 			if err != nil {
@@ -718,30 +737,15 @@ func (s *WSServer) handleChatRequest(ctx context.Context, conn *WSConnection, ms
 }
 
 // triggerCompression 触发摘要压缩流程
-// 做什么：提取最旧的 N 条历史记录，由 Go 组装完整的 summarize prompt，调用 AI 服务生成摘要，校验非空后更新 Redis
-// 为什么这样做：确保摘要字段有效，防止空值覆盖 Redis 中的原有数据
-// 输入输出：
-//   - 输入：sessionID, traceID
-//   - 输出：无（异步执行，结果通过日志记录）
-//
-// 边界条件：
-//   - history 长度未超过阈值时不触发压缩
-//   - AI 服务返回空字段时放弃本次更新
-//
-// 异常行为：
-//   - 获取上下文失败时终止压缩
-//   - AI 服务调用失败时终止压缩
 func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, traceID string) {
 	logger.Info(ctx, "触发摘要压缩", zap.String("session_id", sessionID), zap.String("trace_id", traceID))
 
-	// 获取当前上下文
 	summary, history, err := s.redisRepo.GetContext(ctx, sessionID)
 	if err != nil {
 		logger.Error(ctx, "获取上下文失败，无法进行压缩", zap.Error(err))
 		return
 	}
 
-	// 检查是否达到压缩阈值
 	if len(history) <= int(repository.MemWorkingWindowSize) {
 		logger.Info(ctx, "历史记录未超过阈值，无需压缩",
 			zap.Int("history_count", len(history)),
@@ -749,7 +753,6 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		return
 	}
 
-	// 提取需要压缩的旧 Interaction 记录 (最旧的 N 条)
 	compressCount := int(repository.MemCompressBatchSize)
 	if len(history) < compressCount {
 		compressCount = len(history)
@@ -759,7 +762,6 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		zap.Int("compress_count", compressCount),
 		zap.Int("total_history", len(history)))
 
-	// 将需要压缩的历史记录格式化为文本
 	var messagesTextBuilder strings.Builder
 	for i := 0; i < compressCount; i++ {
 		interaction := history[i]
@@ -772,7 +774,6 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 	}
 	messagesText := messagesTextBuilder.String()
 
-	// 在 Go 端组装完整的 Summarize Prompt（通过缓存层获取各 slot 并注入占位符）
 	summarizeVariables := map[string]string{
 		"CURRENT_CORE_SUMMARY": summary.CoreSummary,
 		"CURRENT_KEY_FACTS":    summary.KeyFacts,
@@ -798,7 +799,6 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		return
 	}
 
-	// 【双重校验】Go 侧拦截：如果返回的摘要为空，则放弃本次更新，防止 Redis 被写空
 	if strings.TrimSpace(resp.NewCoreSummary) == "" || strings.TrimSpace(resp.NewKeyFacts) == "" {
 		logger.Warn(ctx, "AI 服务返回的摘要存在空字段，放弃本次更新",
 			zap.String("session_id", sessionID),
@@ -812,7 +812,6 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		KeyFacts:    resp.NewKeyFacts,
 	}
 
-	// 更新 Redis 摘要并裁剪历史记录
 	if err := s.redisRepo.UpdateSummaryAndTrim(ctx, sessionID, newSummary, int64(compressCount)); err != nil {
 		logger.Error(ctx, "更新摘要并裁剪历史失败", zap.Error(err))
 	} else {

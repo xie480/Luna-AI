@@ -20,6 +20,7 @@ import (
 	"luna-ai/backend/runtime/internal/config"
 	"luna-ai/backend/runtime/internal/infrastructure"
 	"luna-ai/backend/runtime/internal/logger"
+	"luna-ai/backend/runtime/internal/memory"
 	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
 	"luna-ai/backend/runtime/internal/telemetry"
@@ -30,60 +31,56 @@ func main() {
 	// 1. 加载配置 - 尝试从 .env 和 config.yaml 文件中读取配置信息
 	cfg, err := config.Load(".env", "config.yaml")
 	if err != nil {
-		// 如果配置文件不存在或读取失败，则使用默认配置值
 		log.Printf("加载配置失败，使用默认配置: %v\n", err)
 		cfg = &config.Config{}
-		cfg.Server.Port = 8080      // 默认运行在 8080 端口
-		cfg.Log.Level = "info"      // 默认日志级别为 info
+		cfg.Server.Port = 8080
+		cfg.Log.Level = "info"
 		cfg.AIService.Address = "localhost:50051"
-		// Redis 默认配置
 		cfg.Redis.Host = "localhost"
 		cfg.Redis.Port = 6379
 		cfg.Redis.Password = ""
 		cfg.Redis.DB = 0
-		// PostgreSQL 默认配置
 		cfg.Postgres.Host = "localhost"
 		cfg.Postgres.Port = 5432
 		cfg.Postgres.User = "postgres"
 		cfg.Postgres.Password = "postgres"
 		cfg.Postgres.Database = "luna"
+		cfg.Qdrant.Address = "http://localhost:6333"
 	}
 
-	// 2. 初始化日志系统 - 根据配置的日志级别设置日志记录器
+	// 2. 初始化日志系统
 	if err := logger.Init(cfg.Log.Level); err != nil {
 		log.Printf("初始化日志系统失败: %v\n", err)
 		os.Exit(1)
 	}
 
 	ctx := context.Background()
-	// 记录服务启动日志，包含监听的端口号
 	logger.Info(ctx, "正在启动 Luna 运行时服务", "port", cfg.Server.Port)
 
-	// 3. 初始化 Redis 连接 - 用于 DAG 工作流状态同步与 Event Bus
+	// 3. 初始化 Redis 连接
 	redisClient, err := infrastructure.NewRedisClient(cfg.RedisAddr(), cfg.Redis.Password, cfg.Redis.DB)
 	if err != nil {
 		logger.Warn(ctx, "Redis 连接失败，将使用降级模式运行", "error", err)
-		// Redis 连接失败不阻止服务启动，后续可降级处理
 	} else {
 		defer redisClient.Close()
 		logger.Info(ctx, "Redis 连接成功", "addr", cfg.RedisAddr())
 	}
 
-	// 4. 初始化 PostgreSQL 连接 - 用于配置、记忆、状态持久化
+	// 4. 初始化 PostgreSQL 连接
 	postgresClient, err := infrastructure.NewPostgresClient(cfg.PostgresConnStr())
 	if err != nil {
 		logger.Warn(ctx, "PostgreSQL 连接失败，将使用降级模式运行", "error", err)
-		// PostgreSQL 连接失败不阻止服务启动，后续可降级处理
 	} else {
 		defer postgresClient.Close()
 		logger.Info(ctx, "PostgreSQL 连接成功", "database", cfg.Postgres.Database)
-		
-		// 自动迁移数据库表结构
+
+		// 自动迁移数据库表结构（包含新加的 long_term_memories 表）
 		if err := postgresClient.GetDB().AutoMigrate(
 			&repository.InteractionModel{},
 			&repository.PromptTemplate{},
 			&repository.PromptVersion{},
 			&repository.ApiConfigPreset{},
+			&repository.LongTermMemory{},
 		); err != nil {
 			logger.Error(ctx, "自动迁移数据库表结构失败", "error", err)
 		} else {
@@ -116,7 +113,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 初始化 PromptManager（传入 redisClient，启用懒加载缓存）
+	// 初始化 AI 客户端
+	aiClient, err := api.NewAIClient(cfg.AIService.Address)
+	if err != nil {
+		logger.Error(ctx, "初始化 AI 客户端失败", "error", err)
+		os.Exit(1)
+	}
+	defer aiClient.Close()
+
+	// 初始化 PromptManager
 	var promptManager *prompt.Manager
 	if postgresClient != nil {
 		promptRepo := repository.NewPromptPGRepo(postgresClient)
@@ -128,20 +133,49 @@ func main() {
 		promptManager = prompt.NewManager(promptRepo, promptCache)
 	}
 
-	// 5. 初始化 AI 客户端 - 连接 Python AI 服务
-	aiClient, err := api.NewAIClient(cfg.AIService.Address)
-	if err != nil {
-		logger.Error(ctx, "初始化 AI 客户端失败", "error", err)
-		os.Exit(1)
+	// 初始化基础设施仓库
+	var redisRepo *repository.ChatHistoryRedisRepo
+	if redisClient != nil {
+		redisRepo = repository.NewChatHistoryRedisRepo(redisClient)
 	}
-	defer aiClient.Close()
+	var pgRepo *repository.ChatHistoryPGRepo
+	if postgresClient != nil {
+		pgRepo = repository.NewChatHistoryPGRepo(postgresClient)
+	}
 
-	// 6. 注册路由 - 设置 HTTP 路由处理器
+	// 初始化长期记忆仓库
+	var ltmPGRepo *repository.LongTermMemoryPGRepo
+	if postgresClient != nil {
+		ltmPGRepo = repository.NewLongTermMemoryPGRepo(postgresClient)
+	}
+	var qdrantClient *infrastructure.QdrantClient
+	var ltmQdrantRepo *repository.LongTermMemoryQdrantRepo
+	if cfg.Qdrant.Address != "" {
+		qdrantClient, err = infrastructure.NewQdrantClient(cfg.Qdrant.Address)
+		if err != nil {
+			logger.Warn(ctx, "Qdrant 连接失败，将使用降级模式", "error", err)
+		}
+		if qdrantClient != nil {
+			ltmQdrantRepo = repository.NewLongTermMemoryQdrantRepo(qdrantClient)
+		}
+	}
+
+	// 初始化长期记忆管理器并执行启动时兜底检测
+	var memoryManager *memory.Manager
+	if ltmPGRepo != nil {
+		memoryManager = memory.NewManager(redisRepo, ltmPGRepo, ltmQdrantRepo, aiClient, promptManager, qdrantClient)
+		if err := memoryManager.Init(ctx); err != nil {
+			logger.Error(ctx, "长期记忆系统初始化失败", "error", err)
+		} else {
+			logger.Info(ctx, "长期记忆系统初始化成功")
+		}
+	}
+
+	// 6. 注册路由
 	mux := http.NewServeMux()
 
 	if postgresClient != nil && aiClient != nil {
 		presetRepo := repository.NewConfigPresetPGRepo(postgresClient)
-		// 初始化 EventBus 与 ConfigManager
 		eventBus := config.NewEventBus()
 		configMgr := config.NewManager(presetRepo, cryptoSvc, eventBus)
 		presetHandler := api.NewApiConfigPresetHandler(presetRepo, cryptoSvc, aiClient, configMgr)
@@ -151,15 +185,12 @@ func main() {
 		mux.HandleFunc("DELETE /api/v1/config/presets/{id}", presetHandler.HandleDeletePreset)
 		mux.HandleFunc("POST /api/v1/models/fetch", presetHandler.HandleFetchModels)
 
-		// 设置 EventBus 监听 ConfigChanged 事件，进行同步到 Python AI 服务
 		eventHandler := func(event config.Event) {
 			if event.Type == config.EventConfigChanged {
-				// 断言数据类型
 				snapshot, ok := event.Data.(*config.ActiveConfigSnapshot)
 				if !ok || snapshot == nil {
 					return
 				}
-				// 构造 gRPC 请求并发送
 				syncReq := &pb.SyncPresetConfigRequest{
 					SchemaVersion: "v1.0",
 					PresetId:      snapshot.PresetID,
@@ -185,22 +216,17 @@ func main() {
 						Temperature: snapshot.SmallModelConfig.Temperature,
 					},
 				}
-				// 发送同步请求（忽略错误，日志已在 client 中记录）
 				_, _ = aiClient.SyncPresetConfig(context.Background(), syncReq)
 			}
 		}
-		// 订阅事件
 		eventBus.Subscribe(config.EventConfigChanged, eventHandler)
 
-		// 加载激活的配置并触发初始同步
 		if err := configMgr.LoadActiveConfig(ctx); err != nil {
 			logger.Error(ctx, "加载激活配置失败", "error", err)
 		} else {
 			snapshot := configMgr.GetActiveConfig()
 			if snapshot != nil && snapshot.PresetID != "" {
 				logger.Info(ctx, "加载到激活配置，准备触发初始同步", "preset_id", snapshot.PresetID)
-				
-				// 异步等待 AI 服务就绪后同步配置
 				go func() {
 					maxRetries := 15
 					for i := 0; i < maxRetries; i++ {
@@ -223,7 +249,7 @@ func main() {
 		}
 	}
 
-	// Prompt 端点（Go 1.22+ 方法路由模式 + 路径参数）
+	// Prompt 端点
 	if promptManager != nil {
 		promptHandler := api.NewPromptHandler(promptManager)
 		mux.HandleFunc("GET /api/v1/prompts/templates/{id}/versions", promptHandler.HandleGetVersions)
@@ -242,24 +268,15 @@ func main() {
 		mux.HandleFunc("GET /api/v1/telemetry/metrics", telemetryHandler.GetMetrics)
 	}
 
-	// 健康检查端点 - 包含三层健康状态检查
+	// 健康检查端点
 	healthHandler := api.NewHealthHandler(aiClient, redisClient, postgresClient)
 	mux.HandleFunc("/health", healthHandler.HandleHealthCheck)
 
-	// WebSocket 端点 - 前端通信入口
-	// 注意：redisClient 和 postgresClient 可能为 nil（连接失败时），仓库层需处理 nil 情况
-	var redisRepo *repository.ChatHistoryRedisRepo
-	if redisClient != nil {
-		redisRepo = repository.NewChatHistoryRedisRepo(redisClient)
-	}
-	var pgRepo *repository.ChatHistoryPGRepo
-	if postgresClient != nil {
-		pgRepo = repository.NewChatHistoryPGRepo(postgresClient)
-	}
-	wsServer := api.NewWSServer(aiClient, redisRepo, pgRepo, promptManager)
+	// WebSocket 端点 - 传递 memoryManager 以便前端事件通知
+	wsServer := api.NewWSServer(aiClient, redisRepo, pgRepo, promptManager, memoryManager)
 	mux.HandleFunc("/ws", wsServer.HandleWS)
 
-	// 定义 CORS 中间件，允许前端跨域请求 HTTP 接口
+	// 定义 CORS 中间件
 	corsMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -273,13 +290,12 @@ func main() {
 		})
 	}
 
-	// 7. 启动 HTTP 服务 - 创建并启动 HTTP 服务器
+	// 7. 启动 HTTP 服务
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Server.Port), // 监听地址
-		Handler: corsMiddleware(mux),                  // 包装 CORS 中间件
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler: corsMiddleware(mux),
 	}
 
-	// 在独立的 goroutine 中启动服务器，避免阻塞主程序流程
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error(ctx, "启动服务器失败", "error", err)
@@ -287,19 +303,32 @@ func main() {
 		}
 	}()
 
-	// 8. 实现优雅退出 - 监听系统信号以实现平滑关闭
+	// 启动会话流转定时检测（每分钟检查是否需要跨天流转）
+	if memoryManager != nil {
+		go func() {
+			ticker := time.NewTicker(1 * time.Minute)
+			defer ticker.Stop()
+			currentSessionID := time.Now().Format("20060102")
+			for range ticker.C {
+				newSessionID, err := memoryManager.RolloverSession(context.Background(), currentSessionID)
+				if err != nil {
+					logger.Error(context.Background(), "会话流转检测失败", "error", err)
+				} else {
+					currentSessionID = newSessionID
+				}
+			}
+		}()
+	}
+
+	// 8. 实现优雅退出
 	quit := make(chan os.Signal, 1)
-	// 监听 SIGINT (Ctrl+C) 和 SIGTERM (系统终止) 信号
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	// 阻塞等待接收到退出信号
 	<-quit
 	logger.Info(ctx, "正在关闭服务器...")
 
-	// 创建带超时的上下文，确保关闭操作不会无限期等待
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 尝试优雅地关闭服务器，等待正在进行的请求处理完毕
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error(ctx, "服务器强制关闭", "error", err)
 	}

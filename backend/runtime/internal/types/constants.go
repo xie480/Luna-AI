@@ -14,6 +14,9 @@ const (
 	WSMsgTypeResCalendarMetadata    = "RES_CALENDAR_METADATA"     // 日历元数据响应消息类型
 	WSMsgTypeReqGetChatHistory      = "REQ_GET_CHAT_HISTORY"      // 获取聊天历史请求消息类型
 	WSMsgTypeResChatHistory         = "RES_CHAT_HISTORY"          // 聊天历史响应消息类型
+	// WSMsgTypeEvtMemorySync 长期记忆同步事件消息类型
+	// Phase 6 新增：通知前端长期记忆已更新，触发 UI 刷新记忆面板
+	WSMsgTypeEvtMemorySync = "EVT_MEMORY_SYNC"
 )
 
 // 健康检查状态常量
