@@ -48,16 +48,16 @@ message ChatRequest {
   string system_prompt = 4;
 }
 
-// SummarizeContext 请求消息
-message SummarizeContextRequest {
+// ShortSummarize 请求消息
+message ShortSummarizeRequest {
   // 跟踪ID，用于请求追踪
   string trace_id = 1;
   // 已渲染好的完整摘要压缩提示词
   string summarize_prompt = 2;
 }
 
-// SummarizeContext 响应消息
-message SummarizeContextResponse {
+// ShortSummarize 响应消息
+message ShortSummarizeResponse {
   // 跟踪ID，用于请求追踪
   string trace_id = 1;
   // 新的 core_summary
@@ -108,13 +108,13 @@ message SyncPresetConfigResponse {
 }
 
 // 历史记录压缩请求
-message CompressHistoryRequest {
+message LongSummarizeRequest {
   string session_id = 1;
-  string session_context = 2; // 结合了 summary 和 history 的完整上下文
+  string summarize_prompt = 2; // 已渲染好的完整长期记忆压缩提示词
 }
 
 // 历史记录压缩响应
-message CompressHistoryResponse {
+message LongSummarizeResponse {
   string summary = 1; // 深度压缩后的会话摘要
 }
 
@@ -181,13 +181,13 @@ service CommunicationService {
   // ChatStream 方法，用于流式对话
   rpc ChatStream(ChatRequest) returns (stream ChatStreamResponse);
 
-  // SummarizeContext 方法，用于后台摘要压缩
-  rpc SummarizeContext(SummarizeContextRequest) returns (SummarizeContextResponse);
+  // ShortSummarize 方法，用于后台短期摘要压缩
+  rpc ShortSummarize(ShortSummarizeRequest) returns (ShortSummarizeResponse);
 
   rpc SyncPresetConfig(SyncPresetConfigRequest) returns (SyncPresetConfigResponse);
 
-  // CompressHistory 方法，用于历史记录压缩
-  rpc CompressHistory(CompressHistoryRequest) returns (CompressHistoryResponse);
+  // LongSummarize 方法，用于长期历史记录压缩
+  rpc LongSummarize(LongSummarizeRequest) returns (LongSummarizeResponse);
 
   // Embedding 方法，用于文本向量化
   // 做什么：接收文本，返回对应的语义向量（稠密 Embedding）

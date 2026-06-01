@@ -24,9 +24,9 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	CommunicationService_Ping_FullMethodName             = "/communication.CommunicationService/Ping"
 	CommunicationService_ChatStream_FullMethodName       = "/communication.CommunicationService/ChatStream"
-	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
+	CommunicationService_ShortSummarize_FullMethodName   = "/communication.CommunicationService/ShortSummarize"
 	CommunicationService_SyncPresetConfig_FullMethodName = "/communication.CommunicationService/SyncPresetConfig"
-	CommunicationService_CompressHistory_FullMethodName  = "/communication.CommunicationService/CompressHistory"
+	CommunicationService_LongSummarize_FullMethodName    = "/communication.CommunicationService/LongSummarize"
 	CommunicationService_Embedding_FullMethodName        = "/communication.CommunicationService/Embedding"
 	CommunicationService_Rerank_FullMethodName           = "/communication.CommunicationService/Rerank"
 )
@@ -41,11 +41,11 @@ type CommunicationServiceClient interface {
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PongResponse, error)
 	// ChatStream 方法，用于流式对话
 	ChatStream(ctx context.Context, in *ChatRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ChatStreamResponse], error)
-	// SummarizeContext 方法，用于后台摘要压缩
-	SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error)
+	// ShortSummarize 方法，用于后台短期摘要压缩
+	ShortSummarize(ctx context.Context, in *ShortSummarizeRequest, opts ...grpc.CallOption) (*ShortSummarizeResponse, error)
 	SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error)
-	// CompressHistory 方法，用于历史记录压缩
-	CompressHistory(ctx context.Context, in *CompressHistoryRequest, opts ...grpc.CallOption) (*CompressHistoryResponse, error)
+	// LongSummarize 方法，用于长期历史记录压缩
+	LongSummarize(ctx context.Context, in *LongSummarizeRequest, opts ...grpc.CallOption) (*LongSummarizeResponse, error)
 	// Embedding 方法，用于文本向量化
 	// 做什么：接收文本，返回对应的语义向量（稠密 Embedding）
 	// 为什么这样做：将自然语言文本转换为向量，用于 Qdrant 语义检索
@@ -93,10 +93,10 @@ func (c *communicationServiceClient) ChatStream(ctx context.Context, in *ChatReq
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CommunicationService_ChatStreamClient = grpc.ServerStreamingClient[ChatStreamResponse]
 
-func (c *communicationServiceClient) SummarizeContext(ctx context.Context, in *SummarizeContextRequest, opts ...grpc.CallOption) (*SummarizeContextResponse, error) {
+func (c *communicationServiceClient) ShortSummarize(ctx context.Context, in *ShortSummarizeRequest, opts ...grpc.CallOption) (*ShortSummarizeResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SummarizeContextResponse)
-	err := c.cc.Invoke(ctx, CommunicationService_SummarizeContext_FullMethodName, in, out, cOpts...)
+	out := new(ShortSummarizeResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_ShortSummarize_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,10 +113,10 @@ func (c *communicationServiceClient) SyncPresetConfig(ctx context.Context, in *S
 	return out, nil
 }
 
-func (c *communicationServiceClient) CompressHistory(ctx context.Context, in *CompressHistoryRequest, opts ...grpc.CallOption) (*CompressHistoryResponse, error) {
+func (c *communicationServiceClient) LongSummarize(ctx context.Context, in *LongSummarizeRequest, opts ...grpc.CallOption) (*LongSummarizeResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CompressHistoryResponse)
-	err := c.cc.Invoke(ctx, CommunicationService_CompressHistory_FullMethodName, in, out, cOpts...)
+	out := new(LongSummarizeResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_LongSummarize_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,11 +153,11 @@ type CommunicationServiceServer interface {
 	Ping(context.Context, *PingRequest) (*PongResponse, error)
 	// ChatStream 方法，用于流式对话
 	ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error
-	// SummarizeContext 方法，用于后台摘要压缩
-	SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error)
+	// ShortSummarize 方法，用于后台短期摘要压缩
+	ShortSummarize(context.Context, *ShortSummarizeRequest) (*ShortSummarizeResponse, error)
 	SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error)
-	// CompressHistory 方法，用于历史记录压缩
-	CompressHistory(context.Context, *CompressHistoryRequest) (*CompressHistoryResponse, error)
+	// LongSummarize 方法，用于长期历史记录压缩
+	LongSummarize(context.Context, *LongSummarizeRequest) (*LongSummarizeResponse, error)
 	// Embedding 方法，用于文本向量化
 	// 做什么：接收文本，返回对应的语义向量（稠密 Embedding）
 	// 为什么这样做：将自然语言文本转换为向量，用于 Qdrant 语义检索
@@ -182,14 +182,14 @@ func (UnimplementedCommunicationServiceServer) Ping(context.Context, *PingReques
 func (UnimplementedCommunicationServiceServer) ChatStream(*ChatRequest, grpc.ServerStreamingServer[ChatStreamResponse]) error {
 	return status.Error(codes.Unimplemented, "method ChatStream not implemented")
 }
-func (UnimplementedCommunicationServiceServer) SummarizeContext(context.Context, *SummarizeContextRequest) (*SummarizeContextResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SummarizeContext not implemented")
+func (UnimplementedCommunicationServiceServer) ShortSummarize(context.Context, *ShortSummarizeRequest) (*ShortSummarizeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ShortSummarize not implemented")
 }
 func (UnimplementedCommunicationServiceServer) SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SyncPresetConfig not implemented")
 }
-func (UnimplementedCommunicationServiceServer) CompressHistory(context.Context, *CompressHistoryRequest) (*CompressHistoryResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CompressHistory not implemented")
+func (UnimplementedCommunicationServiceServer) LongSummarize(context.Context, *LongSummarizeRequest) (*LongSummarizeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LongSummarize not implemented")
 }
 func (UnimplementedCommunicationServiceServer) Embedding(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Embedding not implemented")
@@ -247,20 +247,20 @@ func _CommunicationService_ChatStream_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type CommunicationService_ChatStreamServer = grpc.ServerStreamingServer[ChatStreamResponse]
 
-func _CommunicationService_SummarizeContext_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SummarizeContextRequest)
+func _CommunicationService_ShortSummarize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShortSummarizeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CommunicationServiceServer).SummarizeContext(ctx, in)
+		return srv.(CommunicationServiceServer).ShortSummarize(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: CommunicationService_SummarizeContext_FullMethodName,
+		FullMethod: CommunicationService_ShortSummarize_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CommunicationServiceServer).SummarizeContext(ctx, req.(*SummarizeContextRequest))
+		return srv.(CommunicationServiceServer).ShortSummarize(ctx, req.(*ShortSummarizeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -283,20 +283,20 @@ func _CommunicationService_SyncPresetConfig_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _CommunicationService_CompressHistory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CompressHistoryRequest)
+func _CommunicationService_LongSummarize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LongSummarizeRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CommunicationServiceServer).CompressHistory(ctx, in)
+		return srv.(CommunicationServiceServer).LongSummarize(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: CommunicationService_CompressHistory_FullMethodName,
+		FullMethod: CommunicationService_LongSummarize_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CommunicationServiceServer).CompressHistory(ctx, req.(*CompressHistoryRequest))
+		return srv.(CommunicationServiceServer).LongSummarize(ctx, req.(*LongSummarizeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -349,16 +349,16 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CommunicationService_Ping_Handler,
 		},
 		{
-			MethodName: "SummarizeContext",
-			Handler:    _CommunicationService_SummarizeContext_Handler,
+			MethodName: "ShortSummarize",
+			Handler:    _CommunicationService_ShortSummarize_Handler,
 		},
 		{
 			MethodName: "SyncPresetConfig",
 			Handler:    _CommunicationService_SyncPresetConfig_Handler,
 		},
 		{
-			MethodName: "CompressHistory",
-			Handler:    _CommunicationService_CompressHistory_Handler,
+			MethodName: "LongSummarize",
+			Handler:    _CommunicationService_LongSummarize_Handler,
 		},
 		{
 			MethodName: "Embedding",

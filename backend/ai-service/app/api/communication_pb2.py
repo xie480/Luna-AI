@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ommunication.proto\x12\rcommunication\"2\n\x0bPingRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\"C\n\x0cPongResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0e\n\x06source\x18\x03 \x01(\t\"U\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x10\n\x08is_error\x18\x03 \x01(\x08\x12\x15\n\rerror_details\x18\x04 \x01(\t\"t\n\x0b\x43hatRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12+\n\x07history\x18\x03 \x03(\x0b\x32\x1a.communication.ChatMessage\x12\x15\n\rsystem_prompt\x18\x04 \x01(\t\"E\n\x17SummarizeContextRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x18\n\x10summarize_prompt\x18\x02 \x01(\t\"|\n\x18SummarizeContextResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x18\n\x10new_core_summary\x18\x02 \x01(\t\x12\x15\n\rnew_key_facts\x18\x03 \x01(\t\x12\x1d\n\x15new_short_term_memory\x18\x04 \x01(\t\"~\n\x12\x43hatStreamResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\r\n\x05\x63hunk\x18\x03 \x01(\t\x12\x13\n\x0bis_finished\x18\x04 \x01(\x08\x12\x15\n\rfinish_reason\x18\x05 \x01(\t\x12\r\n\x05\x65rror\x18\x06 \x01(\t\"k\n\x0bModelConfig\x12\x10\n\x08\x62\x61se_url\x18\x01 \x01(\t\x12\x0f\n\x07\x61pi_key\x18\x02 \x01(\t\x12\x10\n\x08model_id\x18\x03 \x01(\t\x12\x12\n\nmax_tokens\x18\x04 \x01(\x05\x12\x13\n\x0btemperature\x18\x05 \x01(\x02\"\xd8\x01\n\x17SyncPresetConfigRequest\x12\x16\n\x0eschema_version\x18\x01 \x01(\t\x12\x11\n\tpreset_id\x18\x02 \x01(\t\x12/\n\x0blarge_model\x18\x03 \x01(\x0b\x32\x1a.communication.ModelConfig\x12\x30\n\x0cmedium_model\x18\x04 \x01(\x0b\x32\x1a.communication.ModelConfig\x12/\n\x0bsmall_model\x18\x05 \x01(\x0b\x32\x1a.communication.ModelConfig\"B\n\x18SyncPresetConfigResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x15\n\rerror_message\x18\x02 \x01(\t\"E\n\x16\x43ompressHistoryRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x17\n\x0fsession_context\x18\x02 \x01(\t\"*\n\x17\x43ompressHistoryResponse\x12\x0f\n\x07summary\x18\x01 \x01(\t\" \n\x10\x45mbeddingRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\"P\n\x11\x45mbeddingResponse\x12\x13\n\x0bvector_json\x18\x01 \x01(\t\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\x15\n\rerror_message\x18\x03 \x01(\t\"1\n\rRerankRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12\x11\n\tdocuments\x18\x02 \x03(\t\"H\n\x0eRerankResponse\x12\x0e\n\x06scores\x18\x01 \x03(\x01\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\x15\n\rerror_message\x18\x03 \x01(\t2\xe9\x04\n\x14\x43ommunicationService\x12?\n\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n\nChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12\x63\n\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a\'.communication.SummarizeContextResponse\x12\x63\n\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a\'.communication.SyncPresetConfigResponse\x12`\n\x0f\x43ompressHistory\x12%.communication.CompressHistoryRequest\x1a&.communication.CompressHistoryResponse\x12N\n\tEmbedding\x12\x1f.communication.EmbeddingRequest\x1a .communication.EmbeddingResponse\x12\x45\n\x06Rerank\x12\x1c.communication.RerankRequest\x1a\x1d.communication.RerankResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13\x63ommunication.proto\x12\rcommunication\"2\n\x0bPingRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\"C\n\x0cPongResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x11\n\ttimestamp\x18\x02 \x01(\x03\x12\x0e\n\x06source\x18\x03 \x01(\t\"U\n\x0b\x43hatMessage\x12\x0c\n\x04role\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\t\x12\x10\n\x08is_error\x18\x03 \x01(\x08\x12\x15\n\rerror_details\x18\x04 \x01(\t\"t\n\x0b\x43hatRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\x12+\n\x07history\x18\x03 \x03(\x0b\x32\x1a.communication.ChatMessage\x12\x15\n\rsystem_prompt\x18\x04 \x01(\t\"C\n\x15ShortSummarizeRequest\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x18\n\x10summarize_prompt\x18\x02 \x01(\t\"z\n\x16ShortSummarizeResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x18\n\x10new_core_summary\x18\x02 \x01(\t\x12\x15\n\rnew_key_facts\x18\x03 \x01(\t\x12\x1d\n\x15new_short_term_memory\x18\x04 \x01(\t\"~\n\x12\x43hatStreamResponse\x12\x10\n\x08trace_id\x18\x01 \x01(\t\x12\x0c\n\x04type\x18\x02 \x01(\t\x12\r\n\x05\x63hunk\x18\x03 \x01(\t\x12\x13\n\x0bis_finished\x18\x04 \x01(\x08\x12\x15\n\rfinish_reason\x18\x05 \x01(\t\x12\r\n\x05\x65rror\x18\x06 \x01(\t\"k\n\x0bModelConfig\x12\x10\n\x08\x62\x61se_url\x18\x01 \x01(\t\x12\x0f\n\x07\x61pi_key\x18\x02 \x01(\t\x12\x10\n\x08model_id\x18\x03 \x01(\t\x12\x12\n\nmax_tokens\x18\x04 \x01(\x05\x12\x13\n\x0btemperature\x18\x05 \x01(\x02\"\xd8\x01\n\x17SyncPresetConfigRequest\x12\x16\n\x0eschema_version\x18\x01 \x01(\t\x12\x11\n\tpreset_id\x18\x02 \x01(\t\x12/\n\x0blarge_model\x18\x03 \x01(\x0b\x32\x1a.communication.ModelConfig\x12\x30\n\x0cmedium_model\x18\x04 \x01(\x0b\x32\x1a.communication.ModelConfig\x12/\n\x0bsmall_model\x18\x05 \x01(\x0b\x32\x1a.communication.ModelConfig\"B\n\x18SyncPresetConfigResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x15\n\rerror_message\x18\x02 \x01(\t\"D\n\x14LongSummarizeRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x18\n\x10summarize_prompt\x18\x02 \x01(\t\"(\n\x15LongSummarizeResponse\x12\x0f\n\x07summary\x18\x01 \x01(\t\" \n\x10\x45mbeddingRequest\x12\x0c\n\x04text\x18\x01 \x01(\t\"P\n\x11\x45mbeddingResponse\x12\x13\n\x0bvector_json\x18\x01 \x01(\t\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\x15\n\rerror_message\x18\x03 \x01(\t\"1\n\rRerankRequest\x12\r\n\x05query\x18\x01 \x01(\t\x12\x11\n\tdocuments\x18\x02 \x03(\t\"H\n\x0eRerankResponse\x12\x0e\n\x06scores\x18\x01 \x03(\x01\x12\x0f\n\x07success\x18\x02 \x01(\x08\x12\x15\n\rerror_message\x18\x03 \x01(\t2\xdd\x04\n\x14\x43ommunicationService\x12?\n\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n\nChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12]\n\x0eShortSummarize\x12$.communication.ShortSummarizeRequest\x1a%.communication.ShortSummarizeResponse\x12\x63\n\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a\'.communication.SyncPresetConfigResponse\x12Z\n\rLongSummarize\x12#.communication.LongSummarizeRequest\x1a$.communication.LongSummarizeResponse\x12N\n\tEmbedding\x12\x1f.communication.EmbeddingRequest\x1a .communication.EmbeddingResponse\x12\x45\n\x06Rerank\x12\x1c.communication.RerankRequest\x1a\x1d.communication.RerankResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -30,30 +30,30 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_CHATMESSAGE']._serialized_end=244
   _globals['_CHATREQUEST']._serialized_start=246
   _globals['_CHATREQUEST']._serialized_end=362
-  _globals['_SUMMARIZECONTEXTREQUEST']._serialized_start=364
-  _globals['_SUMMARIZECONTEXTREQUEST']._serialized_end=433
-  _globals['_SUMMARIZECONTEXTRESPONSE']._serialized_start=435
-  _globals['_SUMMARIZECONTEXTRESPONSE']._serialized_end=559
-  _globals['_CHATSTREAMRESPONSE']._serialized_start=561
-  _globals['_CHATSTREAMRESPONSE']._serialized_end=687
-  _globals['_MODELCONFIG']._serialized_start=689
-  _globals['_MODELCONFIG']._serialized_end=796
-  _globals['_SYNCPRESETCONFIGREQUEST']._serialized_start=799
-  _globals['_SYNCPRESETCONFIGREQUEST']._serialized_end=1015
-  _globals['_SYNCPRESETCONFIGRESPONSE']._serialized_start=1017
-  _globals['_SYNCPRESETCONFIGRESPONSE']._serialized_end=1083
-  _globals['_COMPRESSHISTORYREQUEST']._serialized_start=1085
-  _globals['_COMPRESSHISTORYREQUEST']._serialized_end=1154
-  _globals['_COMPRESSHISTORYRESPONSE']._serialized_start=1156
-  _globals['_COMPRESSHISTORYRESPONSE']._serialized_end=1198
-  _globals['_EMBEDDINGREQUEST']._serialized_start=1200
-  _globals['_EMBEDDINGREQUEST']._serialized_end=1232
-  _globals['_EMBEDDINGRESPONSE']._serialized_start=1234
-  _globals['_EMBEDDINGRESPONSE']._serialized_end=1314
-  _globals['_RERANKREQUEST']._serialized_start=1316
-  _globals['_RERANKREQUEST']._serialized_end=1365
-  _globals['_RERANKRESPONSE']._serialized_start=1367
-  _globals['_RERANKRESPONSE']._serialized_end=1439
-  _globals['_COMMUNICATIONSERVICE']._serialized_start=1442
-  _globals['_COMMUNICATIONSERVICE']._serialized_end=2059
+  _globals['_SHORTSUMMARIZEREQUEST']._serialized_start=364
+  _globals['_SHORTSUMMARIZEREQUEST']._serialized_end=431
+  _globals['_SHORTSUMMARIZERESPONSE']._serialized_start=433
+  _globals['_SHORTSUMMARIZERESPONSE']._serialized_end=555
+  _globals['_CHATSTREAMRESPONSE']._serialized_start=557
+  _globals['_CHATSTREAMRESPONSE']._serialized_end=683
+  _globals['_MODELCONFIG']._serialized_start=685
+  _globals['_MODELCONFIG']._serialized_end=792
+  _globals['_SYNCPRESETCONFIGREQUEST']._serialized_start=795
+  _globals['_SYNCPRESETCONFIGREQUEST']._serialized_end=1011
+  _globals['_SYNCPRESETCONFIGRESPONSE']._serialized_start=1013
+  _globals['_SYNCPRESETCONFIGRESPONSE']._serialized_end=1079
+  _globals['_LONGSUMMARIZEREQUEST']._serialized_start=1081
+  _globals['_LONGSUMMARIZEREQUEST']._serialized_end=1149
+  _globals['_LONGSUMMARIZERESPONSE']._serialized_start=1151
+  _globals['_LONGSUMMARIZERESPONSE']._serialized_end=1191
+  _globals['_EMBEDDINGREQUEST']._serialized_start=1193
+  _globals['_EMBEDDINGREQUEST']._serialized_end=1225
+  _globals['_EMBEDDINGRESPONSE']._serialized_start=1227
+  _globals['_EMBEDDINGRESPONSE']._serialized_end=1307
+  _globals['_RERANKREQUEST']._serialized_start=1309
+  _globals['_RERANKREQUEST']._serialized_end=1358
+  _globals['_RERANKRESPONSE']._serialized_start=1360
+  _globals['_RERANKRESPONSE']._serialized_end=1432
+  _globals['_COMMUNICATIONSERVICE']._serialized_start=1435
+  _globals['_COMMUNICATIONSERVICE']._serialized_end=2040
 # @@protoc_insertion_point(module_scope)

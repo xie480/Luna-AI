@@ -47,7 +47,7 @@ class ChatRequest(_message.Message):
     system_prompt: str
     def __init__(self, trace_id: _Optional[str] = ..., message: _Optional[str] = ..., history: _Optional[_Iterable[_Union[ChatMessage, _Mapping]]] = ..., system_prompt: _Optional[str] = ...) -> None: ...
 
-class SummarizeContextRequest(_message.Message):
+class ShortSummarizeRequest(_message.Message):
     __slots__ = ("trace_id", "summarize_prompt")
     TRACE_ID_FIELD_NUMBER: _ClassVar[int]
     SUMMARIZE_PROMPT_FIELD_NUMBER: _ClassVar[int]
@@ -55,7 +55,7 @@ class SummarizeContextRequest(_message.Message):
     summarize_prompt: str
     def __init__(self, trace_id: _Optional[str] = ..., summarize_prompt: _Optional[str] = ...) -> None: ...
 
-class SummarizeContextResponse(_message.Message):
+class ShortSummarizeResponse(_message.Message):
     __slots__ = ("trace_id", "new_core_summary", "new_key_facts", "new_short_term_memory")
     TRACE_ID_FIELD_NUMBER: _ClassVar[int]
     NEW_CORE_SUMMARY_FIELD_NUMBER: _ClassVar[int]
@@ -119,15 +119,15 @@ class SyncPresetConfigResponse(_message.Message):
     error_message: str
     def __init__(self, success: bool = ..., error_message: _Optional[str] = ...) -> None: ...
 
-class CompressHistoryRequest(_message.Message):
-    __slots__ = ("session_id", "session_context")
+class LongSummarizeRequest(_message.Message):
+    __slots__ = ("session_id", "summarize_prompt")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
-    SESSION_CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    SUMMARIZE_PROMPT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
-    session_context: str
-    def __init__(self, session_id: _Optional[str] = ..., session_context: _Optional[str] = ...) -> None: ...
+    summarize_prompt: str
+    def __init__(self, session_id: _Optional[str] = ..., summarize_prompt: _Optional[str] = ...) -> None: ...
 
-class CompressHistoryResponse(_message.Message):
+class LongSummarizeResponse(_message.Message):
     __slots__ = ("summary",)
     SUMMARY_FIELD_NUMBER: _ClassVar[int]
     summary: str

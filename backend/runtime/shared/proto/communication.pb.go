@@ -290,8 +290,8 @@ func (x *ChatRequest) GetSystemPrompt() string {
 	return ""
 }
 
-// SummarizeContext 请求消息
-type SummarizeContextRequest struct {
+// ShortSummarize 请求消息
+type ShortSummarizeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
@@ -301,20 +301,20 @@ type SummarizeContextRequest struct {
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *SummarizeContextRequest) Reset() {
-	*x = SummarizeContextRequest{}
+func (x *ShortSummarizeRequest) Reset() {
+	*x = ShortSummarizeRequest{}
 	mi := &file_communication_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SummarizeContextRequest) String() string {
+func (x *ShortSummarizeRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SummarizeContextRequest) ProtoMessage() {}
+func (*ShortSummarizeRequest) ProtoMessage() {}
 
-func (x *SummarizeContextRequest) ProtoReflect() protoreflect.Message {
+func (x *ShortSummarizeRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_communication_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -326,27 +326,27 @@ func (x *SummarizeContextRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SummarizeContextRequest.ProtoReflect.Descriptor instead.
-func (*SummarizeContextRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ShortSummarizeRequest.ProtoReflect.Descriptor instead.
+func (*ShortSummarizeRequest) Descriptor() ([]byte, []int) {
 	return file_communication_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *SummarizeContextRequest) GetTraceId() string {
+func (x *ShortSummarizeRequest) GetTraceId() string {
 	if x != nil {
 		return x.TraceId
 	}
 	return ""
 }
 
-func (x *SummarizeContextRequest) GetSummarizePrompt() string {
+func (x *ShortSummarizeRequest) GetSummarizePrompt() string {
 	if x != nil {
 		return x.SummarizePrompt
 	}
 	return ""
 }
 
-// SummarizeContext 响应消息
-type SummarizeContextResponse struct {
+// ShortSummarize 响应消息
+type ShortSummarizeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 跟踪ID，用于请求追踪
 	TraceId string `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
@@ -360,20 +360,20 @@ type SummarizeContextResponse struct {
 	sizeCache          protoimpl.SizeCache
 }
 
-func (x *SummarizeContextResponse) Reset() {
-	*x = SummarizeContextResponse{}
+func (x *ShortSummarizeResponse) Reset() {
+	*x = ShortSummarizeResponse{}
 	mi := &file_communication_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SummarizeContextResponse) String() string {
+func (x *ShortSummarizeResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SummarizeContextResponse) ProtoMessage() {}
+func (*ShortSummarizeResponse) ProtoMessage() {}
 
-func (x *SummarizeContextResponse) ProtoReflect() protoreflect.Message {
+func (x *ShortSummarizeResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_communication_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -385,33 +385,33 @@ func (x *SummarizeContextResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SummarizeContextResponse.ProtoReflect.Descriptor instead.
-func (*SummarizeContextResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ShortSummarizeResponse.ProtoReflect.Descriptor instead.
+func (*ShortSummarizeResponse) Descriptor() ([]byte, []int) {
 	return file_communication_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *SummarizeContextResponse) GetTraceId() string {
+func (x *ShortSummarizeResponse) GetTraceId() string {
 	if x != nil {
 		return x.TraceId
 	}
 	return ""
 }
 
-func (x *SummarizeContextResponse) GetNewCoreSummary() string {
+func (x *ShortSummarizeResponse) GetNewCoreSummary() string {
 	if x != nil {
 		return x.NewCoreSummary
 	}
 	return ""
 }
 
-func (x *SummarizeContextResponse) GetNewKeyFacts() string {
+func (x *ShortSummarizeResponse) GetNewKeyFacts() string {
 	if x != nil {
 		return x.NewKeyFacts
 	}
 	return ""
 }
 
-func (x *SummarizeContextResponse) GetNewShortTermMemory() string {
+func (x *ShortSummarizeResponse) GetNewShortTermMemory() string {
 	if x != nil {
 		return x.NewShortTermMemory
 	}
@@ -716,28 +716,28 @@ func (x *SyncPresetConfigResponse) GetErrorMessage() string {
 }
 
 // 历史记录压缩请求
-type CompressHistoryRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	SessionContext string                 `protobuf:"bytes,2,opt,name=session_context,json=sessionContext,proto3" json:"session_context,omitempty"` // 结合了 summary 和 history 的完整上下文
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+type LongSummarizeRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	SummarizePrompt string                 `protobuf:"bytes,2,opt,name=summarize_prompt,json=summarizePrompt,proto3" json:"summarize_prompt,omitempty"` // 已渲染好的完整长期记忆压缩提示词
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
-func (x *CompressHistoryRequest) Reset() {
-	*x = CompressHistoryRequest{}
+func (x *LongSummarizeRequest) Reset() {
+	*x = LongSummarizeRequest{}
 	mi := &file_communication_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CompressHistoryRequest) String() string {
+func (x *LongSummarizeRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CompressHistoryRequest) ProtoMessage() {}
+func (*LongSummarizeRequest) ProtoMessage() {}
 
-func (x *CompressHistoryRequest) ProtoReflect() protoreflect.Message {
+func (x *LongSummarizeRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_communication_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -749,47 +749,47 @@ func (x *CompressHistoryRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompressHistoryRequest.ProtoReflect.Descriptor instead.
-func (*CompressHistoryRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use LongSummarizeRequest.ProtoReflect.Descriptor instead.
+func (*LongSummarizeRequest) Descriptor() ([]byte, []int) {
 	return file_communication_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *CompressHistoryRequest) GetSessionId() string {
+func (x *LongSummarizeRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-func (x *CompressHistoryRequest) GetSessionContext() string {
+func (x *LongSummarizeRequest) GetSummarizePrompt() string {
 	if x != nil {
-		return x.SessionContext
+		return x.SummarizePrompt
 	}
 	return ""
 }
 
 // 历史记录压缩响应
-type CompressHistoryResponse struct {
+type LongSummarizeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Summary       string                 `protobuf:"bytes,1,opt,name=summary,proto3" json:"summary,omitempty"` // 深度压缩后的会话摘要
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CompressHistoryResponse) Reset() {
-	*x = CompressHistoryResponse{}
+func (x *LongSummarizeResponse) Reset() {
+	*x = LongSummarizeResponse{}
 	mi := &file_communication_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CompressHistoryResponse) String() string {
+func (x *LongSummarizeResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CompressHistoryResponse) ProtoMessage() {}
+func (*LongSummarizeResponse) ProtoMessage() {}
 
-func (x *CompressHistoryResponse) ProtoReflect() protoreflect.Message {
+func (x *LongSummarizeResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_communication_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -801,12 +801,12 @@ func (x *CompressHistoryResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CompressHistoryResponse.ProtoReflect.Descriptor instead.
-func (*CompressHistoryResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use LongSummarizeResponse.ProtoReflect.Descriptor instead.
+func (*LongSummarizeResponse) Descriptor() ([]byte, []int) {
 	return file_communication_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *CompressHistoryResponse) GetSummary() string {
+func (x *LongSummarizeResponse) GetSummary() string {
 	if x != nil {
 		return x.Summary
 	}
@@ -1087,11 +1087,11 @@ const file_communication_proto_rawDesc = "" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
 	"\ahistory\x18\x03 \x03(\v2\x1a.communication.ChatMessageR\ahistory\x12#\n" +
-	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"_\n" +
-	"\x17SummarizeContextRequest\x12\x19\n" +
+	"\rsystem_prompt\x18\x04 \x01(\tR\fsystemPrompt\"]\n" +
+	"\x15ShortSummarizeRequest\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12)\n" +
-	"\x10summarize_prompt\x18\x02 \x01(\tR\x0fsummarizePrompt\"\xb6\x01\n" +
-	"\x18SummarizeContextResponse\x12\x19\n" +
+	"\x10summarize_prompt\x18\x02 \x01(\tR\x0fsummarizePrompt\"\xb4\x01\n" +
+	"\x16ShortSummarizeResponse\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12(\n" +
 	"\x10new_core_summary\x18\x02 \x01(\tR\x0enewCoreSummary\x12\"\n" +
 	"\rnew_key_facts\x18\x03 \x01(\tR\vnewKeyFacts\x121\n" +
@@ -1122,11 +1122,11 @@ const file_communication_proto_rawDesc = "" +
 	"\x18SyncPresetConfigResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"`\n" +
-	"\x16CompressHistoryRequest\x12\x1d\n" +
+	"\x14LongSummarizeRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
-	"\x0fsession_context\x18\x02 \x01(\tR\x0esessionContext\"3\n" +
-	"\x17CompressHistoryResponse\x12\x18\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12)\n" +
+	"\x10summarize_prompt\x18\x02 \x01(\tR\x0fsummarizePrompt\"1\n" +
+	"\x15LongSummarizeResponse\x12\x18\n" +
 	"\asummary\x18\x01 \x01(\tR\asummary\"&\n" +
 	"\x10EmbeddingRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\"s\n" +
@@ -1141,14 +1141,14 @@ const file_communication_proto_rawDesc = "" +
 	"\x0eRerankResponse\x12\x16\n" +
 	"\x06scores\x18\x01 \x03(\x01R\x06scores\x12\x18\n" +
 	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xe9\x04\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xdd\x04\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +
-	"ChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12c\n" +
-	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponse\x12c\n" +
-	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponse\x12`\n" +
-	"\x0fCompressHistory\x12%.communication.CompressHistoryRequest\x1a&.communication.CompressHistoryResponse\x12N\n" +
+	"ChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12]\n" +
+	"\x0eShortSummarize\x12$.communication.ShortSummarizeRequest\x1a%.communication.ShortSummarizeResponse\x12c\n" +
+	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponse\x12Z\n" +
+	"\rLongSummarize\x12#.communication.LongSummarizeRequest\x1a$.communication.LongSummarizeResponse\x12N\n" +
 	"\tEmbedding\x12\x1f.communication.EmbeddingRequest\x1a .communication.EmbeddingResponse\x12E\n" +
 	"\x06Rerank\x12\x1c.communication.RerankRequest\x1a\x1d.communication.RerankResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
 
@@ -1170,14 +1170,14 @@ var file_communication_proto_goTypes = []any{
 	(*PongResponse)(nil),             // 1: communication.PongResponse
 	(*ChatMessage)(nil),              // 2: communication.ChatMessage
 	(*ChatRequest)(nil),              // 3: communication.ChatRequest
-	(*SummarizeContextRequest)(nil),  // 4: communication.SummarizeContextRequest
-	(*SummarizeContextResponse)(nil), // 5: communication.SummarizeContextResponse
+	(*ShortSummarizeRequest)(nil),    // 4: communication.ShortSummarizeRequest
+	(*ShortSummarizeResponse)(nil),   // 5: communication.ShortSummarizeResponse
 	(*ChatStreamResponse)(nil),       // 6: communication.ChatStreamResponse
 	(*ModelConfig)(nil),              // 7: communication.ModelConfig
 	(*SyncPresetConfigRequest)(nil),  // 8: communication.SyncPresetConfigRequest
 	(*SyncPresetConfigResponse)(nil), // 9: communication.SyncPresetConfigResponse
-	(*CompressHistoryRequest)(nil),   // 10: communication.CompressHistoryRequest
-	(*CompressHistoryResponse)(nil),  // 11: communication.CompressHistoryResponse
+	(*LongSummarizeRequest)(nil),     // 10: communication.LongSummarizeRequest
+	(*LongSummarizeResponse)(nil),    // 11: communication.LongSummarizeResponse
 	(*EmbeddingRequest)(nil),         // 12: communication.EmbeddingRequest
 	(*EmbeddingResponse)(nil),        // 13: communication.EmbeddingResponse
 	(*RerankRequest)(nil),            // 14: communication.RerankRequest
@@ -1190,16 +1190,16 @@ var file_communication_proto_depIdxs = []int32{
 	7,  // 3: communication.SyncPresetConfigRequest.small_model:type_name -> communication.ModelConfig
 	0,  // 4: communication.CommunicationService.Ping:input_type -> communication.PingRequest
 	3,  // 5: communication.CommunicationService.ChatStream:input_type -> communication.ChatRequest
-	4,  // 6: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
+	4,  // 6: communication.CommunicationService.ShortSummarize:input_type -> communication.ShortSummarizeRequest
 	8,  // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
-	10, // 8: communication.CommunicationService.CompressHistory:input_type -> communication.CompressHistoryRequest
+	10, // 8: communication.CommunicationService.LongSummarize:input_type -> communication.LongSummarizeRequest
 	12, // 9: communication.CommunicationService.Embedding:input_type -> communication.EmbeddingRequest
 	14, // 10: communication.CommunicationService.Rerank:input_type -> communication.RerankRequest
 	1,  // 11: communication.CommunicationService.Ping:output_type -> communication.PongResponse
 	6,  // 12: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
-	5,  // 13: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
+	5,  // 13: communication.CommunicationService.ShortSummarize:output_type -> communication.ShortSummarizeResponse
 	9,  // 14: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
-	11, // 15: communication.CommunicationService.CompressHistory:output_type -> communication.CompressHistoryResponse
+	11, // 15: communication.CommunicationService.LongSummarize:output_type -> communication.LongSummarizeResponse
 	13, // 16: communication.CommunicationService.Embedding:output_type -> communication.EmbeddingResponse
 	15, // 17: communication.CommunicationService.Rerank:output_type -> communication.RerankResponse
 	11, // [11:18] is the sub-list for method output_type

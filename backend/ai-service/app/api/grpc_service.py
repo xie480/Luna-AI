@@ -1,8 +1,8 @@
 """
 Luna AI gRPC 通信服务实现
 
-做什么：实现 gRPC 通信服务，处理 Ping、ChatStream、SummarizeContext、CompressHistory、
-        Embedding 和 Rerank 请求。
+做什么：实现 gRPC 通信服务，处理 Ping、ChatStream、ShortSummarize、LongSummarize、
+      Embedding 和 Rerank 请求。
         其中 Embedding 使用 SentenceTransformer 进行文本向量化，
         Rerank 使用 CrossEncoder 进行文档相关性重排打分。
 为什么这样做：作为 Go Runtime 与 Python AI Service 之间的通信桥梁，确保消息的可靠透传。
@@ -85,7 +85,7 @@ class CommunicationServiceServicer(
     """
     实现 gRPC 通信服务
 
-    做什么：处理来自 Go Runtime 的 gRPC 请求，提供 Ping、ChatStream、CompressHistory 等服务。
+    做什么：处理来自 Go Runtime 的 gRPC 请求，提供 Ping、ChatStream、LongSummarize 等服务。
     """
 
     def Ping(
@@ -273,20 +273,20 @@ class CommunicationServiceServicer(
                     f"[TraceID:{trace_id}] 发送错误响应失败，流可能已关闭"
                 )
 
-    async def SummarizeContext(
+    async def ShortSummarize(
         self,
-        request: communication_pb2.SummarizeContextRequest,
+        request: communication_pb2.ShortSummarizeRequest,
         context: grpc.ServicerContext,
-    ) -> communication_pb2.SummarizeContextResponse:
+    ) -> communication_pb2.ShortSummarizeResponse:
         """
-        处理后台摘要压缩请求
+        处理后台短期摘要压缩请求
 
-        做什么：接收 SummarizeContextRequest，直接使用 Go 端渲染好的完整 summarize_prompt，
+        做什么：接收 ShortSummarizeRequest，直接使用 Go 端渲染好的完整 summarize_prompt，
                 调用 LLM 生成摘要，解析 JSON 并校验非空后返回。
         为什么这样做：Go 端负责模板渲染，Python 端仅负责调用 LLM 并解析结果。
         输入输出：
-            - 输入：SummarizeContextRequest {trace_id, summarize_prompt}
-            - 输出：SummarizeContextResponse {trace_id, new_core_summary, new_key_facts}
+            - 输入：ShortSummarizeRequest {trace_id, summarize_prompt}
+            - 输出：ShortSummarizeResponse {trace_id, new_core_summary, new_key_facts}
         边界条件：
             - LLM 返回空字段时回退到当前值
             - JSON 解析失败时回退到当前值
@@ -294,7 +294,7 @@ class CommunicationServiceServicer(
             - 任何异常都返回空摘要，确保系统稳定性
         """
         trace_id = request.trace_id
-        logger.info(f"[TraceID:{trace_id}] 收到 SummarizeContext 请求")
+        logger.info(f"[TraceID:{trace_id}] 收到 ShortSummarize 请求")
 
         full_prompt = request.summarize_prompt
         messages = [{"role": Role.USER.value, "content": full_prompt}]
@@ -343,7 +343,7 @@ class CommunicationServiceServicer(
                             new_key_facts = ""
 
                     logger.info(f"[TraceID:{trace_id}] 摘要压缩完成")
-                    return communication_pb2.SummarizeContextResponse(
+                    return communication_pb2.ShortSummarizeResponse(
                         trace_id=trace_id,
                         new_core_summary=new_core_summary,
                         new_key_facts=new_key_facts,
@@ -357,65 +357,53 @@ class CommunicationServiceServicer(
                     if attempt < max_retries - 1:
                         continue
                     else:
-                        return communication_pb2.SummarizeContextResponse(
+                        return communication_pb2.ShortSummarizeResponse(
                             trace_id=trace_id,
                             new_core_summary="",
                             new_key_facts="",
                         )
 
             except Exception as e:
-                logger.error(f"[TraceID:{trace_id}] 第 {attempt + 1} 次尝试：SummarizeContext 处理异常: {e}")
+                logger.error(f"[TraceID:{trace_id}] 第 {attempt + 1} 次尝试：ShortSummarize 处理异常: {e}")
                 if attempt < max_retries - 1:
                     continue
                 else:
-                    return communication_pb2.SummarizeContextResponse(
+                    return communication_pb2.ShortSummarizeResponse(
                         trace_id=trace_id,
                         new_core_summary="",
                         new_key_facts="",
                     )
 
-    async def CompressHistory(
+    async def LongSummarize(
         self,
-        request: communication_pb2.CompressHistoryRequest,
+        request: communication_pb2.LongSummarizeRequest,
         context: grpc.ServicerContext,
-    ) -> communication_pb2.CompressHistoryResponse:
+    ) -> communication_pb2.LongSummarizeResponse:
         """
-        处理历史记录压缩请求
+        处理长期历史记录压缩请求
 
-        做什么：接收 CompressHistoryRequest，对历史会话进行深度压缩与摘要提取。
-        为什么这样做：将完整的历史会话（含摘要和历史对话）压缩为结构化摘要，用于长期记忆持久化。
+        做什么：接收 LongSummarizeRequest，直接使用 Go 端渲染好的完整 summarize_prompt，
+                调用 LLM 生成长期记忆摘要。
+        为什么这样做：将完整的历史会话压缩为结构化摘要，用于长期记忆持久化。Go 端负责模板渲染。
         输入输出：
-            - 输入：CompressHistoryRequest {session_id, session_context}
-            - 输出：CompressHistoryResponse {summary}
+            - 输入：LongSummarizeRequest {session_id, summarize_prompt}
+            - 输出：LongSummarizeResponse {summary}
         边界条件：
-            - session_context 为空时返回空摘要
+            - summarize_prompt 为空时返回空摘要
             - LLM 返回空内容时返回空摘要
         异常行为：
             - LLM 调用异常时返回空摘要，不抛出异常（保障 Go 端稳定性）
             - 重试策略：最多 3 次，指数退避
         """
         trace_id = request.session_id
-        logger.info(f"[SessionID:{trace_id}] 收到 CompressHistory 请求")
+        logger.info(f"[SessionID:{trace_id}] 收到 LongSummarize 请求")
 
-        session_context = request.session_context.strip()
-        if not session_context:
-            logger.warning(f"[SessionID:{trace_id}] 会话上下文为空，跳过压缩")
-            return communication_pb2.CompressHistoryResponse(summary="")
+        summarize_prompt = request.summarize_prompt.strip()
+        if not summarize_prompt:
+            logger.warning(f"[SessionID:{trace_id}] 长期记忆压缩提示词为空，跳过压缩")
+            return communication_pb2.LongSummarizeResponse(summary="")
 
-        # 构造压缩提示词：要求 LLM 对历史对话进行深度压缩
-        prompt = (
-            "你是一个高效的对话摘要引擎。请对以下历史会话进行深度压缩与摘要提取。\n\n"
-            "要求：\n"
-            "1. 提取用户的核心关注点、偏好和关键决策\n"
-            "2. 记录 Luna 提供的重要信息和建议\n"
-            "3. 以简洁的段落形式组织，保留关键细节\n"
-            "4. 摘要长度控制在 500 字以内\n"
-            "5. 用第三人称叙述\n\n"
-            f"需要压缩的历史会话：\n{session_context}\n\n"
-            "请直接输出压缩后的摘要文本，不要包含任何前缀或后缀说明。"
-        )
-
-        messages = [{"role": Role.USER.value, "content": prompt}]
+        messages = [{"role": Role.USER.value, "content": summarize_prompt}]
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -440,16 +428,16 @@ class CommunicationServiceServicer(
                 logger.info(
                     f"[SessionID:{trace_id}] 历史压缩完成",
                 )
-                return communication_pb2.CompressHistoryResponse(summary=summary)
+                return communication_pb2.LongSummarizeResponse(summary=summary)
 
             except Exception as e:
                 logger.error(
-                    f"[SessionID:{trace_id}] 第 {attempt + 1} 次尝试：CompressHistory 处理异常: {e}"
+                    f"[SessionID:{trace_id}] 第 {attempt + 1} 次尝试：LongSummarize 处理异常: {e}"
                 )
                 if attempt < max_retries - 1:
                     continue
                 else:
-                    return communication_pb2.CompressHistoryResponse(summary="")
+                    return communication_pb2.LongSummarizeResponse(summary="")
 
     async def SyncPresetConfig(
         self,

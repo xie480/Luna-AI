@@ -788,14 +788,14 @@ func (s *WSServer) triggerCompression(ctx context.Context, sessionID string, tra
 		}
 	}
 
-	req := &pb.SummarizeContextRequest{
+	req := &pb.ShortSummarizeRequest{
 		TraceId:         traceID,
 		SummarizePrompt: fullSummarizePrompt,
 	}
 
-	resp, err := s.aiClient.SummarizeContext(ctx, req)
+	resp, err := s.aiClient.ShortSummarize(ctx, req)
 	if err != nil {
-		logger.Error(ctx, "调用 AI 服务 SummarizeContext 失败", zap.Error(err))
+		logger.Error(ctx, "调用 AI 服务 ShortSummarize 失败", zap.Error(err))
 		return
 	}
 

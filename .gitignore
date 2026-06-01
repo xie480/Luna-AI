@@ -54,3 +54,5 @@ data/
 *.db
 
 proxy.py
+
+backend/runtime/cmd/migrate_prompts/

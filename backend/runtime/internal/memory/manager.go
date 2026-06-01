@@ -35,8 +35,8 @@ type MemoryEventHandler func(event MemoryEvent)
 
 // AIClient 定义 AI 客户端接口，用于与 Python AI 服务通信
 type AIClient interface {
-	// CompressHistory 调用 Python 的 CompressHistory gRPC 方法
-	CompressHistory(ctx context.Context, req *pb.CompressHistoryRequest) (*pb.CompressHistoryResponse, error)
+	// LongSummarize 调用 Python 的 LongSummarize gRPC 方法
+	LongSummarize(ctx context.Context, req *pb.LongSummarizeRequest) (*pb.LongSummarizeResponse, error)
 
 	// Ping 健康检查
 	Ping(ctx context.Context, traceID string) (*pb.PongResponse, error)
@@ -201,9 +201,10 @@ func (m *Manager) detectAndCleanupHistoricalSessions(ctx context.Context) error 
 // compressAndCommit 压缩历史会话并提交到双库
 // 做什么：
 //  1. 从 Redis 提取历史会话的完整上下文（summary + history）
-//  2. 调用 Python CompressHistory gRPC 进行 AI 压缩
-//  3. 写入 PG 长期记忆记录
-//  4. 同步写入 Qdrant 向量
+//  2. 调用 Prompt Manager 组装长期记忆压缩提示词
+//  3. 调用 Python LongSummarize gRPC 进行 AI 压缩
+//  4. 写入 PG 长期记忆记录
+//  5. 同步写入 Qdrant 向量
 func (m *Manager) compressAndCommit(ctx context.Context, sessionID string) error {
 	traceID := snowflake.GenerateStringID()
 	logger.Info(ctx, "开始压缩历史会话", "session_id", sessionID, "trace_id", traceID)
@@ -219,7 +220,6 @@ func (m *Manager) compressAndCommit(ctx context.Context, sessionID string) error
 	}
 
 	var contextBuilder strings.Builder
-	contextBuilder.WriteString(fmt.Sprintf("会话摘要:\n%s\n\n关键事实:\n%s\n\n历史对话:\n", summary.CoreSummary, summary.KeyFacts))
 	for i, h := range history {
 		contextBuilder.WriteString(fmt.Sprintf("[对话 %d]\n", i+1))
 		contextBuilder.WriteString(fmt.Sprintf("用户: %s\n", h.UserContent))
@@ -232,25 +232,43 @@ func (m *Manager) compressAndCommit(ctx context.Context, sessionID string) error
 		}
 		contextBuilder.WriteString("\n")
 	}
-	sessionContext := contextBuilder.String()
+	messagesText := contextBuilder.String()
 
 	if m.aiClient == nil {
 		return fmt.Errorf("AI 客户端不可用，无法压缩历史会话 [session_id=%s]", sessionID)
 	}
 
-	compressReq := &pb.CompressHistoryRequest{
-		SessionId:      sessionID,
-		SessionContext: sessionContext,
+	// 组装长期记忆压缩提示词
+	summarizeVariables := map[string]string{
+		"CURRENT_CORE_SUMMARY": summary.CoreSummary,
+		"CURRENT_KEY_FACTS":    summary.KeyFacts,
+		"MESSAGES_TEXT":        messagesText,
 	}
 
-	compressResp, err := m.aiClient.CompressHistory(ctx, compressReq)
+	var fullSummarizePrompt string
+	if m.promptMgr != nil {
+		fullSummarizePrompt, err = m.promptMgr.AssemblePrompt(ctx, prompt.CategoryLongSummary, summarizeVariables)
+		if err != nil {
+			logger.Error(ctx, "组装 LongSummarize Prompt 失败", "error", err)
+			return fmt.Errorf("组装 LongSummarize Prompt 失败: %w", err)
+		}
+	} else {
+		return fmt.Errorf("Prompt 管理器不可用，无法组装提示词")
+	}
+
+	compressReq := &pb.LongSummarizeRequest{
+		SessionId:       sessionID,
+		SummarizePrompt: fullSummarizePrompt,
+	}
+
+	compressResp, err := m.aiClient.LongSummarize(ctx, compressReq)
 	if err != nil {
-		return fmt.Errorf("调用 CompressHistory 失败 [session_id=%s]: %w", sessionID, err)
+		return fmt.Errorf("调用 LongSummarize 失败 [session_id=%s]: %w", sessionID, err)
 	}
 
 	compressedSummary := strings.TrimSpace(compressResp.Summary)
 	if compressedSummary == "" {
-		return fmt.Errorf("CompressHistory 返回空摘要 [session_id=%s]", sessionID)
+		return fmt.Errorf("LongSummarize 返回空摘要 [session_id=%s]", sessionID)
 	}
 
 	logger.Info(ctx, "历史会话压缩完成", "session_id", sessionID, "summary_length", len(compressedSummary))

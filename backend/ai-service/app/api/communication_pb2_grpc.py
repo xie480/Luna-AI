@@ -46,20 +46,20 @@ class CommunicationServiceStub(object):
                 request_serializer=communication__pb2.ChatRequest.SerializeToString,
                 response_deserializer=communication__pb2.ChatStreamResponse.FromString,
                 _registered_method=True)
-        self.SummarizeContext = channel.unary_unary(
-                '/communication.CommunicationService/SummarizeContext',
-                request_serializer=communication__pb2.SummarizeContextRequest.SerializeToString,
-                response_deserializer=communication__pb2.SummarizeContextResponse.FromString,
+        self.ShortSummarize = channel.unary_unary(
+                '/communication.CommunicationService/ShortSummarize',
+                request_serializer=communication__pb2.ShortSummarizeRequest.SerializeToString,
+                response_deserializer=communication__pb2.ShortSummarizeResponse.FromString,
                 _registered_method=True)
         self.SyncPresetConfig = channel.unary_unary(
                 '/communication.CommunicationService/SyncPresetConfig',
                 request_serializer=communication__pb2.SyncPresetConfigRequest.SerializeToString,
                 response_deserializer=communication__pb2.SyncPresetConfigResponse.FromString,
                 _registered_method=True)
-        self.CompressHistory = channel.unary_unary(
-                '/communication.CommunicationService/CompressHistory',
-                request_serializer=communication__pb2.CompressHistoryRequest.SerializeToString,
-                response_deserializer=communication__pb2.CompressHistoryResponse.FromString,
+        self.LongSummarize = channel.unary_unary(
+                '/communication.CommunicationService/LongSummarize',
+                request_serializer=communication__pb2.LongSummarizeRequest.SerializeToString,
+                response_deserializer=communication__pb2.LongSummarizeResponse.FromString,
                 _registered_method=True)
         self.Embedding = channel.unary_unary(
                 '/communication.CommunicationService/Embedding',
@@ -91,8 +91,8 @@ class CommunicationServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SummarizeContext(self, request, context):
-        """SummarizeContext 方法，用于后台摘要压缩
+    def ShortSummarize(self, request, context):
+        """ShortSummarize 方法，用于后台短期摘要压缩
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -104,8 +104,8 @@ class CommunicationServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def CompressHistory(self, request, context):
-        """CompressHistory 方法，用于历史记录压缩
+    def LongSummarize(self, request, context):
+        """LongSummarize 方法，用于长期历史记录压缩
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -138,20 +138,20 @@ def add_CommunicationServiceServicer_to_server(servicer, server):
                     request_deserializer=communication__pb2.ChatRequest.FromString,
                     response_serializer=communication__pb2.ChatStreamResponse.SerializeToString,
             ),
-            'SummarizeContext': grpc.unary_unary_rpc_method_handler(
-                    servicer.SummarizeContext,
-                    request_deserializer=communication__pb2.SummarizeContextRequest.FromString,
-                    response_serializer=communication__pb2.SummarizeContextResponse.SerializeToString,
+            'ShortSummarize': grpc.unary_unary_rpc_method_handler(
+                    servicer.ShortSummarize,
+                    request_deserializer=communication__pb2.ShortSummarizeRequest.FromString,
+                    response_serializer=communication__pb2.ShortSummarizeResponse.SerializeToString,
             ),
             'SyncPresetConfig': grpc.unary_unary_rpc_method_handler(
                     servicer.SyncPresetConfig,
                     request_deserializer=communication__pb2.SyncPresetConfigRequest.FromString,
                     response_serializer=communication__pb2.SyncPresetConfigResponse.SerializeToString,
             ),
-            'CompressHistory': grpc.unary_unary_rpc_method_handler(
-                    servicer.CompressHistory,
-                    request_deserializer=communication__pb2.CompressHistoryRequest.FromString,
-                    response_serializer=communication__pb2.CompressHistoryResponse.SerializeToString,
+            'LongSummarize': grpc.unary_unary_rpc_method_handler(
+                    servicer.LongSummarize,
+                    request_deserializer=communication__pb2.LongSummarizeRequest.FromString,
+                    response_serializer=communication__pb2.LongSummarizeResponse.SerializeToString,
             ),
             'Embedding': grpc.unary_unary_rpc_method_handler(
                     servicer.Embedding,
@@ -230,7 +230,7 @@ class CommunicationService(object):
             _registered_method=True)
 
     @staticmethod
-    def SummarizeContext(request,
+    def ShortSummarize(request,
             target,
             options=(),
             channel_credentials=None,
@@ -243,9 +243,9 @@ class CommunicationService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/communication.CommunicationService/SummarizeContext',
-            communication__pb2.SummarizeContextRequest.SerializeToString,
-            communication__pb2.SummarizeContextResponse.FromString,
+            '/communication.CommunicationService/ShortSummarize',
+            communication__pb2.ShortSummarizeRequest.SerializeToString,
+            communication__pb2.ShortSummarizeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -284,7 +284,7 @@ class CommunicationService(object):
             _registered_method=True)
 
     @staticmethod
-    def CompressHistory(request,
+    def LongSummarize(request,
             target,
             options=(),
             channel_credentials=None,
@@ -297,9 +297,9 @@ class CommunicationService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/communication.CommunicationService/CompressHistory',
-            communication__pb2.CompressHistoryRequest.SerializeToString,
-            communication__pb2.CompressHistoryResponse.FromString,
+            '/communication.CommunicationService/LongSummarize',
+            communication__pb2.LongSummarizeRequest.SerializeToString,
+            communication__pb2.LongSummarizeResponse.FromString,
             options,
             channel_credentials,
             insecure,
