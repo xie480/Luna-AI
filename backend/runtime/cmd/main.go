@@ -18,6 +18,7 @@ import (
 
 	"luna-ai/backend/runtime/internal/api"
 	"luna-ai/backend/runtime/internal/config"
+	"luna-ai/backend/runtime/internal/inference"
 	"luna-ai/backend/runtime/internal/infrastructure"
 	"luna-ai/backend/runtime/internal/logger"
 	"luna-ai/backend/runtime/internal/memory"
@@ -160,10 +161,20 @@ func main() {
 		}
 	}
 
+	// 初始化推理服务
+	var inferenceSvc inference.Service
+	if aiClient != nil {
+		inferenceSvc = inference.NewService(aiClient)
+	}
+
 	// 初始化长期记忆管理器并执行启动时兜底检测
 	var memoryManager *memory.Manager
 	if ltmPGRepo != nil {
-		memoryManager = memory.NewManager(redisRepo, ltmPGRepo, ltmQdrantRepo, aiClient, promptManager, qdrantClient)
+		topK := cfg.Retrieval.TopK
+		if topK <= 0 {
+			topK = 5 // 默认值
+		}
+		memoryManager = memory.NewManager(redisRepo, ltmPGRepo, ltmQdrantRepo, aiClient, promptManager, qdrantClient, inferenceSvc, topK)
 		if err := memoryManager.Init(ctx); err != nil {
 			logger.Error(ctx, "长期记忆系统初始化失败", "error", err)
 		} else {

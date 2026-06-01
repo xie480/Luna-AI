@@ -2,13 +2,13 @@ package memory
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"luna-ai/backend/runtime/internal/infrastructure"
+	"luna-ai/backend/runtime/internal/inference"
 	"luna-ai/backend/runtime/internal/logger"
 	"luna-ai/backend/runtime/internal/prompt"
 	"luna-ai/backend/runtime/internal/repository"
@@ -38,22 +38,6 @@ type AIClient interface {
 	// CompressHistory 调用 Python 的 CompressHistory gRPC 方法
 	CompressHistory(ctx context.Context, req *pb.CompressHistoryRequest) (*pb.CompressHistoryResponse, error)
 
-	// Embedding 调用 Python 的 Embedding 方法进行文本向量化
-	// 做什么：将自然语言文本转换为稠密向量，用于 Qdrant 语义检索
-	// 输入输出：
-	//   - 输入：EmbeddingRequest {text}
-	//   - 输出：EmbeddingResponse {vector_json, success, error_message}
-	// 边界条件：text 为空时返回 success=false
-	Embedding(ctx context.Context, req *pb.EmbeddingRequest) (*pb.EmbeddingResponse, error)
-
-	// Rerank 调用 Python 的 Rerank 方法进行文档相关性重排
-	// 做什么：计算查询与候选文档的相关性分数
-	// 输入输出：
-	//   - 输入：RerankRequest {query, documents[]}
-	//   - 输出：RerankResponse {scores[], success, error_message}
-	// 边界条件：query 为空时返回 success=false
-	Rerank(ctx context.Context, req *pb.RerankRequest) (*pb.RerankResponse, error)
-
 	// Ping 健康检查
 	Ping(ctx context.Context, traceID string) (*pb.PongResponse, error)
 }
@@ -76,12 +60,18 @@ type Manager struct {
 	// Qdrant 客户端（用于直接操作集合）
 	qdrantClient *infrastructure.QdrantClient
 
+	// 推理服务（用于 Embedding 和 Rerank）
+	inferenceSvc inference.Service
+
 	// 事件监听器
 	listeners []MemoryEventHandler
 	mu        sync.RWMutex
 
 	// 是否启用记忆同步通知
 	enableSyncNotify bool
+
+	// 检索配置
+	retrievalTopK int
 }
 
 // NewManager 创建长期记忆管理器
@@ -92,6 +82,8 @@ type Manager struct {
 //   - aiClient: AI 客户端（调用压缩服务）
 //   - promptMgr: Prompt 管理器（组装提示词）
 //   - qdrantClient: Qdrant 客户端（初始化集合）
+//   - inferenceSvc: 推理服务（用于 Embedding 和 Rerank）
+//   - retrievalTopK: 检索返回的 Top-K 数量
 func NewManager(
 	redisRepo *repository.ChatHistoryRedisRepo,
 	ltmPGRepo *repository.LongTermMemoryPGRepo,
@@ -99,6 +91,8 @@ func NewManager(
 	aiClient AIClient,
 	promptMgr *prompt.Manager,
 	qdrantClient *infrastructure.QdrantClient,
+	inferenceSvc inference.Service,
+	retrievalTopK int,
 ) *Manager {
 	return &Manager{
 		redisRepo:        redisRepo,
@@ -107,6 +101,8 @@ func NewManager(
 		aiClient:         aiClient,
 		promptMgr:        promptMgr,
 		qdrantClient:     qdrantClient,
+		inferenceSvc:     inferenceSvc,
+		retrievalTopK:    retrievalTopK,
 		enableSyncNotify: true,
 	}
 }
@@ -278,8 +274,15 @@ func (m *Manager) compressAndCommit(ctx context.Context, sessionID string) error
 
 	// 6. 对压缩后的摘要进行向量化，写入 Qdrant 向量库
 	if m.ltmQdrantRepo != nil {
-		// 调用 AI 服务的 Embedding 方法获取真实向量
-		embeddingVec, embedErr := m.getEmbeddingVector(ctx, compressedSummary)
+		var embeddingVec []float64
+		var embedErr error
+		
+		if m.inferenceSvc != nil {
+			embeddingVec, embedErr = m.inferenceSvc.GetEmbeddingVector(ctx, compressedSummary)
+		} else {
+			embedErr = fmt.Errorf("推理服务不可用")
+		}
+
 		if embedErr != nil {
 			logger.Warn(ctx, "获取语义向量失败，使用零值向量写入 Qdrant（后续可对账补充）", "memory_id", memoryID, "error", embedErr)
 			embeddingVec = make([]float64, 1536)
@@ -343,73 +346,6 @@ func (m *Manager) RolloverSession(ctx context.Context, currentSessionID string) 
 	return today, nil
 }
 
-// getEmbeddingVector 获取文本的语义向量
-// 做什么：调用 Python AI 服务的 Embedding 方法，将文本编码为稠密向量
-// 为什么这样做：作为统一的向量化入口，确保所有文本向量化都经过 AI 服务
-// 输入：
-//   - ctx: 上下文
-//   - text: 需要向量化的文本
-//
-// 输出：[]float64（语义向量）, error
-// 边界条件：
-//   - text 为空时返回错误
-//   - aiClient 不可用时返回错误
-// 异常行为：
-//   - Embedding 响应中 success=false 时返回错误
-//   - vector_json 解析失败时返回错误
-func (m *Manager) getEmbeddingVector(ctx context.Context, text string) ([]float64, error) {
-	if m.aiClient == nil {
-		return nil, fmt.Errorf("AI 客户端不可用，无法获取向量")
-	}
-
-	req := &pb.EmbeddingRequest{
-		Text: text,
-	}
-
-	resp, err := m.aiClient.Embedding(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("Embedding 调用失败: %w", err)
-	}
-
-	if !resp.Success {
-		return nil, fmt.Errorf("Embedding 返回错误: %s", resp.ErrorMessage)
-	}
-
-	// 解析 JSON 格式的向量字符串
-	vector, err := parseVectorFromJSON(resp.VectorJson)
-	if err != nil {
-		return nil, fmt.Errorf("解析向量 JSON 失败: %w", err)
-	}
-
-	if len(vector) == 0 {
-		return nil, fmt.Errorf("Embedding 返回空向量")
-	}
-
-	return vector, nil
-}
-
-// parseVectorFromJSON 解析 JSON 格式的 float64 向量字符串
-// 做什么：将 `"[0.123, 0.456, ...]"` 格式的 JSON 字符串解析为 []float64
-// 为什么这样做：Protobuf 不支持直接传输 float64 数组，使用 JSON 序列化传输
-// 输入：
-//   - jsonStr: JSON 格式的向量字符串
-//
-// 输出：[]float64, error
-// 边界条件：jsonStr 为空时返回空切片
-func parseVectorFromJSON(jsonStr string) ([]float64, error) {
-	if jsonStr == "" || jsonStr == "[]" {
-		return nil, fmt.Errorf("向量 JSON 为空")
-	}
-
-	// 使用 encoding/json 解析
-	var vector []float64
-	if err := json.Unmarshal([]byte(jsonStr), &vector); err != nil {
-		return nil, fmt.Errorf("向量 JSON 反序列化失败: %w", err)
-	}
-
-	return vector, nil
-}
-
 // RetrieveLongTermMemories 检索长期记忆（带语义检索与重排）
 // 做什么：根据用户意图查询文本，先通过 Embedding 转为向量进行 Qdrant 粗排检索，
 //         再通过 CrossEncoder 精排提升 Top-K 结果的排序质量
@@ -424,27 +360,27 @@ func parseVectorFromJSON(jsonStr string) ([]float64, error) {
 //   - ctx: 上下文
 //   - queryText: 查询文本（用户意图），用于 Embedding 向量化和 Rerank 重排
 //   - queryVector: 预计算的查询向量（如果 queryText 为空时使用此向量，或两者都为空则仅查询）
-//   - topK: 返回 Top-K 结果
 //
 // 输出：[]LongTermMemory（完整记忆记录）, error
 // 边界条件：
 //   - Qdrant 或 PG 不可用时降级为空返回
 //   - queryText 和 queryVector 都为空时仅返回最近记忆
 //   - Rerank 不可用时仅使用 Qdrant 粗排结果
-func (m *Manager) RetrieveLongTermMemories(ctx context.Context, queryText string, queryVector []float64, topK int) ([]repository.LongTermMemory, error) {
+func (m *Manager) RetrieveLongTermMemories(ctx context.Context, queryText string, queryVector []float64) ([]repository.LongTermMemory, error) {
 	if m.ltmQdrantRepo == nil || m.ltmPGRepo == nil {
 		logger.Warn(ctx, "长期记忆系统不可用，跳过记忆检索")
 		return nil, nil
 	}
 
+	topK := m.retrievalTopK
 	if topK <= 0 {
 		topK = 5
 	}
 
 	// 如果提供了 queryText，先通过 Embdedding 转为查询向量（覆盖外部传入的 queryVector）
 	finalQueryVector := queryVector
-	if queryText != "" && m.aiClient != nil {
-		embeddingVec, err := m.getEmbeddingVector(ctx, queryText)
+	if queryText != "" && m.inferenceSvc != nil {
+		embeddingVec, err := m.inferenceSvc.GetEmbeddingVector(ctx, queryText)
 		if err != nil {
 			logger.Warn(ctx, "获取查询向量的 Embedding 失败，使用外部传入向量（如有）", "error", err)
 		} else {
@@ -490,9 +426,15 @@ func (m *Manager) RetrieveLongTermMemories(ctx context.Context, queryText string
 		return nil, nil
 	}
 
-	// Rerank 精排：如果提供了 queryText，且 AI 客户端支持 Rerank，对结果进行重排
-	if queryText != "" && m.aiClient != nil && len(memories) > 1 {
-		rerankMemories, rerankErr := m.rerankMemories(ctx, queryText, memories, topK)
+	// Rerank 精排：如果提供了 queryText，且推理服务支持 Rerank，对结果进行重排
+	if queryText != "" && m.inferenceSvc != nil && len(memories) > 1 {
+		// 提取候选文档列表（使用记忆的 Summary 作为文档内容）
+		documents := make([]string, len(memories))
+		for i, mem := range memories {
+			documents[i] = mem.Summary
+		}
+
+		rerankResults, rerankErr := m.inferenceSvc.RerankDocuments(ctx, queryText, documents)
 		if rerankErr != nil {
 			// Rerank 失败时降级为粗排结果，截取 topK
 			logger.Warn(ctx, "Rerank 重排失败，使用 Qdrant 粗排结果", "error", rerankErr)
@@ -500,92 +442,18 @@ func (m *Manager) RetrieveLongTermMemories(ctx context.Context, queryText string
 				memories = memories[:topK]
 			}
 		} else {
-			memories = rerankMemories
+			// 根据重排结果重新排序 memories
+			rerankedMemories := make([]repository.LongTermMemory, 0, min(topK, len(rerankResults)))
+			for i := 0; i < min(topK, len(rerankResults)); i++ {
+				rerankedMemories = append(rerankedMemories, memories[rerankResults[i].Index])
+			}
+			memories = rerankedMemories
 		}
 	} else if len(memories) > topK {
 		// 没有 Rerank 时，截取前 topK 个
 		memories = memories[:topK]
 	}
 
-	logger.Info(ctx, "长期记忆检索完成", "hits", len(memories), "top_k", topK, "has_rerank", queryText != "" && m.aiClient != nil)
+	logger.Info(ctx, "长期记忆检索完成", "hits", len(memories), "top_k", topK, "has_rerank", queryText != "" && m.inferenceSvc != nil)
 	return memories, nil
-}
-
-// rerankMemories 使用 CrossEncoder 对候选记忆进行重排
-// 做什么：调用 Python AI 服务的 Rerank 方法，对 queryText 和候选记忆的 Summary 进行相关性打分，
-//         按分数降序排列后返回 Top-K 结果
-// 为什么这样做：Qdrant 的向量相似度（余弦/点积）是粗排，CrossEncoder 精排能显著提升结果质量
-// 输入：
-//   - ctx: 上下文
-//   - queryText: 查询文本（用户意图）
-//   - memories: 候选记忆列表
-//   - topK: 返回 Top-K 结果
-//
-// 输出：[]repository.LongTermMemory（按相关性降序排列）, error
-// 边界条件：
-//   - aiClient 为 nil 时返回原始列表
-//   - Rerank 失败时返回原始列表
-// 异常行为：
-//   - Rerank 响应中 success=false 时返回 error
-//   - scores 长度与 memories 长度不一致时返回 error
-func (m *Manager) rerankMemories(ctx context.Context, queryText string, memories []repository.LongTermMemory, topK int) ([]repository.LongTermMemory, error) {
-	if m.aiClient == nil {
-		return memories, nil
-	}
-
-	// 提取候选文档列表（使用记忆的 Summary 作为文档内容）
-	documents := make([]string, len(memories))
-	for i, mem := range memories {
-		documents[i] = mem.Summary
-	}
-
-	req := &pb.RerankRequest{
-		Query:     queryText,
-		Documents: documents,
-	}
-
-	resp, err := m.aiClient.Rerank(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("Rerank 调用失败: %w", err)
-	}
-
-	if !resp.Success {
-		return nil, fmt.Errorf("Rerank 返回错误: %s", resp.ErrorMessage)
-	}
-
-	if len(resp.Scores) != len(memories) {
-		return nil, fmt.Errorf("Rerank 返回分数数量不匹配: 期望 %d, 实际 %d", len(memories), len(resp.Scores))
-	}
-
-	// 按分数对 memories 进行降序排列
-	type scoredMemory struct {
-		memory repository.LongTermMemory
-		score  float64
-	}
-
-	scored := make([]scoredMemory, len(memories))
-	for i, mem := range memories {
-		scored[i] = scoredMemory{memory: mem, score: resp.Scores[i]}
-	}
-
-	// 使用 Go 1.21+ 的 slices 排序或简单冒泡排序
-	// 这里使用插入排序（简单且适合小规模数据）
-	for i := 1; i < len(scored); i++ {
-		key := scored[i]
-		j := i - 1
-		for j >= 0 && scored[j].score < key.score {
-			scored[j+1] = scored[j]
-			j--
-		}
-		scored[j+1] = key
-	}
-
-	// 提取排序后的记忆列表，截取 topK
-	result := make([]repository.LongTermMemory, 0, min(topK, len(scored)))
-	for i := 0; i < min(topK, len(scored)); i++ {
-		result = append(result, scored[i].memory)
-	}
-
-	logger.Info(ctx, "Rerank 重排完成", "原始数", len(memories), "返回数", len(result), "最高分", scored[0].score)
-	return result, nil
 }

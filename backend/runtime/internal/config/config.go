@@ -71,6 +71,12 @@ type Config struct {
 		// 示例: "D:/AI_Models/bge-reranker-v2-m3-model"
 		RerankPath string `yaml:"rerank_path"`
 	} `yaml:"model"`
+
+	// 检索配置
+	Retrieval struct {
+		// 向量检索返回的 Top-K 数量
+		TopK int `yaml:"top_k"`
+	} `yaml:"retrieval"`
 }
 
 // Load 加载配置
@@ -162,6 +168,11 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if rerankPath := getEnvString("RERANK_MODEL_PATH"); rerankPath != "" {
 		cfg.Model.RerankPath = rerankPath
+	}
+
+	// 检索配置
+	if topK := getEnvInt("RETRIEVAL_TOP_K"); topK != 0 {
+		cfg.Retrieval.TopK = topK
 	}
 }
 

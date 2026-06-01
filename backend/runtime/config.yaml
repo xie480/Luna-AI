@@ -51,3 +51,8 @@ model:
   # Rerank 模型路径（CrossEncoder 格式）
   # 示例: "D:/AI_Models/bge-reranker-v2-m3-model"
   rerank_path: ""
+
+# 检索配置
+retrieval:
+  # 向量检索返回的 Top-K 数量
+  top_k: 5
