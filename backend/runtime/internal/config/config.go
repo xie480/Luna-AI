@@ -61,6 +61,16 @@ type Config struct {
 		// Qdrant HTTP API 地址
 		Address string `yaml:"address"`
 	} `yaml:"qdrant"`
+
+	// Model 配置 - 用于 Embedding 和 Rerank 模型
+	Model struct {
+		// Embedding 模型路径（SentenceTransformer 格式）
+		// 示例: "D:/AI_Models/bge-base-zh-v1.5-model"
+		EmbeddingPath string `yaml:"embedding_path"`
+		// Rerank 模型路径（CrossEncoder 格式）
+		// 示例: "D:/AI_Models/bge-reranker-v2-m3-model"
+		RerankPath string `yaml:"rerank_path"`
+	} `yaml:"model"`
 }
 
 // Load 加载配置
@@ -144,6 +154,14 @@ func applyEnvOverrides(cfg *Config) {
 	// Qdrant 配置
 	if addr := getEnvString("QDRANT_ADDRESS"); addr != "" {
 		cfg.Qdrant.Address = addr
+	}
+
+	// Model 配置
+	if embeddingPath := getEnvString("EMBEDDING_MODEL_PATH"); embeddingPath != "" {
+		cfg.Model.EmbeddingPath = embeddingPath
+	}
+	if rerankPath := getEnvString("RERANK_MODEL_PATH"); rerankPath != "" {
+		cfg.Model.RerankPath = rerankPath
 	}
 }
 

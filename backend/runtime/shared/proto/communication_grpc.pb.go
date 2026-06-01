@@ -27,6 +27,8 @@ const (
 	CommunicationService_SummarizeContext_FullMethodName = "/communication.CommunicationService/SummarizeContext"
 	CommunicationService_SyncPresetConfig_FullMethodName = "/communication.CommunicationService/SyncPresetConfig"
 	CommunicationService_CompressHistory_FullMethodName  = "/communication.CommunicationService/CompressHistory"
+	CommunicationService_Embedding_FullMethodName        = "/communication.CommunicationService/Embedding"
+	CommunicationService_Rerank_FullMethodName           = "/communication.CommunicationService/Rerank"
 )
 
 // CommunicationServiceClient is the client API for CommunicationService service.
@@ -44,6 +46,14 @@ type CommunicationServiceClient interface {
 	SyncPresetConfig(ctx context.Context, in *SyncPresetConfigRequest, opts ...grpc.CallOption) (*SyncPresetConfigResponse, error)
 	// CompressHistory 方法，用于历史记录压缩
 	CompressHistory(ctx context.Context, in *CompressHistoryRequest, opts ...grpc.CallOption) (*CompressHistoryResponse, error)
+	// Embedding 方法，用于文本向量化
+	// 做什么：接收文本，返回对应的语义向量（稠密 Embedding）
+	// 为什么这样做：将自然语言文本转换为向量，用于 Qdrant 语义检索
+	Embedding(ctx context.Context, in *EmbeddingRequest, opts ...grpc.CallOption) (*EmbeddingResponse, error)
+	// Rerank 方法，用于候选文档重排打分
+	// 做什么：接收查询和候选文档列表，返回每个文档的相关性分数
+	// 为什么这样做：在向量检索后，通过 CrossEncoder 精排提升召回质量
+	Rerank(ctx context.Context, in *RerankRequest, opts ...grpc.CallOption) (*RerankResponse, error)
 }
 
 type communicationServiceClient struct {
@@ -113,6 +123,26 @@ func (c *communicationServiceClient) CompressHistory(ctx context.Context, in *Co
 	return out, nil
 }
 
+func (c *communicationServiceClient) Embedding(ctx context.Context, in *EmbeddingRequest, opts ...grpc.CallOption) (*EmbeddingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EmbeddingResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_Embedding_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *communicationServiceClient) Rerank(ctx context.Context, in *RerankRequest, opts ...grpc.CallOption) (*RerankResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RerankResponse)
+	err := c.cc.Invoke(ctx, CommunicationService_Rerank_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CommunicationServiceServer is the server API for CommunicationService service.
 // All implementations must embed UnimplementedCommunicationServiceServer
 // for forward compatibility.
@@ -128,6 +158,14 @@ type CommunicationServiceServer interface {
 	SyncPresetConfig(context.Context, *SyncPresetConfigRequest) (*SyncPresetConfigResponse, error)
 	// CompressHistory 方法，用于历史记录压缩
 	CompressHistory(context.Context, *CompressHistoryRequest) (*CompressHistoryResponse, error)
+	// Embedding 方法，用于文本向量化
+	// 做什么：接收文本，返回对应的语义向量（稠密 Embedding）
+	// 为什么这样做：将自然语言文本转换为向量，用于 Qdrant 语义检索
+	Embedding(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error)
+	// Rerank 方法，用于候选文档重排打分
+	// 做什么：接收查询和候选文档列表，返回每个文档的相关性分数
+	// 为什么这样做：在向量检索后，通过 CrossEncoder 精排提升召回质量
+	Rerank(context.Context, *RerankRequest) (*RerankResponse, error)
 	mustEmbedUnimplementedCommunicationServiceServer()
 }
 
@@ -152,6 +190,12 @@ func (UnimplementedCommunicationServiceServer) SyncPresetConfig(context.Context,
 }
 func (UnimplementedCommunicationServiceServer) CompressHistory(context.Context, *CompressHistoryRequest) (*CompressHistoryResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CompressHistory not implemented")
+}
+func (UnimplementedCommunicationServiceServer) Embedding(context.Context, *EmbeddingRequest) (*EmbeddingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Embedding not implemented")
+}
+func (UnimplementedCommunicationServiceServer) Rerank(context.Context, *RerankRequest) (*RerankResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Rerank not implemented")
 }
 func (UnimplementedCommunicationServiceServer) mustEmbedUnimplementedCommunicationServiceServer() {}
 func (UnimplementedCommunicationServiceServer) testEmbeddedByValue()                              {}
@@ -257,6 +301,42 @@ func _CommunicationService_CompressHistory_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CommunicationService_Embedding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmbeddingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).Embedding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_Embedding_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).Embedding(ctx, req.(*EmbeddingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CommunicationService_Rerank_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RerankRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CommunicationServiceServer).Rerank(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CommunicationService_Rerank_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CommunicationServiceServer).Rerank(ctx, req.(*RerankRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CommunicationService_ServiceDesc is the grpc.ServiceDesc for CommunicationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -279,6 +359,14 @@ var CommunicationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CompressHistory",
 			Handler:    _CommunicationService_CompressHistory_Handler,
+		},
+		{
+			MethodName: "Embedding",
+			Handler:    _CommunicationService_Embedding_Handler,
+		},
+		{
+			MethodName: "Rerank",
+			Handler:    _CommunicationService_Rerank_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

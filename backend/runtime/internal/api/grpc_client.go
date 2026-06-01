@@ -220,6 +220,66 @@ func (c *AIClient) CompressHistory(ctx context.Context, req *pb.CompressHistoryR
 	return resp, nil
 }
 
+// Embedding 发送文本向量化请求到 AI 服务
+// 做什么：调用 Python AI 服务的 Embedding 方法，将文本编码为语义向量
+// 为什么这样做：将自然语言文本转换为稠密向量，用于 Qdrant 语义检索
+// 输入输出：
+//   - 输入：EmbeddingRequest {text}
+//   - 输出：EmbeddingResponse {vector_json, success, error_message}
+//
+// 边界条件：
+//   - text 为空时返回 success=false 的响应
+//   - AI 服务不可用时返回错误
+// 异常行为：
+//   - gRPC 连接超时（5秒）
+//   - 响应中 success=false 时由调用方处理
+func (c *AIClient) Embedding(ctx context.Context, req *pb.EmbeddingRequest) (*pb.EmbeddingResponse, error) {
+	logger.Info(ctx, "发送 Embedding 请求到 AI 服务", "text_length", len(req.Text))
+
+	// 设置超时时间，向量化通常在毫秒级完成
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	resp, err := c.client.Embedding(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "Embedding 请求失败", "error", err)
+		return nil, fmt.Errorf("embedding 请求失败: %w", err)
+	}
+
+	logger.Info(ctx, "收到 Embedding 响应", "success", resp.Success, "error_message", resp.ErrorMessage)
+	return resp, nil
+}
+
+// Rerank 发送文档重排打分请求到 AI 服务
+// 做什么：调用 Python AI 服务的 Rerank 方法，计算查询与候选文档的相关性分数
+// 为什么这样做：在向量检索（粗排）之后，通过 CrossEncoder 精排提升召回质量
+// 输入输出：
+//   - 输入：RerankRequest {query, documents[]}
+//   - 输出：RerankResponse {scores[], success, error_message}
+//
+// 边界条件：
+//   - query 为空或 documents 为空时由 Python 端处理
+//   - AI 服务不可用时返回错误
+// 异常行为：
+//   - gRPC 连接超时（30秒，重排可能较慢）
+//   - 响应中 success=false 时由调用方处理
+func (c *AIClient) Rerank(ctx context.Context, req *pb.RerankRequest) (*pb.RerankResponse, error) {
+	logger.Info(ctx, "发送 Rerank 请求到 AI 服务", "query_length", len(req.Query), "doc_count", len(req.Documents))
+
+	// 设置超时时间，重排涉及模型推理，可能需要更长时间
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+
+	resp, err := c.client.Rerank(ctx, req)
+	if err != nil {
+		logger.Error(ctx, "Rerank 请求失败", "error", err)
+		return nil, fmt.Errorf("rerank 请求失败: %w", err)
+	}
+
+	logger.Info(ctx, "收到 Rerank 响应", "success", resp.Success, "score_count", len(resp.Scores))
+	return resp, nil
+}
+
 // SyncPresetConfig 发送预设配置同步请求到 AI 服务
 func (c *AIClient) SyncPresetConfig(ctx context.Context, req *pb.SyncPresetConfigRequest) (*pb.SyncPresetConfigResponse, error) {
 	logger.Info(ctx, "发送 SyncPresetConfig 请求到 AI 服务", "preset_id", req.PresetId)

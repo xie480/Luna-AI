@@ -1,32 +1,82 @@
 """
 Luna AI gRPC 通信服务实现
 
-做什么：实现 gRPC 通信服务，处理 Ping 健康检查和 ChatStream 流式对话请求。
-         流式对话支持多轮历史记录、TTFT 监控和全面的异常容错。
+做什么：实现 gRPC 通信服务，处理 Ping、ChatStream、SummarizeContext、CompressHistory、
+        Embedding 和 Rerank 请求。
+        其中 Embedding 使用 SentenceTransformer 进行文本向量化，
+        Rerank 使用 CrossEncoder 进行文档相关性重排打分。
 为什么这样做：作为 Go Runtime 与 Python AI Service 之间的通信桥梁，确保消息的可靠透传。
 输入输出：
     - Ping(): 健康检查，返回 Pong 响应
     - ChatStream(): 流式对话，返回 AsyncGenerator[ChatStreamResponse]
-    - CompressHistory(): 历史记录压缩，返回 CompressHistoryResponse
+    - Embedding(): 文本向量化，返回 EmbeddingResponse
+    - Rerank(): 文档重排打分，返回 RerankResponse
 边界条件：
     - ChatRequest.history 为空时表示首次对话
-    - 客户端断开连接时立即停止流式输出
+    - Embedding 和 Rerank 模型在服务启动时加载，不可用时有明确降级策略
 异常行为：
     - context.cancelled() 返回 True 时终止流
     - LLM 调用异常时返回结构化错误响应
 """
 
 import time
-from typing import AsyncGenerator
+import json
+from typing import TYPE_CHECKING, AsyncGenerator, Optional, List
 
 import grpc
-import json
+import numpy as np
+# 使用 TYPE_CHECKING 条件导入 sentence_transformers 的类型：
+# - 类型检查时：可以看到完整的 SentenceTransformer / CrossEncoder 类型定义
+# - 运行时：不会导入 sentence_transformers（重依赖，可能未安装）
+# - 实际运行中，Embedding/Rerank 方法内部已有模型为 None 的守卫检查
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer, CrossEncoder
+
 from app.api import communication_pb2
 from app.api import communication_pb2_grpc
 from app.logger import logger
 from app.llm.client import llm_client, compression_llm_client
 from app.llm.stream_parser import StreamParser
 from app.constants import Role
+
+# ============================================================
+# 全局 Embedding 和 Rerank 模型实例
+# 在服务启动时由 set_embedding_model() 和 set_rerank_model() 初始化
+# 为什么是全局变量：SentenceTransformer 和 CrossEncoder 实例是线程安全的，
+#   且模型加载开销较大（数百MB到数GB），必须在进程内复用。
+# 为什么不在 __init__ 中加载：因为 CommunicationServiceServicer 由 gRPC 框架
+#   在 add_CommunicationServiceServicer_to_server() 时创建，无法传递外部参数。
+# ============================================================
+_embedding_model: Optional["SentenceTransformer"] = None
+_rerank_model: Optional["CrossEncoder"] = None
+
+
+def set_embedding_model(model: "SentenceTransformer"):
+    """
+    设置全局 Embedding 模型实例
+
+    做什么：在服务启动前注入已加载的 SentenceTransformer 实例。
+    为什么这样做：避免 gRPC Servicer 无法接收构造函数参数的限制。
+    输入：model - 已加载的 SentenceTransformer 实例
+    边界条件：model 为 None 时后续 Embedding 调用将返回错误
+    """
+    global _embedding_model
+    _embedding_model = model
+    logger.info("全局 Embedding 模型已设置")
+
+
+def set_rerank_model(model: "CrossEncoder"):
+    """
+    设置全局 Rerank 模型实例
+
+    做什么：在服务启动前注入已加载的 CrossEncoder 实例。
+    为什么这样做：避免 gRPC Servicer 无法接收构造函数参数的限制。
+    输入：model - 已加载的 CrossEncoder 实例
+    边界条件：model 为 None 时后续 Rerank 调用将返回错误
+    """
+    global _rerank_model
+    _rerank_model = model
+    logger.info("全局 Rerank 模型已设置")
 
 
 class CommunicationServiceServicer(
@@ -80,7 +130,7 @@ class CommunicationServiceServicer(
         处理流式对话请求（支持多轮历史记录和系统提示词）
 
         做什么：接收 ChatRequest，提取 history 和 system_prompt，调用 LLM 客户端
-               进行流式对话，将每个文本块封装为 ChatStreamResponse 返回。
+                进行流式对话，将每个文本块封装为 ChatStreamResponse 返回。
         为什么这样做：作为对话入口，负责解析请求参数、监控 TTFT、处理客户端断开。
         输入输出：
             - 输入：ChatRequest {trace_id, message, history[], system_prompt}
@@ -436,6 +486,124 @@ class CommunicationServiceServicer(
         except Exception as e:
             logger.error(f"SyncPresetConfig 处理异常: {e}")
             return communication_pb2.SyncPresetConfigResponse(
+                success=False,
+                error_message=str(e)
+            )
+
+    async def Embedding(
+        self,
+        request: communication_pb2.EmbeddingRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.EmbeddingResponse:
+        """
+        处理文本向量化请求
+
+        做什么：接收文本，使用 SentenceTransformer 模型将其编码为稠密向量，
+                返回 JSON 序列化的 float64 数组。
+        为什么这样做：将自然语言文本转换为语义向量，用于 Qdrant 向量检索和语义相似度计算。
+        输入输出：
+            - 输入：EmbeddingRequest {text}
+            - 输出：EmbeddingResponse {vector_json, success, error_message}
+        边界条件：
+            - text 为空时返回 success=false
+            - Embedding 模型未加载时返回 success=false
+        异常行为：
+            - 向量化过程中的任何异常均被捕获，返回 success=false + 错误信息
+        """
+        text = (request.text or "").strip()
+        if not text:
+            return communication_pb2.EmbeddingResponse(
+                vector_json="[]",
+                success=False,
+                error_message="text is blank"
+            )
+
+        if _embedding_model is None:
+            logger.error("Embedding 模型未加载，无法处理向量化请求")
+            return communication_pb2.EmbeddingResponse(
+                vector_json="[]",
+                success=False,
+                error_message="Embedding model not loaded"
+            )
+
+        try:
+            # 使用 SentenceTransformer 编码文本
+            vec = _embedding_model.encode(text).tolist()
+            vector_json = json.dumps(vec, ensure_ascii=False)
+            logger.info(f"Embedding 向量化完成, text_length={len(text)}, vector_dim={len(vec)}")
+            return communication_pb2.EmbeddingResponse(
+                vector_json=vector_json,
+                success=True,
+                error_message=""
+            )
+        except Exception as e:
+            logger.exception("Embedding 向量化失败")
+            return communication_pb2.EmbeddingResponse(
+                vector_json="[]",
+                success=False,
+                error_message=str(e)
+            )
+
+    async def Rerank(
+        self,
+        request: communication_pb2.RerankRequest,
+        context: grpc.ServicerContext,
+    ) -> communication_pb2.RerankResponse:
+        """
+        处理文档重排打分请求
+
+        做什么：接收查询文本和候选文档列表，使用 CrossEncoder 模型计算每对 (query, doc)
+                的相关性分数。
+        为什么这样做：在 Qdrant 向量检索（粗排）之后，通过 CrossEncoder 精排提升召回质量。
+        输入输出：
+            - 输入：RerankRequest {query, documents[]}
+            - 输出：RerankResponse {scores[], success, error_message}
+        边界条件：
+            - query 为空时返回 success=false
+            - documents 为空时返回空 scores + success=true
+            - Rerank 模型未加载时返回 success=false
+        异常行为：
+            - predict 过程中的任何异常均被捕获，返回 success=false + 错误信息
+        """
+        query = (request.query or "").strip()
+        docs = list(request.documents)
+
+        if not query:
+            return communication_pb2.RerankResponse(
+                scores=[],
+                success=False,
+                error_message="query is blank"
+            )
+
+        if not docs:
+            return communication_pb2.RerankResponse(
+                scores=[],
+                success=True,
+                error_message=""
+            )
+
+        if _rerank_model is None:
+            logger.error("Rerank 模型未加载，无法处理重排请求")
+            return communication_pb2.RerankResponse(
+                scores=[],
+                success=False,
+                error_message="Rerank model not loaded"
+            )
+
+        try:
+            # 构造 (query, doc) 对并预测分数
+            pairs = [[query, d] for d in docs]
+            scores = _rerank_model.predict(pairs).tolist()
+            logger.info(f"Rerank 重排完成, query_length={len(query)}, doc_count={len(docs)}")
+            return communication_pb2.RerankResponse(
+                scores=scores,
+                success=True,
+                error_message=""
+            )
+        except Exception as e:
+            logger.exception("Rerank 重排失败")
+            return communication_pb2.RerankResponse(
+                scores=[],
                 success=False,
                 error_message=str(e)
             )

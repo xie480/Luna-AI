@@ -813,6 +813,259 @@ func (x *CompressHistoryResponse) GetSummary() string {
 	return ""
 }
 
+// Embedding 请求消息
+// 做什么：请求对文本进行向量化（Embedding），生成语义向量
+// 为什么这样做：将自然语言文本转换为稠密向量，用于语义检索与相似度计算
+// 输入：text（要向量化的文本内容）
+// 边界条件：text 为空时返回 success=false
+type EmbeddingRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 要向量化的文本内容
+	Text          string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EmbeddingRequest) Reset() {
+	*x = EmbeddingRequest{}
+	mi := &file_communication_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EmbeddingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EmbeddingRequest) ProtoMessage() {}
+
+func (x *EmbeddingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EmbeddingRequest.ProtoReflect.Descriptor instead.
+func (*EmbeddingRequest) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *EmbeddingRequest) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+// Embedding 响应消息
+// 输出：
+//   - vector_json: JSON 序列化的 float64 向量数组
+//   - success: 是否成功
+//   - error_message: 错误信息（成功时为空）
+type EmbeddingResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// JSON 序列化的 float64 向量数组，例如 "[0.123, 0.456, ...]"
+	VectorJson string `protobuf:"bytes,1,opt,name=vector_json,json=vectorJson,proto3" json:"vector_json,omitempty"`
+	// 是否成功
+	Success bool `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	// 错误信息（成功时为空字符串）
+	ErrorMessage  string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EmbeddingResponse) Reset() {
+	*x = EmbeddingResponse{}
+	mi := &file_communication_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EmbeddingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EmbeddingResponse) ProtoMessage() {}
+
+func (x *EmbeddingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EmbeddingResponse.ProtoReflect.Descriptor instead.
+func (*EmbeddingResponse) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *EmbeddingResponse) GetVectorJson() string {
+	if x != nil {
+		return x.VectorJson
+	}
+	return ""
+}
+
+func (x *EmbeddingResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *EmbeddingResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+// Rerank 请求消息
+// 做什么：对查询（query）与候选文档列表（documents）进行相关性重排打分
+// 为什么这样做：在检索到候选记忆片段后，通过 CrossEncoder 进行精确的相关性排序，
+//
+//	提升最终结果的质量
+//
+// 输入：
+//   - query: 查询文本（用户意图）
+//   - documents: 候选文档列表（待排序的记忆片段）
+//
+// 边界条件：
+//   - query 为空时返回 success=false
+//   - documents 为空时返回空 scores 列表
+type RerankRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 查询文本（用户意图）
+	Query string `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	// 候选文档列表（待排序的记忆片段）
+	Documents     []string `protobuf:"bytes,2,rep,name=documents,proto3" json:"documents,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RerankRequest) Reset() {
+	*x = RerankRequest{}
+	mi := &file_communication_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RerankRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RerankRequest) ProtoMessage() {}
+
+func (x *RerankRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RerankRequest.ProtoReflect.Descriptor instead.
+func (*RerankRequest) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RerankRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *RerankRequest) GetDocuments() []string {
+	if x != nil {
+		return x.Documents
+	}
+	return nil
+}
+
+// Rerank 响应消息
+// 输出：
+//   - scores: 每个 document 对应的相关性分数（与 documents 顺序一一对应）
+//   - success: 是否成功
+//   - error_message: 错误信息（成功时为空）
+type RerankResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 每个 document 对应的相关性分数，与输入 documents 顺序一一对应
+	Scores []float64 `protobuf:"fixed64,1,rep,packed,name=scores,proto3" json:"scores,omitempty"`
+	// 是否成功
+	Success bool `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	// 错误信息（成功时为空字符串）
+	ErrorMessage  string `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RerankResponse) Reset() {
+	*x = RerankResponse{}
+	mi := &file_communication_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RerankResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RerankResponse) ProtoMessage() {}
+
+func (x *RerankResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_communication_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RerankResponse.ProtoReflect.Descriptor instead.
+func (*RerankResponse) Descriptor() ([]byte, []int) {
+	return file_communication_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *RerankResponse) GetScores() []float64 {
+	if x != nil {
+		return x.Scores
+	}
+	return nil
+}
+
+func (x *RerankResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *RerankResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_communication_proto protoreflect.FileDescriptor
 
 const file_communication_proto_rawDesc = "" +
@@ -874,14 +1127,30 @@ const file_communication_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
 	"\x0fsession_context\x18\x02 \x01(\tR\x0esessionContext\"3\n" +
 	"\x17CompressHistoryResponse\x12\x18\n" +
-	"\asummary\x18\x01 \x01(\tR\asummary2\xd2\x03\n" +
+	"\asummary\x18\x01 \x01(\tR\asummary\"&\n" +
+	"\x10EmbeddingRequest\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\"s\n" +
+	"\x11EmbeddingResponse\x12\x1f\n" +
+	"\vvector_json\x18\x01 \x01(\tR\n" +
+	"vectorJson\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"C\n" +
+	"\rRerankRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1c\n" +
+	"\tdocuments\x18\x02 \x03(\tR\tdocuments\"g\n" +
+	"\x0eRerankResponse\x12\x16\n" +
+	"\x06scores\x18\x01 \x03(\x01R\x06scores\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess\x12#\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage2\xe9\x04\n" +
 	"\x14CommunicationService\x12?\n" +
 	"\x04Ping\x12\x1a.communication.PingRequest\x1a\x1b.communication.PongResponse\x12M\n" +
 	"\n" +
 	"ChatStream\x12\x1a.communication.ChatRequest\x1a!.communication.ChatStreamResponse0\x01\x12c\n" +
 	"\x10SummarizeContext\x12&.communication.SummarizeContextRequest\x1a'.communication.SummarizeContextResponse\x12c\n" +
 	"\x10SyncPresetConfig\x12&.communication.SyncPresetConfigRequest\x1a'.communication.SyncPresetConfigResponse\x12`\n" +
-	"\x0fCompressHistory\x12%.communication.CompressHistoryRequest\x1a&.communication.CompressHistoryResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
+	"\x0fCompressHistory\x12%.communication.CompressHistoryRequest\x1a&.communication.CompressHistoryResponse\x12N\n" +
+	"\tEmbedding\x12\x1f.communication.EmbeddingRequest\x1a .communication.EmbeddingResponse\x12E\n" +
+	"\x06Rerank\x12\x1c.communication.RerankRequest\x1a\x1d.communication.RerankResponseB&Z$luna-ai/backend/runtime/shared/protob\x06proto3"
 
 var (
 	file_communication_proto_rawDescOnce sync.Once
@@ -895,7 +1164,7 @@ func file_communication_proto_rawDescGZIP() []byte {
 	return file_communication_proto_rawDescData
 }
 
-var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_communication_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_communication_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: communication.PingRequest
 	(*PongResponse)(nil),             // 1: communication.PongResponse
@@ -909,6 +1178,10 @@ var file_communication_proto_goTypes = []any{
 	(*SyncPresetConfigResponse)(nil), // 9: communication.SyncPresetConfigResponse
 	(*CompressHistoryRequest)(nil),   // 10: communication.CompressHistoryRequest
 	(*CompressHistoryResponse)(nil),  // 11: communication.CompressHistoryResponse
+	(*EmbeddingRequest)(nil),         // 12: communication.EmbeddingRequest
+	(*EmbeddingResponse)(nil),        // 13: communication.EmbeddingResponse
+	(*RerankRequest)(nil),            // 14: communication.RerankRequest
+	(*RerankResponse)(nil),           // 15: communication.RerankResponse
 }
 var file_communication_proto_depIdxs = []int32{
 	2,  // 0: communication.ChatRequest.history:type_name -> communication.ChatMessage
@@ -920,13 +1193,17 @@ var file_communication_proto_depIdxs = []int32{
 	4,  // 6: communication.CommunicationService.SummarizeContext:input_type -> communication.SummarizeContextRequest
 	8,  // 7: communication.CommunicationService.SyncPresetConfig:input_type -> communication.SyncPresetConfigRequest
 	10, // 8: communication.CommunicationService.CompressHistory:input_type -> communication.CompressHistoryRequest
-	1,  // 9: communication.CommunicationService.Ping:output_type -> communication.PongResponse
-	6,  // 10: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
-	5,  // 11: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
-	9,  // 12: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
-	11, // 13: communication.CommunicationService.CompressHistory:output_type -> communication.CompressHistoryResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
+	12, // 9: communication.CommunicationService.Embedding:input_type -> communication.EmbeddingRequest
+	14, // 10: communication.CommunicationService.Rerank:input_type -> communication.RerankRequest
+	1,  // 11: communication.CommunicationService.Ping:output_type -> communication.PongResponse
+	6,  // 12: communication.CommunicationService.ChatStream:output_type -> communication.ChatStreamResponse
+	5,  // 13: communication.CommunicationService.SummarizeContext:output_type -> communication.SummarizeContextResponse
+	9,  // 14: communication.CommunicationService.SyncPresetConfig:output_type -> communication.SyncPresetConfigResponse
+	11, // 15: communication.CommunicationService.CompressHistory:output_type -> communication.CompressHistoryResponse
+	13, // 16: communication.CommunicationService.Embedding:output_type -> communication.EmbeddingResponse
+	15, // 17: communication.CommunicationService.Rerank:output_type -> communication.RerankResponse
+	11, // [11:18] is the sub-list for method output_type
+	4,  // [4:11] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -943,7 +1220,7 @@ func file_communication_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_communication_proto_rawDesc), len(file_communication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

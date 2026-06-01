@@ -41,3 +41,13 @@ postgres:
 qdrant:
   # Qdrant HTTP API 地址
   address: "http://localhost:6333"
+
+# Embedding 和 Rerank 模型配置
+# 用于文本向量化和文档相关性重排
+model:
+  # Embedding 模型路径（SentenceTransformer 格式）
+  # 示例: "D:/AI_Models/bge-base-zh-v1.5-model"
+  embedding_path: ""
+  # Rerank 模型路径（CrossEncoder 格式）
+  # 示例: "D:/AI_Models/bge-reranker-v2-m3-model"
+  rerank_path: ""
