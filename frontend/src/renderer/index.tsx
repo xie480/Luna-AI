@@ -95,8 +95,8 @@ const App: React.FC = () => {
     setSessionId('default-session');
 
     // 建立 WebSocket 连接
-    wsManager.connect(8080);
-    addSystemLog('应用启动，正在连接 Go Runtime...');
+    wsManager.connect(8081);
+    addSystemLog('应用启动，正在连接 Python AI Service...');
 
     // 清理函数：断开 WebSocket 连接
     return () => {

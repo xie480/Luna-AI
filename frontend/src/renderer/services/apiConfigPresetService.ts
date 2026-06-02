@@ -15,8 +15,8 @@ export interface ApiConfigPreset {
   medium_model_config: ModelConfig;
   small_model_config: ModelConfig;
 }
+const API_BASE_URL = 'http://localhost:8081/api/v1/config/presets';
 
-const API_BASE_URL = 'http://localhost:8080/api/v1/config/presets';
 
 export const apiConfigPresetService = {
   async getPresets(): Promise<ApiConfigPreset[]> {
@@ -76,7 +76,7 @@ export const apiConfigPresetService = {
   },
 
   async fetchModels(baseUrl: string, apiKey: string): Promise<{ id: string; name: string }[]> {
-    const response = await fetch('http://localhost:8080/api/v1/models/fetch', {
+    const response = await fetch('http://localhost:8081/api/v1/models/fetch', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

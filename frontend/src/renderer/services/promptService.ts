@@ -6,8 +6,8 @@
  */
 import { PromptTemplate, PromptVersion } from '../types/prompt';
 import { ResponseModel } from '../../shared/enum';
+const API_BASE = 'http://127.0.0.1:8081/api/v1/prompts';
 
-const API_BASE = 'http://127.0.0.1:8080/api/v1/prompts';
 
 /** 后端端点可用性缓存：null=未探测, true=可用, false=不可用 */
 let _isPromptsReady: boolean | null = null;

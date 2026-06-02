@@ -46,7 +46,7 @@ class WSManager {
   private reconnectAttempts: number = 0;
   private maxReconnectDelay: number = 10000; // 最大重连延迟 10 秒
   private baseReconnectDelay: number = 1000; // 基础重连延迟 1 秒
-  private port: number = 8080; // Go Runtime 默认端口
+  private port: number = 8081; // Python AI Service 默认端口
   private isManualDisconnect: boolean = false; // 标记是否为主动断开
 
   // Phase 5: 记录当前正在交互的用户消息，用于气泡渲染完成后插入近期记忆
@@ -89,9 +89,9 @@ class WSManager {
 
   /**
    * 建立 WebSocket 连接
-   * @param port Go Runtime 服务端口
+   * @param port Python AI Service 服务端口
    */
-  public connect(port: number = 8080): void {
+  public connect(port: number = 8081): void {
     this.port = port;
     // 先标记为主动断开，防止 cleanup() 触发 onclose 重连
     this.isManualDisconnect = true;

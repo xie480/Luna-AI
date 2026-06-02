@@ -195,8 +195,8 @@ async def lifespan(app: FastAPI):
         app.state.model_router = model_router
 
     # 11. 初始化 WebSocket 服务
-    global ws_server
-    ws_server = WSServer(
+    import app.api.ws_server
+    app.api.ws_server.ws_server = WSServer(
         redis_repo=redis_repo,
         pg_repo=pg_repo,
         prompt_mgr=prompt_manager,
@@ -257,6 +257,7 @@ app = FastAPI(title="Luna AI Service", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

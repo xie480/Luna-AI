@@ -1,7 +1,7 @@
 import { TelemetrySpan, AuditLogEntry, MetricsDataPoint } from '../stores/telemetryStore';
 import { useSystemStore } from '../stores/systemStore';
 
-const TELEMETRY_BASE = 'http://127.0.0.1:8080/api/v1/telemetry';
+const TELEMETRY_BASE = 'http://127.0.0.1:8081/api/v1/telemetry';
 
 /**
  * 查询链路 Spans（支持分页和按 TraceID 筛选）

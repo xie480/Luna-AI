@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # ============================================================
 
     # HTTP/FastAPI 服务端口
-    ai_service_port: int = 8000
+    ai_service_port: int = 8081
     # gRPC 服务端口
     grpc_port: int = 50051
 
