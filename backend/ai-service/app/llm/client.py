@@ -161,7 +161,7 @@ class CompressionLLMClient:
         """
         重新加载配置并重新初始化客户端
         """
-        from app.config import global_config_container
+        from app.config.settings import global_config_container
         config = global_config_container.get_model_config("small")
         api_key = config.get("api_key") or "dummy"
         base_url = config.get("base_url") or "https://api.openai.com/v1"
@@ -180,7 +180,7 @@ class CompressionLLMClient:
     )
     async def summarize(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         logger.info(f"正在调用压缩模型 API: {self.model_name}")
-        from app.config import global_config_container
+        from app.config.settings import global_config_container
         config = global_config_container.get_model_config("small")
         max_tokens = config.get("max_tokens")
         temperature = config.get("temperature", 0.7)
@@ -218,7 +218,7 @@ class LLMClient:
         重新加载配置并重新初始化客户端
         """
         logger.info("LLM Client 正在重新加载配置...")
-        from app.config import global_config_container
+        from app.config.settings import global_config_container
         # 默认使用中模型进行日常对话
         config = global_config_container.get_model_config("medium")
         api_key = config.get("api_key") or "dummy"
@@ -254,7 +254,7 @@ class LLMClient:
                     }
                 ]
         
-        from app.config import global_config_container
+        from app.config.settings import global_config_container
         config = global_config_container.get_model_config("medium")
         max_tokens = config.get("max_tokens")
         temperature = config.get("temperature", 0.7)
@@ -291,7 +291,7 @@ class LLMClient:
         """
         logger.info(f"正在调用 LLM API (Structured Outputs), model: {model}")
         
-        from app.config import global_config_container
+        from app.config.settings import global_config_container
         config = global_config_container.get_model_config("medium")
         temperature = config.get("temperature", 0.1) # 结构化输出通常需要较低的温度
 
@@ -509,7 +509,7 @@ class LLMClient:
         """
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
-            from app.config import global_config_container
+            from app.config.settings import global_config_container
             config = global_config_container.get_model_config("medium")
             max_context_tokens = config.get("max_context_tokens", 128000)
             

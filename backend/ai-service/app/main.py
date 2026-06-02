@@ -17,7 +17,7 @@ from app.api import communication_pb2_grpc
 from app.api.grpc_service import CommunicationServiceServicer, set_embedding_model, set_rerank_model
 from app.api.health import router as health_router
 from app.api.interceptor import TelemetryInterceptor
-from app.config import settings
+from app.config.settings import settings
 from app.logger import logger
 
 # ============================================================

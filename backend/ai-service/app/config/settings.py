@@ -15,6 +15,7 @@ Luna AI 全局配置模块
 """
 
 from pathlib import Path
+from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -49,9 +50,31 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ============================================================
-    # LLM 接入配置 (已废弃，由 Go 端通过 gRPC 动态推送预设)
+    # AI 服务配置
     # ============================================================
-    # 彻底移除对 .env 中 LLM 配置的依赖
+    ai_service_address: str = "localhost:50051"
+
+    # ============================================================
+    # Redis 配置
+    # ============================================================
+    redis_host: str = "localhost"
+    redis_port: int = 6379
+    redis_password: str = ""
+    redis_db: int = 0
+
+    # ============================================================
+    # PostgreSQL 配置
+    # ============================================================
+    db_host: str = "localhost"
+    db_port: int = 5432
+    db_user: str = "postgres"
+    db_password: str = "postgres"
+    db_name: str = "luna"
+
+    # ============================================================
+    # Qdrant 配置
+    # ============================================================
+    qdrant_address: str = "localhost:6333"
 
     # ============================================================
     # 上下文管理配置
@@ -83,6 +106,11 @@ class Settings(BaseSettings):
     rerank_model_path: str = ""
 
     # ============================================================
+    # 检索配置
+    # ============================================================
+    retrieval_top_k: int = 5
+
+    # ============================================================
     # Pydantic Settings 配置
     # ============================================================
 
@@ -92,13 +120,21 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @property
+    def redis_addr(self) -> str:
+        """返回 Redis 连接地址字符串"""
+        return f"{self.redis_host}:{self.redis_port}"
+
+    @property
+    def postgres_conn_str(self) -> str:
+        """返回 PostgreSQL 连接字符串"""
+        return f"postgresql+asyncpg://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+
 
 # 全局单例
 settings = Settings()
 
 import asyncio
-from typing import Any
-
 
 class GlobalConfigContainer:
     """

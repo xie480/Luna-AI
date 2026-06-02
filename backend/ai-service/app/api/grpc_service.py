@@ -453,7 +453,7 @@ class CommunicationServiceServicer(
         logger.info(f"收到 SyncPresetConfig 请求, preset_id: {request.preset_id}, schema_version: {request.schema_version}")
 
         try:
-            from app.config import global_config_container
+            from app.config.settings import global_config_container
 
             def proto_to_dict(model_config):
                 return {

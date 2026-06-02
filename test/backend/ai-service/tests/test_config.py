@@ -1,6 +1,6 @@
 import os
 
-from app.config import Settings
+from app.config.settings import Settings
 
 
 def test_config_load() -> None:
