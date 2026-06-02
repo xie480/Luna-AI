@@ -42,6 +42,7 @@ import {
 class WSManager {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempts: number = 0;
   private maxReconnectDelay: number = 10000; // 最大重连延迟 10 秒
   private baseReconnectDelay: number = 1000; // 基础重连延迟 1 秒
@@ -119,6 +120,9 @@ class WSManager {
       useSystemStore.getState().addSystemLog('WebSocket 已连接');
       this.reconnectAttempts = 0;
 
+      // 启动心跳检测
+      this.startPing();
+
       // 连接成功后，请求同步初始状态
       this.send({
         type: WS_MSG_TYPE.CMD_SYNC_INIT_STATE,
@@ -176,6 +180,9 @@ class WSManager {
         systemStore.addSystemLog(
           `收到 PONG: trace_id=${msg.trace_id}, source=${pongPayload.source}`
         );
+        if (pongPayload.source === 'python-ai-service') {
+          systemStore.setAiConnectionStatus('connected');
+        }
         break;
       }
 
@@ -185,6 +192,9 @@ class WSManager {
         systemStore.addSystemLog(
           `收到 ERROR: trace_id=${msg.trace_id}, code=${errorPayload.code}, message=${errorPayload.message}`
         );
+        if (errorPayload.code === 5000 && errorPayload.message === 'AI service unavailable') {
+          systemStore.setAiConnectionStatus('disconnected');
+        }
         break;
       }
 
@@ -502,6 +512,32 @@ class WSManager {
   }
 
   /**
+   * 启动心跳检测
+   */
+  private startPing(): void {
+    this.stopPing();
+    this.pingTimer = setInterval(() => {
+      if (this.isConnected()) {
+        const aiStatus = useSystemStore.getState().aiConnectionStatus;
+        // 如果 AI 服务未连接，则发送 Ping 进行探测
+        if (aiStatus !== 'connected') {
+          this.sendPing();
+        }
+      }
+    }, 5000); // 每 5 秒发送一次 Ping
+  }
+
+  /**
+   * 停止心跳检测
+   */
+  private stopPing(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+  }
+
+  /**
    * 安排重连任务
    * 使用指数退避策略
    */
@@ -531,6 +567,7 @@ class WSManager {
    * 注意：先移除事件处理器再关闭连接，防止 onclose 触发重连
    */
   private cleanup(): void {
+    this.stopPing();
     if (this.ws) {
       // 先移除所有事件处理器，防止 onclose 触发 scheduleReconnect
       this.ws.onopen = null;

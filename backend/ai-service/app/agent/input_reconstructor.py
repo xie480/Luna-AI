@@ -53,7 +53,7 @@ class InputReconstructorAgent:
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}],
                     response_format=InputReconstructionOutput,
-                    timeout=5.0 # 严格的超时控制
+                    timeout=15.0 # 放宽超时控制，因为结构化输出可能较慢
                 )
                 
                 # 校验 trace_id 一致性
@@ -85,7 +85,7 @@ class InputReconstructorAgent:
                 "unresolved_pronouns": []
             },
             intent_routing={
-                "primary_intent": PrimaryIntent.CHAT,
+                "primary_intent": PrimaryIntent.GREETING,
                 "category": IntentCategory.CHAT,
                 "dag_route_hint": DagRouteHint.FAST_CHAT,
                 "required_retrieval_types": []

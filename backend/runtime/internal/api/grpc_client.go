@@ -254,7 +254,7 @@ func (c *AIClient) Embedding(ctx context.Context, req *pb.EmbeddingRequest) (*pb
 func (c *AIClient) InputReconstruction(ctx context.Context, req *pb.InputReconstructionRequest) (*pb.InputReconstructionResponse, error) {
 	logger.Info(ctx, "发送 InputReconstruction 请求到 AI 服务", "trace_id", req.TraceId)
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	resp, err := c.client.InputReconstruction(ctx, req)

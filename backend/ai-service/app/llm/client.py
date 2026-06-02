@@ -271,6 +271,54 @@ class LLMClient:
 
         return await self.client.chat.completions.create(**call_kwargs)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError, asyncio.TimeoutError)),
+        reraise=True,
+        before_sleep=before_sleep_log(logger, 20),
+    )
+    async def generate_structured(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        response_format: type[BaseModel],
+        timeout: float = 15.0,
+        **kwargs: Any
+    ) -> BaseModel:
+        """
+        调用大模型并强制返回结构化 JSON 数据
+        """
+        logger.info(f"正在调用 LLM API (Structured Outputs), model: {model}")
+        
+        from app.config import global_config_container
+        config = global_config_container.get_model_config("medium")
+        temperature = config.get("temperature", 0.1) # 结构化输出通常需要较低的温度
+
+        call_kwargs = {
+            "model": model,
+            "messages": messages,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_format.__name__,
+                    "schema": response_format.model_json_schema(),
+                    "strict": True
+                }
+            },
+            "temperature": temperature,
+            "timeout": timeout,
+            **kwargs
+        }
+
+        response = await self.client.chat.completions.create(**call_kwargs)
+        content = response.choices[0].message.content
+        
+        if not content:
+            raise ValueError("LLM 返回了空内容")
+            
+        return response_format.model_validate_json(content)
+
     async def stream_chat(
         self,
         prompt: str,

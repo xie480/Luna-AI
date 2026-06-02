@@ -43,6 +43,8 @@ export interface FrontendErrorEntry {
 interface SystemState {
   // WebSocket 连接状态
   connectionStatus: ConnectionStatus;
+  // AI 服务连接状态
+  aiConnectionStatus: ConnectionStatus;
   // 左侧边栏是否展开
   isLeftSidebarOpen: boolean;
   // 模态窗口是否打开
@@ -72,6 +74,7 @@ interface SystemState {
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
+  setAiConnectionStatus: (status: ConnectionStatus) => void;
   toggleLeftSidebar: () => void;
   openLeftSidebar: () => void;
   closeLeftSidebar: () => void;
@@ -114,6 +117,7 @@ function loadClothingConfig(): Record<string, boolean> {
  */
 export const useSystemStore = create<SystemState>((set) => ({
   connectionStatus: 'disconnected',
+  aiConnectionStatus: 'disconnected',
   isLeftSidebarOpen: false,
   isModalOpen: false,
   activeModalPanel: null,
@@ -131,6 +135,9 @@ export const useSystemStore = create<SystemState>((set) => ({
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
+
+  // 设置 AI 服务连接状态
+  setAiConnectionStatus: (status) => set({ aiConnectionStatus: status }),
 
   // 切换左侧边栏展开状态
   toggleLeftSidebar: () => set((state) => ({ isLeftSidebarOpen: !state.isLeftSidebarOpen })),

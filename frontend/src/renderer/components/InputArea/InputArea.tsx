@@ -32,6 +32,7 @@ export const InputArea: React.FC = () => {
   const measureRef = useRef<HTMLDivElement>(null);
   
   const connectionStatus = useSystemStore((state) => state.connectionStatus);
+  const aiConnectionStatus = useSystemStore((state) => state.aiConnectionStatus);
   const addSystemLog = useSystemStore.getState().addSystemLog;
 
   // 单行文本高度（像素）
@@ -41,13 +42,13 @@ export const InputArea: React.FC = () => {
   // 最大高度（三行 + padding）
   const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES + 24;
 
-  // 检查是否正在等待响应（有 sending 或 streaming 状态的消息）
+  // 检查是否正在等待响应（有 sending 或 streaming 状态的消息，或者 WebSocket 未连接，或者 AI 服务未连接）
   const isWaiting = useSessionStore((state) => {
     const sessionId = state.currentSessionId;
     if (!sessionId) return false;
     const msgs = state.messages[sessionId] || [];
     return msgs.some((m) => m.status === 'sending' || m.status === 'streaming');
-  });
+  }) || connectionStatus !== 'connected' || aiConnectionStatus !== 'connected';
 
   /**
    * 自适应高度调整
@@ -184,7 +185,7 @@ export const InputArea: React.FC = () => {
           <div className={`cyber-loader ${isWaiting ? 'active' : ''}`}>
             <div className="cyber-text">
               <span className="cyber-dot"></span>
-              PROCESSING
+              {connectionStatus !== 'connected' || aiConnectionStatus !== 'connected' ? 'CONNECTING' : 'PROCESSING'}
               <span className="cyber-dot"></span>
             </div>
           </div>
@@ -195,8 +196,8 @@ export const InputArea: React.FC = () => {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={connectionStatus === 'connected' ? '' : '等待连接...'}
-            disabled={connectionStatus !== 'connected' || isWaiting}
+            placeholder={connectionStatus === 'connected' && aiConnectionStatus === 'connected' ? '' : ''}
+            disabled={connectionStatus !== 'connected' || aiConnectionStatus !== 'connected' || isWaiting}
             className={`quiet-textarea ${isWaiting ? 'hidden' : ''}`}
             rows={1}
           />
@@ -232,7 +233,7 @@ export const InputArea: React.FC = () => {
                 <button
                   className="fullscreen-action-btn send-btn"
                   onClick={handleSendMessage}
-                  disabled={!fullscreenText.trim() || connectionStatus !== 'connected'}
+                  disabled={!fullscreenText.trim() || connectionStatus !== 'connected' || aiConnectionStatus !== 'connected'}
                   title="发送消息"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
