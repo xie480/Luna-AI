@@ -92,30 +92,39 @@ class TelemetryStreamClientInterceptor(grpc.aio.UnaryStreamClientInterceptor):
         )
 
         start_time = time.time()
-        try:
-            response_iterator = await continuation(new_details, request)
+        
+        # 获取原始的响应迭代器
+        response_iterator = await continuation(new_details, request)
+        
+        # 定义一个包装生成器，用于追踪流的完整生命周期
+        async def _wrap_iterator(iterator):
             status = "OK"
-        except Exception as e:
-            status = "ERROR"
-            raise e
-        finally:
-            duration_ms = int((time.time() - start_time) * 1000)
-            from app.telemetry.worker import get_worker
-            worker = get_worker()
-            if worker:
-                worker.record_span_async({
-                    "trace_id": trace_id,
-                    "span_id": span_id,
-                    "name": f"{client_call_details.method}_stream_init",
-                    "service": "python_ai_service",
-                    "start_time": datetime.fromtimestamp(start_time),
-                    "end_time": datetime.now(),
-                    "duration_ms": duration_ms,
-                    "status": status,
-                    "attributes": "{}"
-                })
+            try:
+                async for response in iterator:
+                    yield response
+            except Exception as e:
+                status = "ERROR"
+                raise e
+            finally:
+                # 在流真正结束（或异常中断）时记录 Span
+                duration_ms = int((time.time() - start_time) * 1000)
+                from app.telemetry.worker import get_worker
+                worker = get_worker()
+                if worker:
+                    worker.record_span_async({
+                        "trace_id": trace_id,
+                        "span_id": span_id,
+                        "name": f"{client_call_details.method}_stream",
+                        "service": "python_ai_service",
+                        "start_time": datetime.fromtimestamp(start_time),
+                        "end_time": datetime.now(),
+                        "duration_ms": duration_ms,
+                        "status": status,
+                        "attributes": "{}"
+                    })
 
-        return response_iterator
+        # 返回包装后的生成器
+        return _wrap_iterator(response_iterator)
 
 
 class AIClient:

@@ -149,8 +149,9 @@ async def lifespan(app: FastAPI):
     prompt_manager = None
     if pg_client:
         prompt_repo = PromptPGRepo(pg_client)
-        # TODO: 实现 PromptCache
-        prompt_manager = PromptManager(prompt_repo, None)
+        from app.prompt.cache import CacheManager
+        prompt_cache = CacheManager(redis_client, prompt_repo)
+        prompt_manager = PromptManager(prompt_repo, prompt_cache)
 
     # 6. 初始化基础设施仓库
     redis_repo = None
