@@ -145,8 +145,18 @@ async def get_metrics(
     req_trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     
     try:
-        # 简化实现：返回空列表
-        points = []
+        from app.telemetry.metrics import get_metrics_buffer
+        buffer = get_metrics_buffer()
+        if not buffer:
+            from app.types.errors import ErrorCode
+            return create_error_response(ErrorCode.SYSTEM_ERROR, "Metrics buffer not initialized", req_trace_id)
+            
+        # 默认返回最近 60 个点 (1小时)
+        n = 60
+        if range == "24h":
+            n = 1440
+            
+        points = buffer.get_recent(n)
         
         return create_success_response(points, req_trace_id)
     except Exception as e:

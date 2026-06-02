@@ -173,8 +173,11 @@ async def lifespan(app: FastAPI):
         qdrant_client = QdrantClientWrapper(settings.qdrant_address)
         ltm_qdrant_repo = LongTermMemoryQdrantRepo(qdrant_client)
 
-    # 8. 初始化推理服务 (这里简化，实际应实现 InferenceService 接口)
+    # 8. 初始化推理服务
+    from app.inference.service import InferenceService
     inference_svc = None
+    if ai_client:
+        inference_svc = InferenceService(ai_client)
 
     # 9. 初始化长期记忆管理器并执行启动时兜底检测
     memory_manager = None
@@ -203,7 +206,12 @@ async def lifespan(app: FastAPI):
     app.state.memory_manager = memory_manager
     
     if pg_client:
-        app.state.config_preset_repo = ConfigPresetPGRepo(pg_client)
+        preset_repo = ConfigPresetPGRepo(pg_client)
+        app.state.config_preset_repo = preset_repo
+        
+        from app.router.model_router import ModelRouter
+        model_router = ModelRouter(preset_repo)
+        app.state.model_router = model_router
 
     # 11. 初始化 WebSocket 服务
     global ws_server
@@ -226,7 +234,12 @@ async def lifespan(app: FastAPI):
     # 13. 启动 gRPC 服务
     grpc_task = asyncio.create_task(serve_grpc())
 
-    # 14. 启动会话流转定时检测
+    # 14. 启动监控指标收集器
+    from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector
+    init_metrics()
+    await start_metrics_collector()
+
+    # 15. 启动会话流转定时检测
     rollover_task = None
     if memory_manager:
         async def _rollover_loop():
@@ -250,6 +263,8 @@ async def lifespan(app: FastAPI):
         rollover_task.cancel()
         
     grpc_task.cancel()
+    
+    await stop_metrics_collector()
     
     worker = get_worker()
     if worker:
