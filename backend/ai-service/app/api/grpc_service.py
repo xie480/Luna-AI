@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from app.api import communication_pb2, communication_pb2_grpc
-from app.constants import Role
+from app.types.constants import Role
 from app.llm.client import compression_llm_client, llm_client
 from app.llm.stream_parser import StreamParser
 from app.logger import logger

@@ -56,3 +56,9 @@ data/
 proxy.py
 
 backend/runtime/cmd/migrate_prompts/
+
+# Node.js (Frontend)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+frontend/out/

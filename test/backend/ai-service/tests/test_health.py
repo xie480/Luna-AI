@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.constants import ErrorCode
+from app.types.errors import ErrorCode
 from app.main import app
 
 client = TestClient(app)

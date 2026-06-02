@@ -34,7 +34,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.constants import Role
+from app.types.constants import Role
 from app.llm.context_manager import (
     format_messages_for_api,
     should_flush_buffer,

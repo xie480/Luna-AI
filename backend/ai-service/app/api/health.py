@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
 
-from app.constants import ResponseModel, create_success_response
+from app.types.errors import ResponseModel, create_success_response
 
 router = APIRouter()
 
