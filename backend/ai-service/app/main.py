@@ -11,6 +11,10 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+# 强制 HuggingFace 离线模式，防止加载本地模型时因网络问题卡死
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["HF_DATASETS_OFFLINE"] = "1"
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,14 +22,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers.api_config_preset import router as config_preset_router
 from app.api.routers.prompt import router as prompt_router
 from app.api.routers.telemetry import router as telemetry_router
-from app.api.ws_server import router as ws_router, ws_server, WSServer
+from app.api.http_api import router as http_router
+from app.api.sse import router as sse_router
 from app.config.crypto import CryptoService
 from app.config.event_bus import event_bus
 from app.config.settings import settings
+from app.logger import logger, setup_logger
+
+# ============================================================
+# 在应用启动的最早期初始化日志系统
+# 必须在 Uvicorn 启动和大量业务模块加载前执行，以确保接管标准 logging
+# ============================================================
+setup_logger(level=settings.log_level)
+
 from app.infrastructure.postgres import PostgresClient
 from app.infrastructure.qdrant import QdrantClientWrapper
 from app.infrastructure.redis import RedisClient
-from app.logger import logger
 from app.memory.manager import Manager as MemoryManager
 from app.prompt.manager import Manager as PromptManager
 from app.repository.chat_history_pg import ChatHistoryPGRepo
@@ -62,7 +74,7 @@ def load_embedding_model() -> object | None:
 
     try:
         logger.info(f"正在加载 Embedding 模型: {EMBEDDING_MODEL_PATH}")
-        model = SentenceTransformer(EMBEDDING_MODEL_PATH)
+        model = SentenceTransformer(EMBEDDING_MODEL_PATH, local_files_only=True, device="cpu")
         logger.info("Embedding 模型加载完成")
         return model
     except Exception as e:
@@ -88,7 +100,7 @@ def load_rerank_model() -> object | None:
 
     try:
         logger.info(f"正在加载 Rerank 模型: {RERANK_MODEL_PATH}")
-        model = CrossEncoder(RERANK_MODEL_PATH, max_length=1024, trust_remote_code=True)
+        model = CrossEncoder(RERANK_MODEL_PATH, max_length=1024, trust_remote_code=True, local_files_only=True, device="cpu")
         logger.info("Rerank 模型加载完成")
         return model
     except Exception as e:
@@ -193,20 +205,24 @@ async def lifespan(app: FastAPI):
         from app.router.model_router import ModelRouter
         model_router = ModelRouter(preset_repo)
         app.state.model_router = model_router
+# 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
+app.state.pg_repo = pg_repo
+app.state.redis_repo = redis_repo
 
-    # 11. 初始化 WebSocket 服务
-    import app.api.ws_server
-    app.api.ws_server.ws_server = WSServer(
-        redis_repo=redis_repo,
-        pg_repo=pg_repo,
-        prompt_mgr=prompt_manager,
-        memory_manager=memory_manager,
-    )
 
     # 12. 加载 Embedding 和 Rerank 模型
     global _embedding_model, _rerank_model
-    _embedding_model = load_embedding_model()
-    _rerank_model = load_rerank_model()
+    _embedding_model = None
+    _rerank_model = None
+
+    def _load_models_bg():
+        global _embedding_model, _rerank_model
+        _embedding_model = load_embedding_model()
+        _rerank_model = load_rerank_model()
+
+    # 在后台线程加载模型，避免阻塞服务器启动
+    loop = asyncio.get_running_loop()
+    loop.run_in_executor(None, _load_models_bg)
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector
@@ -253,6 +269,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Luna AI Service", lifespan=lifespan)
 
+from fastapi import Request
+from app.logger import trace_id_var
+from app.utils.snowflake import generate_string_id
+
+@app.middleware("http")
+async def trace_id_middleware(request: Request, call_next):
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    token = trace_id_var.set(trace_id)
+    try:
+        response = await call_next(request)
+        response.headers["X-Trace-ID"] = trace_id
+        return response
+    finally:
+        trace_id_var.reset(token)
+
 # 允许所有跨域请求，开发阶段方便调试
 app.add_middleware(
     CORSMiddleware,
@@ -267,7 +298,8 @@ app.add_middleware(
 app.include_router(config_preset_router)
 app.include_router(prompt_router)
 app.include_router(telemetry_router)
-app.include_router(ws_router)
+app.include_router(http_router)
+app.include_router(sse_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router
@@ -275,10 +307,23 @@ app.include_router(health_router)
 
 
 if __name__ == "__main__":
+    # 禁用 Uvicorn 的默认日志配置，让我们的 InterceptHandler 完全接管
+    log_config = uvicorn.config.LOGGING_CONFIG
+    
+    # 移除 Uvicorn 默认 handler 中不兼容的参数 (如 stream/strm)
+    for handler_name in ["default", "access"]:
+        if handler_name in log_config["handlers"]:
+            for key in ["stream", "strm"]:
+                if key in log_config["handlers"][handler_name]:
+                    del log_config["handlers"][handler_name][key]
+        
+    log_config["handlers"]["default"]["class"] = "app.logger.InterceptHandler"
+    log_config["handlers"]["access"]["class"] = "app.logger.InterceptHandler"
+
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=settings.ai_service_port,
         reload=True,
-        log_level=settings.log_level.lower()
+        log_config=log_config
     )

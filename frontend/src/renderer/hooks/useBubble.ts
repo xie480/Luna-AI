@@ -10,7 +10,7 @@
  * - 修复：气泡必须严格按照渲染顺序依次消失，确保消失顺序与出现顺序严格一致
  *
  * Phase 5 增强：当所有气泡渲染并消失完成后，触发 luna:all-bubbles-complete 事件
- * 用于通知外部模块（如 wsManager）可以安全地插入近期记忆，防止内容被截断
+ * 用于通知外部模块（如 sseManager）可以安全地插入近期记忆，防止内容被截断
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import gsap from 'gsap';
@@ -74,7 +74,7 @@ export const useBubble = () => {
 
     // 如果没有气泡、没有队列、没有待消失、没有在处理中 → 全部完成
     if (!hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving) {
-      // 触发全局事件，通知外部（如 wsManager）可以安全插入近期记忆
+      // 触发全局事件，通知外部（如 sseManager）可以安全插入近期记忆
       window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
     }
   }, []);

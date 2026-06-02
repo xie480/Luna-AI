@@ -12,7 +12,7 @@ import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 export type ModalPanelType = 'dag' | 'memory' | 'prompts' | 'settings' | 'logs' | 'clothing';
 
 /**
- * WebSocket 连接状态
+ * 连接状态（SSE / HTTP）
  */
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
 
@@ -41,7 +41,7 @@ export interface FrontendErrorEntry {
  * 系统状态切片
  */
 interface SystemState {
-  // WebSocket 连接状态
+  // 连接状态（SSE / HTTP）
   connectionStatus: ConnectionStatus;
   // AI 服务连接状态
   aiConnectionStatus: ConnectionStatus;
@@ -69,7 +69,7 @@ interface SystemState {
   frontendErrors: FrontendErrorEntry[];
   // 诊断面板是否打开（与独立调试面板联动）
   isDiagnosticOpen: boolean;
-  // 当前 TraceID（由 wsManager 自动维护，用于异常上报关联）
+  // 当前 TraceID（由 sseManager 自动维护，用于异常上报关联）
   currentTraceID: string | null;
 
   // Actions

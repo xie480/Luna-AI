@@ -1,6 +1,6 @@
 /**
  * Luna AI 渲染进程入口
- * 负责：UI 渲染、Live2D 展示、状态展示、WebSocket 监听
+ * 负责：UI 渲染、Live2D 展示、状态展示、SSE 事件监听
  * 注意：渲染进程禁止直接访问本地 DB、Redis、Python 服务
  *
  * 架构原则：
@@ -25,7 +25,7 @@ import { Modal } from './components/Modal/Modal';
 import DebugPanel from './components/Settings/DebugPanel';
 
 // 导入服务和 Store
-import { wsManager } from './services/wsManager';
+import { sseManager } from './services/sseManager';
 import { useSessionStore } from './stores/sessionStore';
 import { useSystemStore } from './stores/systemStore';
 
@@ -84,7 +84,7 @@ const App: React.FC = () => {
   const globalMessage = useSystemStore((state) => state.globalMessage);
 
   /**
-   * 应用启动时建立 WebSocket 连接
+   * 应用启动时建立 SSE 连接
    * 并初始化默认会话
    *
    * 依赖数组为空数组，因为我们只需要在组件挂载时执行一次
@@ -94,13 +94,13 @@ const App: React.FC = () => {
     // 初始化默认会话 ID
     setSessionId('default-session');
 
-    // 建立 WebSocket 连接
-    wsManager.connect(8081);
+    // 建立 SSE 连接（替代原 WebSocket）
+    sseManager.connect(8081);
     addSystemLog('应用启动，正在连接 Python AI Service...');
 
-    // 清理函数：断开 WebSocket 连接
+    // 清理函数：断开 SSE 连接
     return () => {
-      wsManager.disconnect();
+      sseManager.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

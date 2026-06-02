@@ -5,7 +5,7 @@
  *
  * Phase 5 新增：引入 RecentMemoryPanel 右上角近期记忆面板
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Live2DView } from '../Live2DView/Live2DView';
 import { BackgroundLayer } from '../BackgroundLayer/BackgroundLayer';
 import { TopStatusPanel } from '../TopStatusPanel/TopStatusPanel';
@@ -21,6 +21,20 @@ import './ChatView.css';
  * 使用 ErrorBoundary 包裹关键子组件，防止局部异常导致整个页面白屏
  */
 export const ChatView: React.FC = () => {
+  useEffect(() => {
+    const handleNotification = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { message, type } = customEvent.detail;
+      // 简单的兜底实现，后续可替换为更美观的 Toast 组件
+      alert(`[${type.toUpperCase()}] ${message}`);
+    };
+
+    window.addEventListener('luna:notification', handleNotification);
+    return () => {
+      window.removeEventListener('luna:notification', handleNotification);
+    };
+  }, []);
+
   return (
     <div className="chat-view">
       {/* 背景层 z-index: 0 */}

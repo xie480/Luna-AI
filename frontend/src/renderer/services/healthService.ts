@@ -13,7 +13,7 @@ const HEALTH_URL = 'http://127.0.0.1:8081/health';
  * 检查后端是否可用
  * 使用健康检查端点探测后端，结果缓存在闭包中。
  * 首次调用会发起网络请求，后续直接返回缓存值。
- * 当 WebSocket 重连成功时，应通过 resetBackendAvailable() 重置缓存。
+ * 当 SSE 重连成功时，应通过 resetBackendAvailable() 重置缓存。
  */
 export async function isBackendAvailable(): Promise<boolean> {
   // 已有缓存结果，直接返回
@@ -54,7 +54,7 @@ export async function isBackendAvailable(): Promise<boolean> {
 
 /**
  * 重置后端可用性缓存
- * 当 WebSocket 连接成功或重连时调用，允许重新探测后端状态
+ * 当 SSE 连接成功或重连时调用，允许重新探测后端状态
  */
 export function resetBackendAvailable(): void {
   _backendAvailable = null;

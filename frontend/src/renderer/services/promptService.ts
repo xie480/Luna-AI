@@ -38,7 +38,7 @@ async function probePromptsEndpoint(): Promise<boolean> {
   return _probePromise;
 }
 
-/** 重置可用性缓存（WebSocket 重连时调用） */
+/** 重置可用性缓存（SSE 重连时调用） */
 export function resetPromptsProbe(): void {
   _isPromptsReady = null;
 }

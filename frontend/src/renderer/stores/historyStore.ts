@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { wsManager } from '../services/wsManager';
+import { sseManager } from '../services/sseManager';
 import { WS_MSG_TYPE } from '../../shared/enum';
 
 export type HistoryViewType = 'RECENT' | 'CALENDAR';
@@ -73,18 +73,18 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     get().fetchCalendarMetadata(yearMonth);
   },
 
-  fetchCalendarMetadata: (yearMonth) => {
+  fetchCalendarMetadata: async (yearMonth) => {
     set({ isLoadingMetadata: true });
-    wsManager.sendMessage(WS_MSG_TYPE.REQ_GET_CALENDAR_METADATA, {
-      year_month: yearMonth,
-    });
+    await sseManager.fetchCalendarMetadata(yearMonth);
+    // fetchCalendarMetadata 内部已调用 setCalendarMetadata 更新状态，
+    // 但需要确保 isLoadingMetadata 被关闭
+    // sseManager.fetchCalendarMetadata 完成后会通过 setCalendarMetadata 关闭 loading
   },
 
-  fetchChatHistory: (date) => {
+  fetchChatHistory: async (date) => {
     set({ isLoadingHistory: true });
-    wsManager.sendMessage(WS_MSG_TYPE.REQ_GET_CHAT_HISTORY, {
-      date: date,
-    });
+    await sseManager.fetchChatHistory(date);
+    // fetchChatHistory 内部已调用 setChatHistory 更新状态
   },
 
   setCalendarMetadata: (yearMonth, activeDates) => {

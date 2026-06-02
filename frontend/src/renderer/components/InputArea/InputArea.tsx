@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSessionStore } from '../../stores/sessionStore';
-import { wsManager } from '../../services/wsManager';
+import { sseManager } from '../../services/sseManager';
 import './InputArea.css';
 
 /**
@@ -114,7 +114,7 @@ export const InputArea: React.FC = () => {
       return;
     }
 
-    wsManager.sendChatMessage(textToSend.trim());
+    sseManager.sendChatMessage(textToSend.trim());
     
     // 清空对应输入框
     if (isFullscreenMode) {

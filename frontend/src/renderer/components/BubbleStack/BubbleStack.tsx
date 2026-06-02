@@ -21,7 +21,7 @@ export const BubbleStack: React.FC = () => {
   const { bubbles, registerBubble, showBubble } = useBubble();
 
   /**
-   * 监听 wsManager 分发的 luna:show-bubble 事件
+   * 监听 sseManager 分发的 luna:show-bubble 事件
    * 直接以独立气泡策略渲染每个文本块
    */
   useEffect(() => {

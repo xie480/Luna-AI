@@ -1,14 +1,8 @@
 """
 第六阶段（Layer 6）综合测试
 
-做什么：验证 Go backend/runtime/cmd/main.go 的 Python 端口
-     与原始 Go 实现在行为、逻辑和边界条件上 100% 一致。
-
 覆盖范围：
     - main.py: FastAPI 应用入口、生命周期管理（Lifespan）、依赖注入装配
-
-Go 原版参考文件：
-    - backend/runtime/cmd/main.go
 """
 
 import asyncio
@@ -36,7 +30,6 @@ class TestMainLifespan:
     @patch("app.main.LongTermMemoryQdrantRepo")
     @patch("app.main.MemoryManager")
     @patch("app.main.ConfigPresetPGRepo")
-    @patch("app.main.WSServer")
     @patch("app.main.load_embedding_model")
     @patch("app.main.load_rerank_model")
     @patch("app.main.init_worker")
@@ -47,7 +40,6 @@ class TestMainLifespan:
         mock_init_worker,
         mock_load_rerank_model,
         mock_load_embedding_model,
-        mock_ws_server,
         mock_config_preset_pg_repo,
         mock_memory_manager,
         mock_long_term_memory_qdrant_repo,
@@ -61,7 +53,7 @@ class TestMainLifespan:
         mock_postgres_client,
         mock_redis_client,
     ):
-        """验证启动和关闭流程"""
+        """验证启动和关闭流程（已移除 WebSocket 相关 mock）"""
         app = FastAPI()
         
         # 模拟依赖
@@ -112,6 +104,9 @@ class TestMainLifespan:
                 assert app.state.prompt_manager == mock_prompt_manager.return_value
                 assert app.state.memory_manager == mock_memory_mgr_instance
                 assert app.state.config_preset_repo == mock_config_preset_pg_repo.return_value
+                # 验证 HTTP API 依赖注入（新增）
+                assert app.state.pg_repo == mock_chat_history_pg_repo.return_value
+                assert app.state.redis_repo == mock_chat_history_redis_repo.return_value
                 
                 # 验证模型加载
                 mock_load_embedding_model.assert_called_once()
