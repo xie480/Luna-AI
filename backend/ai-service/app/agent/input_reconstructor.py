@@ -7,9 +7,7 @@ from app.agent.schemas.input_reconstruction import (
     PrimaryIntent,
 )
 from app.llm.client import LLMClient
-from app.logger import get_logger
-
-logger = get_logger(__name__)
+from app.logger import logger
 
 class InputReconstructorAgent:
     def __init__(self, llm_client: LLMClient):

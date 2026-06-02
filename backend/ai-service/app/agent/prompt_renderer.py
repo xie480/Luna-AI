@@ -2,9 +2,7 @@
 from jinja2 import Environment, StrictUndefined, TemplateError
 
 from app.api.communication_pb2 import PromptSlot
-from app.logger import get_logger
-
-logger = get_logger(__name__)
+from app.logger import logger
 
 class PromptRenderer:
     """

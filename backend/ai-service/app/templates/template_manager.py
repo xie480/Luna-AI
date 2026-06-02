@@ -21,9 +21,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from app.logger import get_logger
-
-logger = get_logger(__name__)
+from app.logger import logger
 
 # ============================================================
 # 模板目录路径
