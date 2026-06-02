@@ -8,8 +8,12 @@ pytest 配置文件：在测试环境中模拟未安装的 qdrant_client 模块
      但 QdrantClientWrapper 的测试应当能够独立运行。
 """
 
+import os
 import sys
 from unittest.mock import MagicMock
+
+# 解决 gRPC 生成文件的绝对导入问题
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../backend/ai-service/app/api'))
 
 # 创建 qdrant_client 模块的模拟
 # qdrant_client 本身
