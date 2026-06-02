@@ -11,18 +11,10 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-import grpc
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# 将 app/api 目录添加到 sys.path，解决 gRPC 生成文件的绝对导入问题
-sys.path.append(os.path.join(os.path.dirname(__file__), 'api'))
-
-from app.api import communication_pb2_grpc
-from app.api.grpc_client import AIClient
-from app.api.grpc_service import CommunicationServiceServicer, set_embedding_model, set_rerank_model
-from app.api.interceptor import TelemetryInterceptor
 from app.api.routers.api_config_preset import router as config_preset_router
 from app.api.routers.prompt import router as prompt_router
 from app.api.routers.telemetry import router as telemetry_router
@@ -138,13 +130,6 @@ async def lifespan(app: FastAPI):
     # 3. 初始化 CryptoService
     crypto_svc = CryptoService()
 
-    # 4. 初始化 AI 客户端 (gRPC)
-    ai_client = None
-    try:
-        ai_client = AIClient(settings.ai_service_address)
-    except Exception as e:
-        logger.error(f"初始化 AI 客户端失败 error={e}")
-
     # 5. 初始化 PromptManager
     prompt_manager = None
     if pg_client:
@@ -175,9 +160,7 @@ async def lifespan(app: FastAPI):
 
     # 8. 初始化推理服务
     from app.inference.service import InferenceService
-    inference_svc = None
-    if ai_client:
-        inference_svc = InferenceService(ai_client)
+    inference_svc = InferenceService()
 
     # 9. 初始化长期记忆管理器并执行启动时兜底检测
     memory_manager = None
@@ -186,7 +169,6 @@ async def lifespan(app: FastAPI):
             redis_repo=redis_repo,
             ltm_pg_repo=ltm_pg_repo,
             ltm_qdrant_repo=ltm_qdrant_repo,
-            ai_client=ai_client,
             prompt_mgr=prompt_manager,
             qdrant_client=qdrant_client,
             inference_svc=inference_svc,
@@ -200,7 +182,6 @@ async def lifespan(app: FastAPI):
     # 10. 依赖注入装配 (存入 app.state 供路由使用)
     app.state.pg_client = pg_client
     app.state.redis_client = redis_client
-    app.state.ai_client = ai_client
     app.state.crypto_svc = crypto_svc
     app.state.prompt_manager = prompt_manager
     app.state.memory_manager = memory_manager
@@ -216,7 +197,6 @@ async def lifespan(app: FastAPI):
     # 11. 初始化 WebSocket 服务
     global ws_server
     ws_server = WSServer(
-        ai_client=ai_client,
         redis_repo=redis_repo,
         pg_repo=pg_repo,
         prompt_mgr=prompt_manager,
@@ -224,15 +204,9 @@ async def lifespan(app: FastAPI):
     )
 
     # 12. 加载 Embedding 和 Rerank 模型
-    embedding_model = load_embedding_model()
-    rerank_model = load_rerank_model()
-    if embedding_model is not None:
-        set_embedding_model(embedding_model)
-    if rerank_model is not None:
-        set_rerank_model(rerank_model)
-
-    # 13. 启动 gRPC 服务
-    grpc_task = asyncio.create_task(serve_grpc())
+    global _embedding_model, _rerank_model
+    _embedding_model = load_embedding_model()
+    _rerank_model = load_rerank_model()
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector
@@ -262,16 +236,11 @@ async def lifespan(app: FastAPI):
     if rollover_task:
         rollover_task.cancel()
         
-    grpc_task.cancel()
-    
     await stop_metrics_collector()
     
     worker = get_worker()
     if worker:
         await worker.stop()
-        
-    if ai_client:
-        await ai_client.close()
         
     if pg_client:
         await pg_client.close()
@@ -302,20 +271,6 @@ app.include_router(ws_router)
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router
 app.include_router(health_router)
-
-
-async def serve_grpc():
-    """启动 gRPC 服务"""
-    server = grpc.aio.server(interceptors=[TelemetryInterceptor()])
-    communication_pb2_grpc.add_CommunicationServiceServicer_to_server(
-        CommunicationServiceServicer(), server
-    )
-    # 使用 0.0.0.0 绑定 IPv4 地址，确保 Windows 下 Go 客户端能正常连接
-    listen_addr = f"0.0.0.0:{settings.grpc_port}"
-    server.add_insecure_port(listen_addr)
-    logger.info(f"gRPC 服务启动，监听地址: {listen_addr}")
-    await server.start()
-    await server.wait_for_termination()
 
 
 if __name__ == "__main__":

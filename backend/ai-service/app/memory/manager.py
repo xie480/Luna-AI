@@ -45,12 +45,6 @@ class MemoryEvent:
 MemoryEventHandler = Callable[[MemoryEvent], None]
 
 
-class AIClient(Protocol):
-    """定义 AI 客户端接口，用于与 Python AI 服务通信"""
-    async def long_summarize(self, session_id: str, summarize_prompt: str) -> str:
-        ...
-
-
 class InferenceService(Protocol):
     """推理服务接口（用于 Embedding 和 Rerank）"""
     async def get_embedding_vector(self, text: str) -> List[float]:
@@ -69,7 +63,6 @@ class Manager:
         redis_repo: Optional[ChatHistoryRedisRepo],
         ltm_pg_repo: Optional[LongTermMemoryPGRepo],
         ltm_qdrant_repo: Optional[LongTermMemoryQdrantRepo],
-        ai_client: Optional[AIClient],
         prompt_mgr: Optional[PromptManager],
         qdrant_client: Optional[QdrantClientWrapper],
         inference_svc: Optional[InferenceService],
@@ -78,7 +71,6 @@ class Manager:
         self.redis_repo = redis_repo
         self.ltm_pg_repo = ltm_pg_repo
         self.ltm_qdrant_repo = ltm_qdrant_repo
-        self.ai_client = ai_client
         self.prompt_mgr = prompt_mgr
         self.qdrant_client = qdrant_client
         self.inference_svc = inference_svc
@@ -212,9 +204,6 @@ class Manager:
         
         messages_text = "".join(context_parts)
 
-        if not self.ai_client:
-            raise RuntimeError(f"AI 客户端不可用，无法压缩历史会话 [session_id={session_id}]")
-
         # 组装长期记忆压缩提示词
         summarize_variables = {
             "CURRENT_CORE_SUMMARY": summary.core_summary,
@@ -234,7 +223,8 @@ class Manager:
             raise RuntimeError("Prompt 管理器不可用，无法组装提示词")
 
         try:
-            compressed_summary = await self.ai_client.long_summarize(session_id, full_summarize_prompt)
+            from app.api.internal_service import internal_service
+            compressed_summary = await internal_service.long_summarize(session_id, full_summarize_prompt)
         except Exception as e:
             raise RuntimeError(f"调用 LongSummarize 失败 [session_id={session_id}]: {e}")
 

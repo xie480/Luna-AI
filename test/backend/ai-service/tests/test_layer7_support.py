@@ -25,30 +25,32 @@ class TestInferenceService:
     """验证 InferenceService 与 Go service.go 一致"""
 
     @pytest.mark.asyncio
-    async def test_get_embedding_vector(self):
-        mock_ai_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.success = True
-        mock_resp.vector_json = "[0.1, 0.2, 0.3]"
-        mock_ai_client.embedding = AsyncMock(return_value=mock_resp)
+    @patch("app.inference.service._embedding_model", create=True)
+    async def test_get_embedding_vector(self, mock_embedding_model):
+        import numpy as np
+        mock_embedding_model.encode.return_value = np.array([0.1, 0.2, 0.3])
         
-        svc = InferenceService(mock_ai_client)
+        # 注入 mock 模型到 app.main
+        import app.main
+        app.main._embedding_model = mock_embedding_model
+        
+        svc = InferenceService()
         vector = await svc.get_embedding_vector("test text")
         
         assert vector == [0.1, 0.2, 0.3]
-        mock_ai_client.embedding.assert_called_once()
-        args, _ = mock_ai_client.embedding.call_args
-        assert args[0].text == "test text"
+        mock_embedding_model.encode.assert_called_once_with("test text")
 
     @pytest.mark.asyncio
-    async def test_rerank_documents(self):
-        mock_ai_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.success = True
-        mock_resp.scores = [0.5, 0.9, 0.2]
-        mock_ai_client.rerank = AsyncMock(return_value=mock_resp)
+    @patch("app.inference.service._rerank_model", create=True)
+    async def test_rerank_documents(self, mock_rerank_model):
+        import numpy as np
+        mock_rerank_model.predict.return_value = np.array([0.5, 0.9, 0.2])
         
-        svc = InferenceService(mock_ai_client)
+        # 注入 mock 模型到 app.main
+        import app.main
+        app.main._rerank_model = mock_rerank_model
+        
+        svc = InferenceService()
         results = await svc.rerank_documents("query", ["doc1", "doc2", "doc3"])
         
         assert len(results) == 3

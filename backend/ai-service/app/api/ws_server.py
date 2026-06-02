@@ -21,8 +21,6 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from app.api import communication_pb2
-from app.api.grpc_client import AIClient
 from app.logger import logger
 from app.memory.manager import Manager as MemoryManager
 from app.memory.manager import MemoryEvent, MemoryEventType
@@ -148,13 +146,11 @@ class WSServer:
 
     def __init__(
         self,
-        ai_client: Optional[AIClient] = None,
         redis_repo: Optional[ChatHistoryRedisRepo] = None,
         pg_repo: Optional[ChatHistoryPGRepo] = None,
         prompt_mgr: Optional[PromptManager] = None,
         memory_manager: Optional[MemoryManager] = None,
     ):
-        self.ai_client = ai_client
         self.redis_repo = redis_repo
         self.pg_repo = pg_repo
         self.prompt_mgr = prompt_mgr
@@ -417,21 +413,9 @@ class WSServer:
             await self.send_error(conn, msg.trace_id, 4002, "Invalid Ping payload")
             return
 
-        if not self.ai_client:
-            logger.error("AI 客户端不可用")
-            await self.send_error(conn, msg.trace_id, 5000, "AI service unavailable")
-            return
-
-        try:
-            resp = await self.ai_client.ping(msg.trace_id)
-        except Exception as e:
-            logger.error(f"调用 AI 服务 Ping 失败 error={e}")
-            await self.send_error(conn, msg.trace_id, 5000, "AI service unavailable")
-            return
-
         pong_payload = PongPayload(
-            timestamp=resp.timestamp,
-            source=resp.source,
+            timestamp=int(time.time() * 1000),
+            source="python-ai-service",
         )
 
         pong_msg = WSMessage(
@@ -547,35 +531,27 @@ class WSServer:
                 logger.error(f"组装 Input Reconstruction Prompt 失败 error={e}")
 
         # 2. 调用 Input Reconstruction Agent
-        if not self.ai_client:
-            logger.error("AI 客户端不可用")
-            await self.send_error(conn, msg.trace_id, 5000, "AI service unavailable")
-            return
-
-        recon_req = communication_pb2.InputReconstructionRequest(
-            trace_id=msg.trace_id,
-            user_input=cmd_payload.message,
-            system_prompt=input_recon_system_prompt,
-            memory_prompt=input_recon_memory_prompt,
-            runtime_prompt=input_recon_runtime_prompt,
-        )
-
+        from app.agent.input_reconstructor import InputReconstructorAgent
+        from app.llm.client import llm_client
+        
+        agent = InputReconstructorAgent(llm_client)
         try:
-            recon_resp = await self.ai_client.input_reconstruction(recon_req)
+            recon_result = await agent.process(
+                trace_id=msg.trace_id,
+                user_input=cmd_payload.message,
+                system_prompt=input_recon_system_prompt,
+                memory_prompt=input_recon_memory_prompt,
+                runtime_prompt=input_recon_runtime_prompt
+            )
         except Exception as e:
-            logger.error(f"调用 AI 服务 InputReconstruction 失败 error={e}")
-            await self.send_error(conn, msg.trace_id, 5001, "AI service input reconstruction failed")
-            return
-
-        if not recon_resp.success:
-            logger.error(f"InputReconstruction 失败 error={recon_resp.error_message}")
-            await self.send_error(conn, msg.trace_id, 5001, f"Input reconstruction failed: {recon_resp.error_message}")
+            logger.error(f"调用 InputReconstruction 失败 error={e}")
+            await self.send_error(conn, msg.trace_id, 5001, "Input reconstruction failed")
             return
 
         # 3. 解析 Input Reconstruction 结果并组装 Chat Prompt
         disambiguated_text = cmd_payload.message
         try:
-            recon_data = json.loads(recon_resp.json_output)
+            recon_data = recon_result.model_dump()
             emotion_state = recon_data.get("emotion_state", {})
             reconstruction = recon_data.get("reconstruction", {})
             
@@ -599,22 +575,7 @@ class WSServer:
             except Exception as e:
                 logger.error(f"组装 Chat Prompt 失败 error={e}")
 
-        req = communication_pb2.ChatRequest(
-            trace_id=msg.trace_id,
-            message=cmd_payload.message,
-            history=proto_history,
-            system_prompt=full_system_prompt,
-            disambiguated_text=disambiguated_text,
-        )
-
-        logger.info(f"发送流式对话请求到 AI 服务 trace_id={msg.trace_id}")
-
-        try:
-            stream = self.ai_client.chat_stream(req)
-        except Exception as e:
-            logger.error(f"调用 AI 服务 ChatStream 失败 error={e}")
-            await self.send_error(conn, msg.trace_id, 5001, "AI service chat stream failed")
-            return
+        logger.info(f"开始流式对话 trace_id={msg.trace_id}")
 
         start_time = time.time()
         is_first_chunk = True
@@ -624,70 +585,119 @@ class WSServer:
         stream_error = None
 
         try:
-            async for resp in stream:
-                if is_first_chunk and resp.chunk:
+            from app.llm.client import llm_client
+            from app.llm.stream_parser import StreamParser
+            
+            # 转换历史记录格式
+            history_dicts = []
+            for h in recent_history:
+                history_dicts.append({"role": Role.USER.value, "content": h.userContent})
+                content = h.assistantContent
+                if h.error:
+                    content = h.error
+                history_dicts.append({"role": Role.ASSISTANT.value, "content": content})
+                
+            parser = StreamParser(msg.trace_id)
+            
+            async for chunk_data in llm_client.stream_chat_with_context(
+                system_prompt=full_system_prompt,
+                history=history_dicts,
+                current_message=cmd_payload.message,
+                trace_id=msg.trace_id,
+                disambiguated_text=disambiguated_text,
+            ):
+                if is_first_chunk and chunk_data.get("chunk"):
                     ttft = int((time.time() - start_time) * 1000)
                     logger.info(f"首字延迟 (TTFT) trace_id={msg.trace_id} ttft_ms={ttft}")
                     is_first_chunk = False
 
-                msg_type = resp.type if resp.type else "reply_chunk"
+                raw_chunk = chunk_data.get("chunk", "")
+                
+                # 使用 StreamParser 解析原始 LLM 输出块
+                msgs = parser.feed(raw_chunk)
+                for msg_type, content in msgs:
+                    if msg_type == "reply_chunk":
+                        full_assistant_content += content
+                    elif msg_type == "thought_content":
+                        full_assistant_thought += content
+                    elif msg_type == "emotion_update":
+                        full_assistant_emotion = content
+                        
+                    if msg_type != "thought_content":
+                        chat_payload = ChatStreamPayload(
+                            type=msg_type,
+                            chunk=content,
+                            is_finished=False,
+                            node_id=cmd_payload.msgId,
+                            error="",
+                        )
 
-                logger.info(f"接收 ChatStream 响应 trace_id={msg.trace_id} type={msg_type} chunk={resp.chunk}")
+                        stream_msg = WSMessage(
+                            type=WS_MSG_TYPE_CHAT_STREAM,
+                            trace_id=msg.trace_id,
+                            payload=chat_payload.model_dump(),
+                        )
 
-                if msg_type == "reply_chunk":
-                    full_assistant_content += resp.chunk
-                elif msg_type == "thought_content":
-                    full_assistant_thought += resp.chunk
-                elif msg_type == "emotion_update":
-                    full_assistant_emotion = resp.chunk
-                else:
-                    logger.warning(f"收到未知的流式消息类型 type={msg_type} trace_id={msg.trace_id}")
-                    full_assistant_content += resp.chunk
+                        try:
+                            await conn.write_json(stream_msg.model_dump())
+                        except Exception as e:
+                            logger.error(f"发送 CHAT_STREAM 消息失败 error={e}")
+                            return
 
-                if msg_type != "thought_content":
-                    chat_payload = ChatStreamPayload(
-                        type=msg_type,
-                        chunk=resp.chunk,
-                        is_finished=resp.is_finished,
-                        node_id=cmd_payload.msgId,
-                        error=resp.error,
-                    )
+                # 如果流结束，发送剩余缓冲并标记结束
+                if chunk_data.get("is_finished", False):
+                    flush_msgs = parser.flush()
+                    
+                    if not flush_msgs:
+                        chat_payload = ChatStreamPayload(
+                            type="reply_chunk",
+                            chunk="",
+                            is_finished=True,
+                            node_id=cmd_payload.msgId,
+                            error=chunk_data.get("error") or "",
+                        )
 
-                    stream_msg = WSMessage(
-                        type=WS_MSG_TYPE_CHAT_STREAM,
-                        trace_id=msg.trace_id,
-                        payload=chat_payload.model_dump(),
-                    )
+                        stream_msg = WSMessage(
+                            type=WS_MSG_TYPE_CHAT_STREAM,
+                            trace_id=msg.trace_id,
+                            payload=chat_payload.model_dump(),
+                        )
 
-                    try:
-                        await conn.write_json(stream_msg.model_dump())
-                    except Exception as e:
-                        logger.error(f"发送 CHAT_STREAM 消息失败 error={e}")
-                        return
-                elif resp.is_finished:
-                    chat_payload = ChatStreamPayload(
-                        type="reply_chunk",
-                        chunk="",
-                        is_finished=True,
-                        node_id=cmd_payload.msgId,
-                        error=resp.error,
-                    )
+                        try:
+                            await conn.write_json(stream_msg.model_dump())
+                        except Exception:
+                            pass
+                    else:
+                        for f_type, f_content in flush_msgs:
+                            if f_type == "reply_chunk":
+                                full_assistant_content += f_content
+                            elif f_type == "thought_content":
+                                full_assistant_thought += f_content
+                            elif f_type == "emotion_update":
+                                full_assistant_emotion = f_content
+                                
+                            chat_payload = ChatStreamPayload(
+                                type=f_type,
+                                chunk=f_content,
+                                is_finished=True,
+                                node_id=cmd_payload.msgId,
+                                error=chunk_data.get("error") or "",
+                            )
 
-                    stream_msg = WSMessage(
-                        type=WS_MSG_TYPE_CHAT_STREAM,
-                        trace_id=msg.trace_id,
-                        payload=chat_payload.model_dump(),
-                    )
+                            stream_msg = WSMessage(
+                                type=WS_MSG_TYPE_CHAT_STREAM,
+                                trace_id=msg.trace_id,
+                                payload=chat_payload.model_dump(),
+                            )
 
-                    try:
-                        await conn.write_json(stream_msg.model_dump())
-                    except Exception:
-                        pass
-
-                if resp.is_finished:
+                            try:
+                                await conn.write_json(stream_msg.model_dump())
+                            except Exception:
+                                pass
                     break
+
         except Exception as e:
-            logger.error(f"接收 ChatStream 响应失败 error={e}")
+            logger.error(f"ChatStream 处理异常 error={e}")
             await self.send_chat_stream_error(conn, msg.trace_id, cmd_payload.msgId, str(e))
             stream_error = e
 
@@ -806,28 +816,20 @@ class WSServer:
             except Exception as e:
                 logger.error(f"组装 Summarize Prompt 失败 error={e}")
 
-        if not self.ai_client:
-            logger.error("AI 客户端不可用，无法执行 ShortSummarize")
-            return
-
-        req = communication_pb2.ShortSummarizeRequest(
-            trace_id=trace_id,
-            summarize_prompt=full_summarize_prompt,
-        )
-
+        from app.api.internal_service import internal_service
         try:
-            resp = await self.ai_client.short_summarize(req)
+            new_core_summary, new_key_facts = await internal_service.short_summarize(trace_id, full_summarize_prompt)
         except Exception as e:
-            logger.error(f"调用 AI 服务 ShortSummarize 失败 error={e}")
+            logger.error(f"调用 ShortSummarize 失败 error={e}")
             return
 
-        if not resp.new_core_summary.strip() or not resp.new_key_facts.strip():
-            logger.warning(f"AI 服务返回的摘要存在空字段，放弃本次更新 session_id={session_id}")
+        if not new_core_summary.strip() or not new_key_facts.strip():
+            logger.warning(f"返回的摘要存在空字段，放弃本次更新 session_id={session_id}")
             return
 
         new_summary = ChatSummary(
-            core_summary=resp.new_core_summary,
-            key_facts=resp.new_key_facts,
+            core_summary=new_core_summary,
+            key_facts=new_key_facts,
         )
 
         try:

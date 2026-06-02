@@ -12,7 +12,6 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.api.grpc_client import AIClient
 from app.logger import logger
 from app.repository.config_preset_pg import ConfigPresetPGRepo
 from app.repository.models import ApiConfigPreset
@@ -56,9 +55,6 @@ class FetchModelsRequest(BaseModel):
 # 依赖注入占位符，实际应用中应在 main.py 中覆盖或通过 Request.app.state 获取
 def get_repo(request: Request) -> ConfigPresetPGRepo:
     return request.app.state.config_preset_repo
-
-def get_ai_client(request: Request) -> AIClient:
-    return request.app.state.ai_client
 
 from app.config.crypto import CryptoService
 
@@ -121,10 +117,9 @@ async def save_preset(
 
 @router.post("/{id}/activate", response_model=ResponseModel)
 async def activate_preset(
-    id: str, 
-    request: Request, 
+    id: str,
+    request: Request,
     repo: ConfigPresetPGRepo = Depends(get_repo),
-    ai_client: AIClient = Depends(get_ai_client),
     crypto_svc: CryptoService = Depends(get_crypto_svc)
 ) -> ResponseModel:
     """激活预设并同步到 Python"""
@@ -143,20 +138,13 @@ async def activate_preset(
             return create_error_response(404, "预设不存在", trace_id)
             
         # 3. 同步到 AI 服务
-        from app.api import communication_pb2
+        from app.config.settings import global_config_container
         
-        large_cfg = _decrypt_to_proto_model_config(json.dumps(preset.large_model_config), crypto_svc)
-        medium_cfg = _decrypt_to_proto_model_config(json.dumps(preset.medium_model_config), crypto_svc)
-        small_cfg = _decrypt_to_proto_model_config(json.dumps(preset.small_model_config), crypto_svc)
+        large_cfg = _decrypt_model_config(json.dumps(preset.large_model_config), crypto_svc)
+        medium_cfg = _decrypt_model_config(json.dumps(preset.medium_model_config), crypto_svc)
+        small_cfg = _decrypt_model_config(json.dumps(preset.small_model_config), crypto_svc)
         
-        sync_req = communication_pb2.SyncPresetConfigRequest(
-            preset_id=id,
-            large_model=large_cfg,
-            medium_model=medium_cfg,
-            small_model=small_cfg,
-        )
-        
-        await ai_client.sync_preset_config(sync_req)
+        await global_config_container.update_preset_config(large_cfg, medium_cfg, small_cfg)
         
         return create_success_response(None, trace_id)
     except Exception as e:
@@ -226,8 +214,7 @@ def _encrypt_model_config(cfg: ModelConfig, crypto_svc: CryptoService) -> str:
         cfg_dict["api_key"] = crypto_svc.encrypt(cfg_dict["api_key"])
     return json.dumps(cfg_dict)
 
-def _decrypt_to_proto_model_config(json_str: str, crypto_svc: CryptoService) -> Any:
-    from app.api import communication_pb2
+def _decrypt_model_config(json_str: str, crypto_svc: CryptoService) -> dict:
     cfg_dict = json.loads(json_str)
     if cfg_dict.get("api_key"):
         try:
@@ -235,14 +222,14 @@ def _decrypt_to_proto_model_config(json_str: str, crypto_svc: CryptoService) -> 
         except Exception:
             pass
             
-    return communication_pb2.ModelConfig(
-        base_url=cfg_dict.get("base_url", ""),
-        api_key=cfg_dict.get("api_key", ""),
-        model_id=cfg_dict.get("model_id", ""),
-        max_tokens=cfg_dict.get("max_tokens", 0),
-        max_context_tokens=cfg_dict.get("max_context_tokens", 0),
-        temperature=cfg_dict.get("temperature", 0.0),
-    )
+    return {
+        "base_url": cfg_dict.get("base_url", ""),
+        "api_key": cfg_dict.get("api_key", ""),
+        "model_id": cfg_dict.get("model_id", ""),
+        "max_tokens": cfg_dict.get("max_tokens", 0),
+        "max_context_tokens": cfg_dict.get("max_context_tokens", 0),
+        "temperature": cfg_dict.get("temperature", 0.0),
+    }
 
 def _to_preset_response(p: ApiConfigPreset) -> dict:
     large = p.large_model_config

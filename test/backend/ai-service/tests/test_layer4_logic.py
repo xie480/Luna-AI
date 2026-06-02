@@ -187,7 +187,6 @@ class TestMemoryManager:
         redis_repo = MagicMock()
         ltm_pg_repo = MagicMock()
         ltm_qdrant_repo = MagicMock()
-        ai_client = MagicMock()
         prompt_mgr = MagicMock()
         qdrant_client = MagicMock()
         inference_svc = MagicMock()
@@ -196,7 +195,6 @@ class TestMemoryManager:
             "redis_repo": redis_repo,
             "ltm_pg_repo": ltm_pg_repo,
             "ltm_qdrant_repo": ltm_qdrant_repo,
-            "ai_client": ai_client,
             "prompt_mgr": prompt_mgr,
             "qdrant_client": qdrant_client,
             "inference_svc": inference_svc,
@@ -245,9 +243,6 @@ class TestMemoryManager:
         # 模拟 Prompt 组装
         mock_deps["prompt_mgr"].assemble_prompt = AsyncMock(return_value="full prompt")
         
-        # 模拟 AI 压缩
-        mock_deps["ai_client"].long_summarize = AsyncMock(return_value="compressed summary")
-        
         # 模拟 PG 保存
         mock_deps["ltm_pg_repo"].save = AsyncMock()
         
@@ -261,37 +256,37 @@ class TestMemoryManager:
             received_events.append(event)
         await mgr.on_event(handler)
         
-        await mgr._compress_and_commit("session-1")
-        
-        # 验证 Prompt 组装参数
-        mock_deps["prompt_mgr"].assemble_prompt.assert_called_once()
-        args, _ = mock_deps["prompt_mgr"].assemble_prompt.call_args
-        assert args[0] == PromptCategory.LONG_SUMMARY
-        assert args[1]["CURRENT_CORE_SUMMARY"] == "core"
-        assert args[1]["CURRENT_KEY_FACTS"] == "facts"
-        assert "[对话 1]" in args[1]["MESSAGES_TEXT"]
-        assert "(内心独白: t2)" in args[1]["MESSAGES_TEXT"]
-        
-        # 验证 AI 调用
-        mock_deps["ai_client"].long_summarize.assert_called_once_with("session-1", "full prompt")
-        
-        # 验证 PG 保存
-        mock_deps["ltm_pg_repo"].save.assert_called_once()
-        saved_memory = mock_deps["ltm_pg_repo"].save.call_args[0][0]
-        assert saved_memory.session_id == "session-1"
-        assert saved_memory.summary == "compressed summary"
-        assert saved_memory.status == MemoryStatus.ACTIVE.value
-        
-        # 验证 Qdrant 保存
-        mock_deps["ltm_qdrant_repo"].save_with_vector.assert_called_once_with(
-            saved_memory.id, "session-1", [0.1, 0.2], MemoryStatus.ACTIVE.value
-        )
-        
-        # 验证事件触发
-        await asyncio.sleep(0.1) # 等待异步事件处理
-        assert len(received_events) == 1
-        assert received_events[0].type == MemoryEventType.EVENT_MEMORY_SYNC
-        assert received_events[0].payload["session_id"] == "session-1"
+        with patch("app.api.internal_service.internal_service") as mock_internal:
+            mock_internal.long_summarize = AsyncMock(return_value="compressed summary")
+            
+            await mgr._compress_and_commit("session-1")
+            
+            # 验证 Prompt 组装参数
+            mock_deps["prompt_mgr"].assemble_prompt.assert_called_once()
+            args, _ = mock_deps["prompt_mgr"].assemble_prompt.call_args
+            assert args[0] == PromptCategory.LONG_SUMMARY
+            assert args[1]["CURRENT_CORE_SUMMARY"] == "core"
+            assert args[1]["CURRENT_KEY_FACTS"] == "facts"
+            assert "[对话 1]" in args[1]["MESSAGES_TEXT"]
+            assert "(内心独白: t2)" in args[1]["MESSAGES_TEXT"]
+            
+            # 验证 PG 保存
+            mock_deps["ltm_pg_repo"].save.assert_called_once()
+            saved_memory = mock_deps["ltm_pg_repo"].save.call_args[0][0]
+            assert saved_memory.session_id == "session-1"
+            assert saved_memory.summary == "compressed summary"
+            assert saved_memory.status == MemoryStatus.ACTIVE.value
+            
+            # 验证 Qdrant 保存
+            mock_deps["ltm_qdrant_repo"].save_with_vector.assert_called_once_with(
+                saved_memory.id, "session-1", [0.1, 0.2], MemoryStatus.ACTIVE.value
+            )
+            
+            # 验证事件触发
+            await asyncio.sleep(0.1)
+            assert len(received_events) == 1
+            assert received_events[0].type == MemoryEventType.EVENT_MEMORY_SYNC
+            assert received_events[0].payload["session_id"] == "session-1"
 
     @pytest.mark.asyncio
     async def test_rollover_session(self, mock_deps):
