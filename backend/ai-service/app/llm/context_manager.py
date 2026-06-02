@@ -23,13 +23,6 @@ from app.logger import logger
 # 默认常量配置
 # ============================================================
 
-# 最大上下文 Token 总数（包含 System Prompt + 历史 + 当前消息）
-# 此值需根据使用的模型调整，典型值：
-#   - 本地模型（如 Qwen-7B）: 8192
-#   - GPT-3.5-turbo: 16384
-#   - GPT-4o: 128000
-MAX_CONTEXT_TOKENS: int = 128000
-
 # 为模型输出预留的 Token 数
 # 最终输入 token = MAX_CONTEXT_TOKENS - RESERVED_OUTPUT_TOKENS
 RESERVED_OUTPUT_TOKENS: int = 2048
@@ -145,7 +138,7 @@ def truncate_context(
     system_prompt: str,
     history: list[dict[str, str]],
     current_message: str,
-    max_tokens: int = MAX_CONTEXT_TOKENS,
+    max_context_tokens: int,
     reserved_output: int = RESERVED_OUTPUT_TOKENS,
     min_rounds: int = MIN_CONVERSATION_ROUNDS,
     model_name: str = "gpt-3.5-turbo"
@@ -161,7 +154,7 @@ def truncate_context(
             system_prompt: 系统提示词字符串
             history: 历史消息列表，格式 [{"role": "user"/"assistant", "content": "..."}]
             current_message: 当前用户消息字符串
-            max_tokens: 最大 Token 总数
+            max_context_tokens: 上下文窗口最大 Token 总数
             reserved_output: 为输出预留的 Token 数
             min_rounds: 至少保留的对话轮数
             model_name: 模型名称（用于 Token 计数）
@@ -174,7 +167,7 @@ def truncate_context(
     异常行为：记录截断日志但不抛出异常，确保调用方始终能拿到可用的 messages 列表。
     """
     # 计算可用输入长度 = 总限制 - 输出预留
-    max_input_tokens = max_tokens - reserved_output
+    max_input_tokens = max_context_tokens - reserved_output
 
     # 构造 System Prompt 消息
     system_msg: dict[str, str] = {"role": "system", "content": system_prompt}
@@ -252,7 +245,7 @@ def format_messages_for_api(
     system_prompt: str,
     history: list[dict[str, str]],
     current_message: str,
-    max_tokens: int = MAX_CONTEXT_TOKENS,
+    max_context_tokens: int,
     reserved_output: int = RESERVED_OUTPUT_TOKENS,
     model_name: str = "gpt-3.5-turbo"
 ) -> list[dict[str, str]]:
@@ -269,7 +262,7 @@ def format_messages_for_api(
         system_prompt=system_prompt,
         history=history,
         current_message=current_message,
-        max_tokens=max_tokens,
+        max_context_tokens=max_context_tokens,
         reserved_output=reserved_output,
         model_name=model_name,
     )

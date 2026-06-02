@@ -3,6 +3,7 @@ export interface ModelConfig {
   api_key: string;
   model_id: string;
   max_tokens: number;
+  max_context_tokens: number;
   temperature: number;
 }
 

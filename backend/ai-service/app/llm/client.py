@@ -509,10 +509,15 @@ class LLMClient:
         """
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
+            from app.config import global_config_container
+            config = global_config_container.get_model_config("medium")
+            max_context_tokens = config.get("max_context_tokens", 128000)
+            
             truncated_messages = format_messages_for_api(
                 system_prompt=system_prompt,
                 history=history,
                 current_message=current_message,
+                max_context_tokens=max_context_tokens,
                 model_name=self.model_name,
             )
         except Exception as e:

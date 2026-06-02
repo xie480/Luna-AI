@@ -37,9 +37,10 @@ func NewApiConfigPresetHandler(repo *repository.ConfigPresetPGRepo, cryptoSvc *c
 type ModelConfig struct {
 	BaseURL     string  `json:"base_url"`
 	APIKey      string  `json:"api_key"`
-	ModelID     string  `json:"model_id"`
-	MaxTokens   int32   `json:"max_tokens"`
-	Temperature float32 `json:"temperature"`
+	ModelID          string  `json:"model_id"`
+	MaxTokens        int32   `json:"max_tokens"`
+	MaxContextTokens int32   `json:"max_context_tokens"`
+	Temperature      float32 `json:"temperature"`
 }
 
 // PresetRequest 定义创建/更新预设的请求体
@@ -287,9 +288,10 @@ func (h *ApiConfigPresetHandler) decryptToProtoModelConfig(jsonStr string) (*pb.
 	return &pb.ModelConfig{
 		BaseUrl:     cfg.BaseURL,
 		ApiKey:      cfg.APIKey,
-		ModelId:     cfg.ModelID,
-		MaxTokens:   cfg.MaxTokens,
-		Temperature: cfg.Temperature,
+		ModelId:          cfg.ModelID,
+		MaxTokens:        cfg.MaxTokens,
+		MaxContextTokens: cfg.MaxContextTokens,
+		Temperature:      cfg.Temperature,
 	}, nil
 }
 

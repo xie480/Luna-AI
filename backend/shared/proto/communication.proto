@@ -109,6 +109,7 @@ message ModelConfig {
   string model_id = 3;
   int32 max_tokens = 4; // 0 表示无上限
   float temperature = 5;
+  int32 max_context_tokens = 6; // 上下文窗口最大 Token 数
 }
 
 // 预设配置同步请求

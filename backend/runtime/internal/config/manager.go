@@ -28,9 +28,10 @@ type ActiveConfigSnapshot struct {
 type ModelConfig struct {
 	BaseURL     string  `json:"base_url"`
 	APIKey      string  `json:"api_key"`
-	ModelID     string  `json:"model_id"`
-	MaxTokens   int32   `json:"max_tokens"`
-	Temperature float32 `json:"temperature"`
+	ModelID          string  `json:"model_id"`
+	MaxTokens        int32   `json:"max_tokens"`
+	MaxContextTokens int32   `json:"max_context_tokens"`
+	Temperature      float32 `json:"temperature"`
 }
 
 // Manager 负责动态配置的管理、热更新与内存快照

@@ -35,9 +35,10 @@ const (
 type ModelConfig struct {
 	BaseURL     string  `json:"base_url"`
 	APIKey      string  `json:"api_key"`
-	ModelID     string  `json:"model_id"`
-	MaxTokens   int32   `json:"max_tokens"`
-	Temperature float32 `json:"temperature"`
+	ModelID          string  `json:"model_id"`
+	MaxTokens        int32   `json:"max_tokens"`
+	MaxContextTokens int32   `json:"max_context_tokens"`
+	Temperature      float32 `json:"temperature"`
 }
 
 // ModelRouter 模型路由与缓存加载模块
