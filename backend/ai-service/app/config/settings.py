@@ -19,9 +19,15 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# .env 文件位于项目根目录（../../ 相对于 backend/ai-service/）
-# 通过 Path(__file__) 计算绝对路径，不受工作目录变化影响
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+# .env 文件位于项目根目录（../../../ 相对于 backend/ai-service/app/config/）
+# settings.py 的路径为 backend/ai-service/app/config/settings.py
+# 需要向上 5 层才能到达项目根目录
+# Path(__file__).parent -> config/
+# Path(__file__).parent.parent -> app/
+# Path(__file__).parent.parent.parent -> ai-service/
+# Path(__file__).parent.parent.parent.parent -> backend/
+# Path(__file__).parent.parent.parent.parent.parent -> Luna-AI/ (项目根目录，存放 .env)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 _ENV_FILE_PATH = str(_PROJECT_ROOT / '.env')
 
 
