@@ -42,13 +42,69 @@ export const InputArea: React.FC = () => {
   // 最大高度（三行 + padding）
   const MAX_HEIGHT = LINE_HEIGHT * MAX_LINES + 24;
 
-  // 检查是否正在等待响应（有 sending 或 streaming 状态的消息，或者 WebSocket 未连接，或者 AI 服务未连接）
+  /**
+   * 检查是否正在等待响应
+   *
+   * 判断规则：
+   * 1. 当前会话的最后一条消息必须是 "未完成" 状态
+   *    - user 消息状态为 sending
+   *    - assistant 消息状态为 streaming
+   * 2. 最后一条消息的时间戳必须在最近 30 分钟内（防止陈旧消息永远锁定输入框）
+   * 3. 越过了 2 分钟兜底超时自动将状态标记为 error，但兜底超时依赖 useEffect，
+   *    此处额外加时间范围检查作为二次防御
+   */
   const isWaiting = useSessionStore((state) => {
     const sessionId = state.currentSessionId;
     if (!sessionId) return false;
     const msgs = state.messages[sessionId] || [];
-    return msgs.some((m) => m.status === 'sending' || m.status === 'streaming');
-  }) || connectionStatus !== 'connected' || aiConnectionStatus !== 'connected';
+    const lastMsg = msgs[msgs.length - 1];
+    if (!lastMsg) return false;
+    
+    // 只有最后一条消息是未完成状态时才认为处于等待
+    const isWaitingStatus = (lastMsg.role === 'user' && lastMsg.status === 'sending') ||
+                            (lastMsg.role === 'assistant' && lastMsg.status === 'streaming');
+    if (!isWaitingStatus) return false;
+
+    // 二次防御：如果是陈旧消息（超过 30 分钟前），不视为等待状态
+    // 防止加载动画期间捕获的陈旧 sending/streaming 消息永久锁定输入框
+    const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+    const now = Date.now();
+    if (now - lastMsg.timestamp > THIRTY_MINUTES_MS) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // 关键修复：兜底超时机制，防止 isWaiting 因后端响应丢失永久挂起
+  // 当消息处于 sending 或 streaming 状态超过 MAX_WAIT_MS 时，自动标记为 error 释放锁定
+  const WAIT_TIMEOUT_MS = 120000; // 最长等待 2 分钟
+  const waitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (waitTimeoutRef.current) {
+      clearTimeout(waitTimeoutRef.current);
+      waitTimeoutRef.current = null;
+    }
+    if (isWaiting) {
+      waitTimeoutRef.current = setTimeout(() => {
+        const sessionState = useSessionStore.getState();
+        const sessionId = sessionState.currentSessionId;
+        if (!sessionId) return;
+        const msgs = sessionState.messages[sessionId] || [];
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && (lastMsg.status === 'sending' || lastMsg.status === 'streaming')) {
+          sessionState.updateMessageStatus(sessionId, lastMsg.messageId, 'error');
+          addSystemLog(`等待响应超时(${WAIT_TIMEOUT_MS / 1000}s)，自动取消等待状态`);
+        }
+      }, WAIT_TIMEOUT_MS);
+    }
+    return () => {
+      if (waitTimeoutRef.current) {
+        clearTimeout(waitTimeoutRef.current);
+        waitTimeoutRef.current = null;
+      }
+    };
+  }, [isWaiting, addSystemLog]);
 
   /**
    * 自适应高度调整
@@ -179,13 +235,13 @@ export const InputArea: React.FC = () => {
 
       {/* 主输入区域 */}
       <div className="input-area-wrapper">
-        <div className={`input-area ${isWaiting ? 'waiting' : ''} ${showFullscreenButton ? 'has-fullscreen-btn' : ''}`}>
+        <div className={`input-area ${showFullscreenButton ? 'has-fullscreen-btn' : ''} ${isWaiting ? 'waiting' : ''}`}>
           
-          {/* 炫酷的 Cyber-Neural 加载动画 */}
+          {/* 炫酷的 Cyber-Neural 加载动画 (仅在等待响应时显示) */}
           <div className={`cyber-loader ${isWaiting ? 'active' : ''}`}>
             <div className="cyber-text">
               <span className="cyber-dot"></span>
-              {connectionStatus !== 'connected' || aiConnectionStatus !== 'connected' ? 'CONNECTING' : 'PROCESSING'}
+              PROCESSING
               <span className="cyber-dot"></span>
             </div>
           </div>
@@ -196,14 +252,14 @@ export const InputArea: React.FC = () => {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={connectionStatus === 'connected' && aiConnectionStatus === 'connected' ? '' : ''}
-            disabled={connectionStatus !== 'connected' || aiConnectionStatus !== 'connected' || isWaiting}
+            placeholder=""
+            disabled={isWaiting}
             className={`quiet-textarea ${isWaiting ? 'hidden' : ''}`}
             rows={1}
           />
 
           {/* 全屏编辑按钮 */}
-          {showFullscreenButton && !isWaiting && (
+          {showFullscreenButton && (
             <button
               className="fullscreen-btn"
               onClick={openFullscreenMode}
@@ -233,7 +289,7 @@ export const InputArea: React.FC = () => {
                 <button
                   className="fullscreen-action-btn send-btn"
                   onClick={handleSendMessage}
-                  disabled={!fullscreenText.trim() || connectionStatus !== 'connected' || aiConnectionStatus !== 'connected'}
+                  disabled={!fullscreenText.trim()}
                   title="发送消息"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

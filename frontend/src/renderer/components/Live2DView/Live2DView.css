@@ -1,3 +1,14 @@
+/*
+ * Live2DView 渲染层样式
+ *
+ * 关键修复：Canvas 的 CSS 尺寸与 PIXI 的 autoDensity 机制冲突。
+ * PIXI 的 resizeTo:window + autoDensity:true 会通过内联 style 设置 canvas 的 CSS 尺寸，
+ * 如果 CSS 层同时设置 width:100%;height:100%，会导致 canvas 被二次拉伸，
+ * 使 Live2D 模型渲染到屏幕可视区域外或被裁剪。
+ *
+ * 解决方案：移除 canvas 的 width/height CSS，仅由 PIXI 通过内联 style 控制尺寸。
+ * 容器 #live2d-wrapper 保持 position:absolute 覆盖父容器，为 canvas 提供定位锚点。
+ */
 #live2d-wrapper {
   position: absolute;
   top: 0;
@@ -6,12 +17,18 @@
   height: 100%;
   pointer-events: none; /* 容器不拦截事件，允许点击穿透到下层 UI */
   z-index: 10; /* 调整层级，在背景之上，交互层之下 */
-  overflow: visible;
+  overflow: hidden; /* 防止 canvas 溢出影响其他元素定位 */
 }
 
 .live2d-canvas {
-  width: 100%;
-  height: 100%;
+  /*
+   * 关键修复：不设置 width/height CSS，避免与 PIXI 的 autoDensity 机制冲突。
+   * PIXI 初始化时通过 resizeTo:window + autoDensity:true 自动管理 canvas 尺寸，
+   * 包括 devicePixelRatio 适配和 CSS 内联样式设置。
+   * 移除 width:100%;height:100% 后，canvas 尺寸完全由 PIXI 控制，
+   * 确保模型渲染在正确的可视区域内。
+   */
+  display: block; /* 消除 canvas 底部的 4px 间隙 */
   pointer-events: none; /* 画布不拦截事件，通过 window capture 阶段手动分发 */
   touch-action: none; /* 防止触摸设备上的默认手势（如滚动、缩放）干扰拖拽 */
   user-select: none; /* 防止长按选中文本 */
@@ -111,6 +128,15 @@
 
 .save-btn:hover {
   background-color: #38a169;
+}
+
+.reset-btn {
+  background-color: #ed8936;
+  color: white;
+}
+
+.reset-btn:hover {
+  background-color: #dd6b20;
 }
 
 .exit-btn {

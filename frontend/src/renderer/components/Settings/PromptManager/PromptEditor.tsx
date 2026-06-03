@@ -29,6 +29,7 @@ const EDITOR_OPTIONS = {
   tabSize: 2,
   contextmenu: false, // 禁用右键菜单以防止绕过只读限制
   dragAndDrop: false, // 禁用拖拽以防止绕过只读限制
+  padding: { top: 16, bottom: 16 },
 };
 
 export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, templateId }) => {
@@ -214,7 +215,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
   }
 
   return (
-    <div className="prompt-editor">
+    <div className="prompt-editor" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       <div className="prompt-editor-header">
         <div className="editor-header-left">
           <h3>模板编辑器</h3>
@@ -242,9 +243,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
         )}
       </div>
 
-      <div className="editor-container">
+      <div className="editor-container" style={{ flex: 1, minHeight: 0, border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', overflow: 'hidden' }}>
         <Editor
-          height="400px"
+          height="100%"
           language={JINJA2_LANGUAGE}
           value={content}
           onChange={(val) => setContent(val || '')}

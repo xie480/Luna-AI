@@ -197,10 +197,21 @@ export const Live2DView: React.FC = () => {
 
         live2dModel.scale.set(0.15);
         live2dModel.anchor.set(0.5, 0.5);
-        live2dModel.x = app.renderer.width / 2;
-        live2dModel.y = app.renderer.height / 2 + 150;
+        live2dModel.x = 0;
+        live2dModel.y = 0;
+
+        // 关键修复：先设置容器默认位置，再加载持久化配置覆盖
+        // 默认位置：屏幕中心偏下。持久化配置在下一阶段异步读取，确保渲染前已有默认值
+        container.x = app.renderer.width / 2;
+        container.y = app.renderer.height / 2 + 150;
+        
+        // 确保容器在最上层
+        container.zIndex = 10;
+        app.stage.sortableChildren = true;
 
         // 加载持久化的变换配置
+        // 关键修复：localStorage 读取必须在容器默认值设置完成之后，
+        // 确保「读取→解析→应用」序列在组件首次渲染前完成，防止默认值覆盖已保存配置
         try {
           const rawTransform = localStorage.getItem(TRANSFORM_KEY);
           if (rawTransform) {
@@ -542,6 +553,20 @@ export const Live2DView: React.FC = () => {
     setLive2dConfigMode('none');
   };
 
+  // 重置立绘配置
+  const handleResetTransform = () => {
+    if (!container || !app) return;
+    const TRANSFORM_KEY = "luna:transform";
+    localStorage.removeItem(TRANSFORM_KEY);
+    
+    // 恢复默认位置和缩放
+    container.x = app.renderer.width / 2;
+    container.y = app.renderer.height / 2 + 150;
+    container.scale.set(1);
+    
+    showGlobalMessage('立绘已重置到默认位置', 2000);
+  };
+
   // 重置追踪起点
   const handleResetTracking = () => {
     setTrackingOriginOffset({ x: 0, y: 0 });
@@ -588,9 +613,14 @@ export const Live2DView: React.FC = () => {
           </div>
           <div className="live2d-config-panel">
             {live2dConfigMode === 'transform' && (
-              <button className="config-btn save-btn" onClick={handleSaveTransform}>
-                保存配置
-              </button>
+              <>
+                <button className="config-btn save-btn" onClick={handleSaveTransform}>
+                  保存配置
+                </button>
+                <button className="config-btn reset-btn" onClick={handleResetTransform}>
+                  重置立绘
+                </button>
+              </>
             )}
             {live2dConfigMode === 'tracking' && (
               <button className="config-btn save-btn" onClick={handleResetTracking}>

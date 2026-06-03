@@ -257,7 +257,12 @@ export const EventHorizonLoader: React.FC = () => {
     if (isBackendReady && !fadeOut) {
       setFadeOut(true);
       // CSS 过渡 0.8s，与样式保持一致
-      const timer = setTimeout(() => setMounted(false), 800);
+      const timer = setTimeout(() => {
+        setMounted(false);
+        // 关键修复：加载动画完全卸载后派发事件，通知其他组件清理陈旧 waiting 状态
+        // 这解决了输入框在初始加载期间捕获到 sending/streaming 消息后永久显示加载动画的问题
+        window.dispatchEvent(new CustomEvent('luna:loading-complete'));
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [isBackendReady, fadeOut]);

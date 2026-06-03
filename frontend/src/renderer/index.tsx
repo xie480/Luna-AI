@@ -84,6 +84,9 @@ function initGlobalErrorListeners(): void {
  *  - 两者都连接成功 + 最短展示时间到达后，自动触发 0.8s 淡出过渡
  *  - 过渡完成后从 React 树彻底卸载，对主界面无任何副作用
  */
+// 用于标记加载动画是否已卸载（即用户已进入主界面）
+let loadingScreenUnmounted = false;
+
 // eslint-disable-next-line react-refresh/only-export-components
 const App: React.FC = () => {
   // 使用 Zustand hook 方式获取函数，确保引用稳定
@@ -114,6 +117,28 @@ const App: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * 关键修复：监听加载动画卸载事件，在加载动画结束后清除所有陈旧 waiting 状态
+   *
+   * 在初始加载动画尚未结束时，如果后端推送了任何 chat_stream 消息，
+   * sessionStore 中可能残留 status='sending' 或 'streaming' 的消息。
+   * 当加载动画结束（EventHorizonLoader 卸载）后，这些陈旧状态会一直被
+   * isWaiting 选中器捕获，导致输入框永久显示加载动画。
+   *
+   * 解决方案：监听 luna:loading-complete 自定义事件，在加载动画完全卸载后，
+   * 强制将所有 sending/streaming 消息标记为 error，释放输入框锁定。
+   */
+  useEffect(() => {
+    const handleLoadingComplete = () => {
+      useSessionStore.getState().clearAllWaitingStates();
+      addSystemLog('加载动画完成，已清除所有等待状态');
+    };
+    window.addEventListener('luna:loading-complete', handleLoadingComplete);
+    return () => {
+      window.removeEventListener('luna:loading-complete', handleLoadingComplete);
+    };
+  }, [addSystemLog]);
 
   return (
     <>

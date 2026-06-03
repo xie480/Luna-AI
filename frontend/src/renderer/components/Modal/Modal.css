@@ -700,6 +700,8 @@
   border: 1px solid #2d2d44;
   border-radius: 8px;
   overflow: hidden;
+  /* 关键修复：增加底部内边距，防止 Monaco Editor 滚动至最底部时最后一行被 clip 截断 */
+  padding-bottom: 8px;
 }
 
 .editor-footer {

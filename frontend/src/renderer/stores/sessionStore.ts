@@ -84,6 +84,8 @@ interface SessionState {
   updateNodeStatus: (nodeId: string, status: TaskNodeState['status'], progress?: number) => void;
   updateMemory: (memory: MemorySnapshot) => void;
   clearMessages: (sessionId: string) => void;
+  /** 清除所有处于 waiting 状态（sending/streaming）的消息，释放输入框锁定 */
+  clearAllWaitingStates: () => void;
 }
 
 /**
@@ -114,7 +116,24 @@ export const useSessionStore = create<SessionState>((set) => ({
     set((state) => {
       const sessionMessages = state.messages[sessionId] || [];
       const msgIndex = sessionMessages.findIndex((m) => m.messageId === msgId);
-      if (msgIndex === -1) return state;
+      
+      if (msgIndex === -1) {
+        const newMsg: ChatMessage = {
+          messageId: msgId,
+          sessionId,
+          role: 'assistant',
+          contentType: 'text',
+          content: chunk,
+          timestamp: Date.now(),
+          status: 'streaming',
+        };
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: [...sessionMessages, newMsg],
+          },
+        };
+      }
 
       const updatedMessages = [...sessionMessages];
       updatedMessages[msgIndex] = {
@@ -136,7 +155,24 @@ export const useSessionStore = create<SessionState>((set) => ({
     set((state) => {
       const sessionMessages = state.messages[sessionId] || [];
       const msgIndex = sessionMessages.findIndex((m) => m.messageId === msgId);
-      if (msgIndex === -1) return state;
+      
+      if (msgIndex === -1) {
+        const newMsg: ChatMessage = {
+          messageId: msgId,
+          sessionId,
+          role: 'assistant',
+          contentType: 'text',
+          content: '',
+          timestamp: Date.now(),
+          status,
+        };
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: [...sessionMessages, newMsg],
+          },
+        };
+      }
 
       const updatedMessages = [...sessionMessages];
       updatedMessages[msgIndex] = {
@@ -199,4 +235,19 @@ export const useSessionStore = create<SessionState>((set) => ({
         [sessionId]: [],
       },
     })),
+
+  // 清除所有 waiting 状态（sending/streaming）的消息
+  // 在加载动画结束后调用，确保输入框不被陈旧状态锁定
+  clearAllWaitingStates: () =>
+    set((state) => {
+      const updated: Record<string, ChatMessage[]> = {};
+      for (const [sessionId, msgs] of Object.entries(state.messages)) {
+        updated[sessionId] = msgs.map((m) =>
+          m.status === 'sending' || m.status === 'streaming'
+            ? { ...m, status: 'error' as const }
+            : m
+        );
+      }
+      return { messages: updated };
+    }),
 }));

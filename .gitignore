@@ -62,3 +62,4 @@ frontend/node_modules/
 frontend/dist/
 frontend/dist-electron/
 frontend/out/
+VM_start.py
