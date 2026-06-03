@@ -205,9 +205,9 @@ async def lifespan(app: FastAPI):
         from app.router.model_router import ModelRouter
         model_router = ModelRouter(preset_repo)
         app.state.model_router = model_router
-# 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
-app.state.pg_repo = pg_repo
-app.state.redis_repo = redis_repo
+    # 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
+    app.state.pg_repo = pg_repo
+    app.state.redis_repo = redis_repo
 
 
     # 12. 加载 Embedding 和 Rerank 模型

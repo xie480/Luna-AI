@@ -1,10 +1,10 @@
 /**
  * Luna AI SSE（Server-Sent Events）管理器
- * 
- * 做什么：替代原有的 wsManager，通过 EventSource 接收后端实时推送，
+ *
+ * 做什么：通过 EventSource 接收后端实时推送，
  *        通过 fetch HTTP API 发送业务请求。
- * 
- * 为什么这样做：废弃 WebSocket 后，实时推送统一使用 SSE，
+ *
+ * 为什么这样做：实时推送统一使用 SSE，
  *            业务请求通过普通 HTTP POST/GET 完成。
  * 
  * 核心变更：
@@ -165,7 +165,7 @@ class SSEManager {
   }
 
   /**
-   * 处理接收到的消息（与原有 wsManager.handleMessage 逻辑一致）
+   * 处理接收到的 SSE 消息
    */
   private handleMessage(msg: WSMessage): void {
     const sessionStore = useSessionStore.getState();
@@ -297,7 +297,7 @@ class SSEManager {
   }
 
   /**
-   * 处理聊天流式输出（与原有 wsManager.handleChatStream 逻辑一致）
+   * 处理聊天流式输出（通过 SSE 接收的 ChatStreamPayload）
    */
   private handleChatStream(payload: ChatStreamPayload): void {
     const systemStore = useSystemStore.getState();
@@ -464,51 +464,67 @@ class SSEManager {
 
   /**
    * 获取日历元数据（通过 HTTP GET 调用）
+   * 失败时自动关闭 loading 状态，防止 UI 卡死
    */
   public async fetchCalendarMetadata(yearMonth: string): Promise<void> {
     const systemStore = useSystemStore.getState();
     const traceId = systemStore.currentTraceID || `web-${generateId()}`;
     try {
-      const resp = await fetch(`${this.backendUrl}/api/calendar?year_month=${yearMonth}`, {
+      const resp = await fetch(`${this.backendUrl}/api/calendar?year_month=${encodeURIComponent(yearMonth)}`, {
         method: 'GET',
         headers: { 'X-Trace-ID': traceId },
       });
       if (resp.ok) {
         const data = await resp.json();
-        import('../stores/historyStore').then(({ useHistoryStore }) => {
-          useHistoryStore.getState().setCalendarMetadata(
-            data.payload.year_month,
-            data.payload.active_dates || [],
-          );
-        });
+        const { useHistoryStore } = await import('../stores/historyStore');
+        useHistoryStore.getState().setCalendarMetadata(
+          data.payload.year_month,
+          data.payload.active_dates || [],
+        );
+      } else {
+        // 非 200 响应也要关闭 loading
+        const { useHistoryStore } = await import('../stores/historyStore');
+        useHistoryStore.getState().setCalendarMetadata(yearMonth, []);
+        systemStore.addSystemLog(`获取日历元数据失败: HTTP ${resp.status}`);
       }
     } catch (err) {
       systemStore.addSystemLog(`获取日历元数据失败: ${err}`);
+      // 请求失败时必须关闭 loading 状态，否则 UI 永久卡死
+      const { useHistoryStore } = await import('../stores/historyStore');
+      useHistoryStore.getState().setCalendarMetadata(yearMonth, []);
     }
   }
 
   /**
    * 获取指定日期聊天记录（通过 HTTP GET 调用）
+   * 失败时自动关闭 loading 状态，防止 UI 卡死
    */
   public async fetchChatHistory(date: string): Promise<void> {
     const systemStore = useSystemStore.getState();
     const traceId = systemStore.currentTraceID || `web-${generateId()}`;
     try {
-      const resp = await fetch(`${this.backendUrl}/api/chat_history?date=${date}`, {
+      const resp = await fetch(`${this.backendUrl}/api/chat_history?date=${encodeURIComponent(date)}`, {
         method: 'GET',
         headers: { 'X-Trace-ID': traceId },
       });
       if (resp.ok) {
         const data = await resp.json();
-        import('../stores/historyStore').then(({ useHistoryStore }) => {
-          useHistoryStore.getState().setChatHistory(
-            data.payload.date,
-            data.payload.messages || [],
-          );
-        });
+        const { useHistoryStore } = await import('../stores/historyStore');
+        useHistoryStore.getState().setChatHistory(
+          data.payload.date,
+          data.payload.messages || [],
+        );
+      } else {
+        // 非 200 响应也要关闭 loading
+        const { useHistoryStore } = await import('../stores/historyStore');
+        useHistoryStore.getState().setChatHistory(date, []);
+        systemStore.addSystemLog(`获取聊天记录失败: HTTP ${resp.status}`);
       }
     } catch (err) {
       systemStore.addSystemLog(`获取聊天记录失败: ${err}`);
+      // 请求失败时必须关闭 loading 状态，否则 UI 永久卡死
+      const { useHistoryStore } = await import('../stores/historyStore');
+      useHistoryStore.getState().setChatHistory(date, []);
     }
   }
 

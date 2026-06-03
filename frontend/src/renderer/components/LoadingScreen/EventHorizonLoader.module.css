@@ -1,0 +1,77 @@
+.container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              visibility 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fadeOut {
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(1.05);
+  pointer-events: none;
+}
+
+.canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.textOverlay {
+  position: absolute;
+  /* 将文字居中显示，使其被大光环包裹 */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Inter', 'SF Pro Display', 'Segoe UI', monospace;
+  font-size: 14px;
+  letter-spacing: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+  
+  /* 科技感发光阴影 */
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 
+               0 0 20px rgba(0, 240, 255, 0.3),
+               0 0 30px rgba(139, 92, 246, 0.4);
+               
+  /* 平滑的呼吸灯透明度动画 */
+  animation: pulseText 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+.textOverlay.fadeOut {
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+
+@keyframes pulseText {
+  0% {
+    opacity: 0.4;
+    text-shadow: 0 0 5px rgba(0, 240, 255, 0.2), 
+                 0 0 10px rgba(139, 92, 246, 0.2);
+  }
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 12px rgba(0, 240, 255, 0.8), 
+                 0 0 24px rgba(0, 240, 255, 0.5),
+                 0 0 36px rgba(139, 92, 246, 0.6);
+  }
+}

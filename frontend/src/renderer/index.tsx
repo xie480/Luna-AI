@@ -8,6 +8,7 @@
  * 2. 左侧边栏提供导航菜单，点击菜单项打开居中模态窗口
  * 3. 所有状态来自 Go Runtime 推送，前端仅为状态投影
  * 4. 诊断面板 DebugPanel 独立渲染，与模态窗口互斥
+ * 5. EventHorizonLoader 全屏加载动画覆盖在最上层，后端就绪后自动销毁
  */
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -16,6 +17,9 @@ import { generateId } from '../shared/utils/snowflake';
 
 // 导入全局样式
 import './styles/global.css';
+
+// 导入加载屏组件（覆盖在 App 最上层，后端就绪后自动销毁）
+import { EventHorizonLoader } from './components/LoadingScreen/EventHorizonLoader';
 
 // 导入组件
 import { ChatView } from './components/ChatView/ChatView';
@@ -73,6 +77,12 @@ function initGlobalErrorListeners(): void {
  * Luna AI 主应用组件
  * 采用极简布局：主界面为纯聊天区，左侧边栏提供导航，模态窗口展示功能面板
  * DebugPanel 诊断面板独立于 Modal 渲染，二者互斥
+ *
+ *  EventHorizonLoader 包裹在最外层：
+ *  - 覆盖整个屏幕展示引力透镜全屏加载动画
+ *  - 通过 useBackendReady 监听 Go Runtime 与 Python AI 服务连接状态
+ *  - 两者都连接成功 + 最短展示时间到达后，自动触发 0.8s 淡出过渡
+ *  - 过渡完成后从 React 树彻底卸载，对主界面无任何副作用
  */
 // eslint-disable-next-line react-refresh/only-export-components
 const App: React.FC = () => {
@@ -106,37 +116,44 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="app-container">
-      {/* 主界面：纯聊天界面，占据全部空间 */}
-      <main
-        className="main-content"
-        style={{
-          marginLeft: isLeftSidebarOpen ? '260px' : '0',
-          transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      >
-        <ChatView />
-      </main>
+    <>
+      {/* 全屏事件视界引力透镜加载动画 */}
+      {/* - 覆盖在所有 UI 之上（z-index: 9999） */}
+      {/* - 后端就绪后自动淡出并卸载 */}
+      <EventHorizonLoader />
 
-      {/* 左侧边栏开关按钮：固定在左上角 */}
-      <SidebarTrigger />
+      <div className="app-container">
+        {/* 主界面：纯聊天界面，占据全部空间 */}
+        <main
+          className="main-content"
+          style={{
+            marginLeft: isLeftSidebarOpen ? '260px' : '0',
+            transition: 'margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
+        >
+          <ChatView />
+        </main>
 
-      {/* 左侧边栏：提供导航菜单 */}
-      <Sidebar />
+        {/* 左侧边栏开关按钮：固定在左上角 */}
+        <SidebarTrigger />
 
-      {/* 模态窗口：居中展示功能面板 */}
-      <Modal />
+        {/* 左侧边栏：提供导航菜单 */}
+        <Sidebar />
 
-      {/* 诊断面板：独立于模态窗口渲染，通过 isDiagnosticOpen 控制显隐 */}
-      <DebugPanel />
+        {/* 模态窗口：居中展示功能面板 */}
+        <Modal />
 
-      {/* 全局消息提示 */}
-      {globalMessage && (
-        <div className="global-message-toast">
-          {globalMessage}
-        </div>
-      )}
-    </div>
+        {/* 诊断面板：独立于模态窗口渲染，通过 isDiagnosticOpen 控制显隐 */}
+        <DebugPanel />
+
+        {/* 全局消息提示 */}
+        {globalMessage && (
+          <div className="global-message-toast">
+            {globalMessage}
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 
