@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers.api_config_preset import router as config_preset_router
+from app.api.routers.error_log import router as error_log_router
 from app.api.routers.prompt import router as prompt_router
 from app.api.routers.telemetry import router as telemetry_router
 from app.api.http_api import router as http_router
@@ -43,6 +44,7 @@ from app.prompt.manager import Manager as PromptManager
 from app.repository.chat_history_pg import ChatHistoryPGRepo
 from app.repository.chat_history_redis import ChatHistoryRedisRepo
 from app.repository.config_preset_pg import ConfigPresetPGRepo
+from app.repository.error_log_pg import ErrorLogPGRepo
 from app.repository.long_term_memory_pg import LongTermMemoryPGRepo
 from app.repository.long_term_memory_qdrant import LongTermMemoryQdrantRepo
 from app.repository.models import Base
@@ -156,8 +158,10 @@ async def lifespan(app: FastAPI):
         redis_repo = ChatHistoryRedisRepo(redis_client)
         
     pg_repo = None
+    error_log_repo = None
     if pg_client:
         pg_repo = ChatHistoryPGRepo(pg_client)
+        error_log_repo = ErrorLogPGRepo(pg_client)
 
     # 7. 初始化长期记忆仓库
     ltm_pg_repo = None
@@ -208,6 +212,7 @@ async def lifespan(app: FastAPI):
     # 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
     app.state.pg_repo = pg_repo
     app.state.redis_repo = redis_repo
+    app.state.error_log_repo = error_log_repo
 
 
     # 12. 加载 Embedding 和 Rerank 模型
@@ -296,6 +301,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(config_preset_router)
+app.include_router(error_log_router)
 app.include_router(prompt_router)
 app.include_router(telemetry_router)
 app.include_router(http_router)

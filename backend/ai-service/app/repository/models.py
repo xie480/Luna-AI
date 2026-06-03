@@ -97,6 +97,35 @@ class LongTermMemory(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class ErrorLog(Base):
+    """
+    对应 PostgreSQL 中的 error_logs 表（前端错误日志持久化）
+    做什么：记录前端捕获并上报的错误信息，包括运行时异常、Promise 拒绝、WS 通信异常等。
+    为什么这样做：所有前端异常必须同时持久化到数据库，实现可追溯的错误审计。
+    输入输出：
+        - id: Snowflake ID
+        - level: 错误级别 ERROR / WARN / CRITICAL
+        - source: 错误来源（react_renderer / websocket / promise / etc）
+        - message: 错误摘要
+        - detail: 详细错误信息（stack trace / payload）
+        - trace_id: 关联的全链路追踪 ID
+        - user_agent: 用户代理信息
+        - created_at: 记录时间
+    """
+    __tablename__ = "error_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    level: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # ERROR / WARN / CRITICAL
+    source: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    user_agent: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
 class ApiConfigPreset(Base):
     """对应 PostgreSQL 中的 api_config_presets 表（API 配置预设）"""
     __tablename__ = "api_config_presets"

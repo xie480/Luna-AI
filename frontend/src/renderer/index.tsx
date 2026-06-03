@@ -9,6 +9,7 @@
  * 3. 所有状态来自 Go Runtime 推送，前端仅为状态投影
  * 4. 诊断面板 DebugPanel 独立渲染，与模态窗口互斥
  * 5. EventHorizonLoader 全屏加载动画覆盖在最上层，后端就绪后自动销毁
+ * 6. ErrorToast 全局错误提示组件独立于亚层，覆盖在所有 UI 之上
  */
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -28,11 +29,15 @@ import { SidebarTrigger } from './components/SidebarTrigger/SidebarTrigger';
 import { Modal } from './components/Modal/Modal';
 import DebugPanel from './components/Settings/DebugPanel';
 import { Live2DConfigPanel } from './components/Live2DConfigPanel/Live2DConfigPanel';
+import { ErrorToast } from './components/ErrorToast/ErrorToast';
 
 // 导入服务和 Store
 import { sseManager } from './services/sseManager';
 import { useSessionStore } from './stores/sessionStore';
 import { useSystemStore } from './stores/systemStore';
+import { useErrorToastStore } from './stores/errorToastStore';
+import { reportErrorLog } from './services/errorLogService';
+import { createErrorToast } from './stores/errorToastStore';
 
 // 挂载全局 PIXI，必须在任何 pixi-live2d-display 导入前完成
 // @ts-ignore
@@ -41,34 +46,71 @@ window.PIXI = PIXI;
 /**
  * 初始化全局异常监听
  * 捕获 React ErrorBoundary 无法捕获的异常（如 setTimeout、Promise rejection）
+ *
+ * 增强功能：
+ * - 将异常同时写入 systemStore（内存环形缓冲）和 PostgreSQL（持久化上报）
+ * - 通过 ErrorToast 在 UI 顶部展示友好的错误提示
  */
 function initGlobalErrorListeners(): void {
   // 捕获未处理的 Promise rejection
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
     const systemStore = useSystemStore.getState();
+    const message = event.reason?.message || '未处理的 Promise 异常';
+    const traceId = systemStore.currentTraceID || generateId();
+
+    // 1. 写入内存缓冲区（供诊断面板查阅）
     systemStore.addFrontendError({
       id: generateId(),
       timestamp: Date.now(),
       level: 'ERROR',
       source: 'global_promise',
-      message: event.reason?.message || '未处理的 Promise 异常',
+      message,
       stack: event.reason?.stack,
-      trace_id: systemStore.currentTraceID || undefined,
+      trace_id: traceId,
     });
+
+    // 2. 显示 UI 错误提示
+    createErrorToast('ERROR', 'Promise', message);
+
+    // 3. 异步持久化到数据库（不阻塞主流程）
+    reportErrorLog({
+      level: 'ERROR',
+      source: 'global_promise',
+      message,
+      detail: event.reason?.stack || '',
+      trace_id: traceId,
+    }).catch(() => { /* 静默降级 */ });
   });
 
   // 捕获全局 JS 运行时异常
   window.onerror = (message, source, lineno, colno, error): boolean => {
     const systemStore = useSystemStore.getState();
+    const msg = typeof message === 'string' ? message : '全局运行时异常';
+    const traceId = systemStore.currentTraceID || generateId();
+
+    // 1. 写入内存缓冲区
     systemStore.addFrontendError({
       id: generateId(),
       timestamp: Date.now(),
       level: 'CRITICAL',
       source: 'global_runtime',
-      message: typeof message === 'string' ? message : '全局运行时异常',
+      message: msg,
       stack: error?.stack,
-      trace_id: systemStore.currentTraceID || undefined,
+      trace_id: traceId,
     });
+
+    // 2. 显示 UI 错误提示
+    createErrorToast('CRITICAL', '运行时', msg);
+
+    // 3. 异步持久化到数据库
+    reportErrorLog({
+      level: 'CRITICAL',
+      source: 'global_runtime',
+      message: msg,
+      detail: error?.stack || `at ${source}:${lineno}:${colno}`,
+      trace_id: traceId,
+    }).catch(() => { /* 静默降级 */ });
+
     // 返回 true 阻止默认浏览器错误处理
     return true;
   };
@@ -174,14 +216,18 @@ const App: React.FC = () => {
 
         {/* Live2D 配置面板：独立于模态窗口渲染，覆盖在最上层 */}
         <Live2DConfigPanel />
-
-        {/* 全局消息提示 */}
-        {globalMessage && (
-          <div className="global-message-toast">
-            {globalMessage}
-          </div>
-        )}
       </div>
+
+      {/* 全局成功/信息提示（非错误场景：如"配置已保存"） */}
+      {globalMessage && (
+        <div className="global-message-toast">
+          {globalMessage}
+        </div>
+      )}
+
+      {/* 全局错误提示组件：固定定位在屏幕顶部状态栏正下方 */}
+      {/* 替代旧有的 alert() 弹窗和系统原生弹窗报错逻辑 */}
+      <ErrorToast />
     </>
   );
 };

@@ -20,6 +20,8 @@ import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/te
 import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 import { WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
+import { createErrorToast } from '../stores/errorToastStore';
+import { reportError } from '../services/errorLogService';
 import {
   WSMessage,
   PongPayload,
@@ -99,7 +101,11 @@ class SSEManager {
       this.eventSource = new EventSource(`${this.backendUrl}/sse/notifications`);
       this.setupEventHandlers();
     } catch (err) {
-      useSystemStore.getState().addSystemLog(`SSE 连接失败: ${err}`);
+      const errMsg = `SSE 连接失败: ${err}`;
+      useSystemStore.getState().addSystemLog(errMsg);
+      // 显示全局错误提示并持久化
+      createErrorToast('ERROR', 'SSE', errMsg);
+      reportError('sse', errMsg).catch(() => {});
     }
   }
 
@@ -134,7 +140,11 @@ class SSEManager {
         };
         this.handleMessage(msg);
       } catch (err) {
-        useSystemStore.getState().addSystemLog(`解析 SSE 消息失败: ${err}`);
+        const errMsg = `解析 SSE 消息失败: ${err}`;
+        useSystemStore.getState().addSystemLog(errMsg);
+        // 显示全局错误提示并持久化
+        createErrorToast('ERROR', 'SSE', errMsg);
+        reportError('sse', errMsg).catch(() => {});
       }
     });
 
@@ -152,7 +162,11 @@ class SSEManager {
         };
         this.handleMessage(msg);
       } catch (err) {
-        useSystemStore.getState().addSystemLog(`解析 SSE 消息失败: ${err}`);
+        const errMsg = `解析 SSE 消息失败: ${err}`;
+        useSystemStore.getState().addSystemLog(errMsg);
+        // 显示全局错误提示并持久化
+        createErrorToast('ERROR', 'SSE', errMsg);
+        reportError('sse', errMsg).catch(() => {});
       }
     };
 
@@ -342,9 +356,11 @@ class SSEManager {
           sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
         }
         if (payload.error) {
-          systemStore.addSystemLog(`聊天流错误: ${payload.error}`);
+          const errMsg = `生成失败: ${payload.error}`;
+          systemStore.addSystemLog(errMsg);
+          // 发送 ErrorToast 事件（ChatView 中监听的 luna:notification 会处理）
           window.dispatchEvent(new CustomEvent('luna:notification', {
-            detail: { message: `生成失败: ${payload.error}`, type: 'error' }
+            detail: { message: errMsg, type: 'error', source: 'chat_stream' }
           }));
         }
 

@@ -19,6 +19,8 @@ import { BubbleStack } from '../BubbleStack/BubbleStack';
 import { InputArea } from '../InputArea/InputArea';
 import { RecentMemoryPanel } from '../RecentMemoryPanel/RecentMemoryPanel';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
+import { createErrorToast } from '../../stores/errorToastStore';
+import { reportError } from '../../services/errorLogService';
 import './ChatView.css';
 
 /**
@@ -60,11 +62,24 @@ export const ChatView: React.FC = () => {
   // }, []);
 
   useEffect(() => {
+    /**
+     * 监听 luna:notification 自定义事件
+     * 替代旧的 alert() 弹窗，改为使用 ErrorToast 组件展示
+     * 同时将错误信息持久化到数据库
+     */
     const handleNotification = (e: Event) => {
       const customEvent = e as CustomEvent;
-      const { message, type } = customEvent.detail;
-      // 简单的兜底实现，后续可替换为更美观的 Toast 组件
-      alert(`[${type.toUpperCase()}] ${message}`);
+      const { message, type, source, detail } = customEvent.detail;
+
+      // 确定错误级别
+      const level = type === 'error' ? 'ERROR' : type === 'warning' ? 'WARN' : 'ERROR';
+      const errorSource = source || 'notification';
+
+      // 1. 显示 UI 错误提示
+      createErrorToast(level, errorSource, message, detail);
+
+      // 2. 异步持久化到数据库（不阻塞 UI）
+      reportError(errorSource, message, detail || '').catch(() => { /* 静默降级 */ });
     };
 
     window.addEventListener('luna:notification', handleNotification);

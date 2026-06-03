@@ -53,26 +53,29 @@ input, textarea {
   -webkit-user-select: text;
 }
 
-/* 全局消息提示框 */
+/* 全局非错误消息提示框（用于成功/信息提示，如"配置已保存"） */
+/* 注意：错误提示已由 ErrorToast 组件替代（红色背景，带持久化上报） */
 .global-message-toast {
   position: fixed;
-  top: 20px;
+  bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 12px 24px;
+  background-color: rgba(0, 0, 0, 0.75);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 10px 22px;
   border-radius: 8px;
-  font-size: 16px;
-  z-index: 9999;
+  font-size: 14px;
+  z-index: 9998;
   pointer-events: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  animation: slideDown 0.3s ease-out;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  animation: toastFadeIn 0.3s ease-out;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-@keyframes slideDown {
+@keyframes toastFadeIn {
   from {
-    transform: translate(-50%, -20px);
+    transform: translate(-50%, 10px);
     opacity: 0;
   }
   to {
