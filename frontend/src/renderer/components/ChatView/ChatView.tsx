@@ -56,6 +56,12 @@ export const ChatView: React.FC = () => {
     };
 
     window.addEventListener('luna:loading-complete', handleLoadingComplete);
+    
+    // 再次检查，防止在添加监听器期间事件已触发
+    if ((window as any).__LUNA_LOADING_COMPLETE__) {
+      setLive2dReady(true);
+    }
+
     return () => {
       window.removeEventListener('luna:loading-complete', handleLoadingComplete);
     };

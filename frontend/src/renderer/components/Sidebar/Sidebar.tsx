@@ -165,9 +165,18 @@ export const Sidebar: React.FC = () => {
     closeLeftSidebar();
   };
 
-  const handleSubMenuClick = (subId: 'transform' | 'tracking') => {
+  const handleSubMenuClick = (e: React.MouseEvent, subId: 'transform' | 'tracking') => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // 1. 设置 Live2D 配置模式
     setLive2dConfigMode(subId);
-    // 点击子菜单项后自动收回侧边栏
+    
+    // 2. 关闭其他可能遮挡的面板
+    useSystemStore.getState().closeModal();
+    useSystemStore.getState().setDiagnosticOpen(false);
+    
+    // 3. 收起侧边栏，提供全屏视野
     closeLeftSidebar();
   };
 
@@ -204,7 +213,8 @@ export const Sidebar: React.FC = () => {
                   <button
                     key={sub.id}
                     className="sidebar-sub-menu-item"
-                    onClick={() => handleSubMenuClick(sub.id)}
+                    type="button"
+                    onClick={(e) => handleSubMenuClick(e, sub.id as 'transform' | 'tracking')}
                   >
                     {sub.label}
                   </button>

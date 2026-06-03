@@ -143,7 +143,10 @@ export const Live2DView: React.FC = () => {
         view: canvasRef.current as HTMLCanvasElement,
         backgroundAlpha: 0,
         resizeTo: window,
+        resolution: Math.min(window.devicePixelRatio || 1, 1.5),
+        autoDensity: true,
       });
+      pixiApp.ticker.maxFPS = 60;
       const parent = new PIXI.Container();
       pixiApp.stage.addChild(parent);
       setApp(pixiApp);
@@ -540,96 +543,63 @@ export const Live2DView: React.FC = () => {
     };
   }, [model, currentEmotion, addSystemLog]);
 
-  // 保存立绘配置
-  const handleSaveTransform = () => {
-    if (!container) return;
-    const TRANSFORM_KEY = "luna:transform";
-    const data = { x: container.x, y: container.y, scale: container.scale.x };
-    localStorage.setItem(TRANSFORM_KEY, JSON.stringify(data));
-    showGlobalMessage('立绘配置已保存', 2000);
-    setLive2dConfigMode('none');
-  };
+  // 监听来自 Live2DConfigPanel 的事件
+  useEffect(() => {
+    const handleSave = () => {
+      if (!container) return;
+      const TRANSFORM_KEY = "luna:transform";
+      const data = { x: container.x, y: container.y, scale: container.scale.x };
+      localStorage.setItem(TRANSFORM_KEY, JSON.stringify(data));
+    };
 
-  // 重置立绘配置
-  const handleResetTransform = () => {
-    if (!container || !app) return;
-    const TRANSFORM_KEY = "luna:transform";
-    localStorage.removeItem(TRANSFORM_KEY);
-    
-    // 恢复默认位置和缩放
-    container.x = app.renderer.width / 2;
-    container.y = app.renderer.height / 2 + 150;
-    container.scale.set(1);
-    
-    showGlobalMessage('立绘已重置到默认位置', 2000);
-  };
+    const handleResetTransform = () => {
+      if (!container || !app) return;
+      const TRANSFORM_KEY = "luna:transform";
+      localStorage.removeItem(TRANSFORM_KEY);
+      container.x = app.renderer.width / 2;
+      container.y = app.renderer.height / 2 + 150;
+      container.scale.set(1);
+    };
 
-  // 重置追踪起点
-  const handleResetTracking = () => {
-    setTrackingOriginOffset({ x: 0, y: 0 });
-    const TRACKING_KEY = "luna:tracking";
-    localStorage.setItem(TRACKING_KEY, JSON.stringify({ x: 0, y: 0 }));
-    showGlobalMessage('追踪起点已重置', 2000);
-  };
+    const handleResetTracking = () => {
+      setTrackingOriginOffset({ x: 0, y: 0 });
+      const TRACKING_KEY = "luna:tracking";
+      localStorage.setItem(TRACKING_KEY, JSON.stringify({ x: 0, y: 0 }));
+    };
 
-  // 退出配置模式
-  const handleExitConfig = () => {
-    setLive2dConfigMode('none');
-    showGlobalMessage('已退出配置模式', 2000);
-  };
+    window.addEventListener('luna:live2d-save-transform', handleSave);
+    window.addEventListener('luna:live2d-reset-transform', handleResetTransform);
+    window.addEventListener('luna:live2d-reset-tracking', handleResetTracking);
+
+    return () => {
+      window.removeEventListener('luna:live2d-save-transform', handleSave);
+      window.removeEventListener('luna:live2d-reset-transform', handleResetTransform);
+      window.removeEventListener('luna:live2d-reset-tracking', handleResetTracking);
+    };
+  }, [container, app]);
 
   if (!isWebGLSupported) {
     return null;
   }
 
   return (
-    <>
-      <div id="live2d-wrapper" className={live2dConfigMode !== 'none' ? 'config-mode' : ''}>
-        <canvas
-          ref={canvasRef}
-          id="live2d-canvas"
-          className="live2d-canvas"
-          onContextMenu={(e) => e.preventDefault()}
+    <div id="live2d-wrapper" className={live2dConfigMode !== 'none' ? 'config-mode' : ''}>
+      <canvas
+        ref={canvasRef}
+        id="live2d-canvas"
+        className="live2d-canvas"
+        onContextMenu={(e) => e.preventDefault()}
+      />
+      
+      {live2dConfigMode === 'tracking' && container && app && (
+        <div
+          className="tracking-anchor-indicator"
+          style={{
+            left: container.toGlobal(new PIXI.Point(trackingOriginOffset.x, trackingOriginOffset.y)).x,
+            top: container.toGlobal(new PIXI.Point(trackingOriginOffset.x, trackingOriginOffset.y)).y,
+          }}
         />
-        
-        {live2dConfigMode === 'tracking' && container && app && (
-          <div
-            className="tracking-anchor-indicator"
-            style={{
-              left: container.toGlobal(new PIXI.Point(trackingOriginOffset.x, trackingOriginOffset.y)).x,
-              top: container.toGlobal(new PIXI.Point(trackingOriginOffset.x, trackingOriginOffset.y)).y,
-            }}
-          />
-        )}
-      </div>
-
-      {live2dConfigMode !== 'none' && (
-        <>
-          <div className="live2d-config-status-bar">
-            {live2dConfigMode === 'transform' ? '当前正在配置立绘' : '当前正在配置鼠标追踪点'}
-          </div>
-          <div className="live2d-config-panel">
-            {live2dConfigMode === 'transform' && (
-              <>
-                <button className="config-btn save-btn" onClick={handleSaveTransform}>
-                  保存配置
-                </button>
-                <button className="config-btn reset-btn" onClick={handleResetTransform}>
-                  重置立绘
-                </button>
-              </>
-            )}
-            {live2dConfigMode === 'tracking' && (
-              <button className="config-btn save-btn" onClick={handleResetTracking}>
-                重置起点
-              </button>
-            )}
-            <button className="config-btn exit-btn" onClick={handleExitConfig}>
-              退出配置
-            </button>
-          </div>
-        </>
       )}
-    </>
+    </div>
   );
 };

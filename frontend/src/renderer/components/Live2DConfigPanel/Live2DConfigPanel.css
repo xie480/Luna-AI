@@ -1,0 +1,87 @@
+/* Portal 容器，确保层级最高 */
+.live2d-config-portal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none; /* 容器本身不拦截事件 */
+  z-index: 999999; /* 绝对最高层级 */
+}
+
+/* 配置状态提示栏 */
+.live2d-config-status-bar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 24px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  pointer-events: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* 配置操作面板 */
+.live2d-config-panel {
+  position: absolute;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  pointer-events: auto; /* 恢复按钮的点击事件 */
+}
+
+.config-btn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.save-btn {
+  background-color: #48bb78;
+  color: white;
+}
+
+.save-btn:hover {
+  background-color: #38a169;
+}
+
+.reset-btn {
+  background-color: #ed8936;
+  color: white;
+}
+
+.reset-btn:hover {
+  background-color: #dd6b20;
+}
+
+.exit-btn {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.exit-btn:hover {
+  background-color: #cbd5e0;
+}

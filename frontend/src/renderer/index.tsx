@@ -27,6 +27,7 @@ import { Sidebar } from './components/Sidebar/Sidebar';
 import { SidebarTrigger } from './components/SidebarTrigger/SidebarTrigger';
 import { Modal } from './components/Modal/Modal';
 import DebugPanel from './components/Settings/DebugPanel';
+import { Live2DConfigPanel } from './components/Live2DConfigPanel/Live2DConfigPanel';
 
 // 导入服务和 Store
 import { sseManager } from './services/sseManager';
@@ -170,6 +171,9 @@ const App: React.FC = () => {
 
         {/* 诊断面板：独立于模态窗口渲染，通过 isDiagnosticOpen 控制显隐 */}
         <DebugPanel />
+
+        {/* Live2D 配置面板：独立于模态窗口渲染，覆盖在最上层 */}
+        <Live2DConfigPanel />
 
         {/* 全局消息提示 */}
         {globalMessage && (
