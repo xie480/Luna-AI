@@ -36,36 +36,28 @@ import './ChatView.css';
  * 确保加载动画的 WebGL 资源已完全释放。
  */
 export const ChatView: React.FC = () => {
-  // Live2DView 延迟挂载状态：仅当加载动画完全卸载后才渲染
-  const [live2dReady, setLive2dReady] = useState(false);
+  // Live2DView 延迟挂载状态：强制设为 true 以进行诊断
+  const [live2dReady, setLive2dReady] = useState(true);
 
-  useEffect(() => {
-    // 如果加载动画已卸载（全局标记），则立即挂载
-    if ((window as any).__LUNA_LOADING_COMPLETE__) {
-      setLive2dReady(true);
-      return;
-    }
-
-    // 否则监听 luna:loading-complete 事件，延迟挂载
-    const handleLoadingComplete = () => {
-      // 延迟一个微任务（requestAnimationFrame），确保加载动画的 Canvas
-      // 和 WebGL 资源已完全从 DOM 树移除
-      requestAnimationFrame(() => {
-        setLive2dReady(true);
-      });
-    };
-
-    window.addEventListener('luna:loading-complete', handleLoadingComplete);
-    
-    // 再次检查，防止在添加监听器期间事件已触发
-    if ((window as any).__LUNA_LOADING_COMPLETE__) {
-      setLive2dReady(true);
-    }
-
-    return () => {
-      window.removeEventListener('luna:loading-complete', handleLoadingComplete);
-    };
-  }, []);
+  // 暂时注释掉延迟挂载逻辑，强制渲染 Live2DView
+  // useEffect(() => {
+  //   if ((window as any).__LUNA_LOADING_COMPLETE__) {
+  //     setLive2dReady(true);
+  //     return;
+  //   }
+  //   const handleLoadingComplete = () => {
+  //     requestAnimationFrame(() => {
+  //       setLive2dReady(true);
+  //     });
+  //   };
+  //   window.addEventListener('luna:loading-complete', handleLoadingComplete);
+  //   if ((window as any).__LUNA_LOADING_COMPLETE__) {
+  //     setLive2dReady(true);
+  //   }
+  //   return () => {
+  //     window.removeEventListener('luna:loading-complete', handleLoadingComplete);
+  //   };
+  // }, []);
 
   useEffect(() => {
     const handleNotification = (e: Event) => {

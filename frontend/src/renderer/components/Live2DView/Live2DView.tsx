@@ -118,47 +118,97 @@ export const Live2DView: React.FC = () => {
     }
   };
 
-  // ---------- 初始化 PIXI ----------
+  // ---------- 高强度诊断版：初始化 PIXI ----------
   useEffect(() => {
+    console.log("==================================================");
+    console.log("[DIAGNOSTIC] 1. PIXI 初始化 useEffect 被触发");
+    
+    if (!canvasRef.current) {
+      console.warn("[DIAGNOSTIC] 🛑 中断: canvasRef.current 为 null! DOM 尚未挂载。");
+      return;
+    }
+    console.log("[DIAGNOSTIC] 2. Canvas DOM 节点已就绪:", canvasRef.current);
+
     if (!PIXI.utils.isWebGLSupported()) {
       setIsWebGLSupported(false);
+      console.warn("[DIAGNOSTIC] 🛑 中断: PIXI.utils.isWebGLSupported() 返回 false!");
       addSystemLog("当前环境不支持 WebGL，已关闭 Live2D");
       return;
     }
-  }, [addSystemLog]);
 
-  useEffect(() => {
-    if (!canvasRef.current || !isWebGLSupported) return;
+    // --- 原生 WebGL 探针 ---
+    try {
+      const gl = canvasRef.current.getContext('webgl') || canvasRef.current.getContext('experimental-webgl');
+      if (!gl) {
+        console.error("[DIAGNOSTIC] ❌ 原生 WebGL 上下文获取失败！浏览器/Electron 可能禁用了硬件加速。");
+      } else {
+        console.log("[DIAGNOSTIC] 3. 原生 WebGL 探针测试成功。Vendor:", gl.getParameter(gl.VENDOR));
+      }
+    } catch (e) {
+      console.error("[DIAGNOSTIC] ❌ 原生 WebGL 探针抛出异常:", e);
+    }
 
     let pixiApp: PIXI.Application | null = null;
     let isCancelled = false;
 
-    import("pixi-live2d-display/cubism4").then(({ Live2DModel }) => {
-      if (isCancelled) return;
-      
-      if (Live2DModel.registerTicker) {
-        Live2DModel.registerTicker(PIXI.Ticker);
-      }
-      pixiApp = new PIXI.Application({
-        view: canvasRef.current as HTMLCanvasElement,
-        backgroundAlpha: 0,
-        resizeTo: window,
-        resolution: Math.min(window.devicePixelRatio || 1, 1.5),
-        autoDensity: true,
+    console.log("[DIAGNOSTIC] 4. 开始动态导入 pixi-live2d-display/cubism4...");
+    const importStartTime = performance.now();
+
+    import("pixi-live2d-display/cubism4")
+      .then(({ Live2DModel }) => {
+        const importTime = (performance.now() - importStartTime).toFixed(2);
+        console.log(`[DIAGNOSTIC] 5. 动态导入成功! 耗时: ${importTime}ms`);
+        
+        if (isCancelled) {
+          console.warn("[DIAGNOSTIC] 🛑 中断: 组件已卸载 (isCancelled=true)，放弃实例化 PIXI。");
+          return;
+        }
+
+        console.log("[DIAGNOSTIC] 6. 准备实例化 PIXI.Application...");
+        try {
+          if (Live2DModel.registerTicker) {
+            Live2DModel.registerTicker(PIXI.Ticker);
+            console.log("[DIAGNOSTIC] - Ticker 注册成功");
+          }
+
+          // 强制监听 WebGL 丢失事件
+          canvasRef.current!.addEventListener('webglcontextlost', (e) => {
+            console.error("[DIAGNOSTIC] 🚨 严重错误: WebGL 上下文丢失 (webglcontextlost)!");
+          }, false);
+
+          pixiApp = new PIXI.Application({
+            view: canvasRef.current as HTMLCanvasElement,
+            backgroundAlpha: 0,
+            resizeTo: window,
+            resolution: Math.min(window.devicePixelRatio || 1, 1.5),
+            autoDensity: true,
+          });
+
+          console.log("[DIAGNOSTIC] 7. PIXI.Application 实例化完成!", pixiApp);
+          console.log("[DIAGNOSTIC] - 渲染器类型 (1=WebGL, 2=Canvas):", pixiApp.renderer.type);
+          
+          pixiApp.ticker.maxFPS = 60;
+          const parent = new PIXI.Container();
+          pixiApp.stage.addChild(parent);
+          
+          setApp(pixiApp);
+          setContainer(parent);
+          console.log("[DIAGNOSTIC] 8. PIXI 状态已写入 React State。");
+
+        } catch (pixiError) {
+          console.error("[DIAGNOSTIC] ❌ PIXI 实例化过程中抛出致命异常:", pixiError);
+        }
+      })
+      .catch((importError) => {
+        console.error("[DIAGNOSTIC] ❌ 动态导入 pixi-live2d-display 彻底失败:", importError);
+        addSystemLog(`[Live2D] 核心库加载失败: ${importError.message}`);
       });
-      pixiApp.ticker.maxFPS = 60;
-      const parent = new PIXI.Container();
-      pixiApp.stage.addChild(parent);
-      setApp(pixiApp);
-      setContainer(parent);
-    }).catch((e) => {
-      console.error("[Live2D] 加载 pixi-live2d-display 失败", e);
-      addSystemLog(`[Live2D] 加载 pixi-live2d-display 失败: ${e.message}`);
-    });
 
     return () => {
+      console.log("[DIAGNOSTIC] 🧹 useEffect 清理函数被调用。");
       isCancelled = true;
       if (pixiApp) {
+        console.log("[DIAGNOSTIC] - 销毁现有的 PIXI 实例");
         pixiApp.destroy(false, { children: true, texture: true, baseTexture: true });
         pixiApp = null;
       }
@@ -166,7 +216,7 @@ export const Live2DView: React.FC = () => {
       setContainer(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWebGLSupported]);
+  }, []); // 移除 isWebGLSupported 依赖，合并为一个 useEffect
 
   // ---------- 加载模型 ----------
   useEffect(() => {
