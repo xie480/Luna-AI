@@ -143,10 +143,7 @@ export const Live2DView: React.FC = () => {
         view: canvasRef.current as HTMLCanvasElement,
         backgroundAlpha: 0,
         resizeTo: window,
-        resolution: Math.min(window.devicePixelRatio || 1, 1.5),
-        autoDensity: true,
       });
-      pixiApp.ticker.maxFPS = 60;
       const parent = new PIXI.Container();
       pixiApp.stage.addChild(parent);
       setApp(pixiApp);

@@ -134,6 +134,7 @@ export const Sidebar: React.FC = () => {
   // 从 Store 获取状态
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
   const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
+  const closeLeftSidebar = useSystemStore((state) => state.closeLeftSidebar);
 
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null);
 
@@ -143,6 +144,7 @@ export const Sidebar: React.FC = () => {
    * 1. 点击诊断面板 → 关闭模态窗口，打开诊断面板
    * 2. 点击其他菜单项 → 关闭诊断面板，打开对应的模态窗口
    * 3. 点击子菜单项 → 仅设置 Live2D 配置模式，不涉及面板切换
+   * 点击后自动关闭侧边栏
    */
   const handleMenuClick = (item: MenuItem): void => {
     if (item.subItems) {
@@ -159,10 +161,14 @@ export const Sidebar: React.FC = () => {
       useSystemStore.getState().setDiagnosticOpen(false);
       useSystemStore.getState().openModal(item.id as ModalPanelType);
     }
+    // 点击菜单项后自动收回侧边栏
+    closeLeftSidebar();
   };
 
   const handleSubMenuClick = (subId: 'transform' | 'tracking') => {
     setLive2dConfigMode(subId);
+    // 点击子菜单项后自动收回侧边栏
+    closeLeftSidebar();
   };
 
   return (

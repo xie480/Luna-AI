@@ -18,13 +18,6 @@ import './Modal.css';
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
 
-/** 拖拽或缩放中的光标类型 */
-type CursorMode = 
-  | 'default' 
-  | 'move' 
-  | 'nw-resize' | 'ne-resize' | 'sw-resize' | 'se-resize'
-  | 'n-resize' | 's-resize' | 'w-resize' | 'e-resize';
-
 /** 缩放方向 */
 type ResizeDirection = 'n' | 's' | 'w' | 'e' | 'nw' | 'ne' | 'sw' | 'se';
 

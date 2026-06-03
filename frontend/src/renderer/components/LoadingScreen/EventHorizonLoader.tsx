@@ -259,6 +259,8 @@ export const EventHorizonLoader: React.FC = () => {
       // CSS 过渡 0.8s，与样式保持一致
       const timer = setTimeout(() => {
         setMounted(false);
+        // 设置全局标记，供 ChatView 等组件同步检查加载动画是否已完成
+        (window as any).__LUNA_LOADING_COMPLETE__ = true;
         // 关键修复：加载动画完全卸载后派发事件，通知其他组件清理陈旧 waiting 状态
         // 这解决了输入框在初始加载期间捕获到 sending/streaming 消息后永久显示加载动画的问题
         window.dispatchEvent(new CustomEvent('luna:loading-complete'));
