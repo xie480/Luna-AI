@@ -25,10 +25,10 @@
 
 /* 模态窗口容器 */
 .modal-container {
-  width: 680px;
-  height: 520px;
-  max-width: 90vw;
-  max-height: 85vh;
+  width: 1000px;
+  height: 700px;
+  max-width: 95vw;
+  max-height: 90vh;
   background-color: #1a1a2e;
   border-radius: 12px;
   border: 1px solid #2d2d44;
@@ -834,3 +834,49 @@
 
 /* 设置面板旧占位符清除 */
 .settings-placeholder { display: none; }
+
+/* ===== Prompt 版本差异对比增强样式 ===== */
+
+/* 版本操作栏 — 包含"开启版本对比"按钮 */
+.version-actions-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* 差异对比下拉选择器样式 */
+.diff-selectors select.config-input.config-input-sm {
+  flex: 1;
+  cursor: pointer;
+  min-width: 200px;
+}
+
+.diff-selectors select.config-input.config-input-sm option {
+  background-color: #1e1e38;
+  color: #e5e7eb;
+}
+
+/* 差异编辑器容器必须占满高度，否则 DiffEditor 渲染高度为 0 */
+.prompts-diff {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.prompts-diff .diff-editor-container {
+  flex: 1;
+  min-height: 300px;
+  border: 1px solid #2d2d44;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* DiffEditor 在 flex 布局中正确伸展 */
+.prompts-diff .diff-viewer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}

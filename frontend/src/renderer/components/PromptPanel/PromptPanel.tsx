@@ -95,10 +95,18 @@ export const PromptPanel: React.FC = () => {
                       className="config-input config-input-sm"
                       value={compareVersion?.id ?? ''}
                       onChange={(e) => {
-                        setCompareVersion(null);
+                        const version = versions.find(v => v.id === e.target.value);
+                        setCompareVersion(version || null);
                       }}
                     >
                       <option value="">选择对比的旧版本</option>
+                      {versions
+                        .filter(v => v.id !== selectedVersion?.id)
+                        .map(v => (
+                          <option key={v.id} value={v.id}>
+                            v{v.version_num} ({new Date(v.created_at).toLocaleString('zh-CN')})
+                          </option>
+                        ))}
                     </select>
                   </div>
                   <DiffViewer oldVersion={compareVersion} newVersion={selectedVersion} />

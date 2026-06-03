@@ -68,13 +68,24 @@ export const Modal: React.FC = () => {
   // === 窗口尺寸 ===
   const [modalSize, setModalSize] = useState<{ w: number; h: number }>({ w: 680, h: 520 });
 
+  /**
+   * 根据面板类型获取默认尺寸
+   * Prompt 管理面板需要更宽的宽度来展示并排双栏差异对比
+   */
+  const getDefaultSize = useCallback((panel: ModalPanelType | null): { w: number; h: number } => {
+    if (panel === 'prompts') {
+      return { w: 1300, h: 700 };
+    }
+    return { w: 680, h: 520 };
+  }, []);
+
   /** 打开后重置位置和尺寸 */
   useEffect(() => {
     if (isModalOpen) {
       setModalPosition(null);
-      setModalSize({ w: 680, h: 520 });
+      setModalSize(getDefaultSize(activeModalPanel));
     }
-  }, [isModalOpen, activeModalPanel]);
+  }, [isModalOpen, activeModalPanel, getDefaultSize]);
 
   // ===========================
   //  拖拽逻辑
