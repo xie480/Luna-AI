@@ -27,7 +27,7 @@ export interface ApiConfigPreset {
 /** API 配置预设基础 URL（端口从 .env 文件统一读取） */
 const API_BASE_URL = `${AI_SERVICE_BASE_URL}/api/v1/config/presets`;
 /** 模型列表接口 URL（端口从 .env 文件统一读取） */
-const MODELS_API_URL = `${AI_SERVICE_BASE_URL}/api/v1/models/fetch`;
+const MODELS_API_URL = `${AI_SERVICE_BASE_URL}/api/v1/config/presets/fetch-models`;
 
 
 export const apiConfigPresetService = {
