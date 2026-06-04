@@ -37,7 +37,12 @@ export async function isBackendAvailable(): Promise<boolean> {
       });
       clearTimeout(timeoutId);
 
-      _backendAvailable = res.ok;
+      if (res.ok) {
+        const data = await res.json();
+        _backendAvailable = data.payload?.status === 'ready';
+      } else {
+        _backendAvailable = false;
+      }
       return _backendAvailable;
     } catch {
       // 网络错误或超时，标记为不可用
@@ -49,6 +54,34 @@ export async function isBackendAvailable(): Promise<boolean> {
   })();
 
   return _checkPromise;
+}
+
+/**
+ * 检查后端是否完全就绪（不使用缓存，用于轮询）
+ */
+export async function checkBackendReady(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(HEALTH_URL, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const isReady = data.payload?.status === 'ready';
+      if (isReady) {
+        _backendAvailable = true;
+      }
+      return isReady;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 /**

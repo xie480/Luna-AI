@@ -113,6 +113,7 @@ def load_rerank_model() -> object | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用程序生命周期管理"""
+    app.state.is_ready = False
     logger.info(f"正在启动 Luna 运行时服务 port={settings.ai_service_port}")
 
     # 1. 初始化 Redis 连接
@@ -243,9 +244,25 @@ async def lifespan(app: FastAPI):
                     
         rollover_task = asyncio.create_task(_rollover_loop())
 
+    # 标记服务已完全就绪
+    app.state.is_ready = True
+    logger.info("Luna AI Service 所有核心资源初始化完成，服务已就绪")
+    
+    # 尝试通过 SSE 广播就绪事件（如果有早期连接的客户端）
+    try:
+        from app.api.sse import sse_manager
+        await sse_manager.publish({
+            "type": "SERVER_READY",
+            "trace_id": "system",
+            "payload": {"status": "ready", "timestamp": int(datetime.now().timestamp() * 1000)}
+        })
+    except Exception as e:
+        logger.warning(f"广播 SERVER_READY 事件失败: {e}")
+
     yield
 
     # Shutdown: 优雅关闭
+    app.state.is_ready = False
     logger.info("正在关闭服务器...")
     
     if rollover_task:

@@ -11,8 +11,10 @@ async def health_check(request: Request) -> ResponseModel:
     """健康检查接口"""
     trace_id = request.headers.get("X-Trace-ID", "")
     
+    is_ready = getattr(request.app.state, "is_ready", False)
+    
     data = {
-        "status": "ok",
+        "status": "ready" if is_ready else "starting",
         "service": "luna-ai-service",
         "version": "0.1.0",
         "timestamp": datetime.now(timezone.utc).isoformat()

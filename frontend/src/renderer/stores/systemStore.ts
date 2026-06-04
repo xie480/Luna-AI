@@ -71,6 +71,8 @@ interface SystemState {
   isDiagnosticOpen: boolean;
   // 当前 TraceID（由 sseManager 自动维护，用于异常上报关联）
   currentTraceID: string | null;
+  // 后端服务是否完全就绪
+  isBackendReady: boolean;
 
   // Actions
   setConnectionStatus: (status: ConnectionStatus) => void;
@@ -94,6 +96,7 @@ interface SystemState {
   clearFrontendErrors: () => void;
   setDiagnosticOpen: (isOpen: boolean) => void;
   setCurrentTraceID: (traceId: string | null) => void;
+  setBackendReady: (isReady: boolean) => void;
 }
 
 /**
@@ -132,6 +135,7 @@ export const useSystemStore = create<SystemState>((set) => ({
   frontendErrors: [],
   isDiagnosticOpen: false,
   currentTraceID: null,
+  isBackendReady: false,
 
   // 设置连接状态
   setConnectionStatus: (status) => set({ connectionStatus: status }),
@@ -220,4 +224,7 @@ export const useSystemStore = create<SystemState>((set) => ({
 
   // 设置当前 TraceID
   setCurrentTraceID: (traceId) => set({ currentTraceID: traceId }),
+
+  // 设置后端就绪状态
+  setBackendReady: (isReady) => set({ isBackendReady: isReady }),
 }));

@@ -103,7 +103,7 @@ async def get_trace_id(x_trace_id: Optional[str] = Header(None)) -> str:
     return x_trace_id or generate_string_id()
 
 
-async def event_generator(trace_id: str) -> AsyncGenerator[bytes, None]:
+async def event_generator(request: Request, trace_id: str) -> AsyncGenerator[bytes, None]:
     """
     SSE 事件生成器。
 
@@ -117,12 +117,21 @@ async def event_generator(trace_id: str) -> AsyncGenerator[bytes, None]:
     queue = await sse_manager.register()
     try:
         # 发送初始连接确认
+        is_ready = getattr(request.app.state, "is_ready", False)
         init_event = {
             "type": "CONNECTED",
             "trace_id": trace_id,
-            "payload": {"status": "connected", "timestamp": int(time.time() * 1000)},
+            "payload": {"status": "connected", "is_ready": is_ready, "timestamp": int(time.time() * 1000)},
         }
         yield f"event: connected\ndata: {json.dumps(init_event)}\n\n".encode("utf-8")
+        
+        if is_ready:
+            ready_event = {
+                "type": "SERVER_READY",
+                "trace_id": trace_id,
+                "payload": {"status": "ready", "timestamp": int(time.time() * 1000)},
+            }
+            yield f"event: SERVER_READY\ndata: {json.dumps(ready_event)}\n\n".encode("utf-8")
 
         last_heartbeat = time.time()
         while True:
@@ -162,7 +171,7 @@ async def notifications(request: Request, trace_id: str = Depends(get_trace_id))
     """
     logger.info(f"收到 SSE 连接请求 trace_id={trace_id} client={request.client}")
     return StreamingResponse(
-        event_generator(trace_id),
+        event_generator(request, trace_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

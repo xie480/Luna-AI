@@ -117,9 +117,17 @@ class SSEManager {
     if (!this.eventSource) return;
 
     // 连接成功事件
-    this.eventSource.addEventListener('connected', () => {
+    this.eventSource.addEventListener('connected', (event) => {
       useSystemStore.getState().setConnectionStatus('connected');
       useSystemStore.getState().addSystemLog('SSE 已连接 (event)');
+      
+      try {
+        const data = JSON.parse(event.data);
+        if (data.payload && data.payload.is_ready) {
+          useSystemStore.getState().setBackendReady(true);
+        }
+      } catch (e) {}
+
       // 连接成功后，请求同步初始状态
       this.syncInitState();
     });
@@ -129,6 +137,12 @@ class SSEManager {
       useSystemStore.getState().addSystemLog('SSE 已连接 (onopen)');
       this.syncInitState();
     };
+
+    // 监听 SERVER_READY 事件
+    this.eventSource.addEventListener('SERVER_READY', () => {
+      useSystemStore.getState().setBackendReady(true);
+      useSystemStore.getState().addSystemLog('后端服务已完全就绪');
+    });
 
     // 心跳事件（仅用于维持连接，不做 UI 操作）
     this.eventSource.addEventListener('heartbeat', () => {
