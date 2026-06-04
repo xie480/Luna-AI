@@ -27,7 +27,7 @@ import json
 import time
 from typing import Any, Dict, Optional, AsyncGenerator
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
 
 from app.logger import logger
@@ -153,13 +153,14 @@ async def event_generator(trace_id: str) -> AsyncGenerator[bytes, None]:
 
 
 @router.get("/notifications")
-async def notifications(trace_id: str = Depends(get_trace_id)):
+async def notifications(request: Request, trace_id: str = Depends(get_trace_id)):
     """
     SSE 通知端点。
 
     前端使用 new EventSource('/sse/notifications') 建立连接。
     返回 Content-Type: text/event-stream 的流式响应。
     """
+    logger.info(f"收到 SSE 连接请求 trace_id={trace_id} client={request.client}")
     return StreamingResponse(
         event_generator(trace_id),
         media_type="text/event-stream",
@@ -167,5 +168,6 @@ async def notifications(trace_id: str = Depends(get_trace_id)):
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
         },
     )

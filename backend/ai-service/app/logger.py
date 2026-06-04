@@ -85,6 +85,13 @@ def setup_logger(level: str = "INFO") -> Any:
         level=level.upper(),
         enqueue=True, # 异步写入
     )
+    
+    logger.add(
+        "luna_ai_debug.log",
+        format=format_record,
+        level=level.upper(),
+        enqueue=True,
+    )
 
     # 拦截标准 logging
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)

@@ -118,10 +118,16 @@ class SSEManager {
     // 连接成功事件
     this.eventSource.addEventListener('connected', () => {
       useSystemStore.getState().setConnectionStatus('connected');
-      useSystemStore.getState().addSystemLog('SSE 已连接');
+      useSystemStore.getState().addSystemLog('SSE 已连接 (event)');
       // 连接成功后，请求同步初始状态
       this.syncInitState();
     });
+
+    this.eventSource.onopen = () => {
+      useSystemStore.getState().setConnectionStatus('connected');
+      useSystemStore.getState().addSystemLog('SSE 已连接 (onopen)');
+      this.syncInitState();
+    };
 
     // 心跳事件（仅用于维持连接，不做 UI 操作）
     this.eventSource.addEventListener('heartbeat', () => {
@@ -145,6 +151,21 @@ class SSEManager {
         // 显示全局错误提示并持久化
         createErrorToast('ERROR', 'SSE', errMsg);
         reportError('sse', errMsg).catch(() => {});
+      }
+    });
+
+    // EVT_INIT_STATE 事件
+    this.eventSource.addEventListener('EVT_INIT_STATE', (event) => {
+      try {
+        const sseEvent: SSEEvent = JSON.parse(event.data);
+        const msg: WSMessage = {
+          type: sseEvent.type as WSMsgType,
+          trace_id: sseEvent.trace_id,
+          payload: sseEvent.payload,
+        };
+        this.handleMessage(msg);
+      } catch (err) {
+        useSystemStore.getState().addSystemLog(`解析 EVT_INIT_STATE 消息失败: ${err}`);
       }
     });
 

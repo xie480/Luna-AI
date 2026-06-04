@@ -189,13 +189,26 @@ export const useSessionStore = create<SessionState>((set) => ({
     }),
 
   // 设置近期记忆列表（用于初始加载时从 Go 端获取）
-  setRecentQA: (qaList) => set({ recentQA: qaList }),
+  // 根据 msgId 去重，防止后端返回数据中存在重复条目导致 React key 重复警告
+  setRecentQA: (qaList) =>
+    set(() => {
+      const seen = new Set<string>();
+      const deduped = qaList.filter((qa) => {
+        if (seen.has(qa.msgId)) return false;
+        seen.add(qa.msgId);
+        return true;
+      });
+      return { recentQA: deduped };
+    }),
 
   // 追加单条近期记忆（保持最多 3 条）
   // 新条目追加到末尾，超出 3 条时移除最旧的一条
+  // 根据 msgId 去重，防止同一 msgId 多次添加导致 React key 重复警告
   addRecentQA: (qa) =>
     set((state) => {
-      const newList = [...state.recentQA, qa];
+      // 先移除已有的同 msgId 条目（去重），再追加新条目
+      const dedupedList = state.recentQA.filter((item) => item.msgId !== qa.msgId);
+      const newList = [...dedupedList, qa];
       if (newList.length > 3) {
         newList.shift();
       }

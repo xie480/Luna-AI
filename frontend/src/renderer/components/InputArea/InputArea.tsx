@@ -166,7 +166,8 @@ export const InputArea: React.FC = () => {
     if (!textToSend.trim()) return;
 
     if (connectionStatus !== 'connected') {
-      addSystemLog('WebSocket 未连接，无法发送消息');
+      addSystemLog('SSE 未连接，无法发送消息');
+      useSystemStore.getState().showGlobalMessage('服务未连接，请稍后再试', 3000);
       return;
     }
 

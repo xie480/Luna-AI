@@ -293,7 +293,7 @@ class LLMClient:
         
         from app.config.settings import global_config_container
         config = global_config_container.get_model_config("medium")
-        temperature = config.get("temperature", 0.1) # 结构化输出通常需要较低的温度
+        temperature = config.get("temperature", 0.7) 
 
         call_kwargs = {
             "model": model,

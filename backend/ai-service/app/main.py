@@ -217,17 +217,11 @@ async def lifespan(app: FastAPI):
 
     # 12. 加载 Embedding 和 Rerank 模型
     global _embedding_model, _rerank_model
-    _embedding_model = None
-    _rerank_model = None
 
-    def _load_models_bg():
-        global _embedding_model, _rerank_model
-        _embedding_model = load_embedding_model()
-        _rerank_model = load_rerank_model()
-
-    # 在后台线程加载模型，避免阻塞服务器启动
-    loop = asyncio.get_running_loop()
-    loop.run_in_executor(None, _load_models_bg)
+    logger.info("开始同步加载 AI 模型...")
+    _embedding_model = load_embedding_model()
+    _rerank_model = load_rerank_model()
+    logger.info("AI 模型加载完毕！")
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector
@@ -280,10 +274,15 @@ from app.utils.snowflake import generate_string_id
 
 @app.middleware("http")
 async def trace_id_middleware(request: Request, call_next):
+    print(f"====== RAW PRINT: Request arrived: {request.method} {request.url.path} ======")
+    from app.logger import logger
+    logger.info(f"DEBUG: Middleware received request: {request.method} {request.url.path}")
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     token = trace_id_var.set(trace_id)
     try:
+        logger.info(f"DEBUG: Calling next for {request.url.path}")
         response = await call_next(request)
+        logger.info(f"DEBUG: Call next finished for {request.url.path}")
         response.headers["X-Trace-ID"] = trace_id
         return response
     finally:

@@ -252,6 +252,7 @@ async def sync_init_state(
     输入：{ sessionId }
     输出：{ sessionId, recentQA }
     """
+    logger.info(f"收到 /api/init_state 请求 trace_id={trace_id} payload={payload.model_dump()}")
     session_id = payload.sessionId or datetime.now().strftime("%Y%m%d")
 
     recent_history: List[Interaction] = []
@@ -287,6 +288,10 @@ async def sync_init_state(
     )
 
 
+@router.get("/test_reload")
+async def test_reload():
+    return {"status": "reloaded"}
+
 @router.post("/chat")
 async def chat_request(
     payload: ChatRequestPayload,
@@ -310,6 +315,8 @@ async def chat_request(
 
     返回：立即返回 { status: "streaming", msgId }，实际流式内容通过 SSE 推送。
     """
+    print(f"DEBUG: Reached chat_request! trace_id={trace_id}")
+    logger.info(f"收到 /api/chat 请求 trace_id={trace_id} sessionId={payload.sessionId} msgId={payload.msgId}")
     if not payload.sessionId:
         raise HTTPException(status_code=400, detail="sessionId is required")
     if not payload.message:
@@ -388,6 +395,8 @@ async def chat_request(
         except Exception as e:
             logger.error(f"组装 Input Reconstruction Prompt 失败 trace_id={trace_id} error={e}")
 
+    logger.info(f"组装 Input Reconstruction Prompt 成功 trace_id={trace_id}, input_recon_system_prompt={input_recon_system_prompt}, input_recon_memory_prompt={input_recon_memory_prompt}, input_recon_runtime_prompt={input_recon_runtime_prompt}")
+
     # ---- 4. 调用 Input Reconstruction Agent ----
     from app.agent.input_reconstructor import InputReconstructorAgent
     from app.llm.client import llm_client
@@ -415,6 +424,8 @@ async def chat_request(
     except Exception as e:
         logger.error(f"调用 InputReconstruction 失败 trace_id={trace_id} error={e}")
 
+    logger.info(f"调用 InputReconstruction 成功 trace_id={trace_id}, recon_data={recon_data}")
+
     # ---- 5. 组装完整 Chat Prompt ----
     full_system_prompt = ""
     if prompt_mgr:
@@ -425,7 +436,7 @@ async def chat_request(
         except Exception as e:
             logger.error(f"组装 Chat Prompt 失败 trace_id={trace_id} error={e}")
 
-    logger.info(f"开始流式对话 trace_id={trace_id}")
+    logger.info(f"开始流式对话 trace_id={trace_id}, full_system_prompt={full_system_prompt}")
 
     # ---- 6. 流式调用 LLM 并通过 SSE 推送 ----
     start_time = time.time()
@@ -464,6 +475,7 @@ async def chat_request(
                 ttft = int((time.time() - start_time) * 1000)
                 logger.info(f"首字延迟 (TTFT) trace_id={trace_id} ttft_ms={ttft}")
                 is_first_chunk = False
+            logger.debug(f"LLM 推送 chunk trace_id={trace_id} chunk={chunk_data.get('chunk')}")
 
             raw_chunk = chunk_data.get("chunk", "")
             msgs = parser.feed(raw_chunk)

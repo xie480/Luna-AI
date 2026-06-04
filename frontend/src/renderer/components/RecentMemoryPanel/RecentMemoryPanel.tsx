@@ -47,7 +47,8 @@ export const RecentMemoryPanel: React.FC = () => {
         {currentView === 'RECENT' ? (
           <div className="recent-memory-panel-content" ref={contentRef}>
             {recentQA.length > 0 ? (
-              recentQA.map((qa) => (
+              /* 渲染层防御性去重：按 msgId 去重，用 Map 以 msgId 为 key 保留最后出现的条目 */
+              Array.from(new Map(recentQA.map((qa) => [qa.msgId, qa])).values()).map((qa) => (
                 <div key={qa.msgId} className="qa-item">
                   <div className="user-label">你</div>
                   <div className="user-text">{qa.userContent}</div>

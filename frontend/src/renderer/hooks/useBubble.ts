@@ -60,10 +60,15 @@ export const useBubble = () => {
   // Phase 5: 标记所有气泡是否已完成渲染和消失
   const hasPendingWorkRef = useRef(false);
   const idleCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 标记当前批次是否已触发过 luna:all-bubbles-complete 事件
+  // 防止每 500ms 无限重复触发导致 sseManager 重复添加近期记忆
+  const completedRef = useRef(false);
 
   /**
    * Phase 5: 检查是否有未完成的渲染/消失工作
    * 当所有工作完成时，触发 luna:all-bubbles-complete 事件
+   * 注意：每个气泡批次只触发一次，触发后将 completedRef 置为 true，
+   * 直至新的气泡任务到来（showBubble 调用时重置该标记）。
    */
   const checkAllWorkDone = useCallback(() => {
     const hasQueue = queueRef.current.length > 0;
@@ -72,8 +77,14 @@ export const useBubble = () => {
     const isProcessing = isProcessingRef.current;
     const isRemoving = removalInProgressRef.current;
 
+    // 如果已经触发完成事件，不再重复触发
+    if (completedRef.current) {
+      return;
+    }
+
     // 如果没有气泡、没有队列、没有待消失、没有在处理中 → 全部完成
     if (!hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving) {
+      completedRef.current = true;
       // 触发全局事件，通知外部（如 sseManager）可以安全插入近期记忆
       window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
     }
@@ -266,6 +277,9 @@ export const useBubble = () => {
     const id = bubbleIdCounter.current++;
     const renderIndex = renderIndexCounter.current++;
     
+    // 新气泡任务开始时，重置 completedRef，以便完成时能再次触发事件
+    completedRef.current = false;
+
     // 动态 TTL 计算策略：
     // 基础存活时间 2000ms，每个字符增加 250ms 的阅读时间。
     // 确保文本越长，气泡展示的时间越久，严格成正比。
