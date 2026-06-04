@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import Any
+from typing import Any, Union
 from pydantic import BaseModel
 
 class ErrorCode(IntEnum):
@@ -37,10 +37,18 @@ def create_success_response(data: Any, trace_id: str) -> ResponseModel:
         trace_id=trace_id
     )
 
-def create_error_response(code: ErrorCode, msg: str, trace_id: str) -> ResponseModel:
-    """创建错误响应"""
+def create_error_response(code: Union[ErrorCode, int], msg: str, trace_id: str) -> ResponseModel:
+    """
+    创建错误响应
+
+    做什么：生成统一的错误响应对象。
+            支持传入 ErrorCode 枚举或直接传入 int 类型 HTTP 状态码。
+    为什么这样做：部分调用方直接使用 int (如 400/500) 传参，
+                 而 create_error_response 内部尝试调用 int.value 导致 AttributeError。
+    """
+    code_val = code.value if isinstance(code, ErrorCode) else code
     return ResponseModel(
-        code=code.value,
+        code=code_val,
         msg=msg,
         data=None,
         trace_id=trace_id

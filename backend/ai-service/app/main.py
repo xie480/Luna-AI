@@ -210,6 +210,29 @@ async def lifespan(app: FastAPI):
         from app.router.model_router import ModelRouter
         model_router = ModelRouter(preset_repo)
         app.state.model_router = model_router
+
+        # 初始化全局配置容器
+        try:
+            active_preset = await preset_repo.get_active()
+            if active_preset:
+                from app.config.settings import global_config_container
+                from app.api.routers.api_config_preset import _decrypt_model_config
+                import json
+                
+                def _get_json_str(cfg):
+                    return json.dumps(cfg) if isinstance(cfg, dict) else cfg
+
+                large_cfg = _decrypt_model_config(_get_json_str(active_preset.large_model_config), crypto_svc)
+                medium_cfg = _decrypt_model_config(_get_json_str(active_preset.medium_model_config), crypto_svc)
+                small_cfg = _decrypt_model_config(_get_json_str(active_preset.small_model_config), crypto_svc)
+                
+                await global_config_container.update_preset_config(large_cfg, medium_cfg, small_cfg)
+                logger.info(f"已加载激活的 API 配置预设: {active_preset.name}")
+            else:
+                logger.warning("未找到激活的 API 配置预设")
+        except Exception as e:
+            logger.error(f"加载激活的 API 配置预设失败: {e}")
+
     # 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
     app.state.pg_repo = pg_repo
     app.state.redis_repo = redis_repo
@@ -286,6 +309,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Luna AI Service", lifespan=lifespan)
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from app.logger import trace_id_var
 from app.utils.snowflake import generate_string_id
 
@@ -314,6 +338,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================================
+# 全局异常处理器
+# 做什么：捕获所有未处理的异常，确保返回 JSON 格式且包含 CORS 头。
+#         当路由处理函数中抛出异常（如 create_error_response 传入 int 类型
+#         导致的 AttributeError），FastAPI 默认异常处理器不会附加 CORS 头，
+#         导致前端收到 "No 'Access-Control-Allow-Origin' header" 的 CORS 错误。
+# 为什么这样做：前端开发时通过 localhost:5173 访问，必须确保所有响应
+#              （包括错误响应）都包含正确的 CORS 头。
+# ============================================================
+from starlette.responses import JSONResponse as StarletteJSONResponse
+from starlette.requests import Request as StarletteRequest
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: StarletteRequest, exc: Exception):
+    """全局异常处理器：统一返回 JSON 错误响应，确保包含 CORS 头"""
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    logger.error(f"全局异常捕获 path={request.url.path} error={exc}")
+    return StarletteJSONResponse(
+        status_code=500,
+        content={
+            "code": 500,
+            "msg": f"服务器内部错误: {str(exc)}",
+            "data": None,
+            "trace_id": trace_id,
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
 
 # 注册路由
 app.include_router(config_preset_router)
