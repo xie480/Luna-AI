@@ -1,7 +1,9 @@
+import { AI_SERVICE_BASE_URL } from '../appConfig';
 import { TelemetrySpan, AuditLogEntry, MetricsDataPoint } from '../stores/telemetryStore';
 import { useSystemStore } from '../stores/systemStore';
 
-const TELEMETRY_BASE = 'http://127.0.0.1:8081/api/v1/telemetry';
+/** 遥测 API 基础 URL（端口从 .env 文件统一读取） */
+const TELEMETRY_BASE = `${AI_SERVICE_BASE_URL}/api/v1/telemetry`;
 
 /**
  * 查询链路 Spans（支持分页和按 TraceID 筛选）

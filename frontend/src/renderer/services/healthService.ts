@@ -6,8 +6,7 @@
 let _backendAvailable: boolean | null = null;
 let _checkPromise: Promise<boolean> | null = null;
 
-/** 健康检查地址 */
-const HEALTH_URL = 'http://127.0.0.1:8081/health';
+import { HEALTH_URL } from '../appConfig';
 
 /**
  * 检查后端是否可用

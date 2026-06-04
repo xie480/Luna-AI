@@ -14,6 +14,7 @@
  * - 所有业务请求改为 fetch 调用 HTTP API
  * - 保持 CustomEvent 分发兼容层，UI 组件无需改动
  */
+import { AI_SERVICE_BASE_URL, AI_SERVICE_PORT } from '../appConfig';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore, type EmotionState } from '../stores/systemStore';
 import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/telemetryStore';
@@ -48,7 +49,7 @@ interface SSEEvent {
  */
 class SSEManager {
   private eventSource: EventSource | null = null;
-  private backendUrl: string = 'http://127.0.0.1:8081';
+  private backendUrl: string = AI_SERVICE_BASE_URL;
   private isManualDisconnect: boolean = false;
 
   // 记录当前正在交互的用户消息，用于气泡渲染完成后插入近期记忆
@@ -88,7 +89,7 @@ class SSEManager {
    * 建立 SSE 连接
    * @param port Python AI Service 服务端口
    */
-  public connect(port: number = 8081): void {
+  public connect(port: number = AI_SERVICE_PORT): void {
     this.backendUrl = `http://127.0.0.1:${port}`;
     this.isManualDisconnect = true;
     this.disconnect();

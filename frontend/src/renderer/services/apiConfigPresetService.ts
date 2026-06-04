@@ -1,3 +1,11 @@
+/**
+ * Luna AI API 配置预设服务
+ *
+ * 做什么：封装 API 配置预设的 CRUD 操作，与后端 HTTP API 交互。
+ * 为什么这样做：统一管理预配置记录，支持多预设切换和模型列表动态获取。
+ */
+import { AI_SERVICE_BASE_URL } from '../appConfig';
+
 export interface ModelConfig {
   base_url: string;
   api_key: string;
@@ -15,7 +23,11 @@ export interface ApiConfigPreset {
   medium_model_config: ModelConfig;
   small_model_config: ModelConfig;
 }
-const API_BASE_URL = 'http://localhost:8081/api/v1/config/presets';
+
+/** API 配置预设基础 URL（端口从 .env 文件统一读取） */
+const API_BASE_URL = `${AI_SERVICE_BASE_URL}/api/v1/config/presets`;
+/** 模型列表接口 URL（端口从 .env 文件统一读取） */
+const MODELS_API_URL = `${AI_SERVICE_BASE_URL}/api/v1/models/fetch`;
 
 
 export const apiConfigPresetService = {
@@ -76,7 +88,7 @@ export const apiConfigPresetService = {
   },
 
   async fetchModels(baseUrl: string, apiKey: string): Promise<{ id: string; name: string }[]> {
-    const response = await fetch('http://localhost:8081/api/v1/models/fetch', {
+    const response = await fetch(MODELS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

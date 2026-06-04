@@ -31,11 +31,11 @@ import DebugPanel from './components/Settings/DebugPanel';
 import { Live2DConfigPanel } from './components/Live2DConfigPanel/Live2DConfigPanel';
 import { ErrorToast } from './components/ErrorToast/ErrorToast';
 
-// 导入服务和 Store
+// 导入配置和服务
+import { AI_SERVICE_PORT } from './appConfig';
 import { sseManager } from './services/sseManager';
 import { useSessionStore } from './stores/sessionStore';
 import { useSystemStore } from './stores/systemStore';
-import { useErrorToastStore } from './stores/errorToastStore';
 import { reportErrorLog } from './services/errorLogService';
 import { createErrorToast } from './stores/errorToastStore';
 
@@ -127,8 +127,6 @@ function initGlobalErrorListeners(): void {
  *  - 两者都连接成功 + 最短展示时间到达后，自动触发 0.8s 淡出过渡
  *  - 过渡完成后从 React 树彻底卸载，对主界面无任何副作用
  */
-// 用于标记加载动画是否已卸载（即用户已进入主界面）
-let loadingScreenUnmounted = false;
 
 // eslint-disable-next-line react-refresh/only-export-components
 const App: React.FC = () => {
@@ -150,8 +148,8 @@ const App: React.FC = () => {
     // 初始化默认会话 ID
     setSessionId('default-session');
 
-    // 建立 SSE 连接（替代原 WebSocket）
-    sseManager.connect(8081);
+    // 建立 SSE 连接（端口从 appConfig 读取，默认值来自 .env 文件 VITE_AI_SERVICE_PORT）
+    sseManager.connect(AI_SERVICE_PORT);
     addSystemLog('应用启动，正在连接 Python AI Service...');
 
     // 清理函数：断开 SSE 连接

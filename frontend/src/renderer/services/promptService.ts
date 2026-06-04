@@ -4,9 +4,12 @@
  * 为什么这样做：使用后端端点自探测机制避免重复 404 网络报错。
  * 首次探测到 404 后会缓存不可用状态，后续请求不再发起网络调用。
  */
+import { AI_SERVICE_BASE_URL } from '../appConfig';
 import { PromptTemplate, PromptVersion } from '../types/prompt';
 import { ResponseModel } from '../../shared/enum';
-const API_BASE = 'http://127.0.0.1:8081/api/v1/prompts';
+
+/** Prompt API 基础 URL（端口从 .env 文件统一读取） */
+const API_BASE = `${AI_SERVICE_BASE_URL}/api/v1/prompts`;
 
 
 /** 后端端点可用性缓存：null=未探测, true=可用, false=不可用 */

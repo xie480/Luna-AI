@@ -32,8 +32,10 @@ interface ErrorLogResponse {
   id: string;
 }
 
-/** 后端 API 基础地址 */
-const BACKEND_BASE = 'http://127.0.0.1:8081';
+import { AI_SERVICE_BASE_URL } from '../appConfig';
+
+/** 后端 API 基础地址（端口从 .env 文件统一读取） */
+const BACKEND_BASE = AI_SERVICE_BASE_URL;
 
 /**
  * 上报错误日志到后端 API 进行持久化
