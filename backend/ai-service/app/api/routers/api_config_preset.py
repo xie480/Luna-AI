@@ -82,8 +82,8 @@ async def get_presets(request: Request, repo: ConfigPresetPGRepo = Depends(get_r
 
 @router.post("", response_model=ResponseModel)
 async def save_preset(
-    req: PresetRequest, 
-    request: Request, 
+    req: PresetRequest,
+    request: Request,
     repo: ConfigPresetPGRepo = Depends(get_repo),
     crypto_svc: CryptoService = Depends(get_crypto_svc)
 ) -> ResponseModel:
@@ -94,18 +94,32 @@ async def save_preset(
         return create_error_response(400, "预设名称不能为空", trace_id)
         
     try:
-        large_config = _encrypt_model_config(req.large_model_config, crypto_svc)
-        medium_config = _encrypt_model_config(req.medium_model_config, crypto_svc)
-        small_config = _encrypt_model_config(req.small_model_config, crypto_svc)
-        
         preset_id = req.id if req.id else generate_string_id()
+        
+        # 获取已有预设（仅更新时存在），用于处理占位符 api_key
+        existing = await repo.get_by_id(preset_id) if req.id else None
+        
+        # 逐规格处理：对 api_key 为 "********" 的配置块，
+        # 直接复用 DB 中已有的 JSONB 原始数据（跳过加解密），
+        # 对真实 api_key 进行加密。
+        # 原因：前端展示时 api_key 被替换为 "********"（参见 _to_preset_response），
+        # 若直接传回 "********" 会因 _encrypt_model_config 跳过加密而导致明文落库。
+        large_config = _resolve_model_config(
+            req.large_model_config, existing.large_model_config if existing else None, crypto_svc
+        )
+        medium_config = _resolve_model_config(
+            req.medium_model_config, existing.medium_model_config if existing else None, crypto_svc
+        )
+        small_config = _resolve_model_config(
+            req.small_model_config, existing.small_model_config if existing else None, crypto_svc
+        )
         
         preset = ApiConfigPreset(
             id=preset_id,
             name=req.name,
-            large_model_config=json.loads(large_config),
-            medium_model_config=json.loads(medium_config),
-            small_model_config=json.loads(small_config),
+            large_model_config=large_config,
+            medium_model_config=medium_config,
+            small_model_config=small_config,
         )
         
         await repo.save(preset)
@@ -207,12 +221,40 @@ async def delete_preset(id: str, request: Request, repo: ConfigPresetPGRepo = De
         return create_error_response(500, "删除预设失败", trace_id)
 
 
-# 辅助方法
-def _encrypt_model_config(cfg: ModelConfig, crypto_svc: CryptoService) -> str:
-    cfg_dict = cfg.model_dump()
-    if cfg_dict.get("api_key") and cfg_dict["api_key"] != "********":
+def _resolve_model_config(
+    req_cfg: ModelConfig,
+    existing_cfg: Optional[dict],
+    crypto_svc: CryptoService,
+) -> dict:
+    """
+    解析单个规格的模型配置：对 api_key 为占位符"********"的配置块，
+    直接复用数据库中已有的完整 JSONB；否则加密 api_key 后返回。
+
+    做什么：当用户更新已有预设时，前端传回的 api_key 是被替换为"********"
+           的占位符（参见 _to_preset_response）。如果 api_key 是占位符且
+           有对应的已有配置，则复用整个已有的 JSONB 配置块，确保已加密的
+           api_key 不会被二次加密或丢失。
+    为什么这样做：防止"********"字面值被当作真实 api_key 写入数据库，
+                或已加密的密文被二次加密，导致后续激活解密失败并引发 401。
+    """
+    # 如果 api_key 是占位符且有已有配置，复用完整已有 JSONB
+    if req_cfg.api_key == "********" and existing_cfg is not None:
+        # 仅用已有值覆盖 api_key，保留其他字段（如 base_url 等可能被用户修改）
+        existing_cfg["base_url"] = req_cfg.base_url
+        existing_cfg["model_id"] = req_cfg.model_id
+        existing_cfg["max_tokens"] = req_cfg.max_tokens
+        existing_cfg["max_context_tokens"] = req_cfg.max_context_tokens
+        existing_cfg["temperature"] = req_cfg.temperature
+        return existing_cfg
+
+    # 新建或 api_key 被修改：加密 api_key
+    cfg_dict = req_cfg.model_dump()
+    if cfg_dict.get("api_key"):
         cfg_dict["api_key"] = crypto_svc.encrypt(cfg_dict["api_key"])
-    return json.dumps(cfg_dict)
+    return cfg_dict
+
+
+# 辅助方法
 
 def _decrypt_model_config(json_str: str, crypto_svc: CryptoService) -> dict:
     cfg_dict = json.loads(json_str)

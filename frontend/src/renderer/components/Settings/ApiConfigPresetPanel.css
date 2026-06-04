@@ -38,8 +38,90 @@
 .preset-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
+/*
+ * 操作按钮基础样式
+ * .config-btn-activated：已激活态按钮（"当前激活"），绿色边框 + 绿色文字，禁用态半透明
+ * .config-btn-accent：强调色按钮（"激活"），用于执行激活操作
+ */
+.config-btn-activated {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--success-color, #22c55e);
+  background-color: transparent;
+  color: var(--success-color, #22c55e);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.config-btn-activated:hover:not(:disabled) {
+  background-color: var(--success-color, #22c55e);
+  color: #ffffff;
+}
+
+.config-btn-activated:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+  background-color: transparent;
+}
+
+.config-btn-accent {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--primary-color, #3b82f6);
+  background-color: var(--primary-color, #3b82f6);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.config-btn-accent:hover:not(:disabled) {
+  opacity: 0.9;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.config-btn-accent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * .config-btn-danger：危险操作按钮（"删除"），红色边框 + 红色文字
+ */
+.config-btn-danger {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #ef4444;
+  background-color: transparent;
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.config-btn-danger:hover:not(:disabled) {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+.config-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
 .models-container {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -132,7 +214,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,7 +222,7 @@
 }
 
 .save-dialog {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-primary, #1a1a2e);
   padding: 24px;
   border-radius: 8px;
   width: 400px;
@@ -160,4 +242,38 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: 8px;
+}
+
+/*
+ * 错误信息展示样式
+ * 用于在面板顶部展示 API 请求失败的错误提示
+ */
+.config-error {
+  padding: 10px 14px;
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  color: #ef4444;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/*
+ * 激活确认弹窗中的待取消配置列表样式
+ * 用于展示即将被自动取消激活状态的配置名称
+ */
+.save-dialog ul {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+}
+
+.save-dialog ul li {
+  margin-bottom: 2px;
+}
+
+.save-dialog ul li::marker {
+  color: var(--primary-color, #3b82f6);
 }
