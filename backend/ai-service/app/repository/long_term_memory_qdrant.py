@@ -103,3 +103,15 @@ class LongTermMemoryQdrantRepo:
         
         await self.client.upsert(QDRANT_COLLECTION_LONG_TERM_MEMORIES, [point])
         logger.info(f"长期记忆向量已软删除 memory_id={memory_id}")
+
+    async def delete_vector(self, memory_id: str) -> None:
+        """
+        硬删除指定的长期记忆向量
+        """
+        try:
+            qdrant_id = int(memory_id)
+        except ValueError:
+            raise ValueError(f"memory_id 必须是可转换为整数的字符串: {memory_id}")
+            
+        await self.client.delete(QDRANT_COLLECTION_LONG_TERM_MEMORIES, [qdrant_id])
+        logger.info(f"长期记忆向量已硬删除 memory_id={memory_id}")

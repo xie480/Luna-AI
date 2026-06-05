@@ -139,3 +139,56 @@ class LongTermMemoryPGRepo:
                 await session.delete(memory)
             await session.commit()
             logger.info(f"会话长期记忆记录已删除 session_id={session_id}")
+
+    async def get_paginated(self, page: int, page_size: int) -> tuple[List[LongTermMemory], int]:
+        """
+        分页获取长期记忆记录
+        返回: (记录列表, 总条数)
+        """
+        from sqlalchemy import func
+        
+        async with self.pg_client.session_factory() as session:
+            # 获取总条数
+            count_stmt = select(func.count()).select_from(LongTermMemory).where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
+            total_count = await session.scalar(count_stmt)
+            
+            # 获取分页数据
+            offset = (page - 1) * page_size
+            stmt = (
+                select(LongTermMemory)
+                .where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
+                .order_by(LongTermMemory.created_at.desc())
+                .offset(offset)
+                .limit(page_size)
+            )
+            result = await session.execute(stmt)
+            records = list(result.scalars().all())
+            
+            return records, total_count or 0
+
+    async def update_summary(self, id: str, new_summary: str) -> None:
+        """
+        更新指定 ID 的记忆摘要
+        """
+        async with self.pg_client.session_factory() as session:
+            stmt = (
+                update(LongTermMemory)
+                .where(LongTermMemory.id == id)
+                .values(summary=new_summary)
+            )
+            await session.execute(stmt)
+            await session.commit()
+            logger.info(f"长期记忆摘要已更新 id={id}")
+
+    async def delete_hard(self, id: str) -> None:
+        """
+        硬删除指定的长期记忆记录
+        """
+        async with self.pg_client.session_factory() as session:
+            stmt = select(LongTermMemory).where(LongTermMemory.id == id)
+            result = await session.execute(stmt)
+            memory = result.scalars().first()
+            if memory:
+                await session.delete(memory)
+                await session.commit()
+                logger.info(f"长期记忆记录已硬删除 id={id}")

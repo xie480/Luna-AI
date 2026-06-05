@@ -12,6 +12,7 @@ import { useSessionStore } from '../../stores/sessionStore';
 import { ClothingPanel } from '../ClothingPanel/ClothingPanel';
 import { SettingsPanel } from '../Settings/SettingsPanel';
 import { PromptPanel } from '../PromptPanel/PromptPanel';
+import { MemoryPanel } from '../MemoryPanel/MemoryPanel';
 import './Modal.css';
 
 /** 最小窗口尺寸 */
@@ -69,7 +70,7 @@ export const Modal: React.FC = () => {
     if (panel === 'prompts') {
       return { w: 1300, h: 700 };
     }
-    if (panel === 'settings') {
+    if (panel === 'settings' || panel === 'memory') {
       return { w: 900, h: 600 };
     }
     return { w: 680, h: 520 };
@@ -289,39 +290,7 @@ export const Modal: React.FC = () => {
           {/* 记忆面板 */}
           {activeModalPanel === 'memory' && (
             <div className="panel memory-panel">
-              {memory ? (
-                <div className="memory-view">
-                  <div className="memory-section">
-                    <h4>角色设定</h4>
-                    <ul className="memory-list">
-                      {memory.persona.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="memory-section">
-                    <h4>短期记忆</h4>
-                    <ul className="memory-list">
-                      {memory.shortTerm.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="memory-section">
-                    <h4>长期记忆</h4>
-                    <ul className="memory-list">
-                      {memory.longTermFacts.map((item, index) => (
-                        <li key={index}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-panel">
-                  <div className="empty-icon">🧠</div>
-                  <div className="empty-text">暂无记忆数据</div>
-                </div>
-              )}
+              <MemoryPanel />
             </div>
           )}
 

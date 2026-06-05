@@ -25,6 +25,7 @@ from app.api.routers.prompt import router as prompt_router
 from app.api.routers.telemetry import router as telemetry_router
 from app.api.http_api import router as http_router
 from app.api.sse import router as sse_router
+from app.api.memory_api import router as memory_router
 from app.config.crypto import CryptoService
 from app.config.event_bus import event_bus
 from app.config.settings import settings
@@ -237,6 +238,8 @@ async def lifespan(app: FastAPI):
     app.state.pg_repo = pg_repo
     app.state.redis_repo = redis_repo
     app.state.error_log_repo = error_log_repo
+    app.state.ltm_pg_repo = ltm_pg_repo
+    app.state.ltm_qdrant_repo = ltm_qdrant_repo
 
 
     # 12. 加载 Embedding 和 Rerank 模型
@@ -374,6 +377,7 @@ app.include_router(prompt_router)
 app.include_router(telemetry_router)
 app.include_router(http_router)
 app.include_router(sse_router)
+app.include_router(memory_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router
