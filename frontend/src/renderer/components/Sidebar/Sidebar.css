@@ -6,12 +6,12 @@
   top: 0;
   width: var(--sidebar-width, 240px);
   height: 100vh;
-  background-color: #2d3748;
-  color: white;
+  background-color: var(--sidebar-bg, #2d3748);
+  color: var(--text-color, white);
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  transition: transform 0.3s ease-in-out;
+  transition: transform 0.3s ease-in-out, background-color 0.3s ease, color 0.3s ease;
 }
 
 .left-sidebar.open {
@@ -24,7 +24,7 @@
 
 .sidebar-header {
   padding: 20px;
-  border-bottom: 1px solid #4a5568;
+  border-bottom: 1px solid var(--border-color, #4a5568);
 }
 
 .sidebar-logo {
@@ -63,20 +63,20 @@
 }
 
 .sidebar-menu-item:hover {
-  background-color: #4a5568;
+  background-color: var(--hover-bg, #4a5568);
 }
 
 .sidebar-menu-item.expanded {
-  background-color: #4a5568;
+  background-color: var(--active-bg, #4a5568);
 }
 
 .menu-arrow {
   font-size: 12px;
-  color: #a0aec0;
+  color: var(--text-muted, #a0aec0);
 }
 
 .sidebar-sub-menu {
-  background-color: #1a202c;
+  background-color: var(--panel-bg, #1a202c);
   padding: 8px 0;
 }
 
@@ -86,7 +86,7 @@
   padding: 10px 20px 10px 50px;
   background: transparent;
   border: none;
-  color: #e2e8f0;
+  color: var(--text-color, #e2e8f0);
   cursor: pointer;
   text-align: left;
   font-size: 14px;
@@ -94,8 +94,8 @@
 }
 
 .sidebar-sub-menu-item:hover {
-  background-color: #2d3748;
-  color: white;
+  background-color: var(--hover-bg, #2d3748);
+  color: var(--text-color, white);
 }
 
 .menu-icon {
@@ -109,11 +109,11 @@
 
 .sidebar-footer {
   padding: 20px;
-  border-top: 1px solid #4a5568;
+  border-top: 1px solid var(--border-color, #4a5568);
 }
 
 .version-info {
   text-align: center;
   font-size: 12px;
-  color: #a0aec0;
+  color: var(--text-muted, #a0aec0);
 }

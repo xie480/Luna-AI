@@ -6,8 +6,9 @@
   height: 100%;
   z-index: 0;
   pointer-events: none;
-  background-color: #0a0f0d; /* 深色背景底色 */
+  background-color: var(--chat-bg, #0a0f0d); /* 深色背景底色 */
   overflow: hidden;
+  transition: background-color 0.3s ease;
 }
 
 .background-canvas {
@@ -25,5 +26,5 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at center, transparent 0%, rgba(10, 15, 13, 0.8) 100%);
+  background: radial-gradient(circle at center, transparent 0%, var(--chat-bg, rgba(10, 15, 13, 0.8)) 100%);
 }

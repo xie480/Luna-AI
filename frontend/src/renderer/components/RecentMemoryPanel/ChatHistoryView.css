@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: #121212;
+  background: var(--editor-bg, #121212);
   position: relative;
 }
 
@@ -120,7 +120,7 @@
 }
 
 .message-wrapper.user .message-bubble {
-  background: #a082ff;
+  background: var(--primary-color, #a082ff);
   color: #fff;
   border-bottom-right-radius: 4px;
 }

@@ -171,10 +171,10 @@
 }
 
 .calendar-grid {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--item-bg, rgba(0, 0, 0, 0.2));
   border-radius: 12px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.05));
   transition: opacity 0.3s ease;
 }
 
@@ -225,30 +225,30 @@
 }
 
 .day-cell.has-record {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-color, rgba(255, 255, 255, 0.85));
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--item-bg, rgba(255, 255, 255, 0.03));
 }
 
 .day-cell.has-record:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--item-hover-bg, rgba(255, 255, 255, 0.1));
   transform: translateY(-1px);
 }
 
 .day-cell.selected {
-  background: rgba(160, 130, 255, 0.2) !important;
+  background: var(--primary-color, rgba(160, 130, 255, 0.2)) !important;
   color: #fff;
-  border: 1px solid rgba(160, 130, 255, 0.5);
+  border: 1px solid var(--primary-color, rgba(160, 130, 255, 0.5));
   box-shadow: 0 0 10px rgba(160, 130, 255, 0.3);
 }
 
 .day-cell.today {
   background: rgba(160, 130, 255, 0.15);
-  border: 1px solid rgba(160, 130, 255, 0.4);
+  border: 1px solid var(--primary-color, rgba(160, 130, 255, 0.4));
 }
 
 .day-cell.today .day-number {
-  color: #a082ff;
+  color: var(--primary-color, #a082ff);
   font-weight: 800;
 }
 
@@ -258,7 +258,7 @@
   top: -6px;
   right: -6px;
   font-size: 8px;
-  background: #a082ff;
+  background: var(--primary-color, #a082ff);
   color: #fff;
   padding: 2px 4px;
   border-radius: 4px;

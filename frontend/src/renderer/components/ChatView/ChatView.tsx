@@ -21,6 +21,7 @@ import { RecentMemoryPanel } from '../RecentMemoryPanel/RecentMemoryPanel';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { createErrorToast } from '../../stores/errorToastStore';
 import { reportError } from '../../services/errorLogService';
+import { useSystemStore } from '../../stores/systemStore';
 import './ChatView.css';
 
 /**
@@ -40,6 +41,7 @@ import './ChatView.css';
 export const ChatView: React.FC = () => {
   // Live2DView 延迟挂载状态：强制设为 true 以进行诊断
   const [live2dReady, setLive2dReady] = useState(true);
+  const isLive2dEnabled = useSystemStore((state) => state.isLive2dEnabled);
 
   // 暂时注释掉延迟挂载逻辑，强制渲染 Live2DView
   // useEffect(() => {
@@ -94,7 +96,7 @@ export const ChatView: React.FC = () => {
       <BackgroundLayer />
 
       {/* Live2D 角色层 z-index: 10 — 延迟挂载，避免与加载动画 GPU 上下文冲突 */}
-      {live2dReady && (
+      {live2dReady && isLive2dEnabled && (
         <div className="live2d-layer">
           <ErrorBoundary source="live2d_view">
             <Live2DView />
