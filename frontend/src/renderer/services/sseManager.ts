@@ -18,8 +18,9 @@
  * - Bug 1 修复：sendChatMessage 中添加 assistant 消息占位，
  *   确保 isWaiting 状态在 fetch 响应和 SSE 首块到达之间保持连续，
  *   避免加载动画提前终止后又被重复触发。
- * - Bug 2 修复：在 handleChatStream 的 is_finished 处理中直接
- *   更新 recentQA，不再单独依赖气泡完成事件的不可靠触发链。
+ * - 近期记忆插入时机优化：将 recentQA 更新完全交由
+ *   luna:all-bubbles-complete 事件驱动，确保插入时机与气泡渲染
+ *   队列生命周期严格对齐。
  */
 import { AI_SERVICE_BASE_URL, AI_SERVICE_PORT } from '../appConfig';
 import { useSessionStore } from '../stores/sessionStore';
@@ -68,17 +69,18 @@ class SSEManager {
 
   /**
    * 注册 luna:all-bubbles-complete 事件监听
-   * 当所有气泡渲染和消失动画完成时，插入近期记忆（兜底机制）
+   * 当所有气泡渲染和消失动画完成时，插入近期记忆
    *
-   * Bug 2 修复说明：主插入路径已在 handleChatStream 的 is_finished
-   * 中直接完成。此处作为兜底，处理气泡延迟渲染完成后的场景。
+   * 优化说明：此监听器是 recentQA 更新的唯一入口。
+   * handleChatStream 的 is_finished 处理中不再直接插入，
+   * 而是只标记 hasPendingMemory=true，由本监听器在气泡
+   * 队列完全清空后执行实际插入，确保与气泡生命周期对齐。
    */
   private registerAllBubblesCompleteListener(): void {
     if (this.isMemoryListenerRegistered) return;
     this.isMemoryListenerRegistered = true;
 
     window.addEventListener('luna:all-bubbles-complete', () => {
-      // 兜底检查：如果已经有待处理的记忆且尚未被主路径消费，则在此插入
       if (!this.hasPendingMemory) return;
 
       const newQA: InteractionQA = {
@@ -366,9 +368,11 @@ class SSEManager {
    * - 在第一次调用时立即获取 sessionStore 引用，避免每次调用
    *   getState() 可能产生的陈旧引用问题。
    *
-   * Bug 2 修复说明：
-   * - 在 is_finished=true 时，除了更新消息状态，直接同步更新 recentQA，
-   *   不再等待气泡渲染完成事件。气泡完成事件仅作为兜底机制。
+   * 近期记忆插入时机优化说明：
+   * - is_finished 处理中不再直接插入 recentQA。
+   * - 改为仅设置 hasPendingMemory=true，交由气泡完成事件
+   *   (luna:all-bubbles-complete) 触发实际插入。
+   * - 确保 recentQA 更新与气泡渲染队列生命周期严格对齐。
    */
   private handleChatStream(payload: ChatStreamPayload): void {
     const systemStore = useSystemStore.getState();
@@ -427,26 +431,17 @@ class SSEManager {
         }));
       }
 
-      // 2c. Bug 2 修复：主路径——直接更新近期记忆面板
-      // 在收到完成标记时立即将当前对话插入 recentQA，
-      // 不再依赖气泡渲染完成事件（该事件存在竞态条件和不可靠触发问题）
-      const newQA: InteractionQA = {
-        msgId: this.pendingUserMsgId,
-        userContent: this.pendingUserMessage,
-        assistantContent: this.pendingAssistantContent,
-        timestamp: Math.floor(Date.now() / 1000),
-      };
-      sessionStore.addRecentQA(newQA);
-
-      // 2d. 标记待处理记忆，供气泡完成事件的兜底监听器使用
+      // 2c. 标记待处理记忆，供气泡完成事件的监听器使用
+      // 优化：不再在此处直接插入 recentQA，而是等待气泡队列完全清空后，
+      // 由 luna:all-bubbles-complete 事件触发插入，确保与气泡生命周期对齐。
       this.hasPendingMemory = true;
 
-      // 2e. 如果内容为空或出错，立即触发气泡完成事件（无需等待气泡动画）
+      // 2d. 如果内容为空或出错，立即触发气泡完成事件（无需等待气泡动画）
       if (payload.error || !this.pendingAssistantContent.trim()) {
         window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
       }
 
-      // 2f. 当日聊天记录实时更新
+      // 2e. 当日聊天记录实时更新
       import('../stores/historyStore').then(({ useHistoryStore }) => {
         const historyState = useHistoryStore.getState();
         const now = new Date();
