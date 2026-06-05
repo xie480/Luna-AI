@@ -221,7 +221,7 @@ async def get_chat_history(
             "content": interaction.user_content,
             "created_at": interaction.created_at.isoformat(),
         })
-        # 助手消息
+        # 助手消息：携带 thought（内心独白）和 emotion（情绪）字段
         content = interaction.assistant_content
         if interaction.error:
             content = interaction.error
@@ -229,6 +229,8 @@ async def get_chat_history(
             "id": interaction.id,
             "role": Role.ASSISTANT.value,
             "content": content,
+            "thought": interaction.thought,
+            "emotion": interaction.emotion,
             "created_at": interaction.created_at.isoformat(),
         })
 

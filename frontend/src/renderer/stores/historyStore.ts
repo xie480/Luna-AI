@@ -9,6 +9,8 @@ export interface HistoryChatMessage {
   role: string;
   content: string;
   created_at: string;
+  thought?: string;  // 内心独白字段
+  emotion?: string;  // 情绪字段
 }
 
 interface HistoryState {
