@@ -136,6 +136,12 @@ const App: React.FC = () => {
   const addSystemLog = useSystemStore((state) => state.addSystemLog);
   const isLeftSidebarOpen = useSystemStore((state) => state.isLeftSidebarOpen);
   const globalMessage = useSystemStore((state) => state.globalMessage);
+  const theme = useSystemStore((state) => state.theme);
+
+  // 初始化主题
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   /**
    * 应用启动时建立 SSE 连接

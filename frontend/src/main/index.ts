@@ -56,6 +56,37 @@ function createWindow(): void {
  * 返回去掉路径和扩展名的文件名列表
  */
 function registerIpcHandlers(): void {
+  ipcMain.handle('read-env-file', async () => {
+    let envPath: string;
+    if (process.env.NODE_ENV === 'development') {
+      envPath = path.resolve(app.getAppPath(), '../.env');
+    } else {
+      envPath = path.resolve(process.resourcesPath, '../../.env');
+    }
+    
+    if (fs.existsSync(envPath)) {
+      return fs.readFileSync(envPath, 'utf-8');
+    }
+    return '';
+  });
+
+  ipcMain.handle('write-env-file', async (_, content: string) => {
+    let envPath: string;
+    if (process.env.NODE_ENV === 'development') {
+      envPath = path.resolve(app.getAppPath(), '../.env');
+    } else {
+      envPath = path.resolve(process.resourcesPath, '../../.env');
+    }
+    
+    fs.writeFileSync(envPath, content, 'utf-8');
+    return true;
+  });
+
+  ipcMain.handle('restart-app', () => {
+    app.relaunch();
+    app.exit(0);
+  });
+
   ipcMain.handle('get-model-config-files', async () => {
     // 模型目录相对于应用根目录，开发环境下是 public/models/luna
     // 生产环境下是 exe 同级的 resources/models/luna

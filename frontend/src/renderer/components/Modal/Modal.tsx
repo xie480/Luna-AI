@@ -69,6 +69,9 @@ export const Modal: React.FC = () => {
     if (panel === 'prompts') {
       return { w: 1300, h: 700 };
     }
+    if (panel === 'settings') {
+      return { w: 900, h: 600 };
+    }
     return { w: 680, h: 520 };
   }, []);
 

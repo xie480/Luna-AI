@@ -21,6 +21,15 @@ const electronAPI = {
    */
   getModelConfigFiles: (): Promise<string[]> =>
     ipcRenderer.invoke('get-model-config-files'),
+
+  /** 读取 .env 文件内容 */
+  readEnvFile: (): Promise<string> => ipcRenderer.invoke('read-env-file'),
+
+  /** 写入 .env 文件内容 */
+  writeEnvFile: (content: string): Promise<boolean> => ipcRenderer.invoke('write-env-file', content),
+
+  /** 重启应用 */
+  restartApp: (): Promise<void> => ipcRenderer.invoke('restart-app'),
 };
 
 // 通过 contextBridge 安全地暴露 API 给渲染进程

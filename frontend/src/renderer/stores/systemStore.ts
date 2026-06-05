@@ -63,6 +63,10 @@ interface SystemState {
   globalMessage: string | null;
   // 服装配置状态（实时保存到 localStorage）
   clothingConfig: Record<string, boolean>;
+  // Live2D 渲染开关
+  isLive2dEnabled: boolean;
+  // 主题设置
+  theme: 'dark' | 'light';
 
   // === 可观测性相关增强 ===
   // 前端异常缓冲区（环形缓冲，最多保留 100 条）
@@ -91,6 +95,10 @@ interface SystemState {
   hideGlobalMessage: () => void;
   // 设置服装配置项，同时持久化到 localStorage
   setClothingConfig: (id: string, enabled: boolean) => void;
+  // 设置 Live2D 渲染开关
+  setLive2dEnabled: (enabled: boolean) => void;
+  // 设置主题
+  setTheme: (theme: 'dark' | 'light') => void;
   // 可观测性 Actions
   addFrontendError: (entry: FrontendErrorEntry) => void;
   clearFrontendErrors: () => void;
@@ -115,6 +123,30 @@ function loadClothingConfig(): Record<string, boolean> {
   return {};
 }
 
+function loadLive2dEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem('luna:live2dEnabled');
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return true; // 默认开启
+}
+
+function loadTheme(): 'dark' | 'light' {
+  try {
+    const raw = localStorage.getItem('luna:theme');
+    if (raw === 'dark' || raw === 'light') {
+      return raw;
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return 'dark'; // 默认暗色
+}
+
 /**
  * 创建系统状态 Store
  */
@@ -131,6 +163,8 @@ export const useSystemStore = create<SystemState>((set) => ({
   globalMessage: null,
   // 初始化服装配置，从 localStorage 读取或使用空对象
   clothingConfig: loadClothingConfig(),
+  isLive2dEnabled: loadLive2dEnabled(),
+  theme: loadTheme(),
   // 可观测性初始状态
   frontendErrors: [],
   isDiagnosticOpen: false,
@@ -204,6 +238,28 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误（如 localStorage 满）
       }
       return { clothingConfig: newConfig };
+    }),
+
+  setLive2dEnabled: (enabled) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:live2dEnabled', JSON.stringify(enabled));
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { isLive2dEnabled: enabled };
+    }),
+
+  setTheme: (theme) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:theme', theme);
+        // 动态修改 body 的 class 或 data 属性以应用主题
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { theme };
     }),
 
   // 添加前端异常（环形缓冲，最多 100 条）

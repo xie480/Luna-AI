@@ -1,0 +1,332 @@
+.settings-panel-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color, #1e1e1e);
+  color: var(--text-color, #e0e0e0);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Sidebar Styles */
+.settings-sidebar {
+  width: 200px;
+  background-color: var(--sidebar-bg, #252526);
+  border-right: 1px solid var(--border-color, #333);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+}
+
+.settings-nav-item:hover {
+  background-color: var(--hover-bg, #2a2d2e);
+}
+
+.settings-nav-item.active {
+  background-color: var(--active-bg, #37373d);
+  border-left: 3px solid var(--primary-color, #007acc);
+}
+
+.nav-icon {
+  margin-right: 12px;
+  font-size: 1.2em;
+}
+
+.nav-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Content Area Styles */
+.settings-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.settings-content-section {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.settings-section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+/* General Settings Styles */
+.settings-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color-light, #2d2d2d);
+}
+
+.settings-item:last-child {
+  border-bottom: none;
+}
+
+.settings-item-info {
+  flex: 1;
+  padding-right: 24px;
+}
+
+.settings-item-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.settings-item-desc {
+  font-size: 13px;
+  color: var(--text-muted, #888);
+  line-height: 1.4;
+}
+
+.settings-item-control {
+  flex-shrink: 0;
+}
+
+/* Switch Toggle Styles */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #555;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: var(--primary-color, #007acc);
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px var(--primary-color, #007acc);
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.slider.round {
+  border-radius: 24px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+/* Select Styles */
+.theme-select {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: var(--input-bg, #3c3c3c);
+  color: var(--text-color, #e0e0e0);
+  border: 1px solid var(--border-color, #555);
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+
+.theme-select:focus {
+  border-color: var(--primary-color, #007acc);
+}
+
+/* Env Settings Styles */
+.env-settings-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.env-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.env-settings-title-group {
+  flex: 1;
+}
+
+.env-settings-desc {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted, #888);
+  margin-top: -16px;
+  margin-bottom: 16px;
+}
+
+.env-settings-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-reset, .btn-save, .btn-cancel, .btn-confirm {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.2s;
+}
+
+.btn-reset {
+  background-color: transparent;
+  color: var(--text-color, #e0e0e0);
+  border: 1px solid var(--border-color, #555);
+}
+
+.btn-reset:hover {
+  background-color: var(--hover-bg, #2a2d2e);
+}
+
+.btn-save, .btn-confirm {
+  background-color: var(--primary-color, #007acc);
+  color: white;
+}
+
+.btn-save:hover, .btn-confirm:hover {
+  background-color: #005f9e;
+}
+
+.btn-cancel {
+  background-color: transparent;
+  color: var(--text-color, #e0e0e0);
+  border: 1px solid var(--border-color, #555);
+}
+
+.btn-cancel:hover {
+  background-color: var(--hover-bg, #2a2d2e);
+}
+
+.env-settings-error {
+  background-color: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.env-editor-container {
+  flex: 1;
+  min-height: 400px;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.env-editor-textarea {
+  flex: 1;
+  width: 100%;
+  padding: 16px;
+  background-color: var(--editor-bg, #1e1e1e);
+  color: var(--editor-fg, #d4d4d4);
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  border: none;
+  resize: none;
+  outline: none;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding-bottom: 32px; /* 增加底部 padding 确保最后一行可见 */
+}
+
+.env-settings-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: var(--text-muted, #888);
+}
+
+/* Confirm Dialog Styles */
+.env-confirm-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.env-confirm-dialog {
+  background-color: var(--bg-color, #252526);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  padding: 24px;
+  width: 400px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.env-confirm-dialog h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.env-confirm-dialog p {
+  color: var(--text-muted, #aaa);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.env-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}

@@ -16,6 +16,43 @@
   -ms-overflow-style: none; /* IE 10+ */
 }
 
+/* 全局主题变量定义 */
+:root {
+  /* 默认暗色主题变量 */
+  --bg-color: #1a1a2e;
+  --text-color: #ffffff;
+  --modal-bg: #252526;
+  --modal-border: #333;
+  --sidebar-bg: #252526;
+  --hover-bg: #2a2d2e;
+  --active-bg: #37373d;
+  --primary-color: #007acc;
+  --border-color: #333;
+  --border-color-light: #2d2d2d;
+  --text-muted: #888;
+  --input-bg: #3c3c3c;
+  --editor-bg: #1e1e1e;
+  --editor-fg: #d4d4d4;
+}
+
+[data-theme="light"] {
+  /* 亮色主题变量 */
+  --bg-color: #f0f0f0;
+  --text-color: #333333;
+  --modal-bg: #ffffff;
+  --modal-border: #cccccc;
+  --sidebar-bg: #f5f5f5;
+  --hover-bg: #e0e0e0;
+  --active-bg: #d0d0d0;
+  --primary-color: #007acc;
+  --border-color: #cccccc;
+  --border-color-light: #e0e0e0;
+  --text-muted: #666666;
+  --input-bg: #ffffff;
+  --editor-bg: #ffffff;
+  --editor-fg: #333333;
+}
+
 /* 全局基础样式 */
 html, body, #root {
   width: 100%;
@@ -24,8 +61,9 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: #1a1a2e;
-  color: #ffffff;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .app-container {

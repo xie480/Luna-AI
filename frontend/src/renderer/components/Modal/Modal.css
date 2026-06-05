@@ -29,15 +29,16 @@
   height: 700px;
   max-width: 95vw;
   max-height: 90vh;
-  background-color: #1a1a2e;
+  background-color: var(--modal-bg, #1a1a2e);
   border-radius: 12px;
-  border: 1px solid #2d2d44;
+  border: 1px solid var(--modal-border, #2d2d44);
   display: flex;
   flex-direction: column;
   animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   position: relative;
   overflow: hidden;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 /* 拖拽后脱离 flexbox 居中，使用 fixed 定位跟随鼠标 */
@@ -86,12 +87,12 @@
   justify-content: space-between;
   align-items: center;
   padding: 14px 20px;
-  border-bottom: 1px solid #2d2d44;
+  border-bottom: 1px solid var(--border-color, #2d2d44);
   flex-shrink: 0;
 }
 
 .modal-title {
-  color: #e5e7eb;
+  color: var(--text-color, #e5e7eb);
   font-size: 16px;
   font-weight: 600;
   margin: 0;
@@ -102,7 +103,7 @@
   height: 30px;
   border-radius: 6px;
   background-color: transparent;
-  color: #6b7280;
+  color: var(--text-muted, #6b7280);
   border: none;
   font-size: 15px;
   cursor: pointer;
@@ -114,7 +115,7 @@
 
 .modal-close:hover {
   color: #ef4444;
-  background-color: #2d2d44;
+  background-color: var(--hover-bg, #2d2d44);
 }
 
 /* 模态窗口内容区 */
@@ -124,6 +125,8 @@
   padding: 16px 20px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-content::-webkit-scrollbar {
