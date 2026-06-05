@@ -38,8 +38,10 @@ export async function isBackendAvailable(): Promise<boolean> {
       clearTimeout(timeoutId);
 
       if (res.ok) {
-        const data = await res.json();
-        _backendAvailable = data.payload?.status === 'ready';
+        const body = await res.json();
+        // 响应结构为 {"code":0,"msg":"success","data":{"status":"ready",...},"trace_id":""}
+        const statusData = body.data as { status?: string } | undefined;
+        _backendAvailable = statusData?.status === 'ready';
       } else {
         _backendAvailable = false;
       }
@@ -71,8 +73,10 @@ export async function checkBackendReady(): Promise<boolean> {
     clearTimeout(timeoutId);
 
     if (res.ok) {
-      const data = await res.json();
-      const isReady = data.payload?.status === 'ready';
+      const body = await res.json();
+      // 响应结构为 {"code":0,"msg":"success","data":{"status":"ready",...},"trace_id":""}
+      const statusData = body.data as { status?: string } | undefined;
+      const isReady = statusData?.status === 'ready';
       if (isReady) {
         _backendAvailable = true;
       }

@@ -315,15 +315,11 @@ from app.utils.snowflake import generate_string_id
 
 @app.middleware("http")
 async def trace_id_middleware(request: Request, call_next):
-    print(f"====== RAW PRINT: Request arrived: {request.method} {request.url.path} ======")
-    from app.logger import logger
-    logger.info(f"DEBUG: Middleware received request: {request.method} {request.url.path}")
+    """TraceID 注入中间件：从请求头提取或生成 TraceID，注入上下文变量"""
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     token = trace_id_var.set(trace_id)
     try:
-        logger.info(f"DEBUG: Calling next for {request.url.path}")
         response = await call_next(request)
-        logger.info(f"DEBUG: Call next finished for {request.url.path}")
         response.headers["X-Trace-ID"] = trace_id
         return response
     finally:

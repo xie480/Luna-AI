@@ -5,7 +5,7 @@ echo ==========================================
 echo.
 
 echo [1/2] Starting Python AI Service...
-start "Luna-AI Python Service" cmd /k "cd backend\ai-service && python -m app.main"
+start "Luna-AI Python Service" cmd /k "cd backend\ai-service && python -u -m app.main"
 
 echo [2/2] Starting Frontend (Electron Desktop)...
 start "Luna-AI Frontend" cmd /k "cd frontend && npm run dev"
