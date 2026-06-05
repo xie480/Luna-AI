@@ -13,6 +13,13 @@
  * - 移除指数退避重连，EventSource 原生支持自动重连
  * - 所有业务请求改为 fetch 调用 HTTP API
  * - 保持 CustomEvent 分发兼容层，UI 组件无需改动
+ * 
+ * Bug 修复记录：
+ * - Bug 1 修复：sendChatMessage 中添加 assistant 消息占位，
+ *   确保 isWaiting 状态在 fetch 响应和 SSE 首块到达之间保持连续，
+ *   避免加载动画提前终止后又被重复触发。
+ * - Bug 2 修复：在 handleChatStream 的 is_finished 处理中直接
+ *   更新 recentQA，不再单独依赖气泡完成事件的不可靠触发链。
  */
 import { AI_SERVICE_BASE_URL, AI_SERVICE_PORT } from '../appConfig';
 import { useSessionStore } from '../stores/sessionStore';
@@ -61,13 +68,17 @@ class SSEManager {
 
   /**
    * 注册 luna:all-bubbles-complete 事件监听
-   * 当所有气泡渲染和消失动画完成时，插入近期记忆
+   * 当所有气泡渲染和消失动画完成时，插入近期记忆（兜底机制）
+   *
+   * Bug 2 修复说明：主插入路径已在 handleChatStream 的 is_finished
+   * 中直接完成。此处作为兜底，处理气泡延迟渲染完成后的场景。
    */
   private registerAllBubblesCompleteListener(): void {
     if (this.isMemoryListenerRegistered) return;
     this.isMemoryListenerRegistered = true;
 
     window.addEventListener('luna:all-bubbles-complete', () => {
+      // 兜底检查：如果已经有待处理的记忆且尚未被主路径消费，则在此插入
       if (!this.hasPendingMemory) return;
 
       const newQA: InteractionQA = {
@@ -348,12 +359,26 @@ class SSEManager {
 
   /**
    * 处理聊天流式输出（通过 SSE 接收的 ChatStreamPayload）
+   *
+   * Bug 1 修复说明：
+   * - 将 emotion_update 处理从 return 改为不阻断后续处理路径的方式，
+   *   确保所有消息类型都能正确参与状态流转。
+   * - 在第一次调用时立即获取 sessionStore 引用，避免每次调用
+   *   getState() 可能产生的陈旧引用问题。
+   *
+   * Bug 2 修复说明：
+   * - 在 is_finished=true 时，除了更新消息状态，直接同步更新 recentQA，
+   *   不再等待气泡渲染完成事件。气泡完成事件仅作为兜底机制。
    */
   private handleChatStream(payload: ChatStreamPayload): void {
     const systemStore = useSystemStore.getState();
+    const sessionStore = useSessionStore.getState();
+    const currentSessionId = sessionStore.currentSessionId;
     const msgType = payload.type || 'reply_chunk';
 
+    // ---- 第一步：处理所有消息类型共有的内容更新 ----
     if (msgType === 'emotion_update') {
+      // 情绪更新：不涉及内容拼接，仅更新状态和触发事件
       const rawEmotion = payload.chunk as string;
       const normalizedEmotion = rawEmotion ? rawEmotion.trim() : 'neutral';
       const validEmotions = ['neutral', ...Object.keys(EMOTION_EXPRESSIONS)] as const;
@@ -365,10 +390,8 @@ class SSEManager {
       window.dispatchEvent(
         new CustomEvent('luna:emotion-update', { detail: { emotion: emotionValue } })
       );
-      return;
-    }
-
-    if (msgType === 'reply_chunk') {
+    } else if (msgType === 'reply_chunk') {
+      // 回复块：拼接内容和触发气泡渲染
       if (payload.chunk && payload.chunk.trim()) {
         const duration = Math.max(3000, payload.chunk.length * 200);
         window.dispatchEvent(
@@ -378,45 +401,61 @@ class SSEManager {
         );
       }
 
-      const sessionStore = useSessionStore.getState();
-      const currentSessionId = sessionStore.currentSessionId;
       if (currentSessionId) {
         sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
       }
 
       this.pendingAssistantContent += payload.chunk;
+    }
 
-      if (payload.is_finished) {
-        const status = payload.error ? 'error' : 'completed';
-        if (currentSessionId) {
-          sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
-        }
-        if (payload.error) {
-          const errMsg = `生成失败: ${payload.error}`;
-          systemStore.addSystemLog(errMsg);
-          // 发送 ErrorToast 事件（ChatView 中监听的 luna:notification 会处理）
-          window.dispatchEvent(new CustomEvent('luna:notification', {
-            detail: { message: errMsg, type: 'error', source: 'chat_stream' }
-          }));
-        }
-
-        this.hasPendingMemory = true;
-
-        if (payload.error || !this.pendingAssistantContent.trim()) {
-          window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
-        }
-
-        // 当日聊天记录实时更新
-        import('../stores/historyStore').then(({ useHistoryStore }) => {
-          const historyState = useHistoryStore.getState();
-          const now = new Date();
-          const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-          historyState.addCalendarRecord(todayStr);
-          if (historyState.selectedDate === todayStr) {
-            historyState.fetchChatHistory(todayStr);
-          }
-        });
+    // ---- 第二步：统一处理所有消息类型的完成标记 ----
+    // 注意：is_finished 标记独立于 msgType，无论 emotion_update 还是
+    // reply_chunk 都可能携带 is_finished=true（实际后端只有 reply_chunk 会带）
+    if (payload.is_finished) {
+      // 2a. 更新消息状态（释放 isWaiting 锁定）
+      const status = payload.error ? 'error' : 'completed';
+      if (currentSessionId) {
+        sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
       }
+
+      // 2b. 处理错误通知
+      if (payload.error) {
+        const errMsg = `生成失败: ${payload.error}`;
+        systemStore.addSystemLog(errMsg);
+        window.dispatchEvent(new CustomEvent('luna:notification', {
+          detail: { message: errMsg, type: 'error', source: 'chat_stream' }
+        }));
+      }
+
+      // 2c. Bug 2 修复：主路径——直接更新近期记忆面板
+      // 在收到完成标记时立即将当前对话插入 recentQA，
+      // 不再依赖气泡渲染完成事件（该事件存在竞态条件和不可靠触发问题）
+      const newQA: InteractionQA = {
+        msgId: this.pendingUserMsgId,
+        userContent: this.pendingUserMessage,
+        assistantContent: this.pendingAssistantContent,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      sessionStore.addRecentQA(newQA);
+
+      // 2d. 标记待处理记忆，供气泡完成事件的兜底监听器使用
+      this.hasPendingMemory = true;
+
+      // 2e. 如果内容为空或出错，立即触发气泡完成事件（无需等待气泡动画）
+      if (payload.error || !this.pendingAssistantContent.trim()) {
+        window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
+      }
+
+      // 2f. 当日聊天记录实时更新
+      import('../stores/historyStore').then(({ useHistoryStore }) => {
+        const historyState = useHistoryStore.getState();
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        historyState.addCalendarRecord(todayStr);
+        if (historyState.selectedDate === todayStr) {
+          historyState.fetchChatHistory(todayStr);
+        }
+      });
     }
   }
 
@@ -463,6 +502,15 @@ class SSEManager {
 
   /**
    * 发送用户聊天消息（通过 HTTP POST 调用）
+   *
+   * Bug 1 修复说明：
+   * - 在发送 HTTP 请求之前，预先插入一条 assistant 消息占位（status: streaming），
+   *   确保 isWaiting 状态在 fetch 快速返回和 SSE 首块到达之间保持连续。
+   * - 原先的流程：用户消息 sending → fetch 返回 200 后变为 completed → isWaiting=false
+   *   → SSE 首块到达自动创建 streaming assistant 消息 → isWaiting=true（加载动画闪烁重启）
+   * - 修复后流程：用户消息 sending + assistant 消息 streaming → fetch 返回后用户消息变为
+   *   completed（isWaiting 仍为 true，因 assistant 尚在 streaming）
+   *   → SSE 首块到达更新 content → is_finished 后 assistant 变为 completed → isWaiting=false
    */
   public sendChatMessage(message: string): void {
     const sessionStore = useSessionStore.getState();
@@ -483,6 +531,7 @@ class SSEManager {
     this.pendingAssistantContent = '';
     this.hasPendingMemory = false;
 
+    // 追加用户消息（sending 状态）
     sessionStore.appendMessage(sessionId, {
       messageId: userMsgId,
       sessionId,
@@ -491,6 +540,18 @@ class SSEManager {
       content: message,
       timestamp: Date.now(),
       status: 'sending',
+    });
+
+    // Bug 1 修复：预先插入 assistant 消息占位（streaming 状态）
+    // 确保 isWaiting 在 HTTP 响应和 SSE 首块之间保持为 true
+    sessionStore.appendMessage(sessionId, {
+      messageId: assistantMsgId,
+      sessionId,
+      role: 'assistant',
+      contentType: 'text',
+      content: '',
+      timestamp: Date.now(),
+      status: 'streaming',
     });
 
     // 通过 HTTP POST 发送聊天请求
@@ -509,15 +570,21 @@ class SSEManager {
     }).then((resp) => {
       if (!resp.ok) {
         systemStore.addSystemLog(`发送聊天消息失败: ${resp.status}`);
-        // 关键修复：HTTP 失败时必须将消息状态标记为 error，释放 isWaiting 锁定
+        // 关键修复：HTTP 失败时必须将用户和 assistant 消息都标记为 error，
+        // 确保 isWaiting 锁被正确释放
         sessionStore.updateMessageStatus(sessionId, userMsgId, 'error');
+        sessionStore.updateMessageStatus(sessionId, assistantMsgId, 'error');
       } else {
+        // HTTP 返回 200（表示后端已接收），用户消息变为 completed
         sessionStore.updateMessageStatus(sessionId, userMsgId, 'completed');
+        // assistant 消息保持 streaming，isWaiting 维持为 true
       }
     }).catch((err) => {
       systemStore.addSystemLog(`发送聊天消息失败: ${err}`);
-      // 关键修复：网络异常时必须将消息状态标记为 error，否则 isWaiting 永久为 true
+      // 关键修复：网络异常时必须将用户和 assistant 消息都标记为 error，
+      // 否则 isWaiting 永久为 true
       sessionStore.updateMessageStatus(sessionId, userMsgId, 'error');
+      sessionStore.updateMessageStatus(sessionId, assistantMsgId, 'error');
     });
   }
 

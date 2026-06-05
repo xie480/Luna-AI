@@ -25,8 +25,15 @@ class InputReconstructorAgent:
         """
         动态组装路由与情绪提取指南 Prompt, 将枚举的有效值列表注入模板。
         """
-        # Go 层已经将变量渲染好, 这里只需要将三个槽位拼接起来
-        return f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
+        # 强制追加枚举约束，防止大模型幻觉
+        enum_constraints = """
+IMPORTANT: You MUST strictly use the following enum values for the respective fields. Do NOT invent new values.
+- intent_routing.primary_intent: "MODIFY_PLAN", "GREETING", "QUERY_INFO", "EMOTION_VENTING", "SYSTEM_COMMAND", "TOOL_INVOCATION"
+- intent_routing.category: "TASK_MANAGEMENT", "CHAT", "KNOWLEDGE_QUERY", "EMOTION_SUPPORT"
+- intent_routing.dag_route_hint: "MULTI_SOURCE_RETRIEVAL_WORKFLOW", "FAST_CHAT", "AGENTIC_WORKFLOW", "GATING_APPROVAL"
+- intent_routing.required_retrieval_types (array elements): "LONG_TERM_MEMORY", "EXTERNAL_KNOWLEDGE", "EXPERIENCE_REFLECTION" (If none, return empty array [])
+"""
+        return f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}\n\n{enum_constraints}"
 
     async def process(
         self,
@@ -53,7 +60,7 @@ class InputReconstructorAgent:
                     model=self.model_name,
                     messages=[{"role": "user", "content": prompt}],
                     response_format=InputReconstructionOutput,
-                    timeout=15.0 # 放宽超时控制，因为结构化输出可能较慢
+                    timeout=40.0 # 该 API 代理对 structured output 响应较慢，需要更长的超时
                 )
                 
                 # 校验 trace_id 一致性
@@ -65,13 +72,20 @@ class InputReconstructorAgent:
                 return response
                 
             except Exception as e:
-                logger.warning(f"[TraceID:{trace_id}] [NodeID:InputReconstructor] 解析失败: {e!s}")
+                logger.warning(
+                    f"[TraceID:{trace_id}] [NodeID:InputReconstructor] "
+                    f"第 {attempt} 次解析失败, 异常类型: {type(e).__name__}, 原因: {e!s}"
+                )
                 if attempt == self.max_retries:
                     logger.error(
                         f"[TraceID:{trace_id}] [NodeID:InputReconstructor] "
-                        "达到最大重试次数, 触发降级策略"
+                        f"达到最大重试次数, 触发降级策略. 最后一次错误类型: {type(e).__name__}, 原因: {e!s}"
                     )
                     return self._build_fallback_response(trace_id, user_input)
+                logger.info(
+                    f"[TraceID:{trace_id}] [NodeID:InputReconstructor] "
+                    f"准备进行第 {attempt + 1} 次重试..."
+                )
                 await asyncio.sleep(0.5)
 
     def _build_fallback_response(self, trace_id: str, user_input: str) -> InputReconstructionOutput:

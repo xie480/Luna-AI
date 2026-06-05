@@ -2,9 +2,9 @@
 Luna AI LLM 客户端封装模块
 
 做什么：封装 AsyncOpenAI 客户端，提供统一的流式对话接口，集成上下文管理器进行历史记录
-        管理和 Token 截断，实现流式输出缓冲平滑机制，以及全面的异常分类容错处理。
+         管理和 Token 截断，实现流式输出缓冲平滑机制，以及全面的异常分类容错处理。
 为什么这样做：确保所有 LLM 调用经过统一的入口，满足 agent.md 中关于结构化输出校验、
-         重试机制、流式输出规范的要求。同时提供流畅的用户体验和健壮的错误处理。
+          重试机制、流式输出规范的要求。同时提供流畅的用户体验和健壮的错误处理。
 输入输出：
     - stream_chat(): 异步生成器，yield Pydantic 校验后的 StreamChunkModel dict
     - llm_client: 全局单例
@@ -71,7 +71,7 @@ class LLMStreamBuffer:
 
     做什么：内部维护缓冲区，将多个小 chunk 合并后再统一输出。
     为什么这样做：LLM 生成的单次 token 可能只有 1-3 个字符，逐字推送会增加前端渲染压力。
-              通过缓冲合并，输出语义更完整的短语或短句，提升用户体验。
+               通过缓冲合并，输出语义更完整的短语或短句，提升用户体验。
     输入输出：
         - add(): 添加新文本到缓冲区
         - flush(): 返回并清空缓冲区内容
@@ -289,6 +289,18 @@ class LLMClient:
     ) -> BaseModel:
         """
         调用大模型并强制返回结构化 JSON 数据
+
+        做什么：发送请求并指定 response_format 约束，强制 LLM 返回符合 Pydantic Schema 的 JSON。
+        为什么这样做：确保智能层输出的数据结构符合预期的 Pydantic 模型定义，在进入业务流程前完成校验。
+        输入输出：
+            - 输入：model 模型名称、messages 消息列表、response_format Pydantic 模型类、timeout 超时秒数
+            - 输出：经过 Pydantic 校验后的模型实例
+        边界条件：
+            - 某些 API 网关/代理不支持 OpenAI 原生的 json_schema 约束，回退返回 markdown 包裹的 JSON
+            - 空内容会触发 ValueError
+        异常行为：
+            - 网络错误/限流由 tenacity 自动重试
+            - JSON 解析失败抛出 ValidationError
         """
         logger.info(f"正在调用 LLM API (Structured Outputs), model: {model}")
         
@@ -317,8 +329,26 @@ class LLMClient:
         
         if not content:
             raise ValueError("LLM 返回了空内容")
+        
+        # 清理可能存在的 markdown 代码块包裹
+        # 某些 API 网关（如 gcli.ggchan.dev）可能不支持原生的 json_schema 约束，
+        # 回退返回 ```json ... ``` 包裹的 JSON 字符串
+        cleaned = content.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]  # 去掉 ```json
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]  # 去掉 ```
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]  # 去掉结尾的 ```
+        cleaned = cleaned.strip()
+        
+        if cleaned != content:
+            logger.info(
+                f"[StructuredOutput] LLM 返回的内容包含 markdown 代码块包裹，已自动清理。"
+                f"原始内容前 50 字符: {content[:50]!r}"
+            )
             
-        return response_format.model_validate_json(content)
+        return response_format.model_validate_json(cleaned)
 
     async def stream_chat(
         self,
