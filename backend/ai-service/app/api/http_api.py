@@ -292,6 +292,7 @@ async def sync_init_state(
 async def test_reload():
     return {"status": "reloaded"}
 
+
 @router.post("/chat")
 async def chat_request(
     payload: ChatRequestPayload,
@@ -310,8 +311,8 @@ async def chat_request(
     2. 组装 Input Reconstruction Prompt
     3. 调用 InputReconstructor 消歧
     4. 组装 Chat Prompt
-    5. 流式调用 LLM 并通过 SSE 推送中间结果
-    6. 异步持久化对话记录
+    5. 通过 asyncio.create_task 在后台执行 LLM 流式调用和 SSE 推送
+    6. 立即返回 HTTP 响应
 
     返回：立即返回 { status: "streaming", msgId }，实际流式内容通过 SSE 推送。
     """
@@ -403,6 +404,7 @@ async def chat_request(
 
     agent = InputReconstructorAgent(llm_client)
     disambiguated_text = payload.message
+    recon_data = None
     try:
         recon_result = await agent.process(
             trace_id=trace_id,
@@ -438,7 +440,48 @@ async def chat_request(
 
     logger.info(f"开始流式对话 trace_id={trace_id}, full_system_prompt={full_system_prompt}")
 
-    # ---- 6. 流式调用 LLM 并通过 SSE 推送 ----
+    # ---- 6. 将流式调用与持久化放入后台 Task，立即返回 HTTP 响应 ----
+    asyncio.create_task(
+        _execute_llm_stream(
+            trace_id=trace_id,
+            session_id=payload.sessionId,
+            user_msg_id=user_msg_id,
+            full_system_prompt=full_system_prompt,
+            recent_history=recent_history,
+            user_message=payload.message,
+            disambiguated_text=disambiguated_text,
+            pg_repo=pg_repo,
+            redis_repo=redis_repo,
+            prompt_mgr=prompt_mgr,
+        )
+    )
+
+    return APIResponse(
+        type=WS_MSG_TYPE_CHAT_STREAM,
+        trace_id=trace_id,
+        payload={"status": "streaming", "msgId": user_msg_id},
+    )
+
+
+async def _execute_llm_stream(
+    trace_id: str,
+    session_id: str,
+    user_msg_id: str,
+    full_system_prompt: str,
+    recent_history: List[Interaction],
+    user_message: str,
+    disambiguated_text: str,
+    pg_repo: Optional[ChatHistoryPGRepo],
+    redis_repo: Optional[ChatHistoryRedisRepo],
+    prompt_mgr: Optional[PromptManager],
+) -> None:
+    """
+    在后台执行 LLM 流式调用、SSE 推送和持久化。
+
+    做什么：在独立的 asyncio.Task 中执行 LLM 流式调用和 SSE 推送，
+            不阻塞 chat_request 的 HTTP 响应返回。
+    为什么这样做：分离 HTTP 响应与 LLM 流式执行的生命周期。
+    """
     start_time = time.time()
     is_first_chunk = True
     full_assistant_content = ""
@@ -463,7 +506,7 @@ async def chat_request(
         async for chunk_data in llm_client.stream_chat_with_context(
             system_prompt=full_system_prompt,
             history=history_dicts,
-            current_message=payload.message,
+            current_message=user_message,
             trace_id=trace_id,
             disambiguated_text=disambiguated_text,
         ):
@@ -541,26 +584,18 @@ async def chat_request(
         )
 
     # ---- 7. 异步持久化 ----
-    asyncio.create_task(
-        _persist_interaction(
-            user_msg_id=user_msg_id,
-            session_id=payload.sessionId,
-            user_message=payload.message,
-            assistant_content=full_assistant_content,
-            thought=full_assistant_thought,
-            emotion=full_assistant_emotion,
-            stream_error=stream_error,
-            pg_repo=pg_repo,
-            redis_repo=redis_repo,
-            prompt_mgr=prompt_mgr,
-            trace_id=trace_id,
-        )
-    )
-
-    return APIResponse(
-        type=WS_MSG_TYPE_CHAT_STREAM,
+    await _persist_interaction(
+        user_msg_id=user_msg_id,
+        session_id=session_id,
+        user_message=user_message,
+        assistant_content=full_assistant_content,
+        thought=full_assistant_thought,
+        emotion=full_assistant_emotion,
+        stream_error=stream_error,
+        pg_repo=pg_repo,
+        redis_repo=redis_repo,
+        prompt_mgr=prompt_mgr,
         trace_id=trace_id,
-        payload={"status": "streaming", "msgId": user_msg_id},
     )
 
 

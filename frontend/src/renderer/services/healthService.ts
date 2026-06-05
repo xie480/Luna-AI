@@ -6,7 +6,7 @@
 let _backendAvailable: boolean | null = null;
 let _checkPromise: Promise<boolean> | null = null;
 
-import { HEALTH_URL } from '../appConfig';
+import { AI_SERVICE_BASE_URL, HEALTH_URL } from '../appConfig';
 
 /**
  * 检查后端是否可用
@@ -75,6 +75,44 @@ export async function checkBackendReady(): Promise<boolean> {
     if (res.ok) {
       const body = await res.json();
       // 响应结构为 {"code":0,"msg":"success","data":{"status":"ready",...},"trace_id":""}
+      const statusData = body.data as { status?: string } | undefined;
+      const isReady = statusData?.status === 'ready';
+      if (isReady) {
+        _backendAvailable = true;
+      }
+      return isReady;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 检查 AI 服务是否完全就绪（通过 /ready 端点）。
+ *
+ * 做什么：专供加载动画轮询使用。单独依赖 /ready 端点来判断后端是否完成
+ *         所有核心资源的初始化并已输出日志：
+ *         - "Luna AI Service 所有核心资源初始化完成，服务已就绪"
+ *         - "Application startup complete."
+ *         由于 FastAPI 的 /ready 端点在 lifespan yield 之后才对外提供服务，
+ *         因此轮询此端点能天然确保上述两条日志已输出。
+ * 为什么这样做：与通用 /health 端点分离，避免 SSE connected 事件携带的
+ *         is_ready 标志或其它因素导致加载动画被过早终止。
+ */
+export async function checkServiceReady(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/ready`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const body = await res.json();
       const statusData = body.data as { status?: string } | undefined;
       const isReady = statusData?.status === 'ready';
       if (isReady) {

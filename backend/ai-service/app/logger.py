@@ -72,11 +72,12 @@ def _get_console_handle():
             # 使用 os.open 而非 open()，避免缓冲和编码问题
             handle = os.open("CONOUT$", os.O_WRONLY | os.O_BINARY)
             # 包装为文本写入流，enable=True 表示写入时进行行结束符转换（\n -> \r\n）
-            _CONSOLE_HANDLE = os.fdopen(handle, "w", encoding=encoding, buffering=1)
+            _CONSOLE_HANDLE = os.fdopen(handle, "w", encoding=encoding, errors="replace", buffering=1)
             return _CONSOLE_HANDLE
         except Exception:
             # 如果失败（如无控制台），回退到 sys.stderr，不阻塞启动
             _CONSOLE_HANDLE = sys.stderr
+            print("警告: CONOUT$ 打开失败，日志回退到 sys.stderr", file=sys.stderr)
 
     # 非 Windows 环境直接使用 sys.stdout
     _CONSOLE_HANDLE = sys.stdout
@@ -162,7 +163,7 @@ def setup_logger(level: str = "INFO") -> Any:
         console_output,
         format=format_record,
         level=level.upper(),
-        enqueue=False,          # 控制台同步写入，确保实时性
+        enqueue=True,           # 开启异步写入，防止 CONOUT$ 阻塞事件循环
         catch=True,             # 捕获写入异常，防止日志写入失败导致业务中断
         colorize=False,         # 关闭 ANSI 颜色避免控制台乱码
     )

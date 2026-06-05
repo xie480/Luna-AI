@@ -380,24 +380,3 @@ from app.api.health import router as health_router
 app.include_router(health_router)
 
 
-if __name__ == "__main__":
-    # 禁用 Uvicorn 的默认日志配置，让我们的 InterceptHandler 完全接管
-    log_config = uvicorn.config.LOGGING_CONFIG
-    
-    # 移除 Uvicorn 默认 handler 中不兼容的参数 (如 stream/strm)
-    for handler_name in ["default", "access"]:
-        if handler_name in log_config["handlers"]:
-            for key in ["stream", "strm"]:
-                if key in log_config["handlers"][handler_name]:
-                    del log_config["handlers"][handler_name][key]
-        
-    log_config["handlers"]["default"]["class"] = "app.logger.InterceptHandler"
-    log_config["handlers"]["access"]["class"] = "app.logger.InterceptHandler"
-
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=settings.ai_service_port,
-        reload=True,
-        log_config=log_config
-    )

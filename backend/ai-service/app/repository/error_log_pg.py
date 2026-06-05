@@ -39,10 +39,9 @@ class ErrorLogPGRepo:
         异常行为：
             - 数据库写入失败时向上抛出异常，由调用方处理重试或降级
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             session.add(error_log)
             await session.commit()
-            return
 
     async def get_error_logs(
         self,
@@ -74,10 +73,9 @@ class ErrorLogPGRepo:
 
         query = query.order_by(desc(ErrorLog.created_at)).limit(limit).offset(offset)
 
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             result = await session.execute(query)
             return list(result.scalars().all())
-        return []
 
     async def count_error_logs(
         self,
@@ -103,7 +101,6 @@ class ErrorLogPGRepo:
         if source:
             query = query.where(ErrorLog.source == source)
 
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             result = await session.execute(query)
             return result.scalar() or 0
-        return 0

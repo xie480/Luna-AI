@@ -477,6 +477,7 @@ class SSEManager {
     this.registerAllBubblesCompleteListener();
 
     const userMsgId = generateId();
+    const assistantMsgId = generateId();
     this.pendingUserMessage = message;
     this.pendingUserMsgId = userMsgId;
     this.pendingAssistantContent = '';
@@ -503,13 +504,15 @@ class SSEManager {
       body: JSON.stringify({
         sessionId,
         message,
-        msgId: userMsgId,
+        msgId: assistantMsgId,
       }),
     }).then((resp) => {
       if (!resp.ok) {
         systemStore.addSystemLog(`发送聊天消息失败: ${resp.status}`);
         // 关键修复：HTTP 失败时必须将消息状态标记为 error，释放 isWaiting 锁定
         sessionStore.updateMessageStatus(sessionId, userMsgId, 'error');
+      } else {
+        sessionStore.updateMessageStatus(sessionId, userMsgId, 'completed');
       }
     }).catch((err) => {
       systemStore.addSystemLog(`发送聊天消息失败: ${err}`);

@@ -264,6 +264,7 @@ class LLMClient:
             "messages": messages,
             "stream": True,
             "temperature": temperature,
+            "timeout": 60.0,  # API 调用超时 60 秒
             **kwargs
         }
         if max_tokens and max_tokens > 0:
@@ -332,7 +333,27 @@ class LLMClient:
         try:
             response = await self._call_api_with_retry(prompt, current_message, **kwargs)
 
+            import time as _time
+            _last_chunk_time = _time.monotonic()
+            STREAM_TIMEOUT = 120.0  # 120秒内若无新 chunk 则判定流式超时
+
             async for chunk in response:
+                # 检查流式超时：距离上次收到 chunk 超过 STREAM_TIMEOUT 秒
+                now = _time.monotonic()
+                if now - _last_chunk_time > STREAM_TIMEOUT:
+                    logger.error(f"[TraceID:{trace_id}] LLM 流式输出超时（{STREAM_TIMEOUT}s 无新 chunk）")
+                    error_model = StreamChunkModel(
+                        chunk="",
+                        is_finished=True,
+                        finish_reason="timeout",
+                        error="AI 回复超时，请稍后重试",
+                    )
+                    yield error_model.model_dump()
+                    break
+
+                # 收到有效 chunk，重置超时计数器
+                _last_chunk_time = now
+
                 # 检查是否收到结束信号（流结束且无 choices）
                 if chunk.choices is None or len(chunk.choices) == 0:
                     # 部分 API 实现会在流结束时返回空 choices

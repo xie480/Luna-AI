@@ -38,17 +38,16 @@ class LongTermMemoryPGRepo:
         if not memory.status:
             memory.status = MemoryStatus.ACTIVE.value
 
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             session.add(memory)
             await session.commit()
             logger.info(f"长期记忆记录已保存 session_id={memory.session_id} id={memory.id}")
-            return
 
     async def get_by_session_id(self, session_id: str) -> Optional[LongTermMemory]:
         """
         根据会话 ID 获取长期记忆记录
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = (
                 select(LongTermMemory)
                 .where(LongTermMemory.session_id == session_id)
@@ -56,7 +55,6 @@ class LongTermMemoryPGRepo:
             )
             result = await session.execute(stmt)
             return result.scalars().first()
-        return None
 
     async def get_by_ids(self, ids: List[str]) -> List[LongTermMemory]:
         """
@@ -66,7 +64,7 @@ class LongTermMemoryPGRepo:
         if not ids:
             return []
 
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = (
                 select(LongTermMemory)
                 .where(LongTermMemory.id.in_(ids))
@@ -74,13 +72,12 @@ class LongTermMemoryPGRepo:
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
-        return []
 
     async def soft_delete(self, id: str) -> None:
         """
         软删除指定的长期记忆记录
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = (
                 update(LongTermMemory)
                 .where(LongTermMemory.id == id)
@@ -89,7 +86,6 @@ class LongTermMemoryPGRepo:
             await session.execute(stmt)
             await session.commit()
             logger.info(f"长期记忆记录已软删除 id={id}")
-            return
 
     async def list_by_month(self, year_month: str) -> List[LongTermMemory]:
         """
@@ -106,7 +102,7 @@ class LongTermMemoryPGRepo:
         except ValueError as e:
             raise ValueError(f"解析月份时间失败: {e}")
 
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = (
                 select(LongTermMemory)
                 .where(LongTermMemory.created_at >= start_time)
@@ -116,28 +112,26 @@ class LongTermMemoryPGRepo:
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
-        return []
 
     async def get_all_active_session_ids(self) -> List[str]:
         """
         获取所有活跃的长期记忆会话 ID 列表
         用途：启动时兜底检测用，判断哪些历史会话已有长期记忆记录
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = (
                 select(LongTermMemory.session_id)
                 .where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
-        return []
 
     async def delete_by_session_id(self, session_id: str) -> None:
         """
         删除指定会话的所有长期记忆记录
         用途：记忆撤销或重置时清理指定会话的记忆
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = select(LongTermMemory).where(LongTermMemory.session_id == session_id)
             result = await session.execute(stmt)
             memories = result.scalars().all()
@@ -145,4 +139,3 @@ class LongTermMemoryPGRepo:
                 await session.delete(memory)
             await session.commit()
             logger.info(f"会话长期记忆记录已删除 session_id={session_id}")
-            return

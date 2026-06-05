@@ -28,47 +28,42 @@ class ConfigPresetPGRepo:
 
     async def get_all(self) -> List[ApiConfigPreset]:
         """获取所有预设"""
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = select(ApiConfigPreset).order_by(ApiConfigPreset.created_at.desc())
             result = await session.execute(stmt)
             return list(result.scalars().all())
-        return []
 
     async def get_by_id(self, id: str) -> Optional[ApiConfigPreset]:
         """根据 ID 获取预设"""
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = select(ApiConfigPreset).where(ApiConfigPreset.id == id)
             result = await session.execute(stmt)
             return result.scalars().first()
-        return None
 
     async def get_active(self) -> Optional[ApiConfigPreset]:
         """获取当前激活的预设"""
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             stmt = select(ApiConfigPreset).where(ApiConfigPreset.is_active == True)
             result = await session.execute(stmt)
             return result.scalars().first()
-        return None
 
     async def save(self, preset: ApiConfigPreset) -> None:
         """保存或更新预设"""
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             session.add(preset)
             await session.commit()
-            return
 
     async def delete(self, id: str) -> None:
         """删除预设"""
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             preset = await session.get(ApiConfigPreset, id)
             if preset:
                 await session.delete(preset)
                 await session.commit()
-            return
 
     async def set_active(self, id: str) -> None:
         """设置激活的预设，并将其他预设设为非激活"""
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session_factory() as session:
             # 1. 将所有预设设为非激活
             stmt1 = update(ApiConfigPreset).values(is_active=False)
             await session.execute(stmt1)
@@ -78,4 +73,3 @@ class ConfigPresetPGRepo:
             await session.execute(stmt2)
 
             await session.commit()
-            return
