@@ -26,6 +26,7 @@ from app.logger import logger
 from app.prompt.manager import Manager as PromptManager
 from app.prompt.types import PromptCategory
 from app.rag.hybrid_retriever import HybridRetriever, InferenceService
+from app.rag.chunker import parse_long_summary_to_chunks
 from app.repository.chat_history_redis import ChatHistoryRedisRepo
 from app.repository.long_term_memory_pg import LongTermMemoryPGRepo
 from app.repository.long_term_memory_qdrant import LongTermMemoryQdrantRepo
@@ -259,28 +260,36 @@ class Manager:
 
         # 6. 对压缩后的摘要进行向量化，写入 Qdrant 向量库
         if self.ltm_qdrant_repo:
-            embedding_vec = None
-            embed_err = None
-            
-            if self.inference_svc:
-                try:
-                    embedding_vec = await self.inference_svc.get_embedding_vector(compressed_summary)
-                except Exception as e:
-                    embed_err = e
+            if not self.inference_svc:
+                logger.warning(f"推理服务不可用，无法进行 Qdrant 向量写入 memory_id={memory_id}")
             else:
-                embed_err = RuntimeError("推理服务不可用")
-
-            if embed_err or not embedding_vec:
-                logger.warning(f"获取语义向量失败，使用零值向量写入 Qdrant（后续可对账补充） memory_id={memory_id} error={embed_err}")
-                embedding_vec = [0.0] * 768
-
-            try:
-                await self.ltm_qdrant_repo.save_with_vector(
-                    memory_id, session_id, embedding_vec, MemoryStatus.ACTIVE.value
-                )
-                logger.info(f"长期记忆向量写入成功 memory_id={memory_id} vector_dim={len(embedding_vec)}")
-            except Exception as e:
-                logger.warning(f"Qdrant 向量写入失败 memory_id={memory_id} error={e}")
+                # 6.1 细粒度拆分
+                chunks = parse_long_summary_to_chunks(compressed_summary)
+                
+                # 6.2 批量获取 Embedding 向量
+                # 暂时循环调用单条 embedding，后续 inference_svc 升级可改为 batch api
+                vectors = []
+                embed_err = None
+                for chunk in chunks:
+                    try:
+                        vec = await self.inference_svc.get_embedding_vector(chunk.content)
+                        if not vec:
+                            logger.warning(f"切片 embedding 结果为空，降级为零值向量 chunk_type={chunk.chunk_type.value}")
+                            vec = [0.0] * 768
+                        vectors.append(vec)
+                    except Exception as e:
+                        embed_err = e
+                        logger.warning(f"获取切片语义向量失败，降级为零值向量 chunk_type={chunk.chunk_type.value} error={e}")
+                        vectors.append([0.0] * 768)
+                
+                # 6.3 批量保存带 payload 的向量点
+                try:
+                    await self.ltm_qdrant_repo.save_chunks_with_vectors(
+                        memory_id, session_id, chunks, vectors, MemoryStatus.ACTIVE.value
+                    )
+                    logger.info(f"[TraceID:{trace_id}] 长期记忆拆分及向量写入成功 memory_id={memory_id} chunks_count={len(chunks)}")
+                except Exception as e:
+                    logger.warning(f"[TraceID:{trace_id}] Qdrant 向量写入失败 memory_id={memory_id} error={e}")
 
         logger.info(f"长期记忆提交完成 session_id={session_id} memory_id={memory_id}")
 

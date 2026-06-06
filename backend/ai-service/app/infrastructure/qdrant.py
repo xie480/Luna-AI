@@ -142,6 +142,41 @@ class QdrantClientWrapper:
             logger.error(f"Qdrant Upsert 失败 [collection={collection_name}]: {e}")
             raise
 
+    async def search_groups(
+        self,
+        collection_name: str,
+        query_vector: List[float],
+        group_by: str,
+        limit: int,
+        group_size: int = 1
+    ) -> List[Any]:
+        """
+        执行向量相似度分组搜索
+        :param collection_name: 集合名称
+        :param query_vector: 查询向量
+        :param group_by: 分组字段名（必须在 payload 中）
+        :param limit: 返回的分组数量
+        :param group_size: 每个分组保留的结果数量
+        :return: 分组结果列表
+        """
+        await self._ensure_client()
+        
+        try:
+            results = await self.client.search_groups(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                group_by=group_by,
+                limit=limit,
+                group_size=group_size,
+                with_payload=True
+            )
+            
+            logger.info(f"Qdrant SearchGroups 完成 [collection={collection_name}], groups: {len(results.groups)}")
+            return results.groups
+        except Exception as e:
+            logger.error(f"Qdrant SearchGroups 失败 [collection={collection_name}]: {e}")
+            raise
+
     async def search(self, collection_name: str, vector: List[float], top_k: int) -> List[QdrantSearchResult]:
         """
         执行向量相似度搜索

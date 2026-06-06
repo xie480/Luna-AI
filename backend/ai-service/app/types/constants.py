@@ -54,3 +54,7 @@ class RetrievalType(str, Enum):
     LONG_TERM_MEMORY = "LONG_TERM_MEMORY"
     EXTERNAL_KNOWLEDGE = "EXTERNAL_KNOWLEDGE"
     EXPERIENCE_REFLECTION = "EXPERIENCE_REFLECTION"
+
+class MemoryChunkType(str, Enum):
+    SUMMARY = "SUMMARY"
+    FACT = "FACT"

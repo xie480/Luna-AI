@@ -21,6 +21,8 @@ from app.infrastructure.qdrant import (
 )
 from app.logger import logger
 from app.repository.models import MemoryStatus
+from app.rag.chunker import MemoryChunk
+from app.utils.snowflake import generate_id
 
 
 class LongTermMemoryQdrantRepo:
@@ -36,32 +38,70 @@ class LongTermMemoryQdrantRepo:
         """
         await self.client.ensure_collection(QDRANT_COLLECTION_LONG_TERM_MEMORIES, vector_size)
 
-    async def save_with_vector(self, memory_id: str, session_id: str, vector: List[float], status: str = "") -> None:
+    async def save_chunks_with_vectors(
+        self,
+        memory_id: str,
+        session_id: str,
+        chunks: List[MemoryChunk],
+        vectors: List[List[float]],
+        status: str = ""
+    ) -> None:
         """
-        保存长期记忆向量
+        做什么：批量将拆分后的 Chunk 及其向量存入 Qdrant。
+        为什么这样做：实现细粒度的 RAG 切片存储，以便后续检索时能够进行 search_groups 分组折叠去重。
+        输入：memory_id（PG记录主键），session_id，MemoryChunk 列表及其对应的向量列表。
+        异常行为：Qdrant 写入异常抛出。
         """
         if not status:
             status = MemoryStatus.ACTIVE.value
             
-        # Qdrant ID 必须是 uint64 或 UUID，这里我们将 memory_id 存储在 payload 中，
-        # 并使用 snowflake ID 的 uint64 形式作为 Qdrant ID
-        try:
-            qdrant_id = int(memory_id)
-        except ValueError:
-            raise ValueError(f"memory_id 必须是可转换为整数的字符串: {memory_id}")
+        if len(chunks) != len(vectors):
+            raise ValueError(f"chunks 数量 ({len(chunks)}) 与 vectors 数量 ({len(vectors)}) 不匹配")
+
+        points = []
+        for chunk, vector in zip(chunks, vectors):
+            point_id = generate_id()  # 每个 Chunk 分配独立的 Snowflake ID
             
-        point = UpsertPoint(
-            id=qdrant_id,
-            vector=vector,
-            payload={
-                "memory_id": memory_id,
-                "session_id": session_id,
-                "status": status,
-            }
+            point = UpsertPoint(
+                id=point_id,
+                vector=vector,
+                payload={
+                    "memory_id": memory_id,
+                    "session_id": session_id,
+                    "chunk_type": chunk.chunk_type.value,
+                    "content": chunk.content,
+                    "status": status,
+                }
+            )
+            points.append(point)
+            
+        await self.client.upsert(QDRANT_COLLECTION_LONG_TERM_MEMORIES, points)
+        logger.info(f"[TraceID:N/A] 长期记忆切片向量已批量保存 memory_id={memory_id} chunks_count={len(chunks)}")
+
+    async def search_groups_by_vector(self, query_vector: List[float], top_k: int) -> List[str]:
+        """
+        做什么：利用 Qdrant search_groups 获取去重后的 memory_id 列表。
+        为什么这样做：解决同一条 PostgreSQL 记录的多个 Chunk 同时挤占 Top-K 检索名额的问题。
+        边界条件：仅返回 payload 中 status=MemoryStatus.ACTIVE.value 的分组
+        """
+        results = await self.client.search_groups(
+            collection_name=QDRANT_COLLECTION_LONG_TERM_MEMORIES,
+            query_vector=query_vector,
+            group_by="memory_id",
+            limit=top_k,
+            group_size=1
         )
         
-        await self.client.upsert(QDRANT_COLLECTION_LONG_TERM_MEMORIES, [point])
-        logger.info(f"长期记忆向量已保存 memory_id={memory_id} session_id={session_id}")
+        active_status = MemoryStatus.ACTIVE.value
+        memory_ids = []
+        for group in results:
+            # group.id 就是 group_by 字段的值，即 memory_id
+            # group.hits 包含组内的得分最高的 chunk
+            if group.hits and group.hits[0].payload and group.hits[0].payload.get("status") == active_status:
+                memory_ids.append(str(group.id))
+                
+        logger.info(f"[TraceID:N/A] 长期记忆分组向量检索完成 groups={len(results)} active_hits={len(memory_ids)} top_k={top_k}")
+        return memory_ids
 
     async def search_by_vector(self, vector: List[float], top_k: int) -> List[QdrantSearchResult]:
         """
@@ -73,45 +113,12 @@ class LongTermMemoryQdrantRepo:
         # 过滤掉 status!=MemoryStatus.ACTIVE.value 的结果
         active_status = MemoryStatus.ACTIVE.value
         active_results = [
-            res for res in results 
+            res for res in results
             if res.payload.get("status") == active_status
         ]
         
         logger.info(f"长期记忆向量检索完成 hits={len(active_results)} top_k={top_k}")
         return active_results
 
-    async def soft_delete_by_memory_id(self, memory_id: str) -> None:
-        """
-        根据记忆 ID 软删除向量（更新 payload 中的 status）
-        """
-        try:
-            qdrant_id = int(memory_id)
-        except ValueError:
-            raise ValueError(f"memory_id 必须是可转换为整数的字符串: {memory_id}")
-            
-        # Qdrant 不支持直接修改 payload 中单个字段，需重新 Upsert
-        # 使用空向量 + MemoryStatus.DELETED.value 状态覆盖
-        # 使用零值向量覆盖：后续搜索时不会被匹配到（余弦相似度极低）
-        point = UpsertPoint(
-            id=qdrant_id,
-            vector=[0.0] * 768, # 假设维度为 768
-            payload={
-                "memory_id": memory_id,
-                "status": MemoryStatus.DELETED.value,
-            }
-        )
-        
-        await self.client.upsert(QDRANT_COLLECTION_LONG_TERM_MEMORIES, [point])
-        logger.info(f"长期记忆向量已软删除 memory_id={memory_id}")
-
-    async def delete_vector(self, memory_id: str) -> None:
-        """
-        硬删除指定的长期记忆向量
-        """
-        try:
-            qdrant_id = int(memory_id)
-        except ValueError:
-            raise ValueError(f"memory_id 必须是可转换为整数的字符串: {memory_id}")
-            
-        await self.client.delete(QDRANT_COLLECTION_LONG_TERM_MEMORIES, [qdrant_id])
-        logger.info(f"长期记忆向量已硬删除 memory_id={memory_id}")
+    # TODO: soft_delete_by_memory_id & delete_vector 以后需要改成 scroll 取出所有 point 然后修改 / 删除
+    # 因为现在同一个 memory_id 会对应多个 Qdrant Points。但本次改动重点在 RAG Chunking 和 search_groups。

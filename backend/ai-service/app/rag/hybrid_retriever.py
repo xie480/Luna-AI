@@ -130,16 +130,12 @@ class HybridRetriever:
             if query_vector:
                 search_top_k = min(self.retrieval_top_k * 3, 50)
                 try:
-                    results = await self.ltm_qdrant_repo.search_by_vector(query_vector, search_top_k)
+                    memory_ids = await self.ltm_qdrant_repo.search_groups_by_vector(query_vector, search_top_k)
                 except Exception as e:
-                    logger.warning(f"Qdrant 向量检索失败（仅使用 query_vector） error={e}")
+                    logger.warning(f"Qdrant 向量分组检索失败（仅使用 query_vector） error={e}")
                     return []
-                if not results:
+                if not memory_ids:
                     return []
-                memory_ids = []
-                for result in results:
-                    mem_id = result.payload.get("memory_id")
-                    memory_ids.append(str(mem_id) if mem_id else str(result.id))
                 try:
                     memories = await self.ltm_pg_repo.get_by_ids(memory_ids)
                     logger.info(f"向量检索完成（仅 query_vector） hits={len(memories)} top_k={search_top_k}")
@@ -163,15 +159,11 @@ class HybridRetriever:
                 return []
             search_top_k = min(self.retrieval_top_k * 3, 50)
             try:
-                qdrant_results = await self.ltm_qdrant_repo.search_by_vector(embedding_vec, search_top_k)
+                ids = await self.ltm_qdrant_repo.search_groups_by_vector(embedding_vec, search_top_k)
+                return ids
             except Exception as e:
                 logger.warning(f"Qdrant 检索失败 query=\"{q[:50]}...\" error={e}")
                 return []
-            ids = []
-            for r in qdrant_results:
-                mem_id = r.payload.get("memory_id")
-                ids.append(str(mem_id) if mem_id else str(r.id))
-            return ids
 
         # 并发执行所有 query 的向量检索
         id_lists = await asyncio.gather(*[_search_single_query(q) for q in query_texts])
