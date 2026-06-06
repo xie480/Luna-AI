@@ -153,9 +153,9 @@ class QdrantClientWrapper:
         await self._ensure_client()
 
         try:
-            results = await self.client.search(
+            results = await self.client.query_points(
                 collection_name=collection_name,
-                query_vector=vector,
+                query=vector,
                 limit=top_k,
                 with_payload=True
             )
@@ -166,7 +166,7 @@ class QdrantClientWrapper:
                     score=res.score,
                     payload=res.payload or {}
                 )
-                for res in results
+                for res in results.points
             ]
             
             logger.info(f"Qdrant Search 完成 [collection={collection_name}], hits: {len(search_results)}")
