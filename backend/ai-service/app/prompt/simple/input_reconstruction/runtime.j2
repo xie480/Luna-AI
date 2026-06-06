@@ -1,4 +1,4 @@
-### 用户原始输入
+### User原始输入
 {{ USER_INPUT }}
 
 ### 消歧任务指南
@@ -54,10 +54,10 @@
       "trigger_reason": "触发检索的具体原因描述",
       "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"],
       "temporal_focus": {
-        "time_type": "时间指向类型，枚举值：PAST, FUTURE, CURRENT",
-        "reference_time": "具体的参考时间戳，如果没有则为 null"
+        "reference_time": "具体的参考时间戳，如果没有则为 null， 示例格式：2026-06-05T10:00:00Z 或 ISO 8601 格式",
+        "temporal_deviation": "允许前后偏差的天数，精准查找则为0，应为非负整数"
       },
-      "entity_mentions": ["提取出的核心实体词"]
+      "entity_mentions": ["提取出的核心实体词以及时间关键词，用于BM25精准检索"]
     },
     
     "external_knowledge": {

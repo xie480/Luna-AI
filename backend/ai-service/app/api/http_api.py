@@ -407,6 +407,11 @@ async def chat_request(
     agent = InputReconstructorAgent(llm_client)
     disambiguated_text = payload.message
     recon_data = None
+    long_term_memory_trigger = False
+    search_queries = []
+    reference_time = None
+    entity_mentions = []
+    
     try:
         recon_result = await agent.process(
             trace_id=trace_id,
@@ -419,6 +424,15 @@ async def chat_request(
         emotion_state = recon_data.get("emotion_state", {})
         reconstruction = recon_data.get("reconstruction", {})
         disambiguated_text = reconstruction.get("disambiguated_text", payload.message)
+
+        retrieval_routing = recon_data.get("retrieval_routing", {})
+        long_term_memory_routing = retrieval_routing.get("long_term_memory", {})
+        long_term_memory_trigger = long_term_memory_routing.get("trigger", False)
+        search_queries = long_term_memory_routing.get("search_queries", [])
+        temporal_focus = long_term_memory_routing.get("temporal_focus", {})
+        reference_time = temporal_focus.get("reference_time")
+        temporal_deviation = temporal_focus.get("temporal_deviation", 0)
+        entity_mentions = long_term_memory_routing.get("entity_mentions", [])
 
         prompt_variables["EMOTION_PRIMARY"] = emotion_state.get("primary_emotion", "")
         prompt_variables["EMOTION_INTENSITY"] = f"{emotion_state.get('intensity', 0.0):.2f}"
@@ -434,18 +448,24 @@ async def chat_request(
     # 为什么这样做：Phase 6 -> Phase 7 过渡的核心环节，
     # 通过 BM25 + 向量双路召回和 Rerank 重排，将高价值长期记忆注入 Chat Prompt。
     # 检索依赖 disambiguated_text（消歧后的用户输入），在 InputReconstructor 完成后执行。
-    if memory_manager:
+    if memory_manager and long_term_memory_trigger:
         try:
             # 调用混合检索 -> 格式化 -> 返回 'date: ...\ncontent: ...' 文本
             long_term_memory_text = await memory_manager.retrieve_and_format_memories(
                 query_text=disambiguated_text,
                 query_vector=[],
+                search_queries=search_queries,
+                reference_time=reference_time,
+                entity_mentions=entity_mentions,
             )
             prompt_variables["LONG_TERM_MEMORY"] = long_term_memory_text
             logger.info(f"长期记忆 RAG 检索注入成功 trace_id={trace_id} text_length={len(long_term_memory_text)}")
         except Exception as e:
             logger.warning(f"长期记忆 RAG 检索注入失败（降级跳过） trace_id={trace_id} error={e}")
             prompt_variables["LONG_TERM_MEMORY"] = ""
+    elif memory_manager and not long_term_memory_trigger:
+        logger.info(f"长期记忆检索未触发 (trigger=False) trace_id={trace_id}")
+        prompt_variables["LONG_TERM_MEMORY"] = ""
     else:
         logger.info(f"记忆管理器不可用，跳过长期记忆 RAG 检索 trace_id={trace_id}")
         prompt_variables["LONG_TERM_MEMORY"] = ""

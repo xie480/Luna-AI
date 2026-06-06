@@ -324,20 +324,46 @@ class Manager:
 
         return today
 
-    async def retrieve_long_term_memories(self, query_text: str, query_vector: List[float]) -> List[LongTermMemory]:
+    async def retrieve_long_term_memories(
+        self,
+        query_text: str,
+        query_vector: List[float],
+        search_queries: Optional[List[str]] = None,
+        reference_time: Optional[str] = None,
+        entity_mentions: Optional[List[str]] = None,
+    ) -> List[LongTermMemory]:
         """
         检索长期记忆（委托 HybridRetriever）
 
         做什么：将检索请求透传给 rag/ 模块的 HybridRetriever，
                 执行 BM25 + 向量混合检索 + Rerank 重排全流程。
         """
-        return await self.retriever.retrieve(query_text, query_vector)
+        return await self.retriever.retrieve(
+            query_text,
+            query_vector,
+            search_queries=search_queries,
+            reference_time=reference_time,
+            entity_mentions=entity_mentions,
+        )
 
-    async def retrieve_and_format_memories(self, query_text: str, query_vector: List[float]) -> str:
+    async def retrieve_and_format_memories(
+        self,
+        query_text: str,
+        query_vector: List[float],
+        search_queries: Optional[List[str]] = None,
+        reference_time: Optional[str] = None,
+        entity_mentions: Optional[List[str]] = None,
+    ) -> str:
         """
-        检索长期记忆并格式化为 'date: ... \\n content: ...' 文本
+        检索长期记忆并格式化为 'date: ... \\n        content: ...' 文本
 
         做什么：委托 rag/ 模块的 HybridRetriever 完成检索和格式化。
         返回：多行文本，每行格式为 'date: YYYY-MM-DD\\ncontent: <summary>'
         """
-        return await self.retriever.retrieve_and_format(query_text, query_vector)
+        return await self.retriever.retrieve_and_format(
+            query_text,
+            query_vector,
+            search_queries=search_queries,
+            reference_time=reference_time,
+            entity_mentions=entity_mentions,
+        )
