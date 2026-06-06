@@ -330,6 +330,7 @@ class Manager:
         query_vector: List[float],
         search_queries: Optional[List[str]] = None,
         reference_time: Optional[str] = None,
+        temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
     ) -> List[LongTermMemory]:
         """
@@ -343,6 +344,7 @@ class Manager:
             query_vector,
             search_queries=search_queries,
             reference_time=reference_time,
+            temporal_deviation=temporal_deviation,
             entity_mentions=entity_mentions,
         )
 
@@ -352,6 +354,7 @@ class Manager:
         query_vector: List[float],
         search_queries: Optional[List[str]] = None,
         reference_time: Optional[str] = None,
+        temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
     ) -> str:
         """
@@ -365,5 +368,6 @@ class Manager:
             query_vector,
             search_queries=search_queries,
             reference_time=reference_time,
+            temporal_deviation=temporal_deviation,
             entity_mentions=entity_mentions,
         )

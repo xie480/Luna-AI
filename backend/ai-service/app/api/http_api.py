@@ -456,6 +456,7 @@ async def chat_request(
                 query_vector=[],
                 search_queries=search_queries,
                 reference_time=reference_time,
+                temporal_deviation=temporal_deviation,
                 entity_mentions=entity_mentions,
             )
             prompt_variables["LONG_TERM_MEMORY"] = long_term_memory_text

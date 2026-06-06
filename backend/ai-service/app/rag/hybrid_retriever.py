@@ -204,16 +204,18 @@ class HybridRetriever:
         self,
         query_text: str,
         reference_time: Optional[str] = None,
+        temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
     ) -> List[LongTermMemory]:
         """
         PG FTS 稀疏检索（PostgreSQL tsvector/ts_rank）
 
         做什么：委托 PGTextSearch 使用 PostgreSQL 内建全文检索进行 BM25 风格召回。
-                如果提供了 reference_time 和 entity_mentions，将它们拼入查询文本，
+                如果提供了 reference_time、temporal_deviation 和 entity_mentions，将它们拼入查询文本，
                 使 BM25 检索同时覆盖时间语义和实体关键词。
-        为什么这样做：entity_mentions 是 InputReconstructor 提取的核心实体词，
-                     reference_time 是时间指向，两者能显著提升 BM25 的命中精度。
+        :param reference_time: 参考时间戳，ISO 8601 格式字符串或 None
+        :param temporal_deviation: 允许前后偏差的天数（0 表示精确查找），默认 0
+        :param entity_mentions: 核心实体词列表
         返回：去重后的 LongTermMemory 列表
         """
         if not self.fts_retriever.is_available:
@@ -235,25 +237,26 @@ class HybridRetriever:
             # 如果提供了 reference_time，在结果中对 session_id 做时间过滤
             if reference_time and memories:
                 try:
-                    # reference_time 格式示例：2026-06-05T10:00:00
                     ref_dt = datetime.fromisoformat(reference_time.replace("Z", "+00:00"))
                     ref_date_str = ref_dt.strftime("%Y%m%d")
-                    # 过滤出 session_id 与参考时间接近的记忆（前后一天）
+                    ref_date_int = int(ref_date_str)
+                    max_deviation = max(0, temporal_deviation if temporal_deviation is not None else 0)
                     import re
                     filtered = []
                     for mem in memories:
                         sid = mem.session_id
                         if sid and re.match(r"^\d{8}$", sid):
-                            # 允许前后 1 天的偏差
-                            diff = abs(int(sid) - int(ref_date_str))
-                            if diff <= 1:
+                            sid_int = int(sid)
+                            # 使用 temporal_deviation 控制允许的偏差天数
+                            diff = abs(sid_int - ref_date_int)
+                            if diff <= max_deviation:
                                 filtered.append(mem)
                         else:
                             filtered.append(mem)
                     memories = filtered
                     logger.info(
                         f"PG FTS 检索完成（含时间过滤） hits={len(memories)} "
-                        f"reference_time={reference_time}"
+                        f"reference_time={reference_time} temporal_deviation={max_deviation}"
                     )
                 except Exception as e:
                     logger.warning(f"PG FTS 时间过滤失败，跳过 time filter error={e}")
@@ -312,6 +315,7 @@ class HybridRetriever:
         query_vector: List[float],
         search_queries: Optional[List[str]] = None,
         reference_time: Optional[str] = None,
+        temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
     ) -> List[LongTermMemory]:
         """
@@ -320,18 +324,16 @@ class HybridRetriever:
         做什么：
           1. 向量稠密检索（Qdrant）：如果提供了 search_queries，使用多个泛化 Query 并发检索
           2. PG FTS 稀疏检索（PostgreSQL tsvector）：如果提供了 entity_mentions 和 reference_time，
-             增强 BM25 查询文本并做时间过滤
+             增强 BM25 查询文本并做时间过滤（temporal_deviation 控制偏差天数）
           3. 合并去重（按 memory_id）
           4. Rerank 重排
           5. 严格截断至 rerank_top_k 条
-        为什么这样做：混合检索（Dense + Sparse）能兼顾语义相似度与关键词匹配，
-                     search_queries 提升向量检索的召回覆盖面，
-                     entity_mentions 和 reference_time 提升 BM25 检索精度。
 
         :param query_text: 用户查询文本（用于 FTS, Embedding, Rerank）
         :param query_vector: 外部传入的查询向量（可选，可传空列表 []）
         :param search_queries: 向量检索时使用的泛化 Query 列表（由 InputReconstructor 提取）
         :param reference_time: BM25 检索时的时间约束（ISO 时间戳字符串或 None）
+        :param temporal_deviation: BM25 时间过滤允许的偏差天数（0 表示精确匹配）
         :param entity_mentions: BM25 检索时的实体关键词列表（若提供，将在查询中加入这些关键词）
         :return: 经过重排截断后的 LongTermMemory 列表
         """
@@ -347,9 +349,9 @@ class HybridRetriever:
         vector_task = asyncio.create_task(
             self._vector_retrieve(query_text, query_vector, search_queries)
         )
-        # BM25 检索：reference_time 和 entity_mentions 传递给 _fts_retrieve
+        # BM25 检索：reference_time、temporal_deviation 和 entity_mentions 传递给 _fts_retrieve
         fts_task = asyncio.create_task(
-            self._fts_retrieve(query_text, reference_time, entity_mentions)
+            self._fts_retrieve(query_text, reference_time, temporal_deviation, entity_mentions)
         )
 
         vector_memories, fts_memories = await asyncio.gather(vector_task, fts_task)
@@ -383,6 +385,7 @@ class HybridRetriever:
         query_vector: List[float],
         search_queries: Optional[List[str]] = None,
         reference_time: Optional[str] = None,
+        temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
     ) -> str:
         """
@@ -394,7 +397,8 @@ class HybridRetriever:
             - query_text: 查询文本（用户输入）
             - query_vector: 查询向量（可选，可传空列表 []）
             - search_queries: 向量检索泛化 Query 列表
-            - reference_time: BM25 时间参考
+            - reference_time: BM25 时间参考（ISO 8601 格式）
+            - temporal_deviation: BM25 时间过滤允许的偏差天数（0 表示精确匹配）
             - entity_mentions: BM25 实体关键词
             - 返回：多行文本，格式为：
                 date: YYYYMMDD
@@ -408,6 +412,7 @@ class HybridRetriever:
             query_vector,
             search_queries=search_queries,
             reference_time=reference_time,
+            temporal_deviation=temporal_deviation,
             entity_mentions=entity_mentions,
         )
         if not memories:
