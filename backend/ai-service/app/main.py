@@ -10,6 +10,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Optional
 
 # 强制 HuggingFace 离线模式，防止加载本地模型时因网络问题卡死
 os.environ["HF_HUB_OFFLINE"] = "1"
@@ -114,6 +115,31 @@ def load_rerank_model() -> object | None:
         return None
 
 
+async def _initialize_fts_indexes(ltm_pg_repo: Optional[LongTermMemoryPGRepo]) -> None:
+    """
+    初始化全文检索（FTS）GIN 索引
+
+    做什么：为所有需要全文检索的表创建或确认 GIN 索引（幂等操作，IF NOT EXISTS）。
+            当前索引列表：
+              - long_term_memories.summary → idx_ltm_summary_fts
+            后续如果有其他表需要 FTS 支持，直接在此函数中追加即可。
+    为什么这样做：GIN 索引是 PG FTS 高效执行的必备条件，必须在服务启动时确保索引存在。
+    边界条件：
+        - 依赖 PG 仓库实例可用，不可用时静默跳过
+        - 索引创建为幂等操作（CREATE INDEX IF NOT EXISTS），重复调用安全
+    """
+    if not ltm_pg_repo:
+        logger.warning("长期记忆 PG 仓库不可用，跳过 FTS 索引初始化")
+        return
+
+    try:
+        await ltm_pg_repo.create_fts_index()
+        logger.info("全文检索 GIN 索引初始化完成")
+    except Exception as e:
+        # 索引创建失败不阻断启动，检索降级为全表扫描（性能下降但功能可用）
+        logger.warning(f"全文检索 GIN 索引初始化失败（检索将降级为全表扫描） error={e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用程序生命周期管理"""
@@ -213,6 +239,11 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"加载激活的 API 配置预设失败: {e}")
 
+    # 8.5 初始化全文检索（FTS）GIN 索引
+    # 为什么放在这里：PG 连接已就绪，ltm_pg_repo 已初始化完成
+    if ltm_pg_repo:
+        await _initialize_fts_indexes(ltm_pg_repo)
+
     # 8.8 加载 Embedding 和 Rerank 模型
     global _embedding_model, _rerank_model
 
@@ -232,6 +263,7 @@ async def lifespan(app: FastAPI):
             qdrant_client=qdrant_client,
             inference_svc=inference_svc,
             retrieval_top_k=settings.retrieval_top_k,
+            rerank_top_k=settings.rerank_top_k,
         )
         try:
             await memory_manager.init()

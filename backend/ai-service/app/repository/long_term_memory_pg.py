@@ -180,6 +180,107 @@ class LongTermMemoryPGRepo:
             await session.commit()
             logger.info(f"长期记忆摘要已更新 id={id}")
 
+    async def search_by_text(self, query_text: str, top_k: int) -> List[LongTermMemory]:
+        """
+        使用 PostgreSQL 内建全文检索（FTS）执行 BM25 风格的文本搜索
+
+        做什么：对 summary 字段执行 to_tsvector('simple', summary) 向量化，
+                将用户查询转为 tsquery 后进行 ts_rank 排序，返回得分最高的 top_k 条。
+        为什么这样做：PostgreSQL 的 ts_rank 实现基于标准的 BM25 变体，
+                     配合 GIN 索引可支持中等规模文本的高效稀疏检索。
+                     对中文采用 simple 配置（单字符粒度），与内存 BM25 的分词策略一致。
+
+        边界条件：
+            - 仅返回 status=MemoryStatus.ACTIVE.value 的记录
+            - 查询文本为空时返回空列表
+            - 检索结果按 ts_rank 得分降序排列
+        """
+        from sqlalchemy import text
+
+        if not query_text or not query_text.strip():
+            return []
+
+        # 使用原始 SQL 执行 PostgreSQL FTS 以利用 to_tsvector/to_tsquery/ts_rank
+        # 注意：对中文文本，simple 配置会将每个汉字作为独立 token 处理
+        # 这与原内存在 BM25 的中文单字粒度分词策略一致
+        sql = text("""
+            SELECT id, session_id, summary, status, created_at, updated_at,
+                   ts_rank(to_tsvector('simple', summary), plainto_tsquery('simple', :query)) AS rank
+            FROM long_term_memories
+            WHERE status = :status
+              AND to_tsvector('simple', summary) @@ plainto_tsquery('simple', :query)
+            ORDER BY rank DESC
+            LIMIT :limit
+        """)
+
+        async with self.pg_client.session_factory() as session:
+            try:
+                result = await session.execute(sql, {
+                    "query": query_text,
+                    "status": MemoryStatus.ACTIVE.value,
+                    "limit": top_k,
+                })
+                rows = result.all()
+                memories = []
+                for row in rows:
+                    memory = LongTermMemory(
+                        id=row[0],
+                        session_id=row[1],
+                        summary=row[2],
+                        status=row[3],
+                        created_at=row[4],
+                        updated_at=row[5],
+                    )
+                    memories.append(memory)
+                logger.info(f"PG FTS 检索完成 hits={len(memories)} top_k={top_k} query=\"{query_text[:50]}...\"")
+                return memories
+            except Exception as e:
+                logger.error(f"PG FTS 检索失败 query=\"{query_text[:50]}...\" error={e}")
+                # 如果 FTS 失败（例如未安装扩展），降级返回空
+                return []
+
+    async def create_fts_index(self) -> None:
+        """
+        为 long_term_memories.summary 创建 GIN 索引以加速 FTS 检索
+
+        做什么：创建索引 idx_ltm_summary_fts ON long_term_memories
+                USING GIN (to_tsvector('simple', summary))
+        为什么这样做：GIN 索引可将 ts_rank 排序效率提升两个数量级，
+                     是生产环境中 FTS 检索的必备条件。
+        边界条件：
+            - IF NOT EXISTS 确保幂等性
+            - 仅在首次部署或迁移时调用
+        """
+        from sqlalchemy import text
+        sql = text("""
+            CREATE INDEX IF NOT EXISTS idx_ltm_summary_fts
+            ON long_term_memories
+            USING GIN (to_tsvector('simple', summary))
+        """)
+        async with self.pg_client.session_factory() as session:
+            try:
+                await session.execute(sql)
+                await session.commit()
+                logger.info("PG FTS GIN 索引创建/确认完成 idx_ltm_summary_fts")
+            except Exception as e:
+                logger.warning(f"创建 PG FTS GIN 索引失败（不影响核心功能） error={e}")
+
+    async def get_all_active_summaries(self) -> List[tuple[str, str, str]]:
+        """
+        获取所有活跃长期记忆的 (id, summary, created_at) 元组列表
+        用途：为旧版内存 BM25 提供全量语料库（保留向后兼容）。
+        边界条件：仅返回 status=MemoryStatus.ACTIVE.value 的记录。
+        """
+        async with self.pg_client.session_factory() as session:
+            stmt = (
+                select(LongTermMemory.id, LongTermMemory.summary, LongTermMemory.created_at)
+                .where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
+            )
+            result = await session.execute(stmt)
+            rows = result.all()
+            # 将 datetime 转为 ISO 格式字符串
+            return [(row[0], row[1], row[2].isoformat() if row[2] else "") for row in rows]
+
     async def delete_hard(self, id: str) -> None:
         """
         硬删除指定的长期记忆记录

@@ -430,7 +430,27 @@ async def chat_request(
 
     logger.info(f"调用 InputReconstruction 成功 trace_id={trace_id}, recon_data={recon_data}")
 
-    # ---- 5. 组装完整 Chat Prompt ----
+    # ---- 5. 混合检索 RAG：从长期记忆中召回并注入 Prompt ----
+    # 为什么这样做：Phase 6 -> Phase 7 过渡的核心环节，
+    # 通过 BM25 + 向量双路召回和 Rerank 重排，将高价值长期记忆注入 Chat Prompt。
+    # 检索依赖 disambiguated_text（消歧后的用户输入），在 InputReconstructor 完成后执行。
+    if memory_manager:
+        try:
+            # 调用混合检索 -> 格式化 -> 返回 'date: ...\ncontent: ...' 文本
+            long_term_memory_text = await memory_manager.retrieve_and_format_memories(
+                query_text=disambiguated_text,
+                query_vector=[],
+            )
+            prompt_variables["LONG_TERM_MEMORY"] = long_term_memory_text
+            logger.info(f"长期记忆 RAG 检索注入成功 trace_id={trace_id} text_length={len(long_term_memory_text)}")
+        except Exception as e:
+            logger.warning(f"长期记忆 RAG 检索注入失败（降级跳过） trace_id={trace_id} error={e}")
+            prompt_variables["LONG_TERM_MEMORY"] = ""
+    else:
+        logger.info(f"记忆管理器不可用，跳过长期记忆 RAG 检索 trace_id={trace_id}")
+        prompt_variables["LONG_TERM_MEMORY"] = ""
+
+    # ---- 6. 组装完整 Chat Prompt ----
     full_system_prompt = ""
     if prompt_mgr:
         try:

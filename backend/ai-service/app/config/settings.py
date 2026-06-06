@@ -117,6 +117,7 @@ class Settings(BaseSettings):
     # 检索配置
     # ============================================================
     retrieval_top_k: int = 5
+    rerank_top_k: int = 3
 
     # ============================================================
     # Pydantic Settings 配置

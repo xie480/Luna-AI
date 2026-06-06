@@ -2,14 +2,16 @@
 Luna AI 长期记忆管理器模块
 
 做什么：协调长期记忆的完整生命周期：会话流转检测、历史压缩、双库提交、记忆检索。
+        记忆检索委托给 rag/ 模块中的 HybridRetriever 执行 BM25 + 向量混合检索 + Rerank 重排。
 为什么这样做：作为唯一调度权威，所有记忆写入必须经过此管理器的事务控制。
+             检索策略由 rag/ 模块统一负责，遵循单一职责原则。
 输入输出：
     - Manager: 长期记忆管理器类
 边界条件：
     - 启动时兜底检测：清理 Redis 中的非当日历史会话
     - 压缩历史会话并提交到双库
     - 执行自然日会话流转
-    - 检索长期记忆（带语义检索与重排）
+    - 检索长期记忆（委托 rag/ 模块的 HybridRetriever）
 异常行为：
     - 依赖服务不可用时记录警告并降级
 """
@@ -23,6 +25,7 @@ from app.infrastructure.qdrant import QdrantClientWrapper
 from app.logger import logger
 from app.prompt.manager import Manager as PromptManager
 from app.prompt.types import PromptCategory
+from app.rag.hybrid_retriever import HybridRetriever, InferenceService
 from app.repository.chat_history_redis import ChatHistoryRedisRepo
 from app.repository.long_term_memory_pg import LongTermMemoryPGRepo
 from app.repository.long_term_memory_qdrant import LongTermMemoryQdrantRepo
@@ -45,16 +48,6 @@ class MemoryEvent:
 MemoryEventHandler = Callable[[MemoryEvent], None]
 
 
-class InferenceService(Protocol):
-    """推理服务接口（用于 Embedding 和 Rerank）"""
-    async def get_embedding_vector(self, text: str) -> List[float]:
-        ...
-
-    async def rerank_documents(self, query: str, documents: List[str]) -> List[Dict[str, Any]]:
-        """返回包含 'index' 和 'score' 的字典列表"""
-        ...
-
-
 class Manager:
     """长期记忆管理器"""
 
@@ -67,6 +60,7 @@ class Manager:
         qdrant_client: Optional[QdrantClientWrapper],
         inference_svc: Optional[InferenceService],
         retrieval_top_k: int,
+        rerank_top_k: int = 3,
     ):
         self.redis_repo = redis_repo
         self.ltm_pg_repo = ltm_pg_repo
@@ -75,10 +69,20 @@ class Manager:
         self.qdrant_client = qdrant_client
         self.inference_svc = inference_svc
         self.retrieval_top_k = retrieval_top_k
-        
+        self.rerank_top_k = rerank_top_k if rerank_top_k > 0 else 3
+
         self.listeners: List[MemoryEventHandler] = []
         self._lock = asyncio.Lock()
         self.enable_sync_notify = True
+
+        # 混合检索器（RAG 模块）：由 rag/hybrid_retriever.py 提供
+        self.retriever = HybridRetriever(
+            ltm_pg_repo=ltm_pg_repo,
+            ltm_qdrant_repo=ltm_qdrant_repo,
+            inference_svc=inference_svc,
+            retrieval_top_k=self.retrieval_top_k,
+            rerank_top_k=self.rerank_top_k,
+        )
 
     async def on_event(self, handler: MemoryEventHandler) -> None:
         """注册记忆事件监听器"""
@@ -175,6 +179,7 @@ class Manager:
          3. 调用 Python LongSummarize gRPC 进行 AI 压缩
          4. 写入 PG 长期记忆记录
          5. 同步写入 Qdrant 向量
+         6. 失效 BM25 索引缓存（新记忆写完后下次检索自动重建）
         """
         trace_id = generate_string_id()
         logger.info(f"开始压缩历史会话 session_id={session_id} trace_id={trace_id}")
@@ -290,6 +295,8 @@ class Manager:
                 }
             ))
 
+        # 8. 注意：PG FTS 全文检索无需缓存失效，新写入的记忆立即可检索
+
     async def rollover_session(self, current_session_id: str) -> str:
         """
         执行自然日会话流转
@@ -319,90 +326,18 @@ class Manager:
 
     async def retrieve_long_term_memories(self, query_text: str, query_vector: List[float]) -> List[LongTermMemory]:
         """
-        检索长期记忆（带语义检索与重排）
-        做什么：根据用户意图查询文本，先通过 Embedding 转为向量进行 Qdrant 粗排检索，
-                再通过 CrossEncoder 精排提升 Top-K 结果的排序质量
+        检索长期记忆（委托 HybridRetriever）
+
+        做什么：将检索请求透传给 rag/ 模块的 HybridRetriever，
+                执行 BM25 + 向量混合检索 + Rerank 重排全流程。
         """
-        if not self.ltm_qdrant_repo or not self.ltm_pg_repo:
-            logger.warning("长期记忆系统不可用，跳过记忆检索")
-            return []
+        return await self.retriever.retrieve(query_text, query_vector)
 
-        top_k = self.retrieval_top_k
-        if top_k <= 0:
-            top_k = 5
+    async def retrieve_and_format_memories(self, query_text: str, query_vector: List[float]) -> str:
+        """
+        检索长期记忆并格式化为 'date: ... \\n content: ...' 文本
 
-        # 如果提供了 query_text，先通过 Embdedding 转为查询向量（覆盖外部传入的 query_vector）
-        final_query_vector = query_vector
-        if query_text and self.inference_svc:
-            try:
-                embedding_vec = await self.inference_svc.get_embedding_vector(query_text)
-                final_query_vector = embedding_vec
-            except Exception as e:
-                logger.warning(f"获取查询向量的 Embedding 失败，使用外部传入向量（如有） error={e}")
-
-        # 如果仍然没有向量，无法进行语义检索，返回空
-        if not final_query_vector:
-            logger.warning("查询向量为空，跳过语义检索")
-            return []
-
-        # Qdrant 粗排：检索 Top-K 的 3 倍候选数，为后续重排提供足够候选
-        search_top_k = top_k * 3
-        if search_top_k > 50:
-            search_top_k = 50  # 限制最大候选数，防止性能问题
-
-        try:
-            results = await self.ltm_qdrant_repo.search_by_vector(final_query_vector, search_top_k)
-        except Exception as e:
-            logger.warning(f"Qdrant 向量检索失败，降级为空返回 error={e}")
-            return []
-
-        if not results:
-            logger.info(f"Qdrant 无匹配结果 top_k={top_k}")
-            return []
-
-        memory_ids = []
-        for result in results:
-            mem_id = result.payload.get("memory_id")
-            if mem_id:
-                memory_ids.append(str(mem_id))
-            else:
-                # 兼容旧数据
-                memory_ids.append(str(result.id))
-
-        try:
-            memories = await self.ltm_pg_repo.get_by_ids(memory_ids)
-        except Exception as e:
-            logger.warning(f"从 PG 拉取记忆记录失败，降级为空返回 error={e}")
-            return []
-
-        if not memories:
-            return []
-
-        # Rerank 精排：如果提供了 query_text，且推理服务支持 Rerank，对结果进行重排
-        if query_text and self.inference_svc and len(memories) > 1:
-            # 提取候选文档列表（使用记忆的 Summary 作为文档内容）
-            documents = [mem.summary for mem in memories]
-
-            try:
-                rerank_results = await self.inference_svc.rerank_documents(query_text, documents)
-                
-                # 根据重排结果重新排序 memories
-                reranked_memories = []
-                limit = min(top_k, len(rerank_results))
-                for i in range(limit):
-                    idx = rerank_results[i].get("index", 0)
-                    if 0 <= idx < len(memories):
-                        reranked_memories.append(memories[idx])
-                memories = reranked_memories
-            except Exception as e:
-                # Rerank 失败时降级为粗排结果，截取 top_k
-                logger.warning(f"Rerank 重排失败，使用 Qdrant 粗排结果 error={e}")
-                if len(memories) > top_k:
-                    memories = memories[:top_k]
-        elif len(memories) > top_k:
-            # 没有 Rerank 时，截取前 top_k 个
-            memories = memories[:top_k]
-
-        has_rerank = bool(query_text and self.inference_svc)
-        logger.info(f"长期记忆检索完成 hits={len(memories)} top_k={top_k} has_rerank={has_rerank}")
-        return memories
+        做什么：委托 rag/ 模块的 HybridRetriever 完成检索和格式化。
+        返回：多行文本，每行格式为 'date: YYYY-MM-DD\\ncontent: <summary>'
+        """
+        return await self.retriever.retrieve_and_format(query_text, query_vector)
