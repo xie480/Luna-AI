@@ -16,6 +16,7 @@ Luna AI 混合检索编排器模块
     - Rerank 失败时降级到原始合并顺序
 """
 
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
@@ -47,7 +48,7 @@ class HybridRetriever:
               3. 合并去重：按 memory_id 合并两路结果
               4. CrossEncoder 重排：使用 Rerank 模型对合并结果重新打分排序
               5. 严格截断：取 rerank_top_k 条最终结果
-              6. 格式化输出：将每条记忆转为 'date: ...\\ncontent: ...' 文本
+              6. 格式化输出：将每条记忆转为 'date: ...\ncontent: ...' 文本
     """
 
     def __init__(
@@ -78,23 +79,22 @@ class HybridRetriever:
 
     def _format_single_memory(self, memory: LongTermMemory) -> str:
         """
-        将单条长期记忆格式化为 'date: ... \\n content: ...' 的文本
+        将单条长期记忆格式化为 'date: ... \n content: ...' 的文本
 
-        做什么：将 LongTermMemory 模型中的时间戳和摘要内容，按标准文本模板组装。
+        做什么：将 LongTermMemory 模型中的 session_id 和摘要内容，按标准文本模板组装。
         为什么这样做：确保注入 Prompt 的每条记忆具有统一结构，便于 LLM 解析时间语义。
         输入输出：
             - memory: LongTermMemory 实例
-            - 返回: "date: YYYY-MM-DD\\ncontent: ..." 格式的字符串
+            - 返回: "date: YYYY-MM-DD HH:MM:SS Weekday\ncontent: ..." 格式的字符串
         """
         date_str = ""
-        if memory.created_at:
+        if memory.session_id:
             try:
-                if hasattr(memory.created_at, 'strftime'):
-                    date_str = memory.created_at.strftime("%Y-%m-%d")
-                else:
-                    date_str = str(memory.created_at)[:10]
+                # session_id 格式为 YYYYMMDD
+                dt = datetime.strptime(memory.session_id, "%Y%m%d")
+                date_str = dt.strftime("%Y-%m-%d %H:%M:%S %A")
             except Exception:
-                date_str = ""
+                date_str = memory.session_id
         return f"date: {date_str}\ncontent: {memory.summary}"
 
     async def _vector_retrieve(
@@ -217,11 +217,10 @@ class HybridRetriever:
         执行完整的混合检索流程
 
         做什么：
-          1. 向量稠密检索（Qdrant）
-          2. PG FTS 稀疏检索（PostgreSQL tsvector）
-          3. 合并去重（按 memory_id）
-          4. Rerank 重排
-          5. 严格截断至 rerank_top_k 条
+          1. 向量稠密检索（Qdrant）与 PG FTS 稀疏检索（PostgreSQL tsvector）并行执行
+          2. 合并去重（按 memory_id）
+          3. Rerank 重排
+          4. 严格截断至 rerank_top_k 条
         为什么这样做：混合检索（Dense + Sparse）能兼顾语义相似度与关键词匹配，
                      显著提升长尾场景的召回率；Rerank 精排确保最终注入 Prompt 的是相关性最高的记忆。
 
@@ -236,15 +235,17 @@ class HybridRetriever:
         seen_ids: set = set()
         all_memories: List[LongTermMemory] = []
 
-        # ---- 阶段 1: 向量稠密检索 ----
-        vector_memories = await self._vector_retrieve(query_text, query_vector)
+        # ---- 阶段 1 & 2: 向量稠密检索与 PG FTS 稀疏检索并行执行 ----
+        vector_task = asyncio.create_task(self._vector_retrieve(query_text, query_vector))
+        fts_task = asyncio.create_task(self._fts_retrieve(query_text))
+
+        vector_memories, fts_memories = await asyncio.gather(vector_task, fts_task)
+
         for mem in vector_memories:
             if mem.id not in seen_ids:
                 seen_ids.add(mem.id)
                 all_memories.append(mem)
 
-        # ---- 阶段 2: PG FTS 稀疏检索 ----
-        fts_memories = await self._fts_retrieve(query_text)
         for mem in fts_memories:
             if mem.id not in seen_ids:
                 seen_ids.add(mem.id)
@@ -265,7 +266,7 @@ class HybridRetriever:
 
     async def retrieve_and_format(self, query_text: str, query_vector: List[float]) -> str:
         """
-        检索长期记忆并格式化为 'date: ... \\n content: ...' 文本
+        检索长期记忆并格式化为 'date: ... \n content: ...' 文本
 
         做什么：调用 retrieve() 获取记忆列表，将每条记录按格式组装为多行文本，
                 直接供 Prompt 模板中的 {{LONG_TERM_MEMORY}} 变量使用。
@@ -273,10 +274,10 @@ class HybridRetriever:
             - query_text: 查询文本（用户输入）
             - query_vector: 查询向量（可选，可传空列表 []）
             - 返回：多行文本，格式为：
-                date: YYYY-MM-DD
+                date: YYYYMMDD
                 content: <summary>
 
-                date: YYYY-MM-DD
+                date: YYYYMMDD
                 content: <summary>
         """
         memories = await self.retrieve(query_text, query_vector)
