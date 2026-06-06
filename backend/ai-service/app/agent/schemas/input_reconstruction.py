@@ -43,8 +43,8 @@ class IntentRouting(BaseModel):
     required_retrieval_types: list[RetrievalType] = Field(default_factory=list, description="需要触发的检索类型")
 
 class TemporalFocus(BaseModel):
-    time_type: str = Field(..., description="时间指向类型 (PAST, FUTURE, CURRENT)")
     reference_time: str | None = Field(None, description="参考时间戳")
+    temporal_deviation: int = Field(0, description="允许前后偏差的天数")
 
 class LongTermMemoryRouting(BaseModel):
     trigger: bool = Field(..., description="是否触发长期记忆检索")

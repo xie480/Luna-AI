@@ -213,6 +213,7 @@ class HybridRetriever:
         做什么：委托 PGTextSearch 使用 PostgreSQL 内建全文检索进行 BM25 风格召回。
                 如果提供了 reference_time、temporal_deviation 和 entity_mentions，将它们拼入查询文本，
                 使 BM25 检索同时覆盖时间语义和实体关键词。
+                并且如果存在 reference_time，还会额外发起一次只依赖时间的查询以精准召回对应时间段内的记录，并将两路结果合并。
         :param reference_time: 参考时间戳，ISO 8601 格式字符串或 None
         :param temporal_deviation: 允许前后偏差的天数（0 表示精确查找），默认 0
         :param entity_mentions: 核心实体词列表
@@ -221,29 +222,42 @@ class HybridRetriever:
         if not self.fts_retriever.is_available:
             return []
 
-        # 构造 BM25 查询文本：合并原始 query_text + entity_mentions
+        all_memories = []
+        seen_ids = set()
+
+        # 1. 关键词查询 (如果存在)
         query_parts: List[str] = []
         if query_text:
             query_parts.append(query_text)
         if entity_mentions:
             query_parts.extend(entity_mentions)
-
         final_query = " ".join(query_parts).strip()
-        if not final_query:
-            return []
+        
+        # 解析参考时间
+        ref_dt = None
+        ref_date_int = None
+        max_deviation = 0
+        
+        if reference_time:
+            try:
+                ref_dt = datetime.fromisoformat(reference_time.replace("Z", "+00:00"))
+                ref_date_str = ref_dt.strftime("%Y%m%d")
+                ref_date_int = int(ref_date_str)
+                max_deviation = max(0, temporal_deviation if temporal_deviation is not None else 0)
+            except Exception as e:
+                logger.warning(f"时间戳解析失败，将忽略时间过滤 reference_time={reference_time} error={e}")
+                ref_dt = None
 
-        try:
-            memories = await self.fts_retriever.search(final_query, self.retrieval_top_k)
-            # 如果提供了 reference_time，在结果中对 session_id 做时间过滤
-            if reference_time and memories:
-                try:
-                    ref_dt = datetime.fromisoformat(reference_time.replace("Z", "+00:00"))
-                    ref_date_str = ref_dt.strftime("%Y%m%d")
-                    ref_date_int = int(ref_date_str)
-                    max_deviation = max(0, temporal_deviation if temporal_deviation is not None else 0)
+        async def _kw_search() -> List[LongTermMemory]:
+            if not final_query:
+                return []
+            try:
+                kw_memories = await self.fts_retriever.search(final_query, self.retrieval_top_k)
+                if ref_dt is not None:
+                    # 在结果中对 session_id 做时间过滤
                     import re
                     filtered = []
-                    for mem in memories:
+                    for mem in kw_memories:
                         sid = mem.session_id
                         if sid and re.match(r"^\d{8}$", sid):
                             sid_int = int(sid)
@@ -253,19 +267,58 @@ class HybridRetriever:
                                 filtered.append(mem)
                         else:
                             filtered.append(mem)
-                    memories = filtered
-                    logger.info(
-                        f"PG FTS 检索完成（含时间过滤） hits={len(memories)} "
-                        f"reference_time={reference_time} temporal_deviation={max_deviation}"
-                    )
-                except Exception as e:
-                    logger.warning(f"PG FTS 时间过滤失败，跳过 time filter error={e}")
-            else:
-                logger.info(f"PG FTS 检索完成 hits={len(memories)} top_k={self.retrieval_top_k}")
-            return memories
-        except Exception as e:
-            logger.warning(f"PG FTS 检索失败（降级跳过） error={e}")
-            return []
+                    
+                    logger.info(f"PG FTS 关键词检索完成（含时间过滤） hits={len(filtered)} reference_time={reference_time} temporal_deviation={max_deviation}")
+                    return filtered
+                else:
+                    logger.info(f"PG FTS 关键词检索完成 hits={len(kw_memories)} top_k={self.retrieval_top_k}")
+                    return kw_memories
+            except Exception as e:
+                logger.warning(f"PG FTS 关键词检索失败 error={e}")
+                return []
+
+        async def _time_search() -> List[LongTermMemory]:
+            # 2. 纯时间查询 (如果存在有效的 reference_time，且时间偏差前后不超过7天)
+            if ref_dt is None or not self.ltm_pg_repo or max_deviation > 7:
+                return []
+            try:
+                # 收集允许的日期范围内的所有 session_ids
+                allowed_dates = []
+                from datetime import timedelta
+                for i in range(-max_deviation, max_deviation + 1):
+                    target_dt = ref_dt + timedelta(days=i)
+                    allowed_dates.append(target_dt.strftime("%Y%m%d"))
+                
+                # 获取这些 date 的聊天记录 (LongTermMemory.session_id 对应 YYYYMMDD)
+                tasks = [self.ltm_pg_repo.get_by_session_id(sid) for sid in allowed_dates]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                time_memories = []
+                for i, mem in enumerate(results):
+                    if isinstance(mem, Exception):
+                        logger.warning(f"获取纯时间检索记录失败 session_id={allowed_dates[i]} error={mem}")
+                    elif mem:
+                        time_memories.append(mem)
+                        
+                logger.info(f"PG FTS 纯时间检索完成 hits={len(time_memories)} allowed_dates={allowed_dates}")
+                return time_memories
+            except Exception as e:
+                logger.warning(f"PG FTS 纯时间检索失败 error={e}")
+                return []
+
+        kw_results, time_results = await asyncio.gather(_kw_search(), _time_search())
+
+        for mem in kw_results:
+            if mem.id not in seen_ids:
+                seen_ids.add(mem.id)
+                all_memories.append(mem)
+
+        for mem in time_results:
+            if mem.id not in seen_ids:
+                seen_ids.add(mem.id)
+                all_memories.append(mem)
+
+        return all_memories
 
     async def _rerank_and_truncate(
         self,

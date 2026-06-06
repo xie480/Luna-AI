@@ -110,7 +110,7 @@ IMPORTANT: You MUST strictly use the following enum values for the respective fi
                     "trigger": False,
                     "trigger_reason": "降级兜底，不触发检索",
                     "search_queries": [],
-                    "temporal_focus": {"time_type": "CURRENT", "reference_time": None},
+                    "temporal_focus": {"reference_time": None, "temporal_deviation": 0},
                     "entity_mentions": []
                 },
                 "external_knowledge": {
