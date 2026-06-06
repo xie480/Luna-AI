@@ -25,6 +25,7 @@
 * 允许的 category: [ {{ CATEGORIES | join(', ') }} ]
 * 允许的 dag_route_hint: [ {{ DAG_ROUTE_HINTS | join(', ') }} ]
 * 允许的 required_retrieval_types: [ {{ RETRIEVAL_TYPES | join(', ') }} ]
+* 允许的 route_strategy: [ {{ ROUTE_STRATEGIES | join(', ') }} ]
 
 ```json
 {
@@ -62,8 +63,14 @@
     
     "external_knowledge": {
       "trigger": "布尔值，是否触发外部知识检索",
+      "route_strategy": "必须从允许的 route_strategy 列表中选择 (keyword, hybrid, agentic)",
       "trigger_reason": "触发检索的具体原因描述",
-      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"]
+      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"],
+      "temporal_focus": {
+        "reference_time": "具体的参考时间戳，如果没有则为 null， 示例格式：2026-06-05T10:00:00Z 或 ISO 8601 格式",
+        "temporal_deviation": "允许前后偏差的天数，精准查找则为0，应为非负整数"
+      },
+      "entity_mentions": ["提取出的核心实体词以及时间关键词，用于BM25精准检索"]
     },
     
     "experience_reflection": {

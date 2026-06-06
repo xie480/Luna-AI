@@ -27,13 +27,14 @@ class InputReconstructorAgent:
         动态组装路由与情绪提取指南 Prompt, 将枚举的有效值列表注入模板。
         """
         # 强制追加枚举约束，防止大模型幻觉
-        enum_constraints = """
-IMPORTANT: You MUST strictly use the following enum values for the respective fields. Do NOT invent new values.
-- intent_routing.primary_intent: "MODIFY_PLAN", "GREETING", "QUERY_INFO", "EMOTION_VENTING", "SYSTEM_COMMAND", "TOOL_INVOCATION"
-- intent_routing.category: "TASK_MANAGEMENT", "CHAT", "KNOWLEDGE_QUERY", "EMOTION_SUPPORT"
-- intent_routing.dag_route_hint: "MULTI_SOURCE_RETRIEVAL_WORKFLOW", "FAST_CHAT", "AGENTIC_WORKFLOW", "GATING_APPROVAL"
-- intent_routing.required_retrieval_types (array elements): "LONG_TERM_MEMORY", "EXTERNAL_KNOWLEDGE", "EXPERIENCE_REFLECTION" (If none, return empty array [])
-"""
+        enum_constraints = (
+            "\nIMPORTANT: You MUST strictly use the following enum values for the respective fields. Do NOT invent new values.\n"
+            '- intent_routing.primary_intent: "MODIFY_PLAN", "GREETING", "QUERY_INFO", "EMOTION_VENTING", "SYSTEM_COMMAND", "TOOL_INVOCATION"\n'
+            '- intent_routing.category: "TASK_MANAGEMENT", "CHAT", "KNOWLEDGE_QUERY", "EMOTION_SUPPORT"\n'
+            '- intent_routing.dag_route_hint: "MULTI_SOURCE_RETRIEVAL_WORKFLOW", "FAST_CHAT", "AGENTIC_WORKFLOW", "GATING_APPROVAL"\n'
+            '- intent_routing.required_retrieval_types (array elements): "LONG_TERM_MEMORY", "EXTERNAL_KNOWLEDGE", "EXPERIENCE_REFLECTION" (If none, return empty array [])\n'
+            '- retrieval_routing.route_strategy: "keyword", "hybrid", "agentic"\n'
+        )
         return f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}\n\n{enum_constraints}"
 
     async def process(
@@ -106,6 +107,7 @@ IMPORTANT: You MUST strictly use the following enum values for the respective fi
                 "required_retrieval_types": []
             },
             retrieval_routing={
+                "route_strategy": "hybrid",
                 "long_term_memory": {
                     "trigger": False,
                     "trigger_reason": "降级兜底，不触发检索",

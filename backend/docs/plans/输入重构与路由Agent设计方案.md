@@ -76,7 +76,13 @@ class ExperienceReflectionRouting(BaseModel):
     search_queries: List[str] = Field(default_factory=list)
     reflection_focus: str = Field(..., description="反思焦点，如 RISK_AVERSION")
 
+class RagRetrievalRoute(str, Enum):
+    KEYWORD = "keyword"
+    HYBRID = "hybrid"
+    AGENTIC = "agentic"
+
 class RetrievalRouting(BaseModel):
+    route_strategy: RagRetrievalRoute = Field(default=RagRetrievalRoute.HYBRID, description="RAG路由策略")
     long_term_memory: LongTermMemoryRouting
     external_knowledge: ExternalKnowledgeRouting
     experience_reflection: ExperienceReflectionRouting
@@ -233,6 +239,7 @@ class InputReconstructorAgent:
   },
 
   "retrieval_routing": {
+    "route_strategy": "必须从允许的 route_strategy 列表中选择 (keyword, hybrid, agentic)",
     "long_term_memory": {
       "trigger": "布尔值，是否触发长期记忆检索",
       "trigger_reason": "触发检索的具体原因描述",

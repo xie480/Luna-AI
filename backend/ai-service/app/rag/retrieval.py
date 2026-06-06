@@ -90,7 +90,7 @@ class RagRetrievalOrchestrator:
 
     async def search(self, request: RagSearchRequest, trace_id: str) -> RagSearchResponse:
         """执行完整检索编排。"""
-        route = request.route or self._route_query(request.query)
+        route = request.route
         await self.event_publisher.publish_thought(trace_id, "routing", f"已选择 RAG 检索链路: {route.value}")
         if route == RagRetrievalRoute.KEYWORD:
             candidates = await self._keyword_search(request)
@@ -112,27 +112,40 @@ class RagRetrievalOrchestrator:
         await self.event_publisher.publish_citations(trace_id, citations)
         return RagSearchResponse(route=route, evidences=evidences, prompt_context=prompt_context, citations=citations)
 
-    def _route_query(self, query: str) -> RagRetrievalRoute:
-        """基于可解释启发式选择检索链路。"""
-        stripped = query.strip()
-        if re.search(r"[`{}()\[\]=]|错误|报错|日志|函数|类|配置项", stripped):
-            return RagRetrievalRoute.KEYWORD
-        if len(stripped) > 80 or any(mark in stripped for mark in ("为什么", "如何", "对比", "分别", "步骤")):
-            return RagRetrievalRoute.AGENTIC
-        return RagRetrievalRoute.HYBRID
-
     async def _keyword_search(self, request: RagSearchRequest) -> list[ScoredCandidate]:
         """执行纯 BM25/FTS 关键词检索。"""
-        candidates = await self.pg_repo.search_by_text(request.query, request.retrieval_top_k)
-        return [ScoredCandidate(candidate=item, score=item.score) for item in candidates]
+        from app.rag.knowledge_retriever import KnowledgeRetriever
+        
+        retriever = KnowledgeRetriever(
+            pg_repo=self.pg_repo,
+            qdrant_repo=self.qdrant_repo,
+            inference_svc=self.inference_svc,
+            retrieval_top_k=request.retrieval_top_k,
+            rerank_top_k=request.retrieval_top_k # 内部重排数量与检索阶段对齐
+        )
+        
+        candidates = await retriever.retrieve(query_text=request.query, search_mode="keyword")
+        return [ScoredCandidate(candidate=c, score=s) for c, s in candidates]
 
     async def _hybrid_search(self, request: RagSearchRequest, trace_id: str) -> list[ScoredCandidate]:
-        """执行 BM25 + Qdrant 向量双路召回并通过 RRF 融合。"""
+        """执行并发 BM25 + Qdrant 向量召回，废弃 RRF 融合，统一使用 Reranker。"""
         await self.event_publisher.publish_thought(trace_id, "retrieving", "正在执行 BM25 与向量双路召回")
-        keyword_task = asyncio.create_task(self.pg_repo.search_by_text(request.query, request.retrieval_top_k))
-        vector_task = asyncio.create_task(self._vector_search(request.query, request.retrieval_top_k))
-        keyword_candidates, vector_candidates = await asyncio.gather(keyword_task, vector_task)
-        return self._rrf_fuse(keyword_candidates, vector_candidates, request.alpha)
+        
+        from app.rag.knowledge_retriever import KnowledgeRetriever
+        
+        retriever = KnowledgeRetriever(
+            pg_repo=self.pg_repo,
+            qdrant_repo=self.qdrant_repo,
+            inference_svc=self.inference_svc,
+            retrieval_top_k=request.retrieval_top_k,
+            rerank_top_k=request.retrieval_top_k
+        )
+        
+        # 直接使用我们新编写的 knowledge_retriever 执行双路召回并由它完成内部 Reranker 操作，
+        # 在这里我们由于是在 _hybrid_search 里，外部也会进行一次 rerank,
+        # 所以我们返回所有通过初筛与内部 rerank 的 candidates 给外部使用。
+        candidates = await retriever.retrieve(query_text=request.query, search_mode="hybrid")
+        return [ScoredCandidate(candidate=c, score=s) for c, s in candidates]
 
     async def _agentic_search(self, request: RagSearchRequest, trace_id: str) -> list[ScoredCandidate]:
         """
@@ -164,90 +177,60 @@ class RagRetrievalOrchestrator:
             nested_request = request.model_copy(update={"query": current_query, "route": RagRetrievalRoute.HYBRID})
             # 执行混合搜索获取候选结果
             candidates = await self._hybrid_search(nested_request, trace_id)
-            # 检查当前检索到的证据是否足够
-            if self._is_evidence_sufficient(candidates):
+            
+            # 使用 Small Model 评估证据充分性
+            is_sufficient = await self._evaluate_evidence_sufficiency(request.query, candidates, trace_id)
+            if is_sufficient:
                 return candidates
+                
             # 更新最佳候选项（如果当前结果比之前的结果更好）
             if len(candidates) > len(best_candidates):
                 best_candidates = candidates
+                
             # 重写查询以供下一轮使用
-            current_query = self._rewrite_query(request.query, current_query, attempt)
+            if attempt < request.max_retries:
+                 current_query = await self._rewrite_query_agentic(request.query, current_query, trace_id)
+                 
         # 返回在所有尝试中找到的最佳候选项
         return best_candidates
 
-    async def _vector_search(self, query: str, top_k: int) -> list[tuple[RagChunkCandidate, float]]:
-        """执行向量检索并回表取正文。"""
-        if self.qdrant_repo is None or self.inference_svc is None:
-            return []
+    async def _evaluate_evidence_sufficiency(self, query: str, candidates: list[ScoredCandidate], trace_id: str) -> bool:
+        """引入 Small Model 对检索证据进行动态打分评估。"""
+        if not candidates:
+            return False
+            
+        # 执行动态打分
         try:
-            query_vector = await self.inference_svc.get_embedding_vector(query)
-            vector_hits = await self.qdrant_repo.search(query_vector, top_k)
-            candidates = await self.pg_repo.get_chunks_by_ids([hit.chunk_id for hit in vector_hits])
-            hit_scores = {hit.chunk_id: hit.score for hit in vector_hits}
-            return [(candidate, hit_scores.get(candidate.chunk.chunk_id, 0.0)) for candidate in candidates]
-        except Exception as exc:
-            logger.warning(f"RAG 向量检索失败，将仅使用稀疏检索 error={exc}")
-            return []
-
-    def _rrf_fuse(
-        self,
-        keyword_candidates: list[RagChunkCandidate],
-        vector_candidates: list[tuple[RagChunkCandidate, float]],
-        alpha: float,
-    ) -> list[ScoredCandidate]:
-        """
-        使用 Reciprocal Rank Fusion 融合稀疏与稠密结果。
-        
-        参数:
-            keyword_candidates (list[RagChunkCandidate]): 关键词检索得到的候选结果列表
-            vector_candidates (list[tuple[RagChunkCandidate, float]]): 向量检索得到的候选结果及对应分数的元组列表
-            alpha (float): 控制向量检索结果权重的系数，范围通常在 [0, 1] 之间，0 表示只考虑关键词结果，1 表示只考虑向量结果
+            from app.api.internal_service import internal_service
             
-        返回:
-            list[ScoredCandidate]: 融合后的带评分候选结果列表，按分数降序排列
-        """
-        # 设置 RRF 公式中的平滑常数 k，默认为 60.0
-        k = 60.0
-        
-        # 存储每个 chunk_id 对应的融合得分
-        score_map: dict[str, float] = {}
-        
-        # 存储每个 chunk_id 对应的候选对象，便于后续构建结果
-        candidate_map: dict[str, RagChunkCandidate] = {}
-        
-        # 处理关键词检索结果，计算其在 RRF 融合中的贡献分数
-        for rank, candidate in enumerate(keyword_candidates, start=1):
-            chunk_id = candidate.chunk.chunk_id
-            candidate_map[chunk_id] = candidate
-            # 计算关键词检索部分的 RRF 分数，使用 (1.0 - alpha) 作为权重
-            score_map[chunk_id] = score_map.get(chunk_id, 0.0) + (1.0 - alpha) / (k + rank)
-            
-        # 处理向量检索结果，计算其在 RRF 融合中的贡献分数
-        for rank, (candidate, vector_score) in enumerate(vector_candidates, start=1):
-            chunk_id = candidate.chunk.chunk_id
-            candidate_map[chunk_id] = candidate
-            # 计算向量检索部分的 RRF 分数，使用 alpha 作为权重，并加上原始向量分数的小比例（0.001）作为微调
-            score_map[chunk_id] = score_map.get(chunk_id, 0.0) + alpha / (k + rank) + vector_score * 0.001
-            
-        # 将融合后的得分和对应的候选对象组装成 ScoredCandidate 对象列表
-        fused = [ScoredCandidate(candidate=candidate_map[chunk_id], score=score) for chunk_id, score in score_map.items()]
-        
-        # 按照得分从高到低排序，确保最相关的候选结果排在前面
-        fused.sort(key=lambda item: item.score, reverse=True)
-        return fused
+            # 使用 LLM 对首个证据内容进行有效性评价
+            content_to_evaluate = candidates[0].candidate.chunk.content_text
+            prompt = f"请评估以下内容是否足以回答问题 '{query}'。只需返回 'YES' 或 'NO'。\n内容：{content_to_evaluate}"
+            response = await internal_service.short_summarize(trace_id, prompt) # 复用内部轻量请求通道
+            result = response[0] if isinstance(response, tuple) else response
+            if result and "YES" in result.upper():
+                return True
+            return False
+        except Exception as e:
+            logger.warning(f"Agentic 证据充分性评估异常，降级为启发式评价 error={e}")
+            return len(candidates) >= 3 and candidates[0].score >= 0.05
 
-    def _is_evidence_sufficient(self, candidates: list[ScoredCandidate]) -> bool:
-        """用可解释阈值判断证据是否足够。"""
-        if len(candidates) >= 3:
-            return True
-        return bool(candidates and candidates[0].score >= 0.05)
-
-    def _rewrite_query(self, original_query: str, current_query: str, attempt: int) -> str:
-        """生成下一轮检索查询，避免依赖不可控黑盒重写。"""
+    async def _rewrite_query_agentic(self, original_query: str, current_query: str, trace_id: str) -> str:
+        """使用 Small Model 进行 Query 重写。"""
+        try:
+            from app.api.internal_service import internal_service
+            prompt = f"原问题：'{original_query}'。之前的检索词：'{current_query}'。检索结果不够好。请提供一个新的、更宽泛或不同视角的检索词，不要包含任何额外解释。"
+            response = await internal_service.short_summarize(trace_id, prompt)
+            new_query = response[0] if isinstance(response, tuple) else response
+            if new_query and len(new_query.strip()) > 1:
+                return new_query.strip()
+        except Exception as e:
+            logger.warning(f"Agentic Query重写异常，降级为启发式重写 error={e}")
+            
         keywords = re.findall(r"[\u4e00-\u9fffA-Za-z0-9_\-]{2,}", original_query)
         deduped = list(dict.fromkeys(keywords))
-        if attempt % 2 == 0 and deduped:
-            return " ".join(deduped[:8])
+        if deduped:
+            return " ".join(deduped[:8]) + " " + original_query
         return f"{current_query} {original_query}"
 
     async def _build_evidences(

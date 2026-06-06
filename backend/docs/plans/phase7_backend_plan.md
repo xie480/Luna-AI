@@ -100,38 +100,38 @@ class ChunkUnit(BaseModel):
 
 ```mermaid
 graph TD
-    Query[用户 Query 输入] --> RouterNode(Router: 意图分析节点)
+    Query[原始用户输入] --> ReconAgent(InputReconstructor Agent)
     
-    RouterNode -- "词汇匹配 (Keyword)" --> Pipe1[链路 1: 纯字面匹配搜索]
-    RouterNode -- "通识问答 (Hybrid)" --> Pipe2[链路 2: 模块化混合检索]
-    RouterNode -- "逻辑多跳 (Agentic)" --> Pipe3[链路 3: CRAG 反思与查询重写]
+    ReconAgent --> |"提取消歧文本、检索意图与路由策略"| Router[RAG Retriever Orchestrator]
     
-    Pipe1 --> Merit[汇总检索结果合并格式化]
+    Router -- "Keyword Route" --> Pipe1[仅 PG FTS 搜索]
+    Router -- "Hybrid Route" --> Pipe2[并发调用统一 HybridRetriever 引擎]
+    Router -- "Agentic Route" --> Pipe3[动态重写与多次检索迭代]
     
-    Pipe2 --> BM25[BM25 倒排召回]
-    Pipe2 --> Dense[Qdrant 向量召回]
-    BM25 --> RRF{Reciprocal Rank Fusion 调权}
-    Dense --> RRF
-    RRF --> Reranker[BGE-Reranker 轻量重排层]
-    Reranker --> Merit
+    Pipe1 --> Rerank[Cross-Encoder Reranker]
     
-    Pipe3 --> RewriteNode(Query Rewriting: 重写关键词)
-    RewriteNode --> Pipe2Call(调用模块化混合检索获取知识)
-    Pipe2Call --> EvaluatorNode(Evaluator: 判定召回内容相关性)
-    EvaluatorNode -- "相关度低下" --> MaxRetry{超过最大尝试次数?}
-    MaxRetry -- "否" --> RewriteNode
-    MaxRetry -- "是 (跳出回退)" --> Merit
-    EvaluatorNode -- "验证证据充实" --> Merit
+    Pipe2 --> Retriever[HybridRetriever 底层接口]
+    Retriever --> |"并发：BM25 + 向量检索"| Rerank
     
-    Merit --> Generate[执行终结生成 Prompt 装填]
+    Pipe3 --> RetrieverCall[调用 HybridRetriever]
+    RetrieverCall --> Evaluator(Small Model Evidence Evaluator)
+    Evaluator -- "分数低且未超重试次数" --> Rewrite(Query Reformulation)
+    Rewrite --> RetrieverCall
+    Evaluator -- "分数达标或重试耗尽" --> Rerank
+    
+    Rerank --> Expand[父块扩展与证据格式化]
+    Expand --> Output[装填 Prompt 并发 SSE 溯源事件]
 ```
 
-### 4.1 核心节点职责
-*   **`QueryRouter Node`**：使用轻量 LLM（或基于提取词性的预检工具）对用户输入分流，以决定选用性能换精度的哪条通路。
-*   **混合检索与重排 (Hybrid & Rerank)**：
-    依靠 Qdrant 内部支持的 Sparse-Dense 双路提取机制，结合前端传入的 Alpha 参数融合分数。取 Top-20。而后将其送给本地运行的 `Cross-Encoder` 深度模型 (如 `bge-reranker-base`)。该模型会将查询与每个 Chunk 在底层做交叉注意力打分，精确剔除高向量相似度但语义反转的无关数据，最终取 Top-3 至 Top-5 注入。
-*   **`Evaluator Node` (反思节点)**：
-    使用特定的打分 Prompt（如：“请依据下方的检索文本，判定其是否足以为解答用户问题提供决定性事实。返回 JSON：`{"score": 1-10, "reason": "..."}`）。当判定缺失关键拼图时，流转状态图重置搜索词汇。
+### 4.1 核心机制优化
+1.  **路由决策前置化 (Query Reformulation & Routing)**：
+    废弃早期的正则关键字暴力判定。目前统一由 **InputReconstructor Agent** 对用户原始 Query 进行指代消歧（消除代词歧义），并在其结构化输出 JSON 中直接指明本次检索应使用哪种策略（Keyword / Hybrid / Agentic），实现检索意图与检索执行在物理架构上的解耦。
+2.  **统一底层检索接口 (Unified Retrieval Engine)**：
+    彻底废除检索编排器中的重复逻辑。不论是关键词还是多路召回，全部收拢为对 `app/rag/hybrid_retriever.py` 的透明调用。
+3.  **动态证据充分性评估 (Agentic RAG Evaluator)**：
+    废弃原来简单的 `len(candidates) >= 3` 硬编码逻辑。重构为引入 Small Model 对当前轮次检索证据进行动态打分（Score > Threshold）。若评估不及格，自动进入 Query Rewrite 循环重试。
+4.  **去 RRF (Reciprocal Rank Fusion) 化**：
+    早期架构中的 RRF 计算存在性能开销且与 Cross-Encoder Rerank 存在功能重叠。新架构删除 RRF，改由底层的多路召回粗排后，直接交付给深度 Reranker 模型执行交叉注意力打分。
 
 ---
 

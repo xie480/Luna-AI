@@ -81,9 +81,9 @@ class HybridRetriever:
         # PG FTS 检索器（包装 ltm_pg_repo.search_by_text）
         self.fts_retriever = PGTextSearch(ltm_pg_repo)
 
-    def _format_single_memory(self, memory: LongTermMemory) -> str:
+    def _format_single_memory(self, memory: Any) -> str:
         """
-        将单条长期记忆格式化为 'date: ... \n content: ...' 的文本
+        将单条长期记忆或 RAG 切片格式化为 'date: ... \n content: ...' 的文本
 
         做什么：将 LongTermMemory 模型中的 session_id 和摘要内容，按标准文本模板组装。
         为什么这样做：确保注入 Prompt 的每条记忆具有统一结构，便于 LLM 解析时间语义。
@@ -92,14 +92,24 @@ class HybridRetriever:
             - 返回: "date: YYYY-MM-DD HH:MM:SS Weekday\ncontent: ..." 格式的字符串
         """
         date_str = ""
-        if memory.session_id:
+        summary_or_content = ""
+
+        if hasattr(memory, "session_id"):
+            # 是 LongTermMemory
             try:
-                # session_id 格式为 YYYYMMDD
                 dt = datetime.strptime(memory.session_id, "%Y%m%d")
                 date_str = dt.strftime("%Y-%m-%d %H:%M:%S %A")
             except Exception:
                 date_str = memory.session_id
-        return f"date: {date_str}\ncontent: {memory.summary}"
+            summary_or_content = memory.summary
+        elif hasattr(memory, "chunk"):
+            # 是 RagChunkCandidate
+            date_str = memory.chunk.created_at.strftime("%Y-%m-%d %H:%M:%S %A") if memory.chunk.created_at else ""
+            summary_or_content = memory.chunk.content_text
+        else:
+            summary_or_content = str(memory)
+
+        return f"date: {date_str}\ncontent: {summary_or_content}"
 
     async def _vector_retrieve(
         self,
@@ -178,8 +188,13 @@ class HybridRetriever:
         try:
             if self._supports_group_vector_search():
                 return await self.ltm_qdrant_repo.search_groups_by_vector(query_vector, search_top_k)
-            results = await self.ltm_qdrant_repo.search_by_vector(query_vector, search_top_k)
-            return [str(result.payload.get("memory_id", "")) for result in results if result.payload.get("memory_id")]
+            if hasattr(self.ltm_qdrant_repo, "search_by_vector"):
+                results = await self.ltm_qdrant_repo.search_by_vector(query_vector, search_top_k)
+                return [str(result.payload.get("memory_id", "")) for result in results if result.payload.get("memory_id")]
+            else:
+                # 兼容 RagQdrantRepository
+                results = await self.ltm_qdrant_repo.search(query_vector, search_top_k)
+                return [str(getattr(result, "chunk_id", "")) for result in results]
         except Exception as e:
             logger.warning(f"Qdrant 向量检索失败 error={e}")
             return []
@@ -198,7 +213,10 @@ class HybridRetriever:
         if not memory_ids:
             return []
         try:
-            memories = await self.ltm_pg_repo.get_by_ids(memory_ids)
+            if hasattr(self.ltm_pg_repo, "get_chunks_by_ids"):
+                memories = await self.ltm_pg_repo.get_chunks_by_ids(memory_ids)
+            else:
+                memories = await self.ltm_pg_repo.get_by_ids(memory_ids)
             logger.info(f"向量检索完成 hits={len(memories)}")
             return memories
         except Exception as e:
@@ -340,13 +358,15 @@ class HybridRetriever:
         kw_results, time_results = await asyncio.gather(_kw_search(), _time_search())
 
         for mem in kw_results:
-            if mem.id not in seen_ids:
-                seen_ids.add(mem.id)
+            mid = mem.id if hasattr(mem, "id") else mem.chunk.chunk_id
+            if mid not in seen_ids:
+                seen_ids.add(mid)
                 all_memories.append(mem)
 
         for mem in time_results:
-            if mem.id not in seen_ids:
-                seen_ids.add(mem.id)
+            mid = mem.id if hasattr(mem, "id") else mem.chunk.chunk_id
+            if mid not in seen_ids:
+                seen_ids.add(mid)
                 all_memories.append(mem)
 
         return all_memories
@@ -354,8 +374,8 @@ class HybridRetriever:
     async def _rerank_and_truncate(
         self,
         query_text: str,
-        memories: List[LongTermMemory],
-    ) -> List[LongTermMemory]:
+        memories: List[Any],
+    ) -> List[Any]:
         """
         对合并后的记忆列表执行 Rerank 重排并严格截断
 
@@ -374,18 +394,25 @@ class HybridRetriever:
             return memories[:self.rerank_top_k]
 
         # 创建 Rerank 文档
-        documents = [mem.summary for mem in memories]
+        documents = []
+        for mem in memories:
+            if hasattr(mem, "summary"):
+                documents.append(mem.summary)
+            elif hasattr(mem, "chunk"):
+                documents.append(mem.chunk.content_text)
+            else:
+                documents.append(str(mem))
 
         try:
             rerank_results = await self.inference_svc.rerank_documents(query_text, documents)
 
-            reranked: List[LongTermMemory] = []
-            # 截取前 limit 条
-            limit = min(self.rerank_top_k, len(rerank_results))
-            for i in range(limit):
-                idx = rerank_results[i].get("index", 0)
+            reranked: List[Any] = []
+            # Rerank 结果直接截断
+            for result in rerank_results[:self.rerank_top_k]:
+                idx = int(result.get("index", 0))
                 if 0 <= idx < len(memories):
-                    reranked.append(memories[idx])
+                    candidate = memories[idx]
+                    reranked.append(candidate)
 
             logger.info(f"Rerank 重排完成 hits={len(reranked)} rerank_top_k={self.rerank_top_k}")
             return reranked
@@ -401,7 +428,7 @@ class HybridRetriever:
         reference_time: Optional[str] = None,
         temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
-    ) -> List[LongTermMemory]:
+    ) -> List[Any]:
         """
         执行完整的混合检索流程
 
@@ -441,13 +468,15 @@ class HybridRetriever:
         vector_memories, fts_memories = await asyncio.gather(vector_task, fts_task)
 
         for mem in vector_memories:
-            if mem.id not in seen_ids:
-                seen_ids.add(mem.id)
+            mid = mem.id if hasattr(mem, "id") else mem.chunk.chunk_id
+            if mid not in seen_ids:
+                seen_ids.add(mid)
                 all_memories.append(mem)
 
         for mem in fts_memories:
-            if mem.id not in seen_ids:
-                seen_ids.add(mem.id)
+            mid = mem.id if hasattr(mem, "id") else mem.chunk.chunk_id
+            if mid not in seen_ids:
+                seen_ids.add(mid)
                 all_memories.append(mem)
 
         if not all_memories:

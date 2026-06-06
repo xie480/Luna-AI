@@ -57,6 +57,8 @@ class ExternalKnowledgeRouting(BaseModel):
     trigger: bool = Field(..., description="是否触发外部知识检索")
     trigger_reason: str = Field(..., description="触发原因")
     search_queries: list[str] = Field(default_factory=list)
+    temporal_focus: TemporalFocus | None = Field(default=None)
+    entity_mentions: list[str] = Field(default_factory=list)
 
 class ExperienceReflectionRouting(BaseModel):
     trigger: bool = Field(..., description="是否触发经验教训检索")
@@ -64,7 +66,13 @@ class ExperienceReflectionRouting(BaseModel):
     search_queries: list[str] = Field(default_factory=list)
     reflection_focus: str = Field(..., description="反思焦点，如 RISK_AVERSION")
 
+class RagRetrievalRoute(str, Enum):
+    KEYWORD = "keyword"
+    HYBRID = "hybrid"
+    AGENTIC = "agentic"
+
 class RetrievalRouting(BaseModel):
+    route_strategy: RagRetrievalRoute = Field(default=RagRetrievalRoute.HYBRID, description="RAG路由策略")
     long_term_memory: LongTermMemoryRouting
     external_knowledge: ExternalKnowledgeRouting
     experience_reflection: ExperienceReflectionRouting
