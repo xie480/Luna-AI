@@ -10,7 +10,7 @@
 .memory-sidebar {
   width: 200px;
   min-width: 200px;
-  background-color: var(--bg-secondary);
+  background-color: var(--sidebar-bg, #252526);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -20,27 +20,30 @@
 .memory-nav-item {
   display: flex;
   align-items: center;
-  padding: 12px 24px;
+  padding: 10px 24px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: var(--text-secondary);
   user-select: none;
+  gap: 10px;
 }
 
 .memory-nav-item:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--hover-bg);
   color: var(--text-primary);
 }
 
 .memory-nav-item.active {
-  background-color: var(--bg-active);
-  color: var(--accent-color);
-  border-right: 3px solid var(--accent-color);
+  background-color: var(--active-bg, #37373d);
+  color: var(--primary-color, #007acc);
+  border-right: 3px solid var(--primary-color, #007acc);
 }
 
 .memory-nav-item .nav-icon {
-  margin-right: 12px;
-  font-size: 1.2em;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: block;
 }
 
 .memory-nav-item .nav-text {
@@ -160,7 +163,7 @@
 }
 
 .toolbar-btn:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--hover-bg);
 }
 
 .toolbar-btn.primary {
@@ -193,9 +196,9 @@
 }
 
 .memory-table th {
-  background-color: var(--bg-secondary);
+  background-color: var(--sidebar-bg, #252526);
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-muted, #888);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -224,7 +227,7 @@
 }
 
 .action-btn:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--hover-bg);
 }
 
 .pagination {
@@ -255,8 +258,8 @@
 }
 
 .memory-form-modal {
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  background-color: var(--modal-bg);
+  border: 1px solid var(--modal-border);
   border-radius: 8px;
   width: 500px;
   max-width: 90%;

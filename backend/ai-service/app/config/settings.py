@@ -19,6 +19,8 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.types.constants import ModelSize
+
 # .env 文件位于项目根目录（../../../ 相对于 backend/ai-service/app/config/）
 # settings.py 的路径为 backend/ai-service/app/config/settings.py
 # 需要向上 5 层才能到达项目根目录
@@ -172,11 +174,10 @@ class GlobalConfigContainer:
             from app.logger import logger
             logger.info("API 配置预设已更新，LLM Client 已重载")
 
-    def get_model_config(self, size: "ModelSize") -> dict[str, Any]:
+    def get_model_config(self, size: ModelSize) -> dict[str, Any]:
         """
         获取指定规格的模型配置
         """
-        from app.types.constants import ModelSize
         if size == ModelSize.LARGE:
             return self._large_model
         elif size == ModelSize.MEDIUM:
