@@ -128,9 +128,18 @@ def load_embedding_model() -> object | None:
         try:
             from optimum.onnxruntime import ORTModelForFeatureExtraction
             from transformers import AutoTokenizer, pipeline
+            import onnxruntime as ort
+            
+            sess_options = ort.SessionOptions()
+            sess_options.intra_op_num_threads = safe_threads
+            
             logger.info(f"检测到 ONNX 模型目录，准备加载量化版 Embedding 模型: {onnx_path}")
             tokenizer = AutoTokenizer.from_pretrained(onnx_path, local_files_only=True)
-            model = ORTModelForFeatureExtraction.from_pretrained(onnx_path, local_files_only=True)
+            model = ORTModelForFeatureExtraction.from_pretrained(
+                onnx_path,
+                local_files_only=True,
+                session_options=sess_options
+            )
             # 使用 transformers pipeline 简化特征提取调用
             pipe = pipeline("feature-extraction", model=model, tokenizer=tokenizer)
             logger.info("ONNX Embedding 模型加载完成")
@@ -177,9 +186,18 @@ def load_rerank_model() -> object | None:
         try:
             from optimum.onnxruntime import ORTModelForSequenceClassification
             from transformers import AutoTokenizer, pipeline
+            import onnxruntime as ort
+            
+            sess_options = ort.SessionOptions()
+            sess_options.intra_op_num_threads = safe_threads
+            
             logger.info(f"检测到 ONNX 模型目录，准备加载量化版 Rerank 模型: {onnx_path}")
             tokenizer = AutoTokenizer.from_pretrained(onnx_path, local_files_only=True)
-            model = ORTModelForSequenceClassification.from_pretrained(onnx_path, local_files_only=True)
+            model = ORTModelForSequenceClassification.from_pretrained(
+                onnx_path,
+                local_files_only=True,
+                session_options=sess_options
+            )
             pipe = pipeline("text-classification", model=model, tokenizer=tokenizer)
             logger.info("ONNX Rerank 模型加载完成")
             

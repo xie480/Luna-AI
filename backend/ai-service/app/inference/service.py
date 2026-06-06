@@ -19,11 +19,15 @@ from app.logger import logger
 # 事件循环。隔离后，即使单次推理长达 500ms，FastAPI 仍能继续处理 WebSocket 和 SSE
 # ============================================================================
 
-# 注意: Windows 上使用 ProcessPoolExecutor 可能在处理 PyTorch 模型 Pickling 时遇到问题，
-# 为稳妥起见，我们优先使用 ThreadPoolExecutor 搭配底层 OMP_NUM_THREADS 限制来释放主线程。
-# 如确认环境支持并且完全隔离，可以改用 ProcessPoolExecutor
-_pool_workers = max(1, os.cpu_count() // 2 - 1)
-_executor_pool = ThreadPoolExecutor(max_workers=_pool_workers)
+_executor_pool = None
+
+def _get_executor():
+    global _executor_pool
+    if _executor_pool is None:
+        import os
+        workers = max(1, os.cpu_count() // 2 - 1) if os.cpu_count() else 1
+        _executor_pool = ProcessPoolExecutor(max_workers=workers)
+    return _executor_pool
 
 def _cpu_bound_embedding(text: str) -> List[float]:
     """隔离在池中执行的纯计算函数"""
@@ -73,7 +77,7 @@ class InferenceService:
         loop = asyncio.get_running_loop()
         try:
             # 将阻塞调用推入执行池，彻底释放 FastAPI 主线程
-            vec = await loop.run_in_executor(_executor_pool, _cpu_bound_embedding, text)
+            vec = await loop.run_in_executor(_get_executor(), _cpu_bound_embedding, text)
             logger.info(f"Embedding 向量化完成, text_length={len(text)}, vector_dim={len(vec)}")
             return vec
         except Exception as e:
@@ -94,7 +98,7 @@ class InferenceService:
 
         loop = asyncio.get_running_loop()
         try:
-            scores = await loop.run_in_executor(_executor_pool, _cpu_bound_rerank, query, documents)
+            scores = await loop.run_in_executor(_get_executor(), _cpu_bound_rerank, query, documents)
             
             if len(scores) != len(documents):
                 raise RuntimeError(f"Rerank 返回分数数量不匹配: 期望 {len(documents)}, 实际 {len(scores)}")
