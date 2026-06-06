@@ -26,6 +26,7 @@ public/
 
 # Python (AI Service)
 backend/ai-service/__pycache__/
+backend/ai-service/app/utils/__pycache__/
 backend/ai-service/.pytest_cache/
 backend/ai-service/.ruff_cache/
 backend/ai-service/.mypy_cache/
@@ -63,3 +64,6 @@ frontend/dist/
 frontend/dist-electron/
 frontend/out/
 VM_start.py
+
+*.pyc
+*/__pycache__/

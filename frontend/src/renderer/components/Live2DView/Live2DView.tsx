@@ -419,6 +419,104 @@ export const Live2DView: React.FC = () => {
     return () => window.removeEventListener("wheel", onWheel, { capture: true } as any);
   }, [model, app, container, live2dConfigMode]);
 
+  // ---------- 动态渲染挂起与帧率节流策略 (维度五) ----------
+  useEffect(() => {
+    if (!app) return;
+
+    let interactionTimeout: NodeJS.Timeout;
+    const FPS_ACTIVE = 60;
+    const FPS_IDLE = 15;  // 降低到 15 帧在无动画待机时节省大幅资源
+    
+    // 唤醒逻辑：恢复为 60 FPS，并刷新超时计时器
+    const wakeUpRenderer = () => {
+      app.ticker.maxFPS = FPS_ACTIVE;
+      clearTimeout(interactionTimeout);
+      
+      interactionTimeout = setTimeout(() => {
+        // 只有当没有任何活跃情绪输出且静默超过 5 秒时才进行节流降频
+        if (!currentEmotion || currentEmotion === 'neutral' || currentEmotion.toLowerCase() === 'solemn') {
+          app.ticker.maxFPS = FPS_IDLE;
+        }
+      }, 5000);
+    };
+
+    // 系统可见性侦听：应用在后台（被遮挡或最小化）时，彻底切断渲染引擎
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        app.ticker.stop();
+        console.log("[Live2D] 应用转入后台，引擎渲染循环已挂起 (Sleep)");
+      } else {
+        app.ticker.start();
+        wakeUpRenderer();
+        console.log("[Live2D] 应用激活，渲染循环恢复");
+      }
+    };
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // 监听全局交互以作为唤醒触发器
+    window.addEventListener("pointermove", wakeUpRenderer);
+    window.addEventListener("pointerdown", wakeUpRenderer);
+
+    // 当情绪状态发生改变，立即唤醒动画渲染以保持流畅
+    wakeUpRenderer();
+
+    return () => {
+      clearTimeout(interactionTimeout);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pointermove", wakeUpRenderer);
+      window.removeEventListener("pointerdown", wakeUpRenderer);
+    };
+  }, [app, currentEmotion]);
+
+  // ---------- 视线追踪 ----------
+  useEffect(() => {
+    if (!app) return;
+
+    let interactionTimeout: NodeJS.Timeout;
+    const FPS_ACTIVE = 60;
+    const FPS_IDLE = 15;  // 降低到 15 帧在无动画待机时节省大幅资源
+    
+    // 唤醒逻辑：恢复为 60 FPS，并刷新超时计时器
+    const wakeUpRenderer = () => {
+      app.ticker.maxFPS = FPS_ACTIVE;
+      clearTimeout(interactionTimeout);
+      
+      interactionTimeout = setTimeout(() => {
+        // 只有当没有任何活跃情绪输出且静默超过 5 秒时才进行节流降频
+        if (!currentEmotion || currentEmotion === 'neutral' || currentEmotion.toLowerCase() === 'solemn') {
+          app.ticker.maxFPS = FPS_IDLE;
+        }
+      }, 5000);
+    };
+
+    // 系统可见性侦听：应用在后台（被遮挡或最小化）时，彻底切断渲染引擎
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        app.ticker.stop();
+        console.log("[Live2D] 应用转入后台，引擎渲染循环已挂起 (Sleep)");
+      } else {
+        app.ticker.start();
+        wakeUpRenderer();
+        console.log("[Live2D] 应用激活，渲染循环恢复");
+      }
+    };
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    // 监听全局交互以作为唤醒触发器
+    window.addEventListener("pointermove", wakeUpRenderer);
+    window.addEventListener("pointerdown", wakeUpRenderer);
+
+    // 当情绪状态发生改变，立即唤醒动画渲染以保持流畅
+    wakeUpRenderer();
+
+    return () => {
+      clearTimeout(interactionTimeout);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pointermove", wakeUpRenderer);
+      window.removeEventListener("pointerdown", wakeUpRenderer);
+    };
+  }, [app, currentEmotion]);
+
   // ---------- 视线追踪 ----------
   useEffect(() => {
     const TRACKING_ENABLED = true;

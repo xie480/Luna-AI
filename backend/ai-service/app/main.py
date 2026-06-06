@@ -16,6 +16,20 @@ from typing import Optional
 os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["HF_DATASETS_OFFLINE"] = "1"
 
+# ============================================================================
+# 并发调度改造 (维度四)：硬件资源调度与 CPU 算力硬限制边界
+# 为什么这样做：限制 PyTorch / OpenMP 的底层衍生线程数量，防止其默认的 CPU 抢占策略锁死宿主机，
+# 为 UI 交互流（Electron/React）保留至少 2 个独立的逻辑物理核算力。
+# ============================================================================
+import torch
+safe_threads = max(1, os.cpu_count() - 2) if os.cpu_count() else 2
+os.environ["OMP_NUM_THREADS"] = str(safe_threads)
+os.environ["MKL_NUM_THREADS"] = str(safe_threads)
+try:
+    torch.set_num_threads(safe_threads)
+except Exception:
+    pass
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,12 +73,48 @@ from app.telemetry.worker import get_worker, init_worker
 EMBEDDING_MODEL_PATH = settings.embedding_model_path
 RERANK_MODEL_PATH = settings.rerank_model_path
 
-_embedding_model = None
-_rerank_model = None
+# ============================================================================
+# 并发调度改造 (维度三)：模型内存生命周期管理 (带 TTL 的懒加载与自动卸载器)
+# ============================================================================
+import time
+import gc
+import threading
+
+class ModelManager:
+    """具备超时自动卸载机制的模型生命周期管理器"""
+    def __init__(self, name: str, model_loader_func, ttl_seconds=600):
+        self._name = name
+        self._loader = model_loader_func
+        self._model = None
+        self._ttl = ttl_seconds
+        self._last_accessed = 0
+        self._lock = threading.Lock()
+        
+        # 启动后台守护线程，用于定期清理超时未使用的内存模型
+        self._cleanup_thread = threading.Thread(target=self._auto_unload, daemon=True)
+        self._cleanup_thread.start()
+
+    def get_model(self):
+        with self._lock:
+            self._last_accessed = time.time()
+            if self._model is None:
+                logger.info(f"[{self._name}] 触发内存加载 (冷启动): 准备加载模型，请耐心等待...")
+                self._model = self._loader()
+            return self._model
+
+    def _auto_unload(self):
+        while True:
+            time.sleep(60) # 每 60 秒扫描一次状态
+            with self._lock:
+                if self._model is not None and (time.time() - self._last_accessed > self._ttl):
+                    logger.info(f"[{self._name}] 模型已连续闲置超过 {self._ttl} 秒，执行彻底卸载并回收系统内存...")
+                    del self._model
+                    self._model = None
+                    gc.collect() # 强制执行垃圾回收
 
 
 def load_embedding_model() -> object | None:
-    """加载 Embedding 模型（SentenceTransformer）"""
+    """加载 Embedding 模型 (优先尝试 ONNX Optimum，回退到 SentenceTransformer)"""
     if not EMBEDDING_MODEL_PATH:
         logger.warning("EMBEDDING_MODEL_PATH 未配置，跳过 Embedding 模型加载")
         return None
@@ -73,14 +123,37 @@ def load_embedding_model() -> object | None:
         logger.warning(f"Embedding 模型路径不存在: {EMBEDDING_MODEL_PATH}，跳过加载")
         return None
 
+    onnx_path = os.path.join(EMBEDDING_MODEL_PATH, "onnx")
+    if os.path.exists(onnx_path):
+        try:
+            from optimum.onnxruntime import ORTModelForFeatureExtraction
+            from transformers import AutoTokenizer, pipeline
+            logger.info(f"检测到 ONNX 模型目录，准备加载量化版 Embedding 模型: {onnx_path}")
+            tokenizer = AutoTokenizer.from_pretrained(onnx_path, local_files_only=True)
+            model = ORTModelForFeatureExtraction.from_pretrained(onnx_path, local_files_only=True)
+            # 使用 transformers pipeline 简化特征提取调用
+            pipe = pipeline("feature-extraction", model=model, tokenizer=tokenizer)
+            logger.info("ONNX Embedding 模型加载完成")
+            # 包装一层使其对外表现类似 SentenceTransformer 的 encode 接口
+            class ONNXEmbeddingWrapper:
+                def __init__(self, pipe):
+                    self.pipe = pipe
+                def encode(self, text):
+                    # pipeline 返回的是 [[[float, ...], ...]] 格式
+                    import numpy as np
+                    out = self.pipe(text)
+                    # 对 token vectors 进行 mean pooling
+                    vecs = np.array(out[0])
+                    mean_vec = np.mean(vecs, axis=0)
+                    return mean_vec
+            return ONNXEmbeddingWrapper(pipe)
+        except Exception as e:
+            logger.warning(f"加载 ONNX Embedding 失败 ({e})，将回退到原生加载")
+
+    # 回退：使用原生 SentenceTransformer
     try:
         from sentence_transformers import SentenceTransformer
-    except ImportError:
-        logger.error("sentence-transformers 包未安装，无法加载 Embedding 模型。")
-        return None
-
-    try:
-        logger.info(f"正在加载 Embedding 模型: {EMBEDDING_MODEL_PATH}")
+        logger.info(f"正在加载原生 PyTorch Embedding 模型: {EMBEDDING_MODEL_PATH}")
         model = SentenceTransformer(EMBEDDING_MODEL_PATH, local_files_only=True, device="cpu")
         logger.info("Embedding 模型加载完成")
         return model
@@ -90,7 +163,7 @@ def load_embedding_model() -> object | None:
 
 
 def load_rerank_model() -> object | None:
-    """加载 Rerank 模型（CrossEncoder）"""
+    """加载 Rerank 模型 (优先尝试 ONNX Optimum，回退到 CrossEncoder)"""
     if not RERANK_MODEL_PATH:
         logger.warning("RERANK_MODEL_PATH 未配置，跳过 Rerank 模型加载")
         return None
@@ -99,20 +172,48 @@ def load_rerank_model() -> object | None:
         logger.warning(f"Rerank 模型路径不存在: {RERANK_MODEL_PATH}，跳过加载")
         return None
 
+    onnx_path = os.path.join(RERANK_MODEL_PATH, "onnx")
+    if os.path.exists(onnx_path):
+        try:
+            from optimum.onnxruntime import ORTModelForSequenceClassification
+            from transformers import AutoTokenizer, pipeline
+            logger.info(f"检测到 ONNX 模型目录，准备加载量化版 Rerank 模型: {onnx_path}")
+            tokenizer = AutoTokenizer.from_pretrained(onnx_path, local_files_only=True)
+            model = ORTModelForSequenceClassification.from_pretrained(onnx_path, local_files_only=True)
+            pipe = pipeline("text-classification", model=model, tokenizer=tokenizer)
+            logger.info("ONNX Rerank 模型加载完成")
+            
+            class ONNXRerankWrapper:
+                def __init__(self, pipe):
+                    self.pipe = pipe
+                def predict(self, pairs):
+                    # pairs 是 [[query, doc1], [query, doc2]] 格式
+                    import numpy as np
+                    texts = [{"text": p[0], "text_pair": p[1]} for p in pairs]
+                    results = self.pipe(texts)
+                    # pipeline 返回 {"label": ..., "score": ...}，如果是单个特征提取可能是其他形式
+                    # 对于 bge-reranker 这种 cross-encoder，通常预测 logits
+                    # 由于不同的底层结构，提取 score 即可
+                    scores = [r["score"] for r in results]
+                    return np.array(scores)
+            return ONNXRerankWrapper(pipe)
+        except Exception as e:
+            logger.warning(f"加载 ONNX Rerank 失败 ({e})，将回退到原生加载")
+
+    # 回退：原生 CrossEncoder
     try:
         from sentence_transformers import CrossEncoder
-    except ImportError:
-        logger.error("sentence-transformers 包未安装，无法加载 Rerank 模型。")
-        return None
-
-    try:
-        logger.info(f"正在加载 Rerank 模型: {RERANK_MODEL_PATH}")
+        logger.info(f"正在加载原生 PyTorch Rerank 模型: {RERANK_MODEL_PATH}")
         model = CrossEncoder(RERANK_MODEL_PATH, max_length=1024, trust_remote_code=True, local_files_only=True, device="cpu")
         logger.info("Rerank 模型加载完成")
         return model
     except Exception as e:
         logger.error(f"加载 Rerank 模型失败，路径: {RERANK_MODEL_PATH}, 错误: {e}")
         return None
+
+
+embedding_manager = ModelManager("Embedding", load_embedding_model, ttl_seconds=600)
+rerank_manager = ModelManager("Rerank", load_rerank_model, ttl_seconds=600)
 
 
 async def _initialize_fts_indexes(ltm_pg_repo: Optional[LongTermMemoryPGRepo]) -> None:
@@ -244,13 +345,8 @@ async def lifespan(app: FastAPI):
     if ltm_pg_repo:
         await _initialize_fts_indexes(ltm_pg_repo)
 
-    # 8.8 加载 Embedding 和 Rerank 模型
-    global _embedding_model, _rerank_model
-
-    logger.info("开始同步加载 AI 模型...")
-    _embedding_model = load_embedding_model()
-    _rerank_model = load_rerank_model()
-    logger.info("AI 模型加载完毕！")
+    # 8.8 提示大模型进入懒加载模式
+    logger.info("AI 模型加载策略: 按需懒加载并应用 TTL 自动卸载机制")
 
     # 9. 初始化长期记忆管理器并执行启动时兜底检测
     memory_manager = None
