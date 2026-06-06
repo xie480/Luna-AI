@@ -58,6 +58,9 @@ from app.telemetry.worker import get_worker, init_worker
 EMBEDDING_MODEL_PATH = settings.embedding_model_path
 RERANK_MODEL_PATH = settings.rerank_model_path
 
+_embedding_model = None
+_rerank_model = None
+
 
 def load_embedding_model() -> object | None:
     """加载 Embedding 模型（SentenceTransformer）"""
@@ -180,6 +183,44 @@ async def lifespan(app: FastAPI):
     from app.inference.service import InferenceService
     inference_svc = InferenceService()
 
+    # 8.5 初始化全局配置容器
+    if pg_client:
+        preset_repo = ConfigPresetPGRepo(pg_client)
+        app.state.config_preset_repo = preset_repo
+        
+        from app.router.model_router import ModelRouter
+        model_router = ModelRouter(preset_repo)
+        app.state.model_router = model_router
+
+        try:
+            active_preset = await preset_repo.get_active()
+            if active_preset:
+                from app.config.settings import global_config_container
+                from app.api.routers.api_config_preset import _decrypt_model_config
+                import json
+                
+                def _get_json_str(cfg):
+                    return json.dumps(cfg) if isinstance(cfg, dict) else cfg
+
+                large_cfg = _decrypt_model_config(_get_json_str(active_preset.large_model_config), crypto_svc)
+                medium_cfg = _decrypt_model_config(_get_json_str(active_preset.medium_model_config), crypto_svc)
+                small_cfg = _decrypt_model_config(_get_json_str(active_preset.small_model_config), crypto_svc)
+                
+                await global_config_container.update_preset_config(large_cfg, medium_cfg, small_cfg)
+                logger.info(f"已加载激活的 API 配置预设: {active_preset.name}")
+            else:
+                logger.warning("未找到激活的 API 配置预设")
+        except Exception as e:
+            logger.error(f"加载激活的 API 配置预设失败: {e}")
+
+    # 8.8 加载 Embedding 和 Rerank 模型
+    global _embedding_model, _rerank_model
+
+    logger.info("开始同步加载 AI 模型...")
+    _embedding_model = load_embedding_model()
+    _rerank_model = load_rerank_model()
+    logger.info("AI 模型加载完毕！")
+
     # 9. 初始化长期记忆管理器并执行启动时兜底检测
     memory_manager = None
     if ltm_pg_repo:
@@ -203,36 +244,6 @@ async def lifespan(app: FastAPI):
     app.state.crypto_svc = crypto_svc
     app.state.prompt_manager = prompt_manager
     app.state.memory_manager = memory_manager
-    
-    if pg_client:
-        preset_repo = ConfigPresetPGRepo(pg_client)
-        app.state.config_preset_repo = preset_repo
-        
-        from app.router.model_router import ModelRouter
-        model_router = ModelRouter(preset_repo)
-        app.state.model_router = model_router
-
-        # 初始化全局配置容器
-        try:
-            active_preset = await preset_repo.get_active()
-            if active_preset:
-                from app.config.settings import global_config_container
-                from app.api.routers.api_config_preset import _decrypt_model_config
-                import json
-                
-                def _get_json_str(cfg):
-                    return json.dumps(cfg) if isinstance(cfg, dict) else cfg
-
-                large_cfg = _decrypt_model_config(_get_json_str(active_preset.large_model_config), crypto_svc)
-                medium_cfg = _decrypt_model_config(_get_json_str(active_preset.medium_model_config), crypto_svc)
-                small_cfg = _decrypt_model_config(_get_json_str(active_preset.small_model_config), crypto_svc)
-                
-                await global_config_container.update_preset_config(large_cfg, medium_cfg, small_cfg)
-                logger.info(f"已加载激活的 API 配置预设: {active_preset.name}")
-            else:
-                logger.warning("未找到激活的 API 配置预设")
-        except Exception as e:
-            logger.error(f"加载激活的 API 配置预设失败: {e}")
 
     # 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
     app.state.pg_repo = pg_repo
@@ -241,14 +252,6 @@ async def lifespan(app: FastAPI):
     app.state.ltm_pg_repo = ltm_pg_repo
     app.state.ltm_qdrant_repo = ltm_qdrant_repo
 
-
-    # 12. 加载 Embedding 和 Rerank 模型
-    global _embedding_model, _rerank_model
-
-    logger.info("开始同步加载 AI 模型...")
-    _embedding_model = load_embedding_model()
-    _rerank_model = load_rerank_model()
-    logger.info("AI 模型加载完毕！")
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector

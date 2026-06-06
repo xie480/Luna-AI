@@ -57,18 +57,45 @@ class UpdateMemoryRequest(BaseModel):
 
 @router.get("/uncompressed", response_model=APIResponse)
 async def get_uncompressed_sessions(
+    request: Request,
     trace_id: str = Depends(get_trace_id),
     redis_repo: Optional[ChatHistoryRedisRepo] = Depends(get_redis_repo),
 ) -> APIResponse:
-    """获取 Redis 中积压的未压缩会话列表（排除当天）"""
+    """获取积压的未压缩会话列表（排除当天）"""
     if not redis_repo:
         raise HTTPException(status_code=500, detail="Redis 仓库不可用")
 
     try:
-        session_ids = await redis_repo.get_all_session_ids()
-        today = datetime.now().strftime("%Y%m%d")
-        uncompressed_ids = [sid for sid in session_ids if sid != today]
+        # 1. 从 Redis 获取所有会话 ID
+        redis_session_ids = await redis_repo.get_all_session_ids()
         
+        # 2. 从 PG 获取所有已经有长期记忆的 session_id
+        ltm_pg_repo = getattr(request.app.state, "ltm_pg_repo", None)
+        compressed_sessions = []
+        if ltm_pg_repo:
+            compressed_sessions = await ltm_pg_repo.get_all_active_session_ids()
+            
+        # 3. 过滤：排除当天、排除已入库、确保 Redis 中有实际历史记录
+        today = datetime.now().strftime("%Y%m%d")
+        uncompressed_ids = []
+        
+        client = redis_repo.redis_client.get_client()
+        
+        for sid in redis_session_ids:
+            if sid == today:
+                continue
+            if sid in compressed_sessions:
+                continue
+                
+            # 检查该会话是否有实际的历史记录
+            history_key = redis_repo._build_history_key(sid)
+            history_len = await client.llen(history_key)
+            if history_len > 0:
+                uncompressed_ids.append(sid)
+                
+        # 排序，保证返回顺序稳定
+        uncompressed_ids.sort()
+                
         return APIResponse(
             type="RES_UNCOMPRESSED_SESSIONS",
             trace_id=trace_id,

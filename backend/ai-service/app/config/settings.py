@@ -172,15 +172,16 @@ class GlobalConfigContainer:
             from app.logger import logger
             logger.info("API 配置预设已更新，LLM Client 已重载")
 
-    def get_model_config(self, size: str) -> dict[str, Any]:
+    def get_model_config(self, size: "ModelSize") -> dict[str, Any]:
         """
         获取指定规格的模型配置
         """
-        if size == "large":
+        from app.types.constants import ModelSize
+        if size == ModelSize.LARGE:
             return self._large_model
-        elif size == "medium":
+        elif size == ModelSize.MEDIUM:
             return self._medium_model
-        elif size == "small":
+        elif size == ModelSize.SMALL:
             return self._small_model
         return self._medium_model # 默认返回中模型
 

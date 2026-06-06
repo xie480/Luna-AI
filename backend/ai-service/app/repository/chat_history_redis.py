@@ -107,19 +107,25 @@ class ChatHistoryRedisRepo:
     async def get_all_session_ids(self) -> List[str]:
         """
         获取 Redis 中所有会话的 ID 列表
-        做什么：扫描 Redis 中所有 luna:mem:chat:*:summary 模式的 key，提取会话 ID
-        为什么这样做：启动时兜底检测需要找出所有历史会话
+        做什么：扫描 Redis 中所有 luna:mem:chat:*:history 和 summary 模式的 key，提取会话 ID
+        为什么这样做：启动时兜底检测需要找出所有历史会话，有些会话可能只有 history 没有 summary
         """
         client = self.redis_client.get_client()
-        session_ids = []
+        session_ids = set()
         
-        # 使用 SCAN 迭代器
+        # 使用 SCAN 迭代器扫描 history
+        async for key in client.scan_iter(match="luna:mem:chat:*:history"):
+            session_id = self._extract_session_id_from_key(key)
+            if session_id:
+                session_ids.add(session_id)
+                
+        # 使用 SCAN 迭代器扫描 summary
         async for key in client.scan_iter(match="luna:mem:chat:*:summary"):
             session_id = self._extract_session_id_from_key(key)
             if session_id:
-                session_ids.append(session_id)
+                session_ids.add(session_id)
                 
-        return session_ids
+        return list(session_ids)
 
     def _extract_session_id_from_key(self, key: str) -> str:
         """

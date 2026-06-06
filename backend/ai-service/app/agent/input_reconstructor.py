@@ -18,7 +18,8 @@ class InputReconstructorAgent:
     def model_name(self) -> str:
         """动态获取 Mid Model 的名称"""
         from app.config.settings import global_config_container
-        config = global_config_container.get_model_config("medium")
+        from app.types.constants import ModelSize
+        config = global_config_container.get_model_config(ModelSize.MEDIUM)
         return config.get("model_id", "gpt-4o-mini")
 
     def _build_prompt(self, system_prompt: str, memory_prompt: str, runtime_prompt: str) -> str:

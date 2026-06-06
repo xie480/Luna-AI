@@ -162,7 +162,8 @@ class CompressionLLMClient:
         重新加载配置并重新初始化客户端
         """
         from app.config.settings import global_config_container
-        config = global_config_container.get_model_config("small")
+        from app.types.constants import ModelSize
+        config = global_config_container.get_model_config(ModelSize.SMALL)
         api_key = config.get("api_key") or "dummy"
         base_url = config.get("base_url") or "https://api.openai.com/v1"
         self.client = AsyncOpenAI(
@@ -179,14 +180,16 @@ class CompressionLLMClient:
         before_sleep=before_sleep_log(logger, 20),
     )
     async def summarize(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
-        logger.info(f"正在调用压缩模型 API: {self.model_name}")
         from app.config.settings import global_config_container
-        config = global_config_container.get_model_config("small")
+        from app.types.constants import ModelSize
+        config = global_config_container.get_model_config(ModelSize.SMALL)
+        model_name = config.get("model_id") or self.model_name
+        logger.info(f"正在调用压缩模型 API: {model_name}")
         max_tokens = config.get("max_tokens")
         temperature = config.get("temperature", 0.7)
 
         call_kwargs = {
-            "model": self.model_name,
+            "model": model_name,
             "messages": messages,
             "stream": False,
             "temperature": temperature,
@@ -219,8 +222,9 @@ class LLMClient:
         """
         logger.info("LLM Client 正在重新加载配置...")
         from app.config.settings import global_config_container
+        from app.types.constants import ModelSize
         # 默认使用中模型进行日常对话
-        config = global_config_container.get_model_config("medium")
+        config = global_config_container.get_model_config(ModelSize.MEDIUM)
         api_key = config.get("api_key") or "dummy"
         base_url = config.get("base_url") or "https://api.openai.com/v1"
         self.client = AsyncOpenAI(
@@ -255,7 +259,8 @@ class LLMClient:
                 ]
         
         from app.config.settings import global_config_container
-        config = global_config_container.get_model_config("medium")
+        from app.types.constants import ModelSize
+        config = global_config_container.get_model_config(ModelSize.LARGE)
         max_tokens = config.get("max_tokens")
         temperature = config.get("temperature", 0.7)
 
@@ -305,8 +310,9 @@ class LLMClient:
         logger.info(f"正在调用 LLM API (Structured Outputs), model: {model}")
         
         from app.config.settings import global_config_container
-        config = global_config_container.get_model_config("medium")
-        temperature = config.get("temperature", 0.7) 
+        from app.types.constants import ModelSize
+        config = global_config_container.get_model_config(ModelSize.MEDIUM)
+        temperature = config.get("temperature", 0.7)
 
         call_kwargs = {
             "model": model,
@@ -561,7 +567,8 @@ class LLMClient:
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
             from app.config.settings import global_config_container
-            config = global_config_container.get_model_config("medium")
+            from app.types.constants import ModelSize
+            config = global_config_container.get_model_config(ModelSize.MEDIUM)
             max_context_tokens = config.get("max_context_tokens", 128000)
             
             truncated_messages = format_messages_for_api(

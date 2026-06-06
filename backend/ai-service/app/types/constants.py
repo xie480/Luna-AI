@@ -1,5 +1,10 @@
 from enum import Enum
 
+class ModelSize(str, Enum):
+    LARGE = "large"
+    MEDIUM = "medium"
+    SMALL = "small"
+
 class Role(str, Enum):
     """全局统一的角色枚举"""
     USER = "user"
