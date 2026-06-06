@@ -39,8 +39,8 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const editorRef = useRef<any>(null);
-  const monacoRef = useRef<any>(null);
+  const editorRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const monacoRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const decorationsRef = useRef<string[]>([]);
 
   const isDirty = content !== initialContent;
@@ -71,7 +71,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
     if (!model) return;
 
     const lines = model.getLinesContent();
-    const newDecorations: any[] = [];
+    const newDecorations: unknown[] = [];
 
     lines.forEach((line: string, index: number) => {
       if (/\{\{.*?\}\}/.test(line) || /\{%.*?%\}/.test(line)) {
@@ -122,8 +122,9 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
     try {
       const variables = extractVariables(content);
       await createVersion(templateId, content, variables);
-    } catch (err: any) {
-      setSaveError(err.message || '保存版本失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSaveError(message || '保存版本失败');
     } finally {
       setIsSaving(false);
     }
@@ -132,12 +133,12 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
   /**
    * Monaco 编辑器挂载完成后的初始化
    */
-  const handleEditorMount = useCallback((editor: any, monaco: any) => {
+  const handleEditorMount = useCallback((editor: any, monaco: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     editorRef.current = editor;
     monacoRef.current = monaco;
 
     // 注册 Jinja2 语法高亮（如果尚未注册）
-    if (!monaco.languages.getLanguages().some((l: any) => l.id === JINJA2_LANGUAGE)) {
+    if (!monaco.languages.getLanguages().some((l: any) => l.id === JINJA2_LANGUAGE)) { // eslint-disable-line @typescript-eslint/no-explicit-any
       monaco.languages.register({ id: JINJA2_LANGUAGE });
 
       // 定义 Jinja2 语法高亮规则
@@ -156,7 +157,7 @@ export const PromptEditor: React.FC<PromptEditorProps> = ({ currentVersion, temp
     }
 
     // 拦截键盘事件以实现行级只读
-    editor.onKeyDown((e: any) => {
+    editor.onKeyDown((e: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       const selections = editor.getSelections();
       if (!selections) return;
       const model = editor.getModel();

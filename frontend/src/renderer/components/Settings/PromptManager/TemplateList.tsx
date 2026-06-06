@@ -69,8 +69,9 @@ export const TemplateList: React.FC<TemplateListProps> = ({
       await createTemplate(newName.trim(), newCategory, newSlot, false);
       setShowCreateForm(false);
       setNewName('');
-    } catch (err: any) {
-      setCreateError(err.message || '创建模板失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setCreateError(message || '创建模板失败');
     } finally {
       setIsCreating(false);
     }

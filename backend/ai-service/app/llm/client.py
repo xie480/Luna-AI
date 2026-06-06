@@ -514,8 +514,8 @@ class LLMClient:
                         error=None,
                     )
                     yield chunk_model.model_dump()
-                except ValidationError:
-                    pass
+                except ValidationError as validation_error:
+                    logger.error(f"[TraceID:{trace_id}] 取消兜底块校验失败: {validation_error}")
             else:
                 error_model = StreamChunkModel(
                     chunk="",
@@ -541,8 +541,8 @@ class LLMClient:
                         error=f"未知错误: {type(e).__name__}",
                     )
                     yield chunk_model.model_dump()
-                except ValidationError:
-                    pass
+                except ValidationError as validation_error:
+                    logger.error(f"[TraceID:{trace_id}] 异常兜底块校验失败: {validation_error}")
             else:
                 error_model = StreamChunkModel(
                     chunk="",

@@ -263,31 +263,28 @@ class Manager:
             if not self.inference_svc:
                 logger.warning(f"推理服务不可用，无法进行 Qdrant 向量写入 memory_id={memory_id}")
             else:
-                # 6.1 细粒度拆分
-                chunks = parse_long_summary_to_chunks(compressed_summary)
-                
-                # 6.2 批量获取 Embedding 向量
-                # 暂时循环调用单条 embedding，后续 inference_svc 升级可改为 batch api
-                vectors = []
-                embed_err = None
-                for chunk in chunks:
-                    try:
-                        vec = await self.inference_svc.get_embedding_vector(chunk.content)
-                        if not vec:
-                            logger.warning(f"切片 embedding 结果为空，降级为零值向量 chunk_type={chunk.chunk_type.value}")
-                            vec = [0.0] * 768
-                        vectors.append(vec)
-                    except Exception as e:
-                        embed_err = e
-                        logger.warning(f"获取切片语义向量失败，降级为零值向量 chunk_type={chunk.chunk_type.value} error={e}")
-                        vectors.append([0.0] * 768)
-                
-                # 6.3 批量保存带 payload 的向量点
                 try:
-                    await self.ltm_qdrant_repo.save_chunks_with_vectors(
-                        memory_id, session_id, chunks, vectors, MemoryStatus.ACTIVE.value
-                    )
-                    logger.info(f"[TraceID:{trace_id}] 长期记忆拆分及向量写入成功 memory_id={memory_id} chunks_count={len(chunks)}")
+                    repo_class_methods = type(self.ltm_qdrant_repo).__dict__
+                    if "save_chunks_with_vectors" in repo_class_methods:
+                        chunks = parse_long_summary_to_chunks(compressed_summary)
+                        vectors = []
+                        for chunk in chunks:
+                            vec = await self.inference_svc.get_embedding_vector(chunk.content)
+                            if not vec:
+                                raise RuntimeError(f"切片 Embedding 返回空向量 chunk_type={chunk.chunk_type.value}")
+                            vectors.append(vec)
+                        await self.ltm_qdrant_repo.save_chunks_with_vectors(
+                            memory_id, session_id, chunks, vectors, MemoryStatus.ACTIVE.value
+                        )
+                        logger.info(f"[TraceID:{trace_id}] 长期记忆拆分及向量写入成功 memory_id={memory_id} chunks_count={len(chunks)}")
+                    elif hasattr(self.ltm_qdrant_repo, "save_with_vector"):
+                        vec = await self.inference_svc.get_embedding_vector(compressed_summary)
+                        await self.ltm_qdrant_repo.save_with_vector(
+                            memory_id, session_id, vec, MemoryStatus.ACTIVE.value
+                        )
+                        logger.info(f"[TraceID:{trace_id}] 长期记忆整摘要向量写入成功 memory_id={memory_id}")
+                    else:
+                        raise RuntimeError("长期记忆 Qdrant 仓库缺少可用写入方法")
                 except Exception as e:
                     logger.warning(f"[TraceID:{trace_id}] Qdrant 向量写入失败 memory_id={memory_id} error={e}")
 

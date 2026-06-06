@@ -55,6 +55,47 @@ class RetrievalType(str, Enum):
     EXTERNAL_KNOWLEDGE = "EXTERNAL_KNOWLEDGE"
     EXPERIENCE_REFLECTION = "EXPERIENCE_REFLECTION"
 
+
+RAG_SCHEMA_VERSION = "rag.v1"
+RAG_QDRANT_COLLECTION = "luna_rag_index"
+RAG_EVENT_THOUGHT = "EVT_RAG_THOUGHT"
+RAG_EVENT_CITATION = "EVT_RAG_CITATION"
+RAG_DEFAULT_VECTOR_SIZE = 768
+
+
 class MemoryChunkType(str, Enum):
     SUMMARY = "SUMMARY"
     FACT = "FACT"
+
+
+class RagSourceType(str, Enum):
+    """RAG 知识来源类型枚举"""
+
+    LOCAL_FILE = "local_file"
+    URL = "url"
+
+
+class RagDocumentStatus(str, Enum):
+    """RAG 文档摄入状态枚举"""
+
+    PARSING = "parsing"
+    EMBEDDING = "embedding"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class RagChunkStrategy(str, Enum):
+    """RAG 切片策略枚举"""
+
+    SLIDING_WINDOW = "sliding_window"
+    STRUCTURED_AST = "structured_ast"
+    SEMANTIC_PARENT_CHILD = "semantic_parent_child"
+    REGEX = "regex"
+
+
+class RagRetrievalRoute(str, Enum):
+    """RAG 检索路由枚举"""
+
+    KEYWORD = "keyword"
+    HYBRID = "hybrid"
+    AGENTIC = "agentic"

@@ -1,0 +1,80 @@
+.file-upload-dropzone {
+  border: 2px dashed var(--border-color, #555);
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.file-upload-dropzone.active,
+.file-upload-dropzone:hover {
+  border-color: var(--primary-color, #007acc);
+  background-color: rgba(0, 122, 204, 0.05);
+}
+
+.dropzone-label {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.dropzone-icon {
+  font-size: 32px;
+}
+
+.dropzone-text {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.dropzone-hint {
+  font-size: 13px;
+  color: var(--text-muted, #888);
+}
+
+.url-scrape-input {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.url-scrape-input .text-input {
+  flex: 1;
+}
+
+.ingestion-progress {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: var(--editor-bg, #1e1e1e);
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #333);
+}
+
+.progress-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: var(--text-color, #e0e0e0);
+}
+
+.progress-stats .text-red {
+  color: #f44336;
+}
+
+.progress-bar-container {
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: var(--primary-color, #007acc);
+  transition: width 0.3s ease;
+}

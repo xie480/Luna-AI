@@ -44,10 +44,10 @@ class TestSettings:
 
     def test_default_values(self) -> None:
         """验证默认值"""
-        # 临时移除环境变量，确保测试默认值
+        # 临时移除环境变量和 .env 文件影响，确保测试类定义中的默认值。
         with patch.dict(os.environ, {}, clear=True):
-            settings = Settings()
-            assert settings.ai_service_port == 8000
+            settings = Settings(_env_file=None)
+            assert settings.ai_service_port == 8001
             assert settings.grpc_port == 50051
             assert settings.log_level == "INFO"
             assert settings.redis_host == "localhost"
@@ -363,18 +363,20 @@ class TestQdrantClientWrapper:
         client.base_url = "http://localhost:6333"
         client.client = MagicMock()
         
-        # 模拟搜索结果
+        # 模拟 query_points 搜索结果
         mock_result = MagicMock()
         mock_result.id = 1
         mock_result.score = 0.95
         mock_result.payload = {"key": "value"}
-        client.client.search = AsyncMock(return_value=[mock_result])
+        mock_query_response = MagicMock()
+        mock_query_response.points = [mock_result]
+        client.client.query_points = AsyncMock(return_value=mock_query_response)
         
         results = await client.search("test_collection", [0.1, 0.2], 5)
         
-        client.client.search.assert_called_once_with(
+        client.client.query_points.assert_called_once_with(
             collection_name="test_collection",
-            query_vector=[0.1, 0.2],
+            query=[0.1, 0.2],
             limit=5,
             with_payload=True
         )

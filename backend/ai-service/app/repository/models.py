@@ -18,14 +18,21 @@ Luna AI 数据库模型定义
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
-    """SQLAlchemy 声明式基类"""
-    pass
+    """
+    SQLAlchemy 声明式基类。
+
+    做什么：作为所有 ORM 模型的统一元数据注册入口。
+    为什么这样做：FastAPI lifespan 使用 Base.metadata.create_all 自动创建缺失表结构。
+    输入输出：无业务输入输出，供 SQLAlchemy 继承使用。
+    边界条件：不包含业务字段，具体表结构由子类声明。
+    异常行为：子类字段定义非法时由 SQLAlchemy 在映射阶段抛出异常。
+    """
 
 
 class MemoryStatus(str, Enum):
@@ -138,3 +145,48 @@ class ApiConfigPreset(Base):
     small_model_config: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RagDocument(Base):
+    """
+    对应 PostgreSQL 中的 rag_documents 表（知识库文档注册与状态追踪）
+
+    做什么：记录知识来源、摄入状态、Token 规模和失败原因。
+    为什么这样做：RAG 摄入是异步任务，前端需要轮询文档状态，后端也需要失败可恢复记录。
+    输入输出：id 使用 Snowflake 字符串；source_type/status 使用统一枚举值。
+    边界条件：source_type 仅允许 local_file/url，status 仅允许 parsing/embedding/completed/failed。
+    异常行为：数据库约束失败时由仓库层向上抛出并写入失败状态。
+    """
+
+    __tablename__ = "rag_documents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    estimated_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class RagChunk(Base):
+    """
+    对应 PostgreSQL 中的 rag_chunks 表（知识切片正文主表）
+
+    做什么：保存完整切片正文、父子关系与结构化元数据。
+    为什么这样做：Qdrant Payload 禁止存大段正文，检索命中后必须回表获取可信文本。
+    输入输出：chunk_id 使用 Snowflake 字符串，doc_id 外键级联删除。
+    边界条件：content_text 不允许为空；meta_payload 存放标题链路、来源 URL 等结构信息。
+    异常行为：父块不存在不阻断普通切片，但检索扩展时只对可查父块放大上下文。
+    """
+
+    __tablename__ = "rag_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("rag_documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    parent_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    meta_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

@@ -38,10 +38,11 @@ class LongTermMemoryPGRepo:
         if not memory.status:
             memory.status = MemoryStatus.ACTIVE.value
 
-        async with self.pg_client.session_factory() as session:
+        async for session in self.pg_client.get_session():
             session.add(memory)
             await session.commit()
             logger.info(f"长期记忆记录已保存 session_id={memory.session_id} id={memory.id}")
+            return
 
     async def get_by_session_id(self, session_id: str) -> Optional[LongTermMemory]:
         """
@@ -77,7 +78,7 @@ class LongTermMemoryPGRepo:
         """
         软删除指定的长期记忆记录
         """
-        async with self.pg_client.session_factory() as session:
+        async for session in self.pg_client.get_session():
             stmt = (
                 update(LongTermMemory)
                 .where(LongTermMemory.id == id)
@@ -86,6 +87,7 @@ class LongTermMemoryPGRepo:
             await session.execute(stmt)
             await session.commit()
             logger.info(f"长期记忆记录已软删除 id={id}")
+            return
 
     async def list_by_month(self, year_month: str) -> List[LongTermMemory]:
         """

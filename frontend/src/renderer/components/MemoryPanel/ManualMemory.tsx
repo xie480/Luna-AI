@@ -13,8 +13,9 @@ export const ManualMemory: React.FC = () => {
       const data = await memoryService.getUncompressedSessions();
       setUncompressedCount(data.count);
       setSessionIds(data.session_ids);
-    } catch (err: any) {
-      setError(err.message || '获取未压缩会话失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || '获取未压缩会话失败');
     }
   };
 
@@ -38,7 +39,7 @@ export const ManualMemory: React.FC = () => {
       try {
         await memoryService.compressSession(sessionId);
         successCount++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(`压缩会话 ${sessionId} 失败:`, err);
         // 继续压缩下一个，不中断整个流程
       }

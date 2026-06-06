@@ -56,6 +56,10 @@ export const WS_MSG_TYPE = {
   EVT_EMOTION_UPDATE: "EVT_EMOTION_UPDATE",
   EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK",
 
+  // RAG SSE 事件
+  EVT_RAG_THOUGHT: "EVT_RAG_THOUGHT",
+  EVT_RAG_CITATION: "EVT_RAG_CITATION",
+
   // === Phase 4 新增：可观测性相关 ===
   // Go -> Electron: 链路 Span 数据（启用诊断面板时推送）
   EVT_TELEMETRY_TRACE: "EVT_TELEMETRY_TRACE",

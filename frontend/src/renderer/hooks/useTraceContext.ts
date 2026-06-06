@@ -21,5 +21,5 @@ export function useTraceContext() {
       // 组件卸载时清除 TraceID（但保留日志，方便调试）
       addSystemLog(`[Trace] 清理 TraceID: ${traceId}`);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }

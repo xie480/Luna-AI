@@ -97,11 +97,13 @@ class ChatHistoryRedisRepo:
         history = []
         for s in history_strs:
             try:
-                # 忽略解析失败的记录
                 history.append(Interaction.model_validate_json(s))
-            except Exception:
-                pass
-                
+            except Exception as exc:
+                from app.logger import logger
+
+                logger.warning(f"Redis 会话记录解析失败，已跳过损坏记录 session_id={session_id} error={exc}")
+                continue
+
         return summary, history
 
     async def get_all_session_ids(self) -> List[str]:

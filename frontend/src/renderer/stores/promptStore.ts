@@ -52,8 +52,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     try {
       const data = await promptService.getTemplates();
       set({ templates: data, isLoadingTemplates: false });
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to load templates', isLoadingTemplates: false });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to load templates', isLoadingTemplates: false });
     }
   },
 
@@ -69,8 +70,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       } else if (data.length > 0) {
         set({ selectedVersionId: data[0].id });
       }
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to load versions', isLoadingVersions: false });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to load versions', isLoadingVersions: false });
     }
   },
 
@@ -83,8 +85,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     try {
       await promptService.createTemplate(name, category, slotPosition, isSystem);
       await get().fetchTemplates();
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to create template' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to create template' });
       throw err;
     }
   },
@@ -97,8 +100,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       if (get().selectedTemplateId === templateId) {
         await get().selectTemplate(templateId);
       }
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to create version' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to create version' });
       throw err;
     }
   },
@@ -112,8 +116,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       if (get().selectedTemplateId === templateId) {
         await get().selectTemplate(templateId);
       }
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to publish version' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to publish version' });
       throw err;
     }
   },
@@ -127,8 +132,9 @@ export const usePromptStore = create<PromptState>((set, get) => ({
       if (get().selectedTemplateId === templateId) {
         await get().selectTemplate(templateId);
       }
-    } catch (err: any) {
-      set({ error: err.message || 'Failed to rollback version' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to rollback version' });
       throw err;
     }
   },

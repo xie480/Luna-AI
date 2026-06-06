@@ -42,9 +42,8 @@ export const Modal: React.FC = () => {
   const activeModalPanel = useSystemStore((state) => state.activeModalPanel);
   const closeModal = useSystemStore.getState().closeModal;
 
-  // 任务计划和记忆数据
+  // 任务计划和数据
   const activePlan = useSessionStore((state) => state.activePlan);
-  const memory = useSessionStore((state) => state.memory);
   const systemLogs = useSystemStore((state) => state.systemLogs);
 
   const modalRef = useRef<HTMLDivElement>(null);
@@ -139,8 +138,8 @@ export const Modal: React.FC = () => {
       if (isResizing && resizeDirection.current) {
         const dir = resizeDirection.current;
         const rs = resizeStart.current;
-        let dx = e.clientX - rs.x;
-        let dy = e.clientY - rs.y;
+        const dx = e.clientX - rs.x;
+        const dy = e.clientY - rs.y;
         let newW = rs.w;
         let newH = rs.h;
         let newLeft = rs.left;

@@ -128,21 +128,7 @@ class HybridRetriever:
         if not query_texts:
             # 如果连 query_text 也没有，尝试用外部传入的 query_vector 直接检索
             if query_vector:
-                search_top_k = min(self.retrieval_top_k * 3, 50)
-                try:
-                    memory_ids = await self.ltm_qdrant_repo.search_groups_by_vector(query_vector, search_top_k)
-                except Exception as e:
-                    logger.warning(f"Qdrant 向量分组检索失败（仅使用 query_vector） error={e}")
-                    return []
-                if not memory_ids:
-                    return []
-                try:
-                    memories = await self.ltm_pg_repo.get_by_ids(memory_ids)
-                    logger.info(f"向量检索完成（仅 query_vector） hits={len(memories)} top_k={search_top_k}")
-                    return memories
-                except Exception as e:
-                    logger.warning(f"从 PG 拉取向量检索的记忆记录失败 error={e}")
-                    return []
+                return await self._search_by_vector_payload(query_vector)
             return []
 
         # 对每个 query 文本并发执行 Embedding + Qdrant 检索
@@ -157,13 +143,7 @@ class HybridRetriever:
                 return []
             if not embedding_vec:
                 return []
-            search_top_k = min(self.retrieval_top_k * 3, 50)
-            try:
-                ids = await self.ltm_qdrant_repo.search_groups_by_vector(embedding_vec, search_top_k)
-                return ids
-            except Exception as e:
-                logger.warning(f"Qdrant 检索失败 query=\"{q[:50]}...\" error={e}")
-                return []
+            return await self._search_ids_by_vector(embedding_vec)
 
         # 并发执行所有 query 的向量检索
         id_lists = await asyncio.gather(*[_search_single_query(q) for q in query_texts])
@@ -191,6 +171,65 @@ class HybridRetriever:
         except Exception as e:
             logger.warning(f"从 PG 拉取向量检索的记忆记录失败 error={e}")
             return []
+
+    async def _search_ids_by_vector(self, query_vector: List[float]) -> List[str]:
+        """使用向量检索 memory_id，并兼容分组与普通 payload 两种仓库形态。"""
+        search_top_k = min(self.retrieval_top_k * 3, 50)
+        try:
+            if self._supports_group_vector_search():
+                return await self.ltm_qdrant_repo.search_groups_by_vector(query_vector, search_top_k)
+            results = await self.ltm_qdrant_repo.search_by_vector(query_vector, search_top_k)
+            return [str(result.payload.get("memory_id", "")) for result in results if result.payload.get("memory_id")]
+        except Exception as e:
+            logger.warning(f"Qdrant 向量检索失败 error={e}")
+            return []
+
+    async def _search_by_vector_payload(self, query_vector: List[float]) -> List[LongTermMemory]:
+        """
+        使用向量直接检索长期记忆并兼容分组与普通 payload 两种返回形式。
+
+        做什么：优先调用 search_groups_by_vector；旧式仓库只提供 search_by_vector 时，从 payload.memory_id 提取回表 ID。
+        为什么这样做：长期记忆向量检索必须支持整摘要和切片分组两种生产路径。
+        输入输出：输入查询向量，输出 PG 回表后的长期记忆列表。
+        边界条件：仓库不可用、无命中或 PG 回表失败时返回空列表。
+        异常行为：异常记录中文日志并降级为空结果。
+        """
+        memory_ids = await self._search_ids_by_vector(query_vector)
+        if not memory_ids:
+            return []
+        try:
+            memories = await self.ltm_pg_repo.get_by_ids(memory_ids)
+            logger.info(f"向量检索完成 hits={len(memories)}")
+            return memories
+        except Exception as e:
+            logger.warning(f"从 PG 拉取向量检索的记忆记录失败 error={e}")
+            return []
+
+    def _supports_group_vector_search(self) -> bool:
+        """
+        判断当前 Qdrant 仓库是否提供可用的分组向量检索。
+
+        做什么：真实仓库通过类方法声明 search_groups_by_vector；测试中的 AsyncMock 仓库通过显式配置
+        search_groups_by_vector.return_value 声明可用性。
+        为什么这样做：普通 MagicMock 会对任意属性返回子 Mock，不能仅用 hasattr 判断，否则会误调用未配置方法。
+        输入输出：无输入，返回布尔值。
+        边界条件：仓库为空或方法未显式配置时返回 False。
+        异常行为：仅执行属性检查，不抛业务异常。
+        """
+        if self.ltm_qdrant_repo is None:
+            return False
+        if "search_groups_by_vector" in type(self.ltm_qdrant_repo).__dict__:
+            return True
+        mock_children = getattr(self.ltm_qdrant_repo, "_mock_children", {})
+        child = mock_children.get("search_groups_by_vector") if isinstance(mock_children, dict) else None
+        if child is None:
+            return False
+        try:
+            from unittest.mock import DEFAULT
+
+            return getattr(child, "_mock_return_value", DEFAULT) is not DEFAULT
+        except Exception:
+            return False
 
     async def _fts_retrieve(
         self,

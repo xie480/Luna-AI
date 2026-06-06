@@ -90,8 +90,9 @@ export const PromptPreview: React.FC = () => {
       // 延迟模拟请求
       await new Promise((resolve) => setTimeout(resolve, 300));
       setPreviewResult(rendered);
-    } catch (err: any) {
-      setError(err.message || '预览请求失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || '预览请求失败');
     } finally {
       setIsLoading(false);
     }

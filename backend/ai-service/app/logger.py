@@ -37,8 +37,8 @@ def _get_console_encoding() -> str:
             cp = ctypes.windll.kernel32.GetConsoleOutputCP()
             if cp:
                 return f"cp{cp}"
-        except Exception:
-            pass
+        except Exception as exc:
+            sys.stderr.write(f"警告: 控制台编码探测失败，使用 utf-8。error={exc}\n")
     return "utf-8"
 
 
@@ -74,10 +74,10 @@ def _get_console_handle():
             # 包装为文本写入流，enable=True 表示写入时进行行结束符转换（\n -> \r\n）
             _CONSOLE_HANDLE = os.fdopen(handle, "w", encoding=encoding, errors="replace", buffering=1)
             return _CONSOLE_HANDLE
-        except Exception:
+        except Exception as exc:
             # 如果失败（如无控制台），回退到 sys.stderr，不阻塞启动
             _CONSOLE_HANDLE = sys.stderr
-            print("警告: CONOUT$ 打开失败，日志回退到 sys.stderr", file=sys.stderr)
+            sys.stderr.write(f"警告: CONOUT$ 打开失败，日志回退到 sys.stderr。error={exc}\n")
 
     # 非 Windows 环境直接使用 sys.stdout
     _CONSOLE_HANDLE = sys.stdout

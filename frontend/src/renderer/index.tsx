@@ -40,7 +40,7 @@ import { reportErrorLog } from './services/errorLogService';
 import { createErrorToast } from './stores/errorToastStore';
 
 // 挂载全局 PIXI，必须在任何 pixi-live2d-display 导入前完成
-// @ts-ignore
+// @ts-expect-error PIXI global is required for live2d
 window.PIXI = PIXI;
 
 /**

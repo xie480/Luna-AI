@@ -318,7 +318,6 @@ async def chat_request(
 
     返回：立即返回 { status: "streaming", msgId }，实际流式内容通过 SSE 推送。
     """
-    print(f"DEBUG: Reached chat_request! trace_id={trace_id}")
     logger.info(f"收到 /api/chat 请求 trace_id={trace_id} sessionId={payload.sessionId} msgId={payload.msgId}")
     if not payload.sessionId:
         raise HTTPException(status_code=400, detail="sessionId is required")

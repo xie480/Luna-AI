@@ -5,7 +5,7 @@
  */
 
 /** 当前加载的 Live2D 模型实例 */
-let _model: any = null;
+let _model: unknown = null;
 
 /** 所有已注册的表达式名称列表 */
 let _expressionNames: string[] = [];
@@ -13,14 +13,14 @@ let _expressionNames: string[] = [];
 /**
  * 获取当前模型实例
  */
-export function getLive2dModel(): any {
+export function getLive2dModel(): unknown {
   return _model;
 }
 
 /**
  * 设置模型实例
  */
-export function setLive2dModel(model: any): void {
+export function setLive2dModel(model: unknown): void {
   _model = model;
 }
 

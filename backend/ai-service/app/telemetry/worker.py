@@ -26,7 +26,15 @@ from app.logger import logger
 
 
 class Base(DeclarativeBase):
-    pass
+    """
+    遥测模块独立声明式基类。
+
+    做什么：承载 trace_spans 与 audit_logs 两张可观测性表的 SQLAlchemy 元数据。
+    为什么这样做：遥测 Worker 可独立批量写入，不与业务模型注册流程互相污染。
+    输入输出：无业务输入输出，供本模块 ORM 模型继承。
+    边界条件：不直接创建表字段。
+    异常行为：子类映射异常由 SQLAlchemy 抛出。
+    """
 
 
 class TraceSpan(Base):
@@ -124,7 +132,7 @@ class Worker:
             try:
                 await self._task
             except asyncio.CancelledError:
-                pass
+                logger.info("遥测 Worker 主任务已按关闭流程取消")
                 
         # 刷新剩余数据
         await self._flush_remaining()

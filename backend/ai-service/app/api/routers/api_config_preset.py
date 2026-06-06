@@ -52,7 +52,7 @@ class FetchModelsRequest(BaseModel):
     api_key: str
 
 
-# 依赖注入占位符，实际应用中应在 main.py 中覆盖或通过 Request.app.state 获取
+# 依赖注入函数：从 FastAPI app.state 获取应用生命周期中初始化的配置预设仓库。
 def get_repo(request: Request) -> ConfigPresetPGRepo:
     return request.app.state.config_preset_repo
 
@@ -96,14 +96,11 @@ async def save_preset(
     try:
         preset_id = req.id if req.id else generate_string_id()
         
-        # 获取已有预设（仅更新时存在），用于处理占位符 api_key
+        # 获取已有预设（仅更新时存在），用于处理被前端遮蔽的 api_key。
         existing = await repo.get_by_id(preset_id) if req.id else None
         
-        # 逐规格处理：对 api_key 为 "********" 的配置块，
-        # 直接复用 DB 中已有的 JSONB 原始数据（跳过加解密），
-        # 对真实 api_key 进行加密。
-        # 原因：前端展示时 api_key 被替换为 "********"（参见 _to_preset_response），
-        # 若直接传回 "********" 会因 _encrypt_model_config 跳过加密而导致明文落库。
+        # 逐规格处理：对 api_key 为前端遮蔽值的配置块，直接复用 DB 中已有的 JSONB 原始数据；
+        # 对真实 api_key 进行加密，防止遮蔽值被当作真实密钥落库。
         large_config = _resolve_model_config(
             req.large_model_config, existing.large_model_config if existing else None, crypto_svc
         )
@@ -227,17 +224,16 @@ def _resolve_model_config(
     crypto_svc: CryptoService,
 ) -> dict:
     """
-    解析单个规格的模型配置：对 api_key 为占位符"********"的配置块，
+    解析单个规格的模型配置：对 api_key 为前端遮蔽值的配置块，
     直接复用数据库中已有的完整 JSONB；否则加密 api_key 后返回。
 
-    做什么：当用户更新已有预设时，前端传回的 api_key 是被替换为"********"
-           的占位符（参见 _to_preset_response）。如果 api_key 是占位符且
-           有对应的已有配置，则复用整个已有的 JSONB 配置块，确保已加密的
-           api_key 不会被二次加密或丢失。
-    为什么这样做：防止"********"字面值被当作真实 api_key 写入数据库，
+    做什么：当用户更新已有预设时，前端传回的 api_key 是遮蔽值。
+           如果 api_key 是遮蔽值且有对应的已有配置，则复用整个已有的 JSONB 配置块，
+           确保已加密的 api_key 不会被二次加密或丢失。
+    为什么这样做：防止遮蔽值字面量被当作真实 api_key 写入数据库，
                 或已加密的密文被二次加密，导致后续激活解密失败并引发 401。
     """
-    # 如果 api_key 是占位符且有已有配置，复用完整已有 JSONB
+    # 如果 api_key 是前端遮蔽值且有已有配置，复用完整已有 JSONB
     if req_cfg.api_key == "********" and existing_cfg is not None:
         # 仅用已有值覆盖 api_key，保留其他字段（如 base_url 等可能被用户修改）
         existing_cfg["base_url"] = req_cfg.base_url
@@ -261,9 +257,10 @@ def _decrypt_model_config(json_str: str, crypto_svc: CryptoService) -> dict:
     if cfg_dict.get("api_key"):
         try:
             cfg_dict["api_key"] = crypto_svc.decrypt(cfg_dict["api_key"])
-        except Exception:
-            pass
-            
+        except Exception as exc:
+            logger.warning(f"API Key 解密失败，已按空密钥降级 error={exc}")
+            cfg_dict["api_key"] = ""
+
     return {
         "base_url": cfg_dict.get("base_url", ""),
         "api_key": cfg_dict.get("api_key", ""),

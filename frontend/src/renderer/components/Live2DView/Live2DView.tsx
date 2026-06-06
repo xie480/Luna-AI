@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-// @ts-ignore
+// @ts-expect-error css import is ok
 import "./Live2DView.css";
 import * as PIXI from "pixi.js";
 import { useSystemStore } from "../../stores/systemStore";
@@ -19,19 +19,18 @@ export const Live2DView: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [app, setApp] = useState<PIXI.Application | null>(null);
   const [container, setContainer] = useState<PIXI.Container | null>(null);
-  const [model, setModel] = useState<any>(null);
+  const [model, setModel] = useState<unknown>(null);
   const [isWebGLSupported, setIsWebGLSupported] = useState<boolean>(true);
 
   const currentEmotion = useSystemStore((state) => state.currentEmotion);
   const addSystemLog = useSystemStore((state) => state.addSystemLog);
   const live2dConfigMode = useSystemStore((state) => state.live2dConfigMode);
-  const setLive2dConfigMode = useSystemStore((state) => state.setLive2dConfigMode);
   const showGlobalMessage = useSystemStore((state) => state.showGlobalMessage);
 
   const [trackingOriginOffset, setTrackingOriginOffset] = useState({ x: 0, y: 0 });
 
   // --- 新增：表情缓存与状态 ---
-  const expressionCache = useRef<Map<string, any>>(new Map());
+  const expressionCache = useRef<Map<string, unknown>>(new Map());
   const currentEmotionMeta = useRef<Record<string, number>>({});
 
   // --- 新增：预加载表情文件 ---
@@ -74,7 +73,7 @@ export const Live2DView: React.FC = () => {
    * 应用服装配置到模型
    * 遍历 clothingConfig，对已启用的项加载对应的 .exp3.json 并设置参数
    */
-  const applySavedClothingConfig = async (live2dModel: any) => {
+  const applySavedClothingConfig = async (live2dModel: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (!live2dModel || !live2dModel.internalModel || !live2dModel.internalModel.coreModel) {
       return;
     }
@@ -172,7 +171,7 @@ export const Live2DView: React.FC = () => {
           }
 
           // 强制监听 WebGL 丢失事件
-          canvasRef.current!.addEventListener('webglcontextlost', (e) => {
+          canvasRef.current!.addEventListener('webglcontextlost', () => {
             console.error("[DIAGNOSTIC] 🚨 严重错误: WebGL 上下文丢失 (webglcontextlost)!");
           }, false);
 
@@ -222,7 +221,7 @@ export const Live2DView: React.FC = () => {
   useEffect(() => {
     if (!container || !app) return;
     let cancelled = false;
-    let currentModel: any = null;
+    let currentModel: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
 
     const TRANSFORM_KEY = "luna:transform";
     const TRACKING_KEY = "luna:tracking";
@@ -235,7 +234,7 @@ export const Live2DView: React.FC = () => {
           {
             autoInteract: false,
             autoUpdate: true,
-            // @ts-ignore 忽略类型检查，因为 app.ticker 是存在的
+            // @ts-expect-error 忽略类型检查，因为 app.ticker 是存在的
             ticker: app.ticker,
           }
         );
@@ -297,9 +296,10 @@ export const Live2DView: React.FC = () => {
         await applySavedClothingConfig(live2dModel);
 
         addSystemLog("Live2D 模型加载成功");
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
         console.error("[Live2D] 模型加载失败", e);
-        addSystemLog(`[Live2D] 模型加载失败: ${e.message}`);
+        addSystemLog(`[Live2D] 模型加载失败: ${message}`);
       }
     };
     load();
@@ -319,7 +319,7 @@ export const Live2DView: React.FC = () => {
       // 清除共享的模型引用
       clearLive2dModel();
     };
-  }, [container, app, addSystemLog]);
+  }, [container, app, addSystemLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------- 交互事件 ----------
   const dragging = useRef(false);
@@ -416,7 +416,7 @@ export const Live2DView: React.FC = () => {
       container.position.y += globalPoint.y - newGlobal.y;
     };
     window.addEventListener("wheel", onWheel, { passive: false, capture: true });
-    return () => window.removeEventListener("wheel", onWheel, { capture: true } as any);
+    return () => window.removeEventListener("wheel", onWheel, { capture: true });
   }, [model, app, container, live2dConfigMode]);
 
   // ---------- 动态渲染挂起与帧率节流策略 (维度五) ----------
@@ -540,21 +540,23 @@ export const Live2DView: React.FC = () => {
     };
 
     // 1. 重置为平静状态
-    const resetToSolemn = async (core: any) => {
+    const resetToSolemn = async (core: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       if (!core) return;
       const keys = Object.keys(currentEmotionMeta.current);
       if (!keys.length) return;
       for (const id of keys) {
         try {
           core.setParameterValueById(id, typeof currentEmotionMeta.current[id] === "number" ? currentEmotionMeta.current[id] : 0);
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
       currentEmotionMeta.current = {};
       await new Promise((r) => requestAnimationFrame(r));
     };
 
     // 2. 平滑过渡动画
-    const tweenParameters = (core: any, targetValues: Record<string, number>, duration = 220) => {
+    const tweenParameters = (core: any, targetValues: Record<string, number>, duration = 220) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       return new Promise<void>((resolve) => {
         const startTime = performance.now();
         const fromValues: Record<string, number> = {};
@@ -614,7 +616,7 @@ export const Live2DView: React.FC = () => {
           console.warn(`[Live2D] 表情文件未缓存或不存在: ${cnName}`);
           continue;
         }
-        (expJson.Parameters || []).forEach(({ Id, Value, Blend }: any) => {
+        (expJson as any).Parameters?.forEach(({ Id, Value, Blend }: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
           const base = targetValues[Id] ?? core.getParameterValueById(Id) ?? 0;
           if (!(Id in thisApplyPrev)) thisApplyPrev[Id] = base;
           
@@ -640,7 +642,7 @@ export const Live2DView: React.FC = () => {
     return () => {
       isCancelled = true;
     };
-  }, [model, currentEmotion, addSystemLog]);
+  }, [model, currentEmotion, addSystemLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 监听来自 Live2DConfigPanel 的事件
   useEffect(() => {

@@ -2,7 +2,7 @@
  * 版本历史组件
  * 做什么：展示选中模板的版本时间线，高亮当前 Published 版本，支持版本选择与发布操作。
  */
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { usePromptStore } from '../../../stores/promptStore';
 import { PromptVersion } from '../../../types/prompt';
 
@@ -28,7 +28,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
   onSelectVersion,
   selectedVersionId,
 }) => {
-  const { versions, isLoadingVersions, selectTemplate, publishVersion, rollbackVersion, templates } = usePromptStore();
+  const { versions, isLoadingVersions, publishVersion, rollbackVersion, templates } = usePromptStore();
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
 

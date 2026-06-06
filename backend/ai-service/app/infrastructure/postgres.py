@@ -86,15 +86,12 @@ class PostgresClient:
 
     def _mask_password(self, conn_str: str) -> str:
         """隐藏连接字符串中的密码"""
-        # 格式: postgresql+asyncpg://user:password@host:port/database
-        try:
-            if "://" in conn_str and "@" in conn_str:
-                start_idx = conn_str.find("://") + 3
-                at_idx = conn_str.find("@")
-                credentials = conn_str[start_idx:at_idx]
-                if ":" in credentials:
-                    user = credentials.split(":")[0]
-                    return conn_str[:start_idx] + f"{user}:[REDACTED]" + conn_str[at_idx:]
-        except Exception:
-            pass
-        return conn_str
+        if "://" not in conn_str or "@" not in conn_str:
+            return conn_str
+        start_idx = conn_str.find("://") + 3
+        at_idx = conn_str.find("@")
+        credentials = conn_str[start_idx:at_idx]
+        if ":" not in credentials:
+            return conn_str
+        user = credentials.split(":", 1)[0]
+        return conn_str[:start_idx] + f"{user}:[REDACTED]" + conn_str[at_idx:]

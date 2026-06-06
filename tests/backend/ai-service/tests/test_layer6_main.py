@@ -108,9 +108,9 @@ class TestMainLifespan:
                 assert app.state.pg_repo == mock_chat_history_pg_repo.return_value
                 assert app.state.redis_repo == mock_chat_history_redis_repo.return_value
                 
-                # 验证模型加载
-                mock_load_embedding_model.assert_called_once()
-                mock_load_rerank_model.assert_called_once()
+                # 验证模型加载策略：生产实现采用按需懒加载，lifespan 启动阶段只装配推理服务，不主动加载重型模型。
+                mock_load_embedding_model.assert_not_called()
+                mock_load_rerank_model.assert_not_called()
                 
                 # 验证 metrics
                 mock_init_metrics.assert_called_once()

@@ -14,7 +14,8 @@ async def health_check(request: Request) -> ResponseModel:
     is_ready = getattr(request.app.state, "is_ready", False)
     
     data = {
-        "status": "ready" if is_ready else "starting",
+        "status": "ok",
+        "ready": is_ready,
         "service": "luna-ai-service",
         "version": "0.1.0",
         "timestamp": datetime.now(timezone.utc).isoformat()

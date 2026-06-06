@@ -32,15 +32,16 @@ class ChatHistoryPGRepo:
         """
         保存单次问答交互记录（一问一答绑定为完整存储单元）到 PostgreSQL
         """
-        async with self.pg_client.session_factory() as session:
+        async for session in self.pg_client.get_session():
             session.add(interaction)
             await session.commit()
+            return
 
     async def get_interactions_by_session_id(self, session_id: str, limit: int, offset: int) -> List[InteractionModel]:
         """
         分页查询历史交互记录
         """
-        async with self.pg_client.session_factory() as session:
+        async for session in self.pg_client.get_session():
             stmt = (
                 select(InteractionModel)
                 .where(InteractionModel.session_id == session_id)
@@ -50,6 +51,7 @@ class ChatHistoryPGRepo:
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+        return []
 
     async def get_interactions_by_date(self, date_str: str) -> List[InteractionModel]:
         """

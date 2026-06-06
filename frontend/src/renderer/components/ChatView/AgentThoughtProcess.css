@@ -1,0 +1,69 @@
+.agent-thought-process {
+  font-size: 13px;
+  color: var(--text-muted, #888);
+  margin-bottom: 8px;
+  margin-top: -4px;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--primary-color, #007acc);
+}
+
+.agent-thought-process.collapsed {
+  display: inline-block;
+  padding: 4px 8px;
+  background-color: transparent;
+  border-left: none;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.cursor-pointer:hover {
+  color: var(--text-color, #e0e0e0);
+}
+
+.expand-icon {
+  font-family: monospace;
+  margin-right: 4px;
+  color: var(--primary-color, #007acc);
+}
+
+.collapse-header {
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.thought-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.thought-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.thought-icon {
+  font-size: 14px;
+}
+
+.thought-text {
+  line-height: 1.4;
+}
+
+.active-pulse .thought-text {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

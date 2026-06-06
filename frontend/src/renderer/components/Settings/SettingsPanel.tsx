@@ -4,7 +4,9 @@ import { ApiConfigPresetPanel } from './ApiConfigPresetPanel';
 import { EnvSettings } from './EnvSettings';
 import './SettingsPanel.css';
 
-type SettingsTab = 'general' | 'api' | 'env';
+import { KnowledgeBasePanel } from '../KnowledgeBase/KnowledgeBasePanel';
+
+type SettingsTab = 'general' | 'knowledge' | 'api' | 'env';
 
 export const SettingsPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -13,6 +15,8 @@ export const SettingsPanel: React.FC = () => {
     switch (activeTab) {
       case 'general':
         return <GeneralSettings />;
+      case 'knowledge':
+        return <KnowledgeBasePanel />;
       case 'api':
         return (
           <div className="settings-content-section">
@@ -36,6 +40,13 @@ export const SettingsPanel: React.FC = () => {
         >
           <span className="nav-icon">⚙️</span>
           <span className="nav-text">通用</span>
+        </div>
+        <div
+          className={`settings-nav-item ${activeTab === 'knowledge' ? 'active' : ''}`}
+          onClick={() => setActiveTab('knowledge')}
+        >
+          <span className="nav-icon">📚</span>
+          <span className="nav-text">知识库</span>
         </div>
         <div
           className={`settings-nav-item ${activeTab === 'api' ? 'active' : ''}`}

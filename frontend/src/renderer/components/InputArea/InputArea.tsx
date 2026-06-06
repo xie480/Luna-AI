@@ -32,7 +32,6 @@ export const InputArea: React.FC = () => {
   const measureRef = useRef<HTMLDivElement>(null);
   
   const connectionStatus = useSystemStore((state) => state.connectionStatus);
-  const aiConnectionStatus = useSystemStore((state) => state.aiConnectionStatus);
   const addSystemLog = useSystemStore.getState().addSystemLog;
 
   // 单行文本高度（像素）

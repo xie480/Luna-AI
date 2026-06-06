@@ -78,6 +78,7 @@ interface SessionState {
   appendMessage: (sessionId: string, msg: ChatMessage) => void;
   updateMessageChunk: (sessionId: string, msgId: string, chunk: string) => void;
   updateMessageStatus: (sessionId: string, msgId: string, status: ChatMessage['status']) => void;
+  updateMessageMetadata: (sessionId: string, msgId: string, metadata: Record<string, unknown>) => void;
   setRecentQA: (qaList: InteractionQA[]) => void;
   addRecentQA: (qa: InteractionQA) => void;
   updatePlan: (plan: PlanSnapshot) => void;
@@ -140,6 +141,31 @@ export const useSessionStore = create<SessionState>((set) => ({
         ...updatedMessages[msgIndex],
         content: updatedMessages[msgIndex].content + chunk,
         status: 'streaming',
+      };
+
+      return {
+        messages: {
+          ...state.messages,
+          [sessionId]: updatedMessages,
+        },
+      };
+    }),
+
+  // 更新消息元数据
+  updateMessageMetadata: (sessionId, msgId, metadata) =>
+    set((state) => {
+      const sessionMessages = state.messages[sessionId] || [];
+      const msgIndex = sessionMessages.findIndex((m) => m.messageId === msgId);
+      
+      if (msgIndex === -1) return state;
+
+      const updatedMessages = [...sessionMessages];
+      updatedMessages[msgIndex] = {
+        ...updatedMessages[msgIndex],
+        metadata: {
+          ...updatedMessages[msgIndex].metadata,
+          ...metadata
+        }
       };
 
       return {

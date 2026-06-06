@@ -107,8 +107,8 @@ async def stop_metrics_collector() -> None:
         try:
             await _collector_task
         except asyncio.CancelledError:
-            pass
-    logger.info("Metrics collector stopped")
+            logger.info("监控指标采集任务已按关闭流程取消")
+    logger.info("监控指标采集器已停止")
 
 
 async def _collect_loop() -> None:
@@ -136,21 +136,18 @@ async def _collect_loop() -> None:
             except RuntimeError:
                 tasks_count = 0
                 
-            # 模拟一些业务指标（实际应用中应从业务模块获取）
-            # 这里为了演示，生成一些随机波动的数据
-            import random
-            
             point = MetricPoint(
                 timestamp=datetime.now(),
                 system_cpu_usage=cpu_usage,
                 system_memory_usage=mem_usage_mb,
                 go_goroutines_count=tasks_count,
-                llm_token_consumption=random.randint(0, 500),
-                tool_call_failure_rate=random.uniform(0, 0.05),
+                llm_token_consumption=0,
+                tool_call_failure_rate=0.0,
             )
             
             buffer.push(point)
         except asyncio.CancelledError:
+            logger.info("监控指标采集循环收到取消信号")
             break
         except Exception as e:
-            logger.error(f"Metrics collection error: {e}")
+            logger.error(f"监控指标采集失败 error={e}")

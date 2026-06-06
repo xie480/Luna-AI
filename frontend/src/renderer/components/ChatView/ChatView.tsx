@@ -40,7 +40,7 @@ import './ChatView.css';
  */
 export const ChatView: React.FC = () => {
   // Live2DView 延迟挂载状态：强制设为 true 以进行诊断
-  const [live2dReady, setLive2dReady] = useState(true);
+  const [live2dReady] = useState(true);
   const isLive2dEnabled = useSystemStore((state) => state.isLive2dEnabled);
 
   // 暂时注释掉延迟挂载逻辑，强制渲染 Live2DView

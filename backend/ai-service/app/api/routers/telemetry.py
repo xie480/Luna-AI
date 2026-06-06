@@ -16,9 +16,7 @@ from app.utils.snowflake import generate_string_id
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
 
 
-# 依赖注入占位符，实际应用中应在 main.py 中覆盖或通过 Request.app.state 获取
-# 这里简化处理，因为 Python 端目前没有完整的 telemetry worker 实现
-# 实际的 telemetry 数据可能存储在 PostgreSQL 中
+# 依赖注入函数：从 FastAPI app.state 获取应用生命周期中初始化的 PostgreSQL 会话工厂。
 def get_db_session(request: Request):
     return request.app.state.pg_client.get_session()
 

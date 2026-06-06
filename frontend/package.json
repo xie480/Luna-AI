@@ -13,6 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@floating-ui/react": "^0.27.19",
     "@monaco-editor/react": "^4.7.0",
     "gsap": "^3.15.0",
     "pixi-live2d-display": "^0.4.0",

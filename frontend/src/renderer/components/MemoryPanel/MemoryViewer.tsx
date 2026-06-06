@@ -26,8 +26,9 @@ export const MemoryViewer: React.FC = () => {
       setMemories(data.items);
       setTotal(data.total);
       setPage(data.page);
-    } catch (err: any) {
-      setError(err.message || '获取长期记忆失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || '获取长期记忆失败');
     } finally {
       setIsLoading(false);
     }
@@ -35,7 +36,7 @@ export const MemoryViewer: React.FC = () => {
 
   useEffect(() => {
     fetchMemories(page);
-  }, [page]);
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRefresh = () => {
     fetchMemories(page);
@@ -82,8 +83,9 @@ export const MemoryViewer: React.FC = () => {
       }
       closeForm();
       fetchMemories(page);
-    } catch (err: any) {
-      alert(`操作失败: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      alert(`操作失败: ${message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -94,8 +96,9 @@ export const MemoryViewer: React.FC = () => {
       try {
         await memoryService.deleteLongTermMemory(id);
         fetchMemories(page);
-      } catch (err: any) {
-        alert(`删除失败: ${err.message}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        alert(`删除失败: ${message}`);
       }
     }
   };

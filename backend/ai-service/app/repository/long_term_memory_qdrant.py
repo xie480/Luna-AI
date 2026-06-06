@@ -38,6 +38,46 @@ class LongTermMemoryQdrantRepo:
         """
         await self.client.ensure_collection(QDRANT_COLLECTION_LONG_TERM_MEMORIES, vector_size)
 
+    async def save_with_vector(
+        self,
+        memory_id: str,
+        session_id: str,
+        vector: List[float],
+        status: str = ""
+    ) -> None:
+        """
+        保存整条长期记忆向量。
+
+        做什么：为未拆分的长期记忆摘要写入单个 Qdrant Point。
+        为什么这样做：保留生产可用的整摘要向量写入能力，供单块记忆或旧任务补偿路径使用。
+        输入输出：输入 memory_id、session_id、向量和状态；输出为空。
+        边界条件：memory_id 必须可转换为 Snowflake 整数，向量不能为空。
+        异常行为：参数非法或 Qdrant 写入失败时向上抛出。
+        """
+        if not status:
+            status = MemoryStatus.ACTIVE.value
+        if not memory_id or not vector:
+            raise ValueError("memory_id 和 vector 不能为空")
+        point = UpsertPoint(
+            id=int(memory_id),
+            vector=vector,
+            payload={"memory_id": memory_id, "session_id": session_id, "status": status},
+        )
+        await self.client.upsert(QDRANT_COLLECTION_LONG_TERM_MEMORIES, [point])
+        logger.info(f"长期记忆整摘要向量已保存 memory_id={memory_id} status={status}")
+
+    async def soft_delete_by_memory_id(self, memory_id: str) -> None:
+        """
+        软删除长期记忆向量。
+
+        做什么：写入同 ID 零向量并将 payload.status 标记为 DELETED。
+        为什么这样做：Qdrant upsert 是幂等覆盖操作，可在不依赖 scroll 的情况下立即阻断旧向量召回。
+        输入输出：输入 memory_id，输出为空。
+        边界条件：memory_id 必须可转换为 Snowflake 整数。
+        异常行为：Qdrant 写入失败时向上抛出。
+        """
+        await self.save_with_vector(memory_id, "", [0.0] * 768, MemoryStatus.DELETED.value)
+
     async def save_chunks_with_vectors(
         self,
         memory_id: str,
@@ -69,7 +109,6 @@ class LongTermMemoryQdrantRepo:
                     "memory_id": memory_id,
                     "session_id": session_id,
                     "chunk_type": chunk.chunk_type.value,
-                    "content": chunk.content,
                     "status": status,
                 }
             )
@@ -120,5 +159,44 @@ class LongTermMemoryQdrantRepo:
         logger.info(f"长期记忆向量检索完成 hits={len(active_results)} top_k={top_k}")
         return active_results
 
-    # TODO: soft_delete_by_memory_id & delete_vector 以后需要改成 scroll 取出所有 point 然后修改 / 删除
-    # 因为现在同一个 memory_id 会对应多个 Qdrant Points。但本次改动重点在 RAG Chunking 和 search_groups。
+    async def delete_vectors_by_memory_id(self, memory_id: str) -> None:
+        """
+        按长期记忆 ID 删除所有关联向量。
+
+        做什么：通过 Qdrant scroll 找到 payload.memory_id 对应的全部切片点并删除。
+        为什么这样做：同一条长期记忆会对应多个 Chunk Point，撤销记忆时必须清理全部向量，避免脏召回。
+        输入输出：输入 memory_id，输出为空。
+        边界条件：memory_id 为空直接抛错；未找到点时记录日志并返回。
+        异常行为：Qdrant 查询或删除失败时向上抛出，由调用方决定重试或补偿。
+        """
+        if not memory_id:
+            raise ValueError("memory_id 不能为空")
+        await self.client._ensure_client()
+        from qdrant_client.http import models  # type: ignore
+
+        points: list[int] = []
+        next_offset = None
+        while True:
+            records, next_offset = await self.client.client.scroll(
+                collection_name=QDRANT_COLLECTION_LONG_TERM_MEMORIES,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="memory_id",
+                            match=models.MatchValue(value=memory_id),
+                        )
+                    ]
+                ),
+                limit=128,
+                offset=next_offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            points.extend(int(record.id) for record in records)
+            if next_offset is None:
+                break
+        if not points:
+            logger.info(f"长期记忆向量删除跳过，未找到关联点 memory_id={memory_id}")
+            return
+        await self.client.delete_points(QDRANT_COLLECTION_LONG_TERM_MEMORIES, points)
+        logger.info(f"长期记忆关联向量已删除 memory_id={memory_id} points_count={len(points)}")

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { sseManager } from '../services/sseManager';
-import { WS_MSG_TYPE } from '../../shared/enum';
 
 export type HistoryViewType = 'RECENT' | 'CALENDAR';
 

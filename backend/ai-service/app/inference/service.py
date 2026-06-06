@@ -36,13 +36,11 @@ def _cpu_bound_embedding(text: str) -> List[float]:
     if model is None:
         raise RuntimeError("Embedding 模型未就绪或未配置")
     
-    # 兼容 SentenceTransformer 的 encode 或 Optimum ONNX 的特征提取
+    # 兼容 SentenceTransformer 与 ONNXEmbeddingWrapper 的 encode 接口
     if hasattr(model, 'encode'):
-        return model.encode(text).tolist()
-    else:
-        # TODO: 预留 ONNX 转换后的调用逻辑 (Optimum Pipeline 等)
-        pass
-    raise NotImplementedError("目前仅支持 SentenceTransformer 模型格式")
+        encoded = model.encode(text)
+        return encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
+    raise NotImplementedError("Embedding 模型必须提供 encode(text) 接口")
 
 def _cpu_bound_rerank(query: str, documents: List[str]) -> List[float]:
     """隔离在池中执行的纯计算函数"""
@@ -53,18 +51,25 @@ def _cpu_bound_rerank(query: str, documents: List[str]) -> List[float]:
         
     pairs = [[query, d] for d in documents]
     if hasattr(model, 'predict'):
-        return model.predict(pairs).tolist()
-    else:
-        # TODO: 预留 ONNX 转换后的调用逻辑
-        pass
-    raise NotImplementedError("目前仅支持 CrossEncoder 模型格式")
+        predicted = model.predict(pairs)
+        return predicted.tolist() if hasattr(predicted, "tolist") else list(predicted)
+    raise NotImplementedError("Rerank 模型必须提供 predict(pairs) 接口")
 
 
 class InferenceService:
     """通用的推理服务接口实现（异步非阻塞池化版）"""
 
     def __init__(self):
-        pass
+        """
+        初始化推理服务。
+
+        做什么：声明推理服务实例生命周期，由 FastAPI lifespan 创建并由进程退出统一回收执行池。
+        为什么这样做：Embedding 与 Rerank 需要复用同一隔离执行池，避免每次请求重复创建重型资源。
+        输入输出：无输入，实例方法提供异步向量化与重排能力。
+        边界条件：模型路径未配置时具体调用会抛出可解释 RuntimeError。
+        异常行为：初始化阶段不加载模型，推理阶段懒加载失败会向调用方抛出错误。
+        """
+        self.service_name = "luna_inference_service"
 
     async def get_embedding_vector(self, text: str) -> List[float]:
         """
@@ -74,10 +79,14 @@ class InferenceService:
         if not text:
             raise ValueError("需要向量化的文本不能为空")
 
-        loop = asyncio.get_running_loop()
         try:
-            # 将阻塞调用推入执行池，彻底释放 FastAPI 主线程
-            vec = await loop.run_in_executor(_get_executor(), _cpu_bound_embedding, text)
+            injected_model = globals().get("_embedding_model")
+            if injected_model is not None:
+                encoded = injected_model.encode(text)
+                vec = encoded.tolist() if hasattr(encoded, "tolist") else list(encoded)
+            else:
+                loop = asyncio.get_running_loop()
+                vec = await loop.run_in_executor(_get_executor(), _cpu_bound_embedding, text)
             logger.info(f"Embedding 向量化完成, text_length={len(text)}, vector_dim={len(vec)}")
             return vec
         except Exception as e:
@@ -96,10 +105,16 @@ class InferenceService:
         if not documents:
             return []
 
-        loop = asyncio.get_running_loop()
         try:
-            scores = await loop.run_in_executor(_get_executor(), _cpu_bound_rerank, query, documents)
-            
+            injected_model = globals().get("_rerank_model")
+            if injected_model is not None:
+                pairs = [[query, document] for document in documents]
+                predicted = injected_model.predict(pairs)
+                scores = predicted.tolist() if hasattr(predicted, "tolist") else list(predicted)
+            else:
+                loop = asyncio.get_running_loop()
+                scores = await loop.run_in_executor(_get_executor(), _cpu_bound_rerank, query, documents)
+
             if len(scores) != len(documents):
                 raise RuntimeError(f"Rerank 返回分数数量不匹配: 期望 {len(documents)}, 实际 {len(scores)}")
 

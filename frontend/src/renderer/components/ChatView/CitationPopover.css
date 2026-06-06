@@ -1,0 +1,97 @@
+.citation-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--primary-color, #007acc);
+  background-color: rgba(0, 122, 204, 0.1);
+  padding: 0 4px;
+  border-radius: 4px;
+  margin: 0 2px;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+  vertical-align: super;
+  line-height: 1;
+}
+
+.citation-badge:hover {
+  background-color: rgba(0, 122, 204, 0.2);
+}
+
+.citation-popover-panel {
+  width: 320px;
+  background-color: var(--bg-color, #252526);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.citation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background-color: var(--editor-bg, #1e1e1e);
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.citation-doc-name {
+  font-weight: 500;
+  color: var(--text-color, #e0e0e0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.citation-score {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.citation-content-preview {
+  padding: 12px;
+  color: var(--editor-fg, #d4d4d4);
+  line-height: 1.5;
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.citation-footer {
+  padding: 8px 12px;
+  background-color: var(--editor-bg, #1e1e1e);
+  border-top: 1px solid var(--border-color, #333);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-view-source {
+  background: transparent;
+  border: none;
+  color: var(--primary-color, #007acc);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.btn-view-source:hover {
+  background-color: rgba(0, 122, 204, 0.1);
+}

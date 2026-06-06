@@ -51,7 +51,7 @@ let _themeRegistered = false;
  * 插入行（新增）→ 绿色
  * 删除行（删除）→ 红色
  */
-function registerDiffTheme(monaco: any): void {
+function registerDiffTheme(monaco: any): void { // eslint-disable-line @typescript-eslint/no-explicit-any
   if (_themeRegistered) return;
   _themeRegistered = true;
 
@@ -77,13 +77,13 @@ function registerDiffTheme(monaco: any): void {
 }
 
 export const DiffViewer: React.FC<DiffViewerProps> = ({ oldVersion, newVersion }) => {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   /**
    * DiffEditor 挂载后的初始化回调
    * 注册自定义主题并设置差异高亮颜色
    */
-  const handleDiffEditorMount = (editor: any, monaco: any) => {
+  const handleDiffEditorMount = (editor: any, monaco: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
     editorRef.current = editor;
     registerDiffTheme(monaco);
     monaco.editor.setTheme('luna-diff-theme');

@@ -27,8 +27,8 @@ os.environ["OMP_NUM_THREADS"] = str(safe_threads)
 os.environ["MKL_NUM_THREADS"] = str(safe_threads)
 try:
     torch.set_num_threads(safe_threads)
-except Exception:
-    pass
+except Exception as exc:
+    os.environ["LUNA_TORCH_THREAD_INIT_ERROR"] = str(exc)
 
 import uvicorn
 from fastapi import FastAPI
@@ -37,6 +37,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers.api_config_preset import router as config_preset_router
 from app.api.routers.error_log import router as error_log_router
 from app.api.routers.prompt import router as prompt_router
+from app.api.routers.rag import router as rag_router
 from app.api.routers.telemetry import router as telemetry_router
 from app.api.http_api import router as http_router
 from app.api.sse import router as sse_router
@@ -328,6 +329,32 @@ async def lifespan(app: FastAPI):
     from app.inference.service import InferenceService
     inference_svc = InferenceService()
 
+    # 8.2 初始化 Phase 7 RAG 知识库仓库与编排服务
+    rag_pg_repo = None
+    rag_qdrant_repo = None
+    rag_ingestion_service = None
+    rag_retrieval_orchestrator = None
+    if pg_client:
+        from app.repository.rag_pg import RagPGRepository
+        rag_pg_repo = RagPGRepository(pg_client)
+        try:
+            await rag_pg_repo.create_indexes()
+        except Exception as e:
+            logger.warning(f"RAG PostgreSQL 索引初始化失败 error={e}")
+    if qdrant_client:
+        from app.repository.rag_qdrant import RagQdrantRepository
+        from app.types.constants import RAG_DEFAULT_VECTOR_SIZE
+        rag_qdrant_repo = RagQdrantRepository(qdrant_client)
+        try:
+            await rag_qdrant_repo.ensure_collection(RAG_DEFAULT_VECTOR_SIZE)
+        except Exception as e:
+            logger.warning(f"RAG Qdrant 集合初始化失败 error={e}")
+    if rag_pg_repo:
+        from app.rag.ingestion import RagIngestionService
+        from app.rag.retrieval import RagRetrievalOrchestrator
+        rag_ingestion_service = RagIngestionService(rag_pg_repo, rag_qdrant_repo, inference_svc)
+        rag_retrieval_orchestrator = RagRetrievalOrchestrator(rag_pg_repo, rag_qdrant_repo, inference_svc)
+
     # 8.5 初始化全局配置容器
     if pg_client:
         preset_repo = ConfigPresetPGRepo(pg_client)
@@ -390,6 +417,10 @@ async def lifespan(app: FastAPI):
     app.state.crypto_svc = crypto_svc
     app.state.prompt_manager = prompt_manager
     app.state.memory_manager = memory_manager
+    app.state.rag_pg_repo = rag_pg_repo
+    app.state.rag_qdrant_repo = rag_qdrant_repo
+    app.state.rag_ingestion_service = rag_ingestion_service
+    app.state.rag_retrieval_orchestrator = rag_retrieval_orchestrator
 
     # 11. 注入仓库实例到 app.state（供 HTTP API 依赖注入使用）
     app.state.pg_repo = pg_repo
@@ -449,6 +480,9 @@ async def lifespan(app: FastAPI):
     if worker:
         await worker.stop()
         
+    if getattr(app.state, "rag_ingestion_service", None):
+        await app.state.rag_ingestion_service.shutdown()
+
     if pg_client:
         await pg_client.close()
         
@@ -523,6 +557,7 @@ async def global_exception_handler(request: StarletteRequest, exc: Exception):
 app.include_router(config_preset_router)
 app.include_router(error_log_router)
 app.include_router(prompt_router)
+app.include_router(rag_router)
 app.include_router(telemetry_router)
 app.include_router(http_router)
 app.include_router(sse_router)

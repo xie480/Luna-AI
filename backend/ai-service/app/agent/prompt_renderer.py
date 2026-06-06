@@ -1,8 +1,16 @@
-
 from jinja2 import Environment, StrictUndefined, TemplateError
+from dataclasses import dataclass
 
-from app.api.communication_pb2 import PromptSlot
 from app.logger import logger
+
+@dataclass
+class PromptSlot:
+    """
+    表示一个提示词槽位的数据类
+    """
+    slot_name: str
+    template_content: str
+    is_required: bool = True
 
 class PromptRenderer:
     """
