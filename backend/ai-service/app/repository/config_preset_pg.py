@@ -50,7 +50,8 @@ class ConfigPresetPGRepo:
     async def save(self, preset: ApiConfigPreset) -> None:
         """保存或更新预设"""
         async with self.pg_client.session_factory() as session:
-            session.add(preset)
+            # 使用 merge 而非 add：当主键已存在时执行 UPDATE，否则执行 INSERT
+            await session.merge(preset)
             await session.commit()
 
     async def delete(self, id: str) -> None:

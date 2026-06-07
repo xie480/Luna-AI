@@ -9,8 +9,10 @@ interface ApiConfigPresetState {
 
   // 获取所有预设
   fetchPresets: () => Promise<void>;
-  // 保存预设
-  savePreset: (preset: Omit<ApiConfigPreset, 'is_active'>) => Promise<string>;
+  // 创建预设
+  createPreset: (preset: Omit<ApiConfigPreset, 'is_active'>) => Promise<string>;
+  // 更新预设
+  updatePreset: (preset: Omit<ApiConfigPreset, 'is_active'>) => Promise<string>;
   // 激活预设
   activatePreset: (id: string) => Promise<void>;
   // 删除预设
@@ -41,15 +43,28 @@ export const useApiConfigPresetStore = create<ApiConfigPresetState>((set, get) =
     }
   },
 
-  savePreset: async (preset) => {
+  createPreset: async (preset) => {
     set({ isLoading: true, error: null });
     try {
-      const id = await apiConfigPresetService.savePreset(preset);
+      const id = await apiConfigPresetService.createPreset(preset);
       await get().fetchPresets(); // 重新加载列表
       return id;
     } catch (error: unknown) {
       const err = error as Error;
-      set({ error: err.message || '保存预设失败', isLoading: false });
+      set({ error: err.message || '创建预设失败', isLoading: false });
+      throw error;
+    }
+  },
+
+  updatePreset: async (preset) => {
+    set({ isLoading: true, error: null });
+    try {
+      const id = await apiConfigPresetService.updatePreset(preset);
+      await get().fetchPresets(); // 重新加载列表
+      return id;
+    } catch (error: unknown) {
+      const err = error as Error;
+      set({ error: err.message || '更新预设失败', isLoading: false });
       throw error;
     }
   },

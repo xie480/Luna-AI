@@ -31,8 +31,10 @@ except Exception as exc:
     os.environ["LUNA_TORCH_THREAD_INIT_ERROR"] = str(exc)
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request as FastAPIRequest
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routers.api_config_preset import router as config_preset_router
 from app.api.routers.error_log import router as error_log_router
@@ -551,6 +553,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Luna AI Service", lifespan=lifespan)
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.logger import trace_id_var
 from app.utils.snowflake import generate_string_id
@@ -566,6 +569,29 @@ async def trace_id_middleware(request: Request, call_next):
         return response
     finally:
         trace_id_var.reset(token)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """捕获 Pydantic 校验失败（422）并输出详细错误到日志"""
+    errors = exc.errors()
+    body = await request.body()
+    logger.error(f"[422 校验失败] path={request.url.path} method={request.method} errors={errors}")
+    logger.error(f"[422 校验失败] request_body={body.decode('utf-8', errors='replace')}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": 422,
+            "msg": "请求参数校验失败",
+            "data": {"detail": errors, "body": body.decode('utf-8', errors='replace')},
+            "trace_id": request.headers.get("X-Trace-ID", ""),
+        },
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 
 # 允许所有跨域请求，开发阶段方便调试
 app.add_middleware(

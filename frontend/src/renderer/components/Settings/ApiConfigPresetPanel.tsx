@@ -36,7 +36,8 @@ export const ApiConfigPresetPanel: React.FC = () => {
     isLoading,
     error,
     fetchPresets,
-    savePreset,
+    createPreset,
+    updatePreset,
     activatePreset,
     deletePreset,
     fetchModels,
@@ -142,19 +143,30 @@ export const ApiConfigPresetPanel: React.FC = () => {
 
   /**
    * 确认保存：将当前表单数据提交到后端
-   * 新建 → 保存为全新预设（初始未激活）
-   * 已存在 → 覆盖更新已有预设
+   * 新建 → 执行数据入库的新增接口调用
+   * 已存在 → 执行数据更新的修改接口调用
    */
   const handleConfirmSave = async () => {
     if (!newPresetName.trim()) return;
     try {
-      const id = await savePreset({
-        id: selectedPresetId || '',
-        name: newPresetName.trim(),
-        large_model_config: largeConfig,
-        medium_model_config: mediumConfig,
-        small_model_config: smallConfig,
-      });
+      let id;
+      if (isNewPreset) {
+        id = await createPreset({
+          id: '',
+          name: newPresetName.trim(),
+          large_model_config: largeConfig,
+          medium_model_config: mediumConfig,
+          small_model_config: smallConfig,
+        });
+      } else {
+        id = await updatePreset({
+          id: selectedPresetId || '',
+          name: newPresetName.trim(),
+          large_model_config: largeConfig,
+          medium_model_config: mediumConfig,
+          small_model_config: smallConfig,
+        });
+      }
       // 保存成功后选中该预设（切换到已入库态）
       setSelectedPresetId(id);
       setShowSaveDialog(false);

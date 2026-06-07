@@ -26,12 +26,21 @@ class ModelConfig(BaseModel):
     api_key: str
     model_id: str
     max_tokens: int
-    max_context_tokens: int
+    max_context_tokens: int = 0
     temperature: float
 
 
 class PresetRequest(BaseModel):
-    id: str
+    """预设创建请求体：id 留空由后端生成"""
+    id: str = ''
+    name: str
+    large_model_config: ModelConfig
+    medium_model_config: ModelConfig
+    small_model_config: ModelConfig
+
+
+class UpdatePresetRequest(BaseModel):
+    """预设更新请求体：不含 id，id 通过路径参数传递，避免与路径参数冲突"""
     name: str
     large_model_config: ModelConfig
     medium_model_config: ModelConfig
@@ -81,35 +90,24 @@ async def get_presets(request: Request, repo: ConfigPresetPGRepo = Depends(get_r
 
 
 @router.post("", response_model=ResponseModel)
-async def save_preset(
+async def create_preset(
     req: PresetRequest,
     request: Request,
     repo: ConfigPresetPGRepo = Depends(get_repo),
     crypto_svc: CryptoService = Depends(get_crypto_svc)
 ) -> ResponseModel:
-    """创建或更新预设"""
+    """创建预设"""
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     
     if not req.name:
         return create_error_response(400, "预设名称不能为空", trace_id)
         
     try:
-        preset_id = req.id if req.id else generate_string_id()
+        preset_id = generate_string_id()
         
-        # 获取已有预设（仅更新时存在），用于处理被前端遮蔽的 api_key。
-        existing = await repo.get_by_id(preset_id) if req.id else None
-        
-        # 逐规格处理：对 api_key 为前端遮蔽值的配置块，直接复用 DB 中已有的 JSONB 原始数据；
-        # 对真实 api_key 进行加密，防止遮蔽值被当作真实密钥落库。
-        large_config = _resolve_model_config(
-            req.large_model_config, existing.large_model_config if existing else None, crypto_svc
-        )
-        medium_config = _resolve_model_config(
-            req.medium_model_config, existing.medium_model_config if existing else None, crypto_svc
-        )
-        small_config = _resolve_model_config(
-            req.small_model_config, existing.small_model_config if existing else None, crypto_svc
-        )
+        large_config = _resolve_model_config(req.large_model_config, None, crypto_svc)
+        medium_config = _resolve_model_config(req.medium_model_config, None, crypto_svc)
+        small_config = _resolve_model_config(req.small_model_config, None, crypto_svc)
         
         preset = ApiConfigPreset(
             id=preset_id,
@@ -122,8 +120,56 @@ async def save_preset(
         await repo.save(preset)
         return create_success_response({"id": preset.id}, trace_id)
     except Exception as e:
-        logger.error(f"保存预设失败 error={e}")
-        return create_error_response(500, "保存预设失败", trace_id)
+        logger.error(f"创建预设失败 error={e}")
+        return create_error_response(500, "创建预设失败", trace_id)
+
+
+@router.put("/{id}", response_model=ResponseModel)
+async def update_preset(
+    id: str,
+    req: UpdatePresetRequest,
+    request: Request,
+    repo: ConfigPresetPGRepo = Depends(get_repo),
+    crypto_svc: CryptoService = Depends(get_crypto_svc)
+) -> ResponseModel:
+    """更新预设"""
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    
+    if not req.name:
+        return create_error_response(400, "预设名称不能为空", trace_id)
+        
+    try:
+        logger.info(f"更新 API 配置预设 id={id} name={req.name}")
+        
+        existing = await repo.get_by_id(id)
+        if not existing:
+            return create_error_response(404, "预设不存在", trace_id)
+        
+        large_config = _resolve_model_config(
+            req.large_model_config, existing.large_model_config, crypto_svc
+        )
+        medium_config = _resolve_model_config(
+            req.medium_model_config, existing.medium_model_config, crypto_svc
+        )
+        small_config = _resolve_model_config(
+            req.small_model_config, existing.small_model_config, crypto_svc
+        )
+        
+        preset = ApiConfigPreset(
+            id=id,
+            name=req.name,
+            large_model_config=large_config,
+            medium_model_config=medium_config,
+            small_model_config=small_config,
+        )
+        # 保持 is_active 状态
+        preset.is_active = existing.is_active
+        
+        await repo.save(preset)
+        return create_success_response({"id": preset.id}, trace_id)
+    except Exception as e:
+        logger.error(f"更新预设失败 error={e}")
+        return create_error_response(500, "更新预设失败", trace_id)
 
 
 @router.post("/{id}/activate", response_model=ResponseModel)

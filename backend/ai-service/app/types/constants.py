@@ -11,6 +11,12 @@ class Role(str, Enum):
     ASSISTANT = "assistant"
     SYSTEM = "system"
 
+
+# 已知不支持 OpenAI 原生 json_schema response_format 的供应商关键字。
+# 做什么：供 LLMClient 在请求前识别供应商能力，避免 DeepSeek 等兼容接口返回 400。
+# 为什么这样做：结构化输出能力属于供应商差异，不应散落在 Agent 业务逻辑中硬编码。
+LLM_STRUCTURED_OUTPUT_UNSUPPORTED_PROVIDER_KEYWORDS = ("deepseek",)
+
 # WebSocket 消息类型常量
 WS_MSG_TYPE_PING = "PING"
 WS_MSG_TYPE_PONG = "PONG"

@@ -21,10 +21,11 @@ Luna AI LLM 客户端封装模块
 """
 
 import asyncio
+import json
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from openai import APIConnectionError, APIError, AsyncOpenAI, RateLimitError
+from openai import APIConnectionError, APIError, AsyncOpenAI, BadRequestError, RateLimitError
 from pydantic import BaseModel, ValidationError
 from tenacity import (
     before_sleep_log,
@@ -34,7 +35,10 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.types.constants import Role
+from app.types.constants import (
+    LLM_STRUCTURED_OUTPUT_UNSUPPORTED_PROVIDER_KEYWORDS,
+    Role,
+)
 from app.llm.context_manager import (
     format_messages_for_api,
     should_flush_buffer,
@@ -214,6 +218,7 @@ class LLMClient:
         """初始化 AsyncOpenAI 客户端"""
         self.client = None
         self.model_name = ""
+        self.base_url = ""
         self.reload_config()
 
     def reload_config(self) -> None:
@@ -232,6 +237,7 @@ class LLMClient:
             base_url=base_url,
         )
         self.model_name = config.get("model_id") or "gpt-3.5-turbo"
+        self.base_url = base_url
 
     @retry(
         stop=stop_after_attempt(3),
@@ -296,6 +302,7 @@ class LLMClient:
         调用大模型并强制返回结构化 JSON 数据
 
         做什么：发送请求并指定 response_format 约束，强制 LLM 返回符合 Pydantic Schema 的 JSON。
+                若模型不支持原生 structured output（如 DeepSeek），自动降级为普通对话后解析 JSON。
         为什么这样做：确保智能层输出的数据结构符合预期的 Pydantic 模型定义，在进入业务流程前完成校验。
         输入输出：
             - 输入：model 模型名称、messages 消息列表、response_format Pydantic 模型类、timeout 超时秒数
@@ -305,6 +312,7 @@ class LLMClient:
             - 空内容会触发 ValueError
         异常行为：
             - 网络错误/限流由 tenacity 自动重试
+            - 模型不支持 structured output（400 BadRequest）时自动降级重试
             - JSON 解析失败抛出 ValidationError
         """
         logger.info(f"正在调用 LLM API (Structured Outputs), model: {model}")
@@ -314,31 +322,52 @@ class LLMClient:
         config = global_config_container.get_model_config(ModelSize.MEDIUM)
         temperature = config.get("temperature", 0.7)
 
-        call_kwargs = {
+        call_kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "response_format": {
+            "temperature": temperature,
+            "timeout": timeout,
+            **kwargs
+        }
+
+        if self._should_use_native_structured_output(model):
+            # === 第一阶段：仅在供应商明确支持时尝试原生 structured output ===
+            # DeepSeek 当前会直接拒绝 json_schema 类型的 response_format；提前绕开可避免
+            # 产生 400 Bad Request 噪声，并减少 InputReconstructor 的无效重试。
+            structured_kwargs = dict(call_kwargs)
+            structured_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": response_format.__name__,
                     "schema": response_format.model_json_schema(),
                     "strict": True
                 }
-            },
-            "temperature": temperature,
-            "timeout": timeout,
-            **kwargs
-        }
+            }
 
-        response = await self.client.chat.completions.create(**call_kwargs)
-        content = response.choices[0].message.content
+            try:
+                response = await self.client.chat.completions.create(**structured_kwargs)
+                content = response.choices[0].message.content
+            except BadRequestError as e:
+                # 模型不支持 structured output 时降级为普通对话，避免结构化 Agent 直接中断。
+                logger.warning(
+                    f"[StructuredOutput] 模型 {model} 不支持原生结构化输出，"
+                    f"已切换为 Prompt Schema 约束降级调用，错误原因: {e!s}"
+                )
+                content = await self._fallback_structured_call(call_kwargs, response_format)
+            except Exception as e:
+                # 其他错误也尝试降级，保证输入重构链路有机会获得可解析 JSON。
+                logger.warning(
+                    f"[StructuredOutput] 原生结构化输出调用失败，"
+                    f"已切换为 Prompt Schema 约束降级调用，异常类型: {type(e).__name__}, 原因: {e!s}"
+                )
+                content = await self._fallback_structured_call(call_kwargs, response_format)
+        else:
+            content = await self._fallback_structured_call(call_kwargs, response_format)
         
         if not content:
             raise ValueError("LLM 返回了空内容")
         
         # 清理可能存在的 markdown 代码块包裹
-        # 某些 API 网关（如 gcli.ggchan.dev）可能不支持原生的 json_schema 约束，
-        # 回退返回 ```json ... ``` 包裹的 JSON 字符串
         cleaned = content.strip()
         if cleaned.startswith("```json"):
             cleaned = cleaned[7:]  # 去掉 ```json
@@ -355,6 +384,76 @@ class LLMClient:
             )
             
         return response_format.model_validate_json(cleaned)
+
+    def _should_use_native_structured_output(self, model: str) -> bool:
+        """
+        判断当前模型接入是否允许使用 OpenAI 原生结构化输出参数。
+
+        做什么：根据模型名称与当前 base_url 识别已知不支持 json_schema response_format
+                的供应商，并在调用前切换到 Prompt Schema 降级模式。
+        为什么这样做：DeepSeek 兼容接口当前会返回“response_format type unavailable”
+                的 400 错误；预判能力可以避免请求层报错噪声和 Agent 层重复重试。
+        输入输出：
+            - 输入：model 为本次调用使用的模型名称
+            - 输出：True 表示允许发送 response_format，False 表示必须走降级调用
+        边界条件：model 或 base_url 为空时不命中禁用关键字，默认按 OpenAI 兼容能力尝试。
+        异常行为：本方法不抛异常，只负责保守能力判断。
+        """
+        capability_probe_text = f"{model} {self.base_url}".lower()
+        for provider_keyword in LLM_STRUCTURED_OUTPUT_UNSUPPORTED_PROVIDER_KEYWORDS:
+            if provider_keyword in capability_probe_text:
+                logger.info(
+                    f"[StructuredOutput] 检测到模型接入 {provider_keyword} 暂不支持原生结构化输出，"
+                    f"model={model}，将直接使用 Prompt Schema 降级模式"
+                )
+                return False
+        return True
+
+    async def _fallback_structured_call(
+        self,
+        call_kwargs: dict[str, Any],
+        response_format: type[BaseModel],
+    ) -> str:
+        """
+        structured output 降级调用：使用普通对话并注入 JSON Schema 到 system prompt，
+        要求 LLM 返回符合 Schema 的纯 JSON。
+
+        做什么：当模型不支持 response_format 参数时，将 JSON Schema 注入到 system prompt
+                末尾，引导模型自行生成符合结构的 JSON 输出。
+        返回：清理后的 JSON 字符串（可能包含 markdown 代码块包裹，由调用方清理）。
+        """
+        fallback_messages = list(call_kwargs["messages"])
+        schema_json = response_format.model_json_schema()
+
+        # 在 system prompt 末尾追加 JSON Schema 约束说明
+        schema_prompt = (
+            "\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
+            f"{json.dumps(schema_json, ensure_ascii=False, indent=2)}\n\n"
+            "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
+        )
+
+        for i, msg in enumerate(fallback_messages):
+            if msg.get("role") == "system":
+                fallback_messages[i] = {
+                    "role": "system",
+                    "content": msg["content"] + schema_prompt
+                }
+                break
+        else:
+            # 没有 system message，添加一个
+            fallback_messages.insert(0, {
+                "role": "system",
+                "content": schema_prompt
+            })
+
+        fallback_kwargs = dict(call_kwargs)
+        fallback_kwargs["messages"] = fallback_messages
+        # 移除可能残留的 response_format 相关 key
+        fallback_kwargs.pop("response_format", None)
+
+        logger.info("[StructuredOutput] 执行降级调用：注入 JSON Schema 到 system prompt")
+        response = await self.client.chat.completions.create(**fallback_kwargs)
+        return response.choices[0].message.content or ""
 
     async def stream_chat(
         self,

@@ -43,7 +43,7 @@ export const apiConfigPresetService = {
     return result.data || [];
   },
 
-  async savePreset(preset: Omit<ApiConfigPreset, 'is_active'>): Promise<string> {
+  async createPreset(preset: Omit<ApiConfigPreset, 'is_active'>): Promise<string> {
     const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: {
@@ -52,11 +52,39 @@ export const apiConfigPresetService = {
       body: JSON.stringify(preset),
     });
     if (!response.ok) {
-      throw new Error('保存预设失败');
+      throw new Error('创建预设失败');
     }
     const result = await response.json();
     if (result.code !== 0) {
-      throw new Error(result.msg || '保存预设失败');
+      throw new Error(result.msg || '创建预设失败');
+    }
+    return result.data.id;
+  },
+
+  async updatePreset(preset: Omit<ApiConfigPreset, 'is_active'>): Promise<string> {
+    // 发送 PUT 请求时去除 id 字段，避免与路径参数冲突（后端 UpdatePresetRequest 不含 id）
+    const { id, ...updateBody } = preset;
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateBody),
+    });
+    if (!response.ok) {
+      // 尝试获取 422 错误详情以便排查
+      let detail = '';
+      try {
+        const errBody = await response.json();
+        detail = JSON.stringify(errBody);
+      } catch {
+        detail = response.statusText;
+      }
+      throw new Error(`更新预设失败 (${response.status}): ${detail}`);
+    }
+    const result = await response.json();
+    if (result.code !== 0) {
+      throw new Error(result.msg || '更新预设失败');
     }
     return result.data.id;
   },
