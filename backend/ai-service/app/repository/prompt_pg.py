@@ -97,6 +97,53 @@ class PromptPGRepo:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    async def ensure_template_with_version(
+        self,
+        *,
+        name: str,
+        category: str,
+        slot_position: str,
+        content: str,
+        variables: list[str],
+    ) -> None:
+        """
+        确保指定 Prompt 模板和已发布版本存在。
+
+        做什么：按 name 查找模板，不存在时创建模板和 published 版本。
+        为什么这样做：新增 simple prompt 文件必须在服务启动时进入 PromptManager 可加载的数据源。
+        输入输出：输入模板名称、分类、槽位、内容和变量列表，无返回值。
+        边界条件：模板已存在时不覆盖，避免破坏用户在 Prompt 管理面板中的自定义版本。
+        异常行为：数据库异常向上抛出，由启动流程记录。
+        """
+        async with self.pg_client.session_factory() as session:
+            result = await session.execute(select(PromptTemplate).where(PromptTemplate.name == name))
+            existing = result.scalars().first()
+            if existing:
+                return
+            from app.utils.snowflake import generate_string_id
+
+            template = PromptTemplate(
+                id=generate_string_id(),
+                name=name,
+                category=category,
+                slot_position=slot_position,
+                is_system=True,
+            )
+            session.add(template)
+            await session.flush()
+            version = PromptVersion(
+                id=generate_string_id(),
+                template_id=template.id,
+                version_num=1,
+                content=content,
+                variables=variables,
+                status="published",
+            )
+            session.add(version)
+            await session.flush()
+            template.active_version_id = version.id
+            await session.commit()
+
     async def create_version(self, version: PromptVersion) -> None:
         """创建版本"""
         async with self._get_session() as session:

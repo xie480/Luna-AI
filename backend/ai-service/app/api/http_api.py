@@ -34,6 +34,7 @@ from app.prompt.types import PromptCategory
 from app.repository.chat_history_pg import ChatHistoryPGRepo
 from app.repository.chat_history_redis import ChatHistoryRedisRepo, ChatSummary, Interaction
 from app.repository.models import InteractionModel
+from app.user_profile.service import UserProfileService
 from app.types.constants import (
     WS_MSG_TYPE_CHAT_STREAM,
     WS_MSG_TYPE_ERROR,
@@ -127,6 +128,11 @@ async def get_prompt_manager(request: Request) -> Optional[PromptManager]:
 async def get_memory_manager(request: Request) -> Optional[MemoryManager]:
     """从 app.state 获取 MemoryManager 实例"""
     return getattr(request.app.state, "memory_manager", None)
+
+
+async def get_user_profile_service(request: Request) -> Optional[UserProfileService]:
+    """从 app.state 获取 UserProfileService 实例"""
+    return getattr(request.app.state, "user_profile_service", None)
 
 
 # ============================================================
@@ -311,6 +317,7 @@ async def chat_request(
     prompt_mgr: Optional[PromptManager] = Depends(get_prompt_manager),
     memory_manager: Optional[MemoryManager] = Depends(get_memory_manager),
     rag_orchestrator: Optional[RagRetrievalOrchestrator] = Depends(get_rag_orchestrator),
+    user_profile_service: Optional[UserProfileService] = Depends(get_user_profile_service),
 ) -> APIResponse:
     """
     处理聊天请求，执行完整的流式对话流程。
@@ -566,6 +573,18 @@ async def chat_request(
         logger.info(f"Rag Orchestrator 不可用，跳过外部知识 RAG 检索 trace_id={trace_id}")
         prompt_variables["EXTERNAL_KNOWLEDGE"] = ""
 
+    # ---- 5.8 用户画像压缩缓存注入 ----
+    # 用户画像不走 RAG，不读取 PostgreSQL；聊天链路只读取 Redis 中压缩后的画像摘要。
+    if user_profile_service:
+        try:
+            prompt_variables["USER_PROFILE"] = await user_profile_service.get_prompt_summary()
+            logger.info(f"用户画像缓存注入完成 trace_id={trace_id} text_length={len(prompt_variables['USER_PROFILE'])}")
+        except Exception as e:
+            logger.warning(f"用户画像缓存注入失败，跳过画像注入 trace_id={trace_id} error={e}")
+            prompt_variables["USER_PROFILE"] = ""
+    else:
+        prompt_variables["USER_PROFILE"] = ""
+
     # ---- 6. 组装完整 Chat Prompt ----
     # 使用更新后的变量组装最终的聊天提示词
     full_system_prompt = ""
@@ -593,6 +612,7 @@ async def chat_request(
             pg_repo=pg_repo,
             redis_repo=redis_repo,
             prompt_mgr=prompt_mgr,
+            user_profile_service=user_profile_service,
         )
     )
 
@@ -614,6 +634,7 @@ async def _execute_llm_stream(
     pg_repo: Optional[ChatHistoryPGRepo],
     redis_repo: Optional[ChatHistoryRedisRepo],
     prompt_mgr: Optional[PromptManager],
+    user_profile_service: Optional[UserProfileService],
 ) -> None:
     """
     在后台执行 LLM 流式调用、SSE 推送和持久化。
@@ -735,6 +756,7 @@ async def _execute_llm_stream(
         pg_repo=pg_repo,
         redis_repo=redis_repo,
         prompt_mgr=prompt_mgr,
+        user_profile_service=user_profile_service,
         trace_id=trace_id,
     )
 
@@ -755,6 +777,7 @@ async def _persist_interaction(
     pg_repo: Optional[ChatHistoryPGRepo],
     redis_repo: Optional[ChatHistoryRedisRepo],
     prompt_mgr: Optional[PromptManager],
+    user_profile_service: Optional[UserProfileService],
     trace_id: str,
 ) -> None:
     """
@@ -813,6 +836,7 @@ async def _persist_interaction(
                     trace_id=trace_id,
                     redis_repo=redis_repo,
                     prompt_mgr=prompt_mgr,
+                    user_profile_service=user_profile_service,
                 )
         except Exception as e:
             logger.error(f"异步保存 Interaction 到 Redis 失败 trace_id={trace_id} error={e}")
@@ -823,6 +847,7 @@ async def _trigger_compression(
     trace_id: str,
     redis_repo: Optional[ChatHistoryRedisRepo],
     prompt_mgr: Optional[PromptManager],
+    user_profile_service: Optional[UserProfileService],
 ) -> None:
     """
     触发上下文摘要压缩流程：将早期对话压缩为核心摘要，裁剪历史。
@@ -856,6 +881,18 @@ async def _trigger_compression(
             messages_text_parts.append(f"(内心独白: {interaction.thought})\n")
         messages_text_parts.append("\n")
     messages_text = "".join(messages_text_parts)
+
+    if user_profile_service:
+        try:
+            user_profile_service.start_extract_from_messages(
+                user_id="local_default_user",
+                session_id=session_id,
+                messages_text=messages_text,
+                trace_id=trace_id,
+            )
+            logger.info(f"已启动用户画像并行提取任务 session_id={session_id} trace_id={trace_id}")
+        except Exception as e:
+            logger.error(f"启动用户画像并行提取任务失败 session_id={session_id} trace_id={trace_id} error={e}")
 
     summarize_variables = {
         "CURRENT_CORE_SUMMARY": summary.core_summary,

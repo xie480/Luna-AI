@@ -62,6 +62,72 @@ class RetrievalType(str, Enum):
     EXPERIENCE_REFLECTION = "EXPERIENCE_REFLECTION"
 
 
+class UserProfileCategory(str, Enum):
+    """用户画像类别枚举。"""
+
+    APPEARANCE = "appearance"
+    PERSONALITY = "personality"
+    LIKES = "likes"
+    DISLIKES = "dislikes"
+    FEARS = "fears"
+    EXPECTATIONS = "expectations"
+    HABITS = "habits"
+    CUSTOM = "custom"
+
+
+class UserProfileSourceType(str, Enum):
+    """用户画像来源类型枚举。"""
+
+    MANUAL = "manual"
+    MODEL_EXTRACTED = "model_extracted"
+
+
+class UserProfileStatus(str, Enum):
+    """用户画像状态枚举。"""
+
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+    DELETED = "deleted"
+    REJECTED = "rejected"
+
+
+class UserProfileCacheStatus(str, Enum):
+    """用户画像压缩缓存状态枚举。"""
+
+    VALID = "valid"
+    DIRTY = "dirty"
+    MISSING = "missing"
+    REBUILDING = "rebuilding"
+    FAILED = "failed"
+
+
+class UserProfileSourceRefType(str, Enum):
+    """用户画像来源引用类型枚举。"""
+
+    MANUAL_INPUT = "manual_input"
+    INTERACTION = "interaction"
+    SESSION_COMPRESSION = "session_compression"
+    LONG_SUMMARY = "long_summary"
+
+
+USER_PROFILE_SCHEMA_VERSION = "user_profile.v1"
+USER_PROFILE_EXTRACT_SCHEMA_VERSION = "user_profile.extract.v1"
+USER_PROFILE_MUTATION_SCHEMA_VERSION = "user_profile.mutation.v1"
+USER_PROFILE_CACHE_SCHEMA_VERSION = "user_profile.cache.v1"
+USER_PROFILE_DEFAULT_USER_ID = "local_default_user"
+
+USER_PROFILE_CATEGORY_LABELS = {
+    UserProfileCategory.APPEARANCE.value: "外貌",
+    UserProfileCategory.PERSONALITY.value: "性格",
+    UserProfileCategory.LIKES.value: "喜欢的东西",
+    UserProfileCategory.DISLIKES.value: "厌恶的东西",
+    UserProfileCategory.FEARS.value: "害怕的东西",
+    UserProfileCategory.EXPECTATIONS.value: "期待的东西",
+    UserProfileCategory.HABITS.value: "癖好",
+    UserProfileCategory.CUSTOM.value: "自定义",
+}
+
+
 RAG_SCHEMA_VERSION = "rag.v1"
 RAG_QDRANT_COLLECTION = "luna_rag_index"
 RAG_EVENT_THOUGHT = "EVT_RAG_THOUGHT"

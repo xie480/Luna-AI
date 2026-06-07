@@ -455,6 +455,31 @@ class LLMClient:
         response = await self.client.chat.completions.create(**fallback_kwargs)
         return response.choices[0].message.content or ""
 
+    async def generate_structured_text(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        timeout: float = 30.0,
+        **kwargs: Any,
+    ) -> str:
+        """
+        调用大模型并返回非流式文本。
+
+        做什么：为后台摘要类任务提供统一的非流式文本调用入口。
+        为什么这样做：用户画像压缩摘要需要普通文本输出，不适合复用流式聊天接口。
+        输入输出：输入模型名和 messages，输出模型文本。
+        边界条件：空内容返回空字符串，由调用方判定是否失败。
+        异常行为：网络错误由 OpenAI 客户端抛出，调用方负责记录。
+        """
+        response = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=False,
+            timeout=timeout,
+            **kwargs,
+        )
+        return response.choices[0].message.content or ""
+
     async def stream_chat(
         self,
         prompt: str,

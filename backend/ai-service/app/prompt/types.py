@@ -22,6 +22,8 @@ class PromptCategory(str, Enum):
     SHORT_SUMMARY = "short_summary"
     LONG_SUMMARY = "long_summary"
     INPUT_RECONSTRUCTION = "input_reconstruction"
+    USER_PROFILE_EXTRACT = "user_profile_extract"
+    USER_PROFILE_SUMMARIZE = "user_profile_summarize"
 
 
 # 占位符常量

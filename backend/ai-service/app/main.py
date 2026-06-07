@@ -41,6 +41,7 @@ from app.api.routers.error_log import router as error_log_router
 from app.api.routers.prompt import router as prompt_router
 from app.api.routers.rag import router as rag_router
 from app.api.routers.telemetry import router as telemetry_router
+from app.api.routers.user_profile import router as user_profile_router
 from app.api.http_api import router as http_router
 from app.api.sse import router as sse_router
 from app.api.memory_api import router as memory_router
@@ -68,6 +69,7 @@ from app.repository.long_term_memory_pg import LongTermMemoryPGRepo
 from app.repository.long_term_memory_qdrant import LongTermMemoryQdrantRepo
 from app.repository.models import Base
 from app.repository.prompt_pg import PromptPGRepo
+from app.repository.user_profile_pg import UserProfilePGRepository
 from app.telemetry.worker import get_worker, init_worker
 
 # ============================================================
@@ -487,6 +489,35 @@ async def lifespan(app: FastAPI):
     app.state.ltm_pg_repo = ltm_pg_repo
     app.state.ltm_qdrant_repo = ltm_qdrant_repo
 
+    # 12. 初始化用户画像仓库与缓存服务
+    user_profile_service = None
+    if pg_client:
+        from app.user_profile.cache import UserProfileCache
+        from app.user_profile.conflict_resolver import UserProfileConflictResolver
+        from app.user_profile.extractor import UserProfileExtractor
+        from app.user_profile.service import UserProfileService
+        from app.user_profile.summarizer import UserProfileSummarizer
+
+        user_profile_pg_repo = UserProfilePGRepository(pg_client)
+        try:
+            await user_profile_pg_repo.create_indexes()
+        except Exception as e:
+            logger.warning(f"用户画像索引初始化失败 error={e}")
+
+        profile_cache = UserProfileCache(redis_client) if redis_client else None
+        profile_extractor = UserProfileExtractor(prompt_manager)
+        profile_summarizer = UserProfileSummarizer(prompt_manager)
+        profile_conflict_resolver = UserProfileConflictResolver()
+        user_profile_service = UserProfileService(
+            repo=user_profile_pg_repo,
+            cache=profile_cache,
+            extractor=profile_extractor,
+            summarizer=profile_summarizer,
+            conflict_resolver=profile_conflict_resolver,
+        )
+
+        app.state.user_profile_pg_repo = user_profile_pg_repo
+        app.state.user_profile_service = user_profile_service
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector
@@ -644,6 +675,7 @@ app.include_router(telemetry_router)
 app.include_router(http_router)
 app.include_router(sse_router)
 app.include_router(memory_router)
+app.include_router(user_profile_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router

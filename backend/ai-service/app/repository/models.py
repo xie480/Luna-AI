@@ -18,7 +18,7 @@ Luna AI 数据库模型定义
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -194,3 +194,92 @@ class RagChunk(Base):
     meta_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     chunk_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+
+class UserProfileItem(Base):
+    """
+    对应 PostgreSQL 中的 user_profile_items 表（用户画像主表）。
+
+    做什么：保存用户画像的当前事实、类别、来源、置信度、状态与冲突链。
+    为什么这样做：用户画像不进入 RAG，必须作为结构化关系域事实由 PostgreSQL 统一管理。
+    输入输出：id 使用雪花字符串；metadata_payload 映射数据库列 metadata。
+    边界条件：category=custom 时 custom_category_name 必须存在；confidence 必须在 0 到 1。
+    异常行为：违反约束时由数据库或 Pydantic Schema 在写入前拦截。
+    """
+
+    __tablename__ = "user_profile_items"
+    __table_args__ = (
+        CheckConstraint("confidence >= 0 AND confidence <= 1", name="chk_user_profile_confidence"),
+        CheckConstraint("category <> 'custom' OR custom_category_name IS NOT NULL", name="chk_user_profile_custom_category"),
+        Index("idx_user_profile_user_category_status", "user_id", "category", "status"),
+        Index("idx_user_profile_user_updated", "user_id", "updated_at"),
+        Index("idx_user_profile_normalized", "user_id", "category", "normalized_content"),
+        Index("idx_user_profile_conflict_group", "user_id", "conflict_group_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local_default_user")
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    custom_category_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_content: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float] = mapped_column(Numeric(4, 3), nullable=False, default=0.8)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    superseded_by_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    conflict_group_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    metadata_payload: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UserProfileItemVersion(Base):
+    """
+    对应 PostgreSQL 中的 user_profile_item_versions 表（用户画像版本表）。
+
+    做什么：保存每次手动编辑、删除、模型确认、冲突覆盖前后的快照。
+    为什么这样做：用户画像不能静默覆盖，所有变更必须可审计和可回溯。
+    边界条件：snapshot 必须包含当时条目的关键字段；version_num 按 profile_item_id 递增。
+    异常行为：版本写入失败时外层画像事务整体回滚。
+    """
+
+    __tablename__ = "user_profile_item_versions"
+    __table_args__ = (Index("idx_user_profile_versions_item", "profile_item_id", "version_num"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    profile_item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local_default_user")
+    version_num: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    change_reason: Mapped[str] = mapped_column(Text, nullable=False)
+    operator_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserProfileConflict(Base):
+    """
+    对应 PostgreSQL 中的 user_profile_conflicts 表（用户画像冲突表）。
+
+    做什么：显式记录旧画像与新画像之间的冲突关系、处理策略和原因。
+    为什么这样做：冲突处理必须保留痕迹，Redis 注入只体现当前 active 版本。
+    边界条件：old_item_id 和 new_item_id 必须来自同一 user_id。
+    异常行为：冲突记录失败时外层 supersede 事务整体回滚。
+    """
+
+    __tablename__ = "user_profile_conflicts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local_default_user")
+    old_item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    new_item_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    conflict_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    resolution: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

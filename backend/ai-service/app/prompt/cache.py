@@ -9,7 +9,7 @@ Luna AI Prompt 缓存管理器模块
 """
 
 import asyncio
-import json
+from pathlib import Path
 from typing import Dict, Optional
 
 from pydantic import BaseModel
@@ -90,6 +90,12 @@ class CacheManager:
 
         cp = CachedPrompt()
 
+        if not templates:
+            fallback = self._load_from_simple_files(category)
+            if fallback.system_content or fallback.memory_content or fallback.runtime_content:
+                logger.info(f"从 simple 文件加载 Prompt 模板成功 category={category.value}")
+                return fallback
+
         for tmpl in templates:
             if not tmpl.active_version_id:
                 continue
@@ -118,7 +124,39 @@ class CacheManager:
             f"has_runtime={bool(cp.runtime_content)}"
         )
 
+        if not cp.system_content and not cp.memory_content and not cp.runtime_content:
+            fallback = self._load_from_simple_files(category)
+            if fallback.system_content or fallback.memory_content or fallback.runtime_content:
+                return fallback
+
         return cp
+
+    def _load_from_simple_files(self, category: PromptCategory) -> CachedPrompt:
+        """
+        从 app/prompt/simple/{category} 加载三槽位 Prompt 文件。
+
+        做什么：在数据库没有对应 Prompt 模板时读取项目内置 simple prompt。
+        为什么这样做：新功能 Prompt 文件必须可在未执行手动迁移脚本时参与组装。
+        输入输出：输入 PromptCategory，输出 CachedPrompt。
+        边界条件：缺失的槽位文件按空字符串处理。
+        异常行为：读取失败时记录中文 warning 并返回空槽位。
+        """
+        base_dir = Path(__file__).resolve().parent / "simple" / category.value
+        prompt = CachedPrompt()
+        slot_map = {
+            SlotPosition.SYSTEM.value: "system_content",
+            SlotPosition.MEMORY.value: "memory_content",
+            SlotPosition.RUNTIME.value: "runtime_content",
+        }
+        for slot, attr_name in slot_map.items():
+            file_path = base_dir / f"{slot}.j2"
+            if not file_path.exists():
+                continue
+            try:
+                setattr(prompt, attr_name, file_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.warning(f"读取 simple Prompt 文件失败 category={category.value} slot={slot} error={exc}")
+        return prompt
 
     async def _save_to_cache(self, cache_key: str, category: PromptCategory, cp: CachedPrompt) -> None:
         """异步保存到 Redis"""
