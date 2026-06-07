@@ -261,3 +261,44 @@
 .global-submit-hint {
   font-size: 12px;
 }
+
+.global-submit-progress {
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 12px;
+}
+
+.global-submit-progress-bar {
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.global-submit-progress-fill {
+  height: 100%;
+  width: 30%;
+  background-color: var(--primary-color, #007acc);
+  border-radius: 3px;
+  animation: indeterminateProgress 1.5s infinite linear;
+  transform-origin: 0% 50%;
+}
+
+@keyframes indeterminateProgress {
+  0% {
+    transform: translateX(-100%) scaleX(0.2);
+  }
+  50% {
+    transform: translateX(0%) scaleX(0.5);
+  }
+  100% {
+    transform: translateX(350%) scaleX(0.2);
+  }
+}
+
+.global-submit-progress-text {
+  font-size: 12px;
+  color: var(--text-color, #e0e0e0);
+  text-align: center;
+}

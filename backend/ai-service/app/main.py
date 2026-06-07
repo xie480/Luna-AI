@@ -151,7 +151,7 @@ def load_embedding_model() -> object | None:
                 def encode(self, text):
                     # pipeline 返回的是 [[[float, ...], ...]] 格式
                     import numpy as np
-                    out = self.pipe(text)
+                    out = self.pipe(text, truncation=True, max_length=512)
                     # 对 token vectors 进行 mean pooling
                     vecs = np.array(out[0])
                     mean_vec = np.mean(vecs, axis=0)

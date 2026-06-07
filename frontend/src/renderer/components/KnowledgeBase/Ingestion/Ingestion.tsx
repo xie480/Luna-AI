@@ -320,7 +320,7 @@ export const GlobalSubmitButton: React.FC = () => {
     setIsSubmitting(true);
     try {
       await submitAllPending();
-      createErrorToast('ERROR', 'Success', `成功提交 ${totalPending} 项待处理数据进入知识库`);
+      createErrorToast('INFO', 'Success', `成功提交 ${totalPending} 项待处理数据进入知识库`);
     } catch (err: unknown) {
       // Error is already logged and thrown in submitAllPending, so we can just catch it here
       // createErrorToast will have been handled by the error boundary or we can show a generic one
@@ -332,6 +332,14 @@ export const GlobalSubmitButton: React.FC = () => {
 
   return (
     <div className="global-submit-container">
+      {isSubmitting && (
+        <div className="global-submit-progress">
+          <div className="global-submit-progress-bar">
+            <div className="global-submit-progress-fill"></div>
+          </div>
+          <div className="global-submit-progress-text">正在处理入库任务，请稍候...</div>
+        </div>
+      )}
       <button
         className="btn-global-submit"
         onClick={handleGlobalSubmit}
@@ -339,7 +347,7 @@ export const GlobalSubmitButton: React.FC = () => {
       >
         {isSubmitting ? '正在提交入库中...' : `确认开始入库 (${totalPending} 项)`}
       </button>
-      {totalPending > 0 && (
+      {totalPending > 0 && !isSubmitting && (
         <div className="global-submit-hint text-muted">
           注意：将使用上方配置的【最新切片策略】统一处理所有暂存内容
         </div>

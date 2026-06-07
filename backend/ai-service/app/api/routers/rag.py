@@ -245,6 +245,37 @@ async def get_knowledge_document(
     return create_success_response(RagDocumentDTO.model_validate(document).model_dump(), trace_id)
 
 
+@router.delete("/knowledge/{document_id}", response_model=ResponseModel)
+async def delete_knowledge_document(
+    document_id: str,
+    trace_id: Annotated[str, Depends(get_trace_id)],
+    repo: Annotated[RagPGRepository, Depends(get_rag_pg_repo)],
+) -> ResponseModel:
+    """删除知识库文档，清理关联的所有切片信息及向量库中的记录。"""
+    try:
+        document = await repo.get_document(document_id)
+        if document is None:
+            return create_error_response(ErrorCode.BUSINESS_ERROR, "知识库文档不存在", trace_id)
+        
+        # 获取 qdrant 仓库并清理对应 chunk
+        from fastapi import Request
+        from app.main import app as main_app
+        qdrant_repo = getattr(main_app.state, "rag_qdrant_repo", None)
+        
+        # 在 PostgreSQL 中删除文档及关联切片，返回需要从向量库清理的 chunk_ids
+        chunk_ids_to_delete = await repo.delete_document(document_id)
+        
+        # 在 Qdrant 中清理切片
+        if qdrant_repo and chunk_ids_to_delete:
+            await qdrant_repo.delete_chunks(chunk_ids_to_delete)
+            
+        logger.info(f"RAG 文档删除成功 document_id={document_id} chunks_deleted={len(chunk_ids_to_delete)}")
+        return create_success_response({"deleted_document_id": document_id, "deleted_chunks": len(chunk_ids_to_delete)}, trace_id)
+    except Exception as exc:
+        logger.error(f"RAG 知识删除失败 trace_id={trace_id} document_id={document_id} error={exc}")
+        return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
+
+
 @router.get("/knowledge", response_model=ResponseModel)
 async def list_knowledge_documents(
     trace_id: Annotated[str, Depends(get_trace_id)],

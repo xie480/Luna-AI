@@ -185,6 +185,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     set((state) => ({
       documents: state.documents.filter(d => d.id !== documentId)
     }));
+    // Refresh to ensure UI stays consistent
+    get().fetchDocuments();
   },
   
   startPolling: () => {
