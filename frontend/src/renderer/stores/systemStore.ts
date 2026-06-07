@@ -9,7 +9,7 @@ import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
  * 模态窗口面板类型
  * 用于标识当前模态窗口展示的内容
  */
-export type ModalPanelType = 'dag' | 'memory' | 'prompts' | 'knowledge' | 'settings' | 'logs' | 'clothing';
+export type ModalPanelType = 'dag' | 'memory' | 'userProfile' | 'prompts' | 'knowledge' | 'settings' | 'logs' | 'clothing';
 
 /**
  * 连接状态（SSE / HTTP）

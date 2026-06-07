@@ -9,6 +9,7 @@
  *   - 新错误自动追加到队列尾部，同源同内容的错误自动去重合并
  */
 import { create } from 'zustand';
+import { generateId } from '../../shared/utils/snowflake';
 
 /** 错误提示条目结构 */
 export interface ErrorToastItem {
@@ -124,7 +125,7 @@ export function createErrorToast(
   detail?: string,
   trace_id?: string,
 ): string {
-  const id = crypto.randomUUID(); // 简化生成，仅用于 UI 标识
+  const id = generateId();
   const store = useErrorToastStore.getState();
 
   store.addToast({

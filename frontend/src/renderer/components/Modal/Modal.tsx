@@ -14,6 +14,7 @@ import { SettingsPanel } from '../Settings/SettingsPanel';
 import { PromptPanel } from '../PromptPanel/PromptPanel';
 import { MemoryPanel } from '../MemoryPanel/MemoryPanel';
 import { KnowledgeBasePanel } from '../KnowledgeBase/KnowledgeBasePanel';
+import { UserProfilePanel } from '../UserProfile/UserProfilePanel';
 import './Modal.css';
 
 /** 最小窗口尺寸 */
@@ -27,6 +28,7 @@ type ResizeDirection = 'n' | 's' | 'w' | 'e' | 'nw' | 'ne' | 'sw' | 'se';
 const PANEL_TITLES: Record<ModalPanelType, string> = {
   dag: '任务流',
   memory: '记忆',
+  userProfile: 'Luna眼中的你',
   prompts: 'Prompt 管理',
   knowledge: '知识库',
   settings: '设置',
@@ -70,6 +72,9 @@ export const Modal: React.FC = () => {
   const getDefaultSize = useCallback((panel: ModalPanelType | null): { w: number; h: number } => {
     if (panel === 'prompts') {
       return { w: 1300, h: 700 };
+    }
+    if (panel === 'userProfile') {
+      return { w: 860, h: 680 };
     }
     if (panel === 'settings' || panel === 'memory' || panel === 'knowledge') {
       return { w: 900, h: 600 };
@@ -292,6 +297,13 @@ export const Modal: React.FC = () => {
           {activeModalPanel === 'memory' && (
             <div className="panel memory-panel">
               <MemoryPanel />
+            </div>
+          )}
+
+          {/* 用户画像面板 */}
+          {activeModalPanel === 'userProfile' && (
+            <div className="panel user-profile-modal-panel">
+              <UserProfilePanel />
             </div>
           )}
 

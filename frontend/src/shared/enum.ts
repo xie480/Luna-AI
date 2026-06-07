@@ -44,6 +44,75 @@ export const RAG_RETRIEVAL_ROUTE = {
 export const RAG_SCHEMA_VERSION = "rag.v1";
 
 /**
+ * 用户画像类别常量
+ * 做什么：定义前端与 Python API 共享的用户画像类别。
+ * 为什么这样做：避免组件、服务层和 Store 中出现魔法字符串。
+ * 输入输出：无。
+ * 边界条件：自定义类别必须配合 custom_category_name 使用。
+ * 异常行为：无。
+ */
+export const USER_PROFILE_CATEGORY = {
+  APPEARANCE: "appearance",
+  PERSONALITY: "personality",
+  LIKES: "likes",
+  DISLIKES: "dislikes",
+  FEARS: "fears",
+  EXPECTATIONS: "expectations",
+  HABITS: "habits",
+  CUSTOM: "custom",
+} as const;
+
+/**
+ * 用户画像来源类型常量
+ * 做什么：定义画像来源，区分手动录入与模型整理。
+ * 为什么这样做：来源标签和置信度展示必须与后端枚举一致。
+ * 输入输出：无。
+ * 边界条件：手动画像在 UI 中展示为已确认。
+ * 异常行为：无。
+ */
+export const USER_PROFILE_SOURCE_TYPE = {
+  MANUAL: "manual",
+  MODEL_EXTRACTED: "model_extracted",
+} as const;
+
+/**
+ * 用户画像条目状态常量
+ * 做什么：定义画像条目的服务端生命周期状态。
+ * 为什么这样做：前端默认只展示 active，但类型层仍需承载后端响应。
+ * 输入输出：无。
+ * 边界条件：deleted 与 superseded 不应在普通画像页面主动展示。
+ * 异常行为：无。
+ */
+export const USER_PROFILE_STATUS = {
+  ACTIVE: "active",
+  SUPERSEDED: "superseded",
+  DELETED: "deleted",
+  REJECTED: "rejected",
+} as const;
+
+/**
+ * 用户画像缓存状态常量
+ * 做什么：定义 Redis 压缩缓存状态。
+ * 为什么这样做：缓存状态条、重建按钮和轮询退出条件必须统一。
+ * 输入输出：无。
+ * 边界条件：rebuilding 需要轮询直到进入终态。
+ * 异常行为：failed 状态需要展示 last_error。
+ */
+export const USER_PROFILE_CACHE_STATUS = {
+  VALID: "valid",
+  DIRTY: "dirty",
+  MISSING: "missing",
+  REBUILDING: "rebuilding",
+  FAILED: "failed",
+} as const;
+
+/** 用户画像主协议版本。 */
+export const USER_PROFILE_SCHEMA_VERSION = "user_profile.v1";
+
+/** 用户画像缓存协议版本。 */
+export const USER_PROFILE_CACHE_SCHEMA_VERSION = "user_profile.cache.v1";
+
+/**
  * 全局统一的错误码枚举
  * 做什么：定义前后端统一的错误码常量。
  * 为什么这样做：避免代码中出现魔法数字，统一错误处理逻辑。

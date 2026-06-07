@@ -54,6 +54,17 @@ const MENU_ITEMS: MenuItem[] = [
     ),
   },
   {
+    id: 'userProfile',
+    label: '用户画像',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 21a8 8 0 0 0-16 0"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+        <path d="M17.5 11.5 19 13l3-3"></path>
+      </svg>
+    ),
+  },
+  {
     id: 'prompts',
     label: 'Prompt 管理',
     icon: (
