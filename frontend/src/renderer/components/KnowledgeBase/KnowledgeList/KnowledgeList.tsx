@@ -4,7 +4,7 @@ import { KnowledgeDocumentView } from '../../../types/rag';
 import { createErrorToast } from '../../../stores/errorToastStore';
 import './KnowledgeList.css';
 
-export const KnowledgeFilter: React.FC = () => {
+export const KnowledgeFilter: React.FC<{ forceStatus?: string }> = ({ forceStatus }) => {
   const { filterState, setFilterState } = useKnowledgeStore();
 
   return (
@@ -27,23 +27,25 @@ export const KnowledgeFilter: React.FC = () => {
         <option value="url">URL</option>
       </select>
       
-      <select
-        className="theme-select filter-select"
-        value={filterState.status}
-        onChange={e => setFilterState({ status: e.target.value as KnowledgeFilterState['status'] })}
-      >
-        <option value="all">所有状态</option>
-        <option value="completed">已完成</option>
-        <option value="parsing">解析中</option>
-        <option value="embedding">向量化中</option>
-        <option value="failed">失败</option>
-        <option value="offline_suspended">挂起 (离线)</option>
-      </select>
+      {!forceStatus && (
+        <select
+          className="theme-select filter-select"
+          value={filterState.status}
+          onChange={e => setFilterState({ status: e.target.value as KnowledgeFilterState['status'] })}
+        >
+          <option value="all">所有状态</option>
+          <option value="completed">已完成</option>
+          <option value="parsing">解析中</option>
+          <option value="embedding">向量化中</option>
+          <option value="failed">失败</option>
+          <option value="offline_suspended">挂起 (离线)</option>
+        </select>
+      )}
     </div>
   );
 };
 
-const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView }> = ({ doc }) => {
+const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView; isUpdateSelectorMode?: boolean }> = ({ doc, isUpdateSelectorMode }) => {
   const deleteKnowledge = useKnowledgeStore(state => state.deleteKnowledge);
   const updateKnowledge = useKnowledgeStore(state => state.updateKnowledge);
   const updatingDocIds = useKnowledgeStore(state => state.updatingDocIds);
@@ -134,7 +136,14 @@ const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView }> = ({ doc }) => 
       </div>
       
       <div className="doc-actions">
-        {showConfirm ? (
+        {isUpdateSelectorMode ? (
+          <button
+            className="btn-action"
+            onClick={handleUpdateClick}
+          >
+            更新此文档
+          </button>
+        ) : showConfirm ? (
           <div className="confirm-actions">
             <span className="confirm-text">确定删除？</span>
             <button
@@ -154,8 +163,8 @@ const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView }> = ({ doc }) => 
           </div>
         ) : (
           <>
-            {/* 更新按钮：对于 active (在 UI 层映射为 completed) 的文档可用 */}
-            {doc.status === 'completed' && (
+            {/* 更新按钮：对于 active 或 completed 的文档可用 */}
+            {(doc.status === 'completed' || doc.status === 'active') && (
               <button
                 className={`btn-action btn-icon ${isThisUpdating ? 'btn-updating' : ''}`}
                 onClick={handleUpdateClick}
@@ -200,8 +209,7 @@ const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView }> = ({ doc }) => 
     </div>
   );
 };
-
-export const KnowledgeTable: React.FC = () => {
+export const KnowledgeTable: React.FC<{ isUpdateSelectorMode?: boolean }> = ({ isUpdateSelectorMode }) => {
   const documents = useKnowledgeStore(state => state.documents);
   const filterState = useKnowledgeStore(state => state.filterState);
   const fetchKnowledgeList = useKnowledgeStore(state => state.fetchKnowledgeList);
@@ -213,12 +221,13 @@ export const KnowledgeTable: React.FC = () => {
 
   const docs = React.useMemo(() => {
     return documents.filter(doc => {
+      if (isUpdateSelectorMode && doc.status !== 'completed' && doc.status !== 'active') return false;
       if (filterState.sourceType !== 'all' && doc.source_type !== filterState.sourceType) return false;
-      if (filterState.status !== 'all' && doc.display_status !== filterState.status) return false;
+      if (!isUpdateSelectorMode && filterState.status !== 'all' && doc.display_status !== filterState.status) return false;
       if (filterState.keyword && !doc.filename.toLowerCase().includes(filterState.keyword.toLowerCase())) return false;
       return true;
     });
-  }, [documents, filterState]);
+  }, [documents, filterState, isUpdateSelectorMode]);
 
   if (isLoading) {
     return <div className="knowledge-loading">加载知识库...</div>;
@@ -241,7 +250,7 @@ export const KnowledgeTable: React.FC = () => {
   return (
     <div className="knowledge-table">
       {docs.map(doc => (
-        <KnowledgeItemRow key={doc.id} doc={doc} />
+        <KnowledgeItemRow key={doc.id} doc={doc} isUpdateSelectorMode={isUpdateSelectorMode} />
       ))}
     </div>
   );

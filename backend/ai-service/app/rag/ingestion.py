@@ -160,6 +160,7 @@ class RagIngestionService:
         content: bytes,
         options: IngestionOptions,
         trace_id: str,
+        previous_version_id: str | None = None,
     ) -> None:
         """执行文件摄入后台任务，带超时看门狗。"""
         try:
@@ -170,6 +171,7 @@ class RagIngestionService:
                     await self.document_loader.extract_from_bytes(filename, content),
                     options,
                     trace_id,
+                    previous_version_id=previous_version_id,
                 ),
                 timeout=self.task_timeout_seconds,
             )
@@ -304,7 +306,8 @@ class RagIngestionService:
             # 2.3 批量注入所有切片
             all_points = reused_points + new_points
             await self.qdrant_repo.bulk_upsert(all_points)
-            logger.info(f"增量更新完成，复用 {len(reused_points)} 个旧切片，新增计算 {len(new_points)} 个切片")
+            deleted_count = len(old_chunk_map) - len(reused_points)
+            logger.info(f"增量更新完成，复用 {len(reused_points)} 个旧切片，新增计算 {len(new_points)} 个切片, 计划清理 {deleted_count} 个过期切片")
         else:
             # 常规全量更新
             vectors = await self._embed_chunks(chunks)
@@ -331,10 +334,17 @@ class RagIngestionService:
                 
             await session.commit()
             
-        logger.info(
-            f"RAG 摄入任务完成 trace_id={trace_id} task_id={task_id} "
-            f"document_id={document_id} chunks_count={len(chunks)}"
-        )
+        if original_doc_id:
+            logger.info(
+                f"RAG 更新任务完成 trace_id={trace_id} task_id={task_id} "
+                f"new_document_id={document_id} original_document_id={original_doc_id} "
+                f"reused_chunks={len(reused_points)} new_chunks={len(new_points)} deleted_chunks={deleted_count}"
+            )
+        else:
+            logger.info(
+                f"RAG 摄入任务完成 trace_id={trace_id} task_id={task_id} "
+                f"document_id={document_id} chunks_count={len(chunks)}"
+            )
         
         # 触发清理 Worker 回收旧文档
         if original_doc_id:

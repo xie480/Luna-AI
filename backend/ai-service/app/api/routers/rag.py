@@ -114,7 +114,7 @@ async def ingest_knowledge_url(
         logger.error(f"提交 RAG URL 摄入失败 trace_id={trace_id} url={payload.url} error={exc}")
         return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
 
-@router.put("/knowledge/{document_id}", response_model=ResponseModel)
+@router.put("/knowledge/{document_id}/update", response_model=ResponseModel)
 async def update_knowledge_document(
     document_id: str,
     file: Annotated[UploadFile, File(...)],
@@ -158,7 +158,7 @@ async def update_knowledge_document(
     
     options = IngestionOptions(strategy=strategy, chunk_size=chunk_size, overlap=overlap, regex_pattern=regex_pattern)
     task = asyncio.create_task(
-        service._run_file_ingestion(task_id, new_doc_id, file.filename, content, options, trace_id)
+        service._run_file_ingestion(task_id, new_doc_id, file.filename, content, options, trace_id, previous_version_id=document_id)
     )
     service._track_task(task)
     

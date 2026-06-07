@@ -116,6 +116,15 @@ class RagIngestionTaskDTO(BaseModel):
     document_id: str
 
 
+class RagDocumentUpdateResponseDTO(BaseModel):
+    """文档平滑更新异步提交响应结构。"""
+
+    schema_version: str = Field(default=RAG_SCHEMA_VERSION)
+    task_id: str
+    new_document_id: str
+    original_document_id: str
+
+
 class RagUrlIngestionRequest(BaseModel):
     """URL 知识摄入请求结构。"""
 

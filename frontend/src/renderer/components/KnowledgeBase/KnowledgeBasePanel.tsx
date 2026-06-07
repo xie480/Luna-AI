@@ -7,7 +7,8 @@ import './KnowledgeBasePanel.css';
 export const KnowledgeBasePanel: React.FC = () => {
   const documentToUpdate = useKnowledgeStore(state => state.documentToUpdate);
   const setDocumentToUpdate = useKnowledgeStore(state => state.setDocumentToUpdate);
-  const [activeTab, setActiveTab] = useState<'ingestion' | 'list'>('list');
+  // 'update' tab means we are browsing the list of updatable (active/completed) documents
+  const [activeTab, setActiveTab] = useState<'ingestion' | 'list' | 'update'>('list');
 
   const handleSwitchToList = () => {
     setActiveTab('list');
@@ -19,11 +20,16 @@ export const KnowledgeBasePanel: React.FC = () => {
     setDocumentToUpdate(null);
   };
 
+  const handleSwitchToUpdate = () => {
+    setActiveTab('update');
+    setDocumentToUpdate(null);
+  };
+
   return (
     <div className="knowledge-base-panel">
       <div className="settings-sidebar">
         <div
-          className={`settings-nav-item ${activeTab === 'list' && !documentToUpdate ? 'active' : ''}`}
+          className={`settings-nav-item ${activeTab === 'list' ? 'active' : ''}`}
           onClick={handleSwitchToList}
         >
           <span className="nav-icon">
@@ -34,7 +40,7 @@ export const KnowledgeBasePanel: React.FC = () => {
           <span className="nav-text">知识库管理</span>
         </div>
         <div
-          className={`settings-nav-item ${activeTab === 'ingestion' && !documentToUpdate ? 'active' : ''}`}
+          className={`settings-nav-item ${activeTab === 'ingestion' ? 'active' : ''}`}
           onClick={handleSwitchToIngestion}
         >
           <span className="nav-icon">
@@ -46,10 +52,23 @@ export const KnowledgeBasePanel: React.FC = () => {
           </span>
           <span className="nav-text">添加知识</span>
         </div>
+        <div
+          className={`settings-nav-item ${activeTab === 'update' ? 'active' : ''}`}
+          onClick={handleSwitchToUpdate}
+        >
+          <span className="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10"></polyline>
+              <polyline points="23 20 23 14 17 14"></polyline>
+              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+            </svg>
+          </span>
+          <span className="nav-text">更新知识</span>
+        </div>
       </div>
       
       <div className="settings-content">
-        {!documentToUpdate && activeTab === 'list' && (
+        {activeTab === 'list' && (
           <div className="settings-content-section">
             <h3 className="settings-section-title">已入库知识</h3>
             <KnowledgeFilter />
@@ -57,7 +76,7 @@ export const KnowledgeBasePanel: React.FC = () => {
           </div>
         )}
 
-        {!documentToUpdate && activeTab === 'ingestion' && (
+        {activeTab === 'ingestion' && (
           <div className="settings-content-section">
             <h3 className="settings-section-title">添加知识</h3>
             <FileUploadDropzone />
@@ -69,13 +88,21 @@ export const KnowledgeBasePanel: React.FC = () => {
           </div>
         )}
 
-        {documentToUpdate && (
+        {activeTab === 'update' && !documentToUpdate && (
+          <div className="settings-content-section">
+            <h3 className="settings-section-title">请选择要更新的文档</h3>
+            <KnowledgeFilter forceStatus="completed" />
+            <KnowledgeTable isUpdateSelectorMode={true} />
+          </div>
+        )}
+
+        {activeTab === 'update' && documentToUpdate && (
           <div className="settings-content-section">
             <div className="settings-section-header">
               <h3 className="settings-section-title">更新知识文档</h3>
               <button
                 className="btn-action"
-                onClick={handleSwitchToList}
+                onClick={handleSwitchToUpdate}
               >
                 返回列表
               </button>
@@ -107,10 +134,10 @@ export const KnowledgeBasePanel: React.FC = () => {
               </div>
             </div>
 
-            <FileUploadDropzone isUpdateMode={true} targetDocId={documentToUpdate.id} />
+            {documentToUpdate.source_type === 'local_file' && <FileUploadDropzone isUpdateMode={true} targetDocId={documentToUpdate.id} />}
             {documentToUpdate.source_type === 'url' && <UrlScrapeInput isUpdateMode={true} targetDocId={documentToUpdate.id} />}
             <PendingItemsList isUpdateMode={true} />
-            <StrategyDebugger />
+            <StrategyDebugger disabled={true} />
             <GlobalSubmitButton isUpdateMode={true} targetDocId={documentToUpdate.id} />
           </div>
         )}

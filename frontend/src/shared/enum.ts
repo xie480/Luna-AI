@@ -1,4 +1,49 @@
 /**
+ * RAG 切片策略常量
+ */
+export const RAG_CHUNK_STRATEGY = {
+  SLIDING_WINDOW: "sliding_window",
+  STRUCTURED_AST: "structured_ast",
+  SEMANTIC_PARENT_CHILD: "semantic_parent_child",
+  REGEX: "regex"
+} as const;
+
+/**
+ * RAG 来源类型常量
+ */
+export const RAG_SOURCE_TYPE = {
+  LOCAL_FILE: "local_file",
+  URL: "url"
+} as const;
+
+/**
+ * RAG 文档状态常量
+ */
+export const RAG_DOCUMENT_STATUS = {
+  INGESTING: "ingesting",
+  PARSING: "parsing",
+  EMBEDDING: "embedding",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  ACTIVE: "active",
+  DEPRECATED: "deprecated"
+} as const;
+
+/**
+ * RAG 检索路由常量
+ */
+export const RAG_RETRIEVAL_ROUTE = {
+  SEARCH: "search",
+  MODULAR: "modular",
+  AGENTIC: "agentic"
+} as const;
+
+/**
+ * RAG schema_version
+ */
+export const RAG_SCHEMA_VERSION = "rag.v1";
+
+/**
  * 全局统一的错误码枚举
  * 做什么：定义前后端统一的错误码常量。
  * 为什么这样做：避免代码中出现魔法数字，统一错误处理逻辑。
