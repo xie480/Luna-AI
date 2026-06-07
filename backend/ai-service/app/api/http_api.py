@@ -436,7 +436,7 @@ async def chat_request(
     entity_mentions = []
     
     external_knowledge_trigger = False
-    external_knowledge_strategy = "hybrid"
+    external_knowledge_strategy = RagRetrievalRoute.HYBRID
 
     try:
         recon_result = await agent.process(
@@ -469,7 +469,7 @@ async def chat_request(
         if RetrievalType.EXTERNAL_KNOWLEDGE.value in required_retrieval_types:
             external_knowledge_routing = retrieval_routing.get("external_knowledge", {})
             external_knowledge_trigger = external_knowledge_routing.get("trigger", False)
-            external_knowledge_strategy = retrieval_routing.get("route_strategy", "hybrid")
+            external_knowledge_strategy = retrieval_routing.get("route_strategy", RagRetrievalRoute.HYBRID)
             external_search_queries = external_knowledge_routing.get("search_queries", [])
             ext_temporal_focus = external_knowledge_routing.get("temporal_focus") or {}
             ext_reference_time = ext_temporal_focus.get("reference_time")
@@ -521,14 +521,34 @@ async def chat_request(
     #   disambiguated_text 作为基础查询贯穿所有检索策略
     if rag_orchestrator and external_knowledge_trigger:
         try:
-            external_knowledge_text = await rag_orchestrator.retrieve_and_format_knowledge(
-                query_text=disambiguated_text,
-                query_vector=[],
+            from app.types.constants import RagRetrievalRoute
+            
+            if isinstance(external_knowledge_strategy, str):
+                try:
+                    route = RagRetrievalRoute(external_knowledge_strategy)
+                except ValueError:
+                    route = RagRetrievalRoute.HYBRID
+            else:
+                route = external_knowledge_strategy
+            
+            from app.rag.types import RagSearchRequest
+            
+            # 使用新的 search 接口
+            search_request = RagSearchRequest(
+                query=disambiguated_text,
+                route=route,
+                retrieval_top_k=20,
+                rerank_top_k=3,
+                max_retries=3,
+                disambiguated_text=disambiguated_text,
                 search_queries=external_search_queries,
-                reference_time=ext_reference_time,
-                temporal_deviation=ext_temporal_deviation,
-                entity_mentions=ext_entity_mentions,
+                temporal_focus={"reference_time": ext_reference_time, "temporal_deviation": ext_temporal_deviation} if ext_reference_time else None,
+                entity_mentions=ext_entity_mentions
             )
+            
+            search_response = await rag_orchestrator.search(search_request, trace_id)
+            external_knowledge_text = search_response.prompt_context
+            
             if external_knowledge_text:
                 prompt_variables["EXTERNAL_KNOWLEDGE"] = external_knowledge_text
                 logger.info(f"外部知识库 RAG 检索注入成功 trace_id={trace_id} text_length={len(external_knowledge_text)}")

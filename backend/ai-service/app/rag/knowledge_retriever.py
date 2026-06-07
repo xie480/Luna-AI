@@ -20,6 +20,7 @@ from app.logger import logger
 from app.repository.models import RagChunk, RagDocument
 from app.repository.rag_pg import RagChunkCandidate, RagPGRepository
 from app.repository.rag_qdrant import RagQdrantRepository
+from app.types.constants import RagRetrievalRoute
 
 
 class InferenceService(Protocol):
@@ -272,7 +273,7 @@ class KnowledgeRetriever:
     async def retrieve(
         self,
         query_text: str,
-        search_mode: str = "hybrid",
+        search_mode: RagRetrievalRoute = RagRetrievalRoute.HYBRID,
         search_queries: Optional[List[str]] = None,
         reference_time: Optional[str] = None,
         temporal_deviation: int = 0,
@@ -288,7 +289,7 @@ class KnowledgeRetriever:
           - query_text（即 disambiguated_text）作为基础查询贯穿所有检索策略
 
         :param query_text: disambiguated_text，作为基础查询贯穿所有策略
-        :param search_mode: 检索模式，支持 'keyword', 'vector', 'hybrid'
+        :param search_mode: 检索模式，支持 RagRetrievalRoute.KEYWORD, RagRetrievalRoute.HYBRID 等
         :param search_queries: 向量检索时使用的泛化 Query 列表（由 InputReconstructor 提取）
         :param reference_time: BM25 时间参考（ISO 时间戳字符串或 None）
         :param temporal_deviation: BM25 时间过滤允许的偏差天数（0 表示精确匹配）
@@ -301,7 +302,7 @@ class KnowledgeRetriever:
 
         # 阶段 1 & 2: 向量检索与 PG FTS 并行执行
         # 向量检索：仅使用 search_queries（或降级 query_text）
-        if search_mode in ("hybrid", "vector"):
+        if search_mode in (RagRetrievalRoute.HYBRID, RagRetrievalRoute.AGENTIC): #  Agentic目前不涉及知识库，但可能退化到hybrid
             vector_task = asyncio.create_task(
                 self._vector_retrieve(query_text, search_queries)
             )
@@ -309,7 +310,7 @@ class KnowledgeRetriever:
             vector_task = asyncio.create_task(asyncio.sleep(0, result=[]))
             
         # BM25 检索：使用 entity_mentions + query_text + reference_time
-        if search_mode in ("hybrid", "keyword"):
+        if search_mode in (RagRetrievalRoute.HYBRID, RagRetrievalRoute.KEYWORD):
             fts_task = asyncio.create_task(
                 self._fts_retrieve(query_text, reference_time, temporal_deviation, entity_mentions)
             )

@@ -5,6 +5,7 @@ from app.agent.schemas.input_reconstruction import (
     InputReconstructionOutput,
     IntentCategory,
     PrimaryIntent,
+    RagRetrievalRoute,
 )
 from app.llm.client import LLMClient
 from app.logger import logger
@@ -60,7 +61,7 @@ class InputReconstructorAgent:
                 # 利用大模型 Structured Outputs 特性强制返回 JSON
                 response = await self.llm_client.generate_structured(
                     model=self.model_name,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[{"role": "system", "content": prompt}],
                     response_format=InputReconstructionOutput,
                     timeout=40.0 # 该 API 代理对 structured output 响应较慢，需要更长的超时
                 )
@@ -107,7 +108,7 @@ class InputReconstructorAgent:
                 "required_retrieval_types": []
             },
             retrieval_routing={
-                "route_strategy": "hybrid",
+                "route_strategy": RagRetrievalRoute.HYBRID,
                 "long_term_memory": {
                     "trigger": False,
                     "trigger_reason": "降级兜底，不触发检索",

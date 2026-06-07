@@ -119,6 +119,10 @@ class RagSearchRequest(BaseModel):
 
     schema_version: str = Field(default=RAG_SCHEMA_VERSION)
     query: str = Field(min_length=1, max_length=5000)
+    disambiguated_text: str | None = None
+    search_queries: list[str] | None = None
+    entity_mentions: list[str] | None = None
+    temporal_focus: dict[str, Any] | None = None
     route: RagRetrievalRoute | None = None
     alpha: float = Field(default=0.55, ge=0.0, le=1.0)
     retrieval_top_k: int = Field(default=20, ge=1, le=50)

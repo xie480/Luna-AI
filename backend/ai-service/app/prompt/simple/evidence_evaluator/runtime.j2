@@ -1,0 +1,111 @@
+任务目标
+请评估当前证据是否足以支持最终结论，并判断是否需要继续检索。
+
+输出要求
+请严格输出合法 JSON。
+禁止输出：
+* Markdown
+* 代码块标记
+* 解释性文字
+* JSON 之外的任何内容
+
+输出格式如下：
+{
+    "sufficiency_score": 0,
+    "confidence_score": 0,
+    "reason": "",
+    "suggested_new_query": null
+}
+或
+{
+    "sufficiency_score": 0,
+    "confidence_score": 0,
+    "reason": "",
+    "suggested_new_query": {
+        "updated_search_queries": [
+            "查询词1",
+            "查询词2"
+        ],
+        "updated_entity_mentions": [
+            "实体1",
+            "实体2"
+        ],
+        "updated_temporal_focus": {
+            "reference_time": "时间值",
+            "temporal_deviation": 0
+        }
+    }
+}
+
+字段定义
+sufficiency_score
+* 当前证据对最终结论的支撑程度。
+* 取值范围：0-100。
+* 必须为整数。
+confidence_score
+* 对当前评估结果的确信程度。
+* 取值范围：0-100。
+* 必须为整数。
+reason
+* 用一句话说明评分依据。
+* 不超过50字。
+suggested_new_query
+* 当无需继续检索时，必须为 null。
+* 当需要继续检索时，必须为对象。
+
+评分标准
+0-20
+* 几乎没有有效证据。
+* 当前结论基本无法成立。
+21-40
+* 仅存在少量或低质量证据。
+* 需要大幅调整检索方向。
+41-59
+* 存在部分证据。
+* 关键事实仍缺失。
+* 需要重写检索意图。
+60-79
+* 主要事实已有支持。
+* 仍缺少补充验证。
+* 建议继续检索。
+80-89
+* 证据较充分。
+* 一般可以结束检索。
+90-100
+* 证据非常充分。
+* 可以直接停止检索。
+
+检索策略决策规则
+
+当 sufficiency_score >= 80 且 confidence_score >= 75 时：
+* suggested_new_query 必须为 null。
+当 sufficiency_score < 80 时：
+* suggested_new_query 不得为 null。
+当 sufficiency_score < 60 时：
+* 必须重写检索意图。
+* 不允许沿用原有检索方向。
+* 应从更宽泛、更具体或不同视角重新构建检索策略。
+当 confidence_score < 50 时：
+* 即使 sufficiency_score 较高，也应优先继续检索。
+* suggested_new_query 不得为 null。
+
+检索策略生成要求
+当 suggested_new_query 不为 null 时：
+updated_search_queries
+* 必须体现新的搜索思路。
+* 不得简单复制上一轮查询。
+* 应增加同义词、相关概念或新的检索角度。
+updated_entity_mentions
+* 必须补充新的相关实体。
+* 不得简单重复上一轮实体集合。
+updated_temporal_focus
+* 必须显式给出 reference_time。
+* 必须显式给出 temporal_deviation。
+* temporal_deviation 必须为整数。
+
+最终要求
+* 仅输出 JSON。
+* 所有分数必须为整数。
+* 不得输出空字符串数组。
+* 不得输出额外字段。
+* 不得输出注释。

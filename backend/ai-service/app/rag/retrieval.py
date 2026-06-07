@@ -116,6 +116,7 @@ class RagRetrievalOrchestrator:
         self,
         query_text: str,
         query_vector: list[float],
+        mode: RagRetrievalRoute = RagRetrievalRoute.HYBRID,
         search_queries: list[str] | None = None,
         reference_time: str | None = None,
         temporal_deviation: int = 0,
@@ -141,10 +142,10 @@ class RagRetrievalOrchestrator:
             rerank_top_k=3,
         )
 
-        # 执行混合检索，传递所有精化参数
+        # 执行检索，传递所有精化参数
         candidates = await retriever.retrieve(
             query_text=query_text,
-            search_mode="hybrid",
+            search_mode=mode,
             search_queries=search_queries,
             reference_time=reference_time,
             temporal_deviation=temporal_deviation,
@@ -184,7 +185,7 @@ class RagRetrievalOrchestrator:
         
         candidates = await retriever.retrieve(
             query_text=request.query,
-            search_mode="keyword",
+            search_mode=RagRetrievalRoute.KEYWORD,
             entity_mentions=None,
         )
         return [ScoredCandidate(candidate=c, score=s) for c, s in candidates]
@@ -208,7 +209,7 @@ class RagRetrievalOrchestrator:
         # 所以我们返回所有通过初筛与内部 rerank 的 candidates 给外部使用。
         candidates = await retriever.retrieve(
             query_text=request.query,
-            search_mode="hybrid",
+            search_mode=RagRetrievalRoute.HYBRID,
         )
         return [ScoredCandidate(candidate=c, score=s) for c, s in candidates]
 
@@ -226,10 +227,11 @@ class RagRetrievalOrchestrator:
         返回:
             list[ScoredCandidate]: 包含评分的候选结果列表，按相关性排序
         """
-        # 初始化当前查询为原始请求中的查询
-        current_query = request.query
         # 存储最佳的候选项结果
         best_candidates: list[ScoredCandidate] = []
+        # 初始化当前请求对象
+        current_request = request.model_copy(update={"route": RagRetrievalRoute.HYBRID})
+        
         # 根据最大重试次数进行循环
         for attempt in range(request.max_retries + 1):
             # 发布当前思考状态到事件发布器
@@ -238,65 +240,109 @@ class RagRetrievalOrchestrator:
                 "evaluating",
                 f"正在执行第 {attempt + 1} 轮证据检索与相关性审查",
             )
-            # 创建嵌套请求，使用当前查询和混合检索路由
-            nested_request = request.model_copy(update={"query": current_query, "route": RagRetrievalRoute.HYBRID})
-            # 执行混合搜索获取候选结果
-            candidates = await self._hybrid_search(nested_request, trace_id)
             
-            # 使用 Small Model 评估证据充分性
-            is_sufficient = await self._evaluate_evidence_sufficiency(request.query, candidates, trace_id)
-            if is_sufficient:
+            # 执行混合搜索获取候选结果
+            candidates = await self._hybrid_search(current_request, trace_id)
+            
+            # 使用 Small Model 评估证据充分性并获取重写建议
+            eval_result = await self._evaluate_evidence_sufficiency(current_request, candidates, trace_id)
+            
+            # 从评估结果中提取新格式的字段
+            sufficiency_score = eval_result.get("sufficiency_score", 0) if eval_result else 0
+            confidence_score = eval_result.get("confidence_score", 0) if eval_result else 0
+            suggested_new_query = eval_result.get("suggested_new_query") if eval_result else None
+
+            # 决定是否足以直接返回
+            if sufficiency_score >= 80 and confidence_score >= 75:
                 return candidates
                 
-            # 更新最佳候选项（如果当前结果比之前的结果更好）
-            if len(candidates) > len(best_candidates):
+            # 更新最佳候选项（如果当前结果得分更高）
+            if candidates and (not best_candidates or candidates[0].score > best_candidates[0].score):
                 best_candidates = candidates
                 
             # 重写查询以供下一轮使用
             if attempt < request.max_retries:
-                 current_query = await self._rewrite_query_agentic(request.query, current_query, trace_id)
+                if suggested_new_query and isinstance(suggested_new_query, dict):
+                     updated_search_queries = suggested_new_query.get("updated_search_queries", current_request.search_queries)
+                     updated_entity_mentions = suggested_new_query.get("updated_entity_mentions", current_request.entity_mentions)
+                     updated_temporal_focus = suggested_new_query.get("updated_temporal_focus", current_request.temporal_focus)
+                     
+                     current_request = current_request.model_copy(update={
+                         "search_queries": updated_search_queries,
+                         "entity_mentions": updated_entity_mentions,
+                         "temporal_focus": updated_temporal_focus
+                     })
+                else:
+                     # 降级启发式重写
+                     original_query = request.query
+                     current_query_str = current_request.query
+                     keywords = re.findall(r"[\u4e00-\u9fffA-Za-z0-9_\-]{2,}", original_query)
+                     deduped = list(dict.fromkeys(keywords))
+                     new_query = " ".join(deduped[:8]) + " " + original_query if deduped else f"{current_query_str} {original_query}"
+                     current_request = current_request.model_copy(update={"query": new_query})
                  
         # 返回在所有尝试中找到的最佳候选项
         return best_candidates
 
-    async def _evaluate_evidence_sufficiency(self, query: str, candidates: list[ScoredCandidate], trace_id: str) -> bool:
-        """引入 Small Model 对检索证据进行动态打分评估。"""
+    async def _evaluate_evidence_sufficiency(self, request: RagSearchRequest, candidates: list[ScoredCandidate], trace_id: str) -> dict[str, Any] | None:
+        """引入 Small Model 对检索证据进行动态打分评估与重写。"""
         if not candidates:
-            return False
+            return None
             
         # 执行动态打分
         try:
-            from app.api.internal_service import internal_service
+            from app.prompt.manager import prompt_manager
+            from app.llm.client import compression_llm_client
             
             # 使用 LLM 对首个证据内容进行有效性评价
             content_to_evaluate = candidates[0].candidate.chunk.content_text
-            prompt = f"请评估以下内容是否足以回答问题 '{query}'。只需返回 'YES' 或 'NO'。\n内容：{content_to_evaluate}"
-            response = await internal_service.short_summarize(trace_id, prompt) # 复用内部轻量请求通道
-            result = response[0] if isinstance(response, tuple) else response
-            if result and "YES" in result.upper():
-                return True
-            return False
+            
+            # 构建渲染上下文
+            context = {
+                "disambiguated_text": request.disambiguated_text or request.query,
+                "search_queries": request.search_queries or [request.query],
+                "entity_mentions": request.entity_mentions or [],
+                "temporal_focus": request.temporal_focus or {},
+                "content_to_evaluate": content_to_evaluate,
+            }
+            
+            prompt_payload = await prompt_manager.render_prompt(
+                preset_id="evidence_evaluator",
+                variables=context,
+            )
+            
+            messages = []
+            if prompt_payload.system:
+                messages.append({"role": "system", "content": prompt_payload.system})
+            if prompt_payload.memory:
+                messages.append({"role": "system", "content": prompt_payload.memory})
+            if prompt_payload.runtime:
+                messages.append({"role": "system", "content": prompt_payload.runtime})
+                
+            result_text = await compression_llm_client.summarize(
+                messages=messages,
+                response_format={"type": "json_object"}
+            )
+            
+            import json
+            cleaned_text = result_text.strip()
+            json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", cleaned_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                json_str = cleaned_text
+
+            if not (json_str.startswith('{') and json_str.endswith('}')):
+                start_idx = json_str.find('{')
+                end_idx = json_str.rfind('}')
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    json_str = json_str[start_idx:end_idx+1]
+                    
+            result = json.loads(json_str)
+            return result
         except Exception as e:
             logger.warning(f"Agentic 证据充分性评估异常，降级为启发式评价 error={e}")
-            return len(candidates) >= 3 and candidates[0].score >= 0.05
-
-    async def _rewrite_query_agentic(self, original_query: str, current_query: str, trace_id: str) -> str:
-        """使用 Small Model 进行 Query 重写。"""
-        try:
-            from app.api.internal_service import internal_service
-            prompt = f"原问题：'{original_query}'。之前的检索词：'{current_query}'。检索结果不够好。请提供一个新的、更宽泛或不同视角的检索词，不要包含任何额外解释。"
-            response = await internal_service.short_summarize(trace_id, prompt)
-            new_query = response[0] if isinstance(response, tuple) else response
-            if new_query and len(new_query.strip()) > 1:
-                return new_query.strip()
-        except Exception as e:
-            logger.warning(f"Agentic Query重写异常，降级为启发式重写 error={e}")
-            
-        keywords = re.findall(r"[\u4e00-\u9fffA-Za-z0-9_\-]{2,}", original_query)
-        deduped = list(dict.fromkeys(keywords))
-        if deduped:
-            return " ".join(deduped[:8]) + " " + original_query
-        return f"{current_query} {original_query}"
+            return None
 
     async def _build_evidences(
         self,
