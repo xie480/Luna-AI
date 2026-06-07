@@ -50,6 +50,9 @@ class RagPGRepository:
         source_type: RagSourceType,
         status: RagDocumentStatus,
         estimated_tokens: int = 0,
+        file_hash: str | None = None,
+        file_size: int | None = None,
+        previous_version_id: str | None = None,
     ) -> RagDocument:
         """注册知识库文档并写入初始状态。"""
         document = RagDocument(
@@ -58,6 +61,9 @@ class RagPGRepository:
             source_type=source_type.value,
             status=status.value,
             estimated_tokens=estimated_tokens,
+            file_hash=file_hash,
+            file_size=file_size,
+            previous_version_id=previous_version_id,
             error_log=None,
         )
         async with self.pg_client.session_factory() as session:
@@ -65,6 +71,37 @@ class RagPGRepository:
             await session.commit()
         logger.info(f"RAG 文档已注册 document_id={document_id} filename={filename} status={status.value}")
         return document
+
+    async def get_document_by_hash(self, file_hash: str) -> list[RagDocument]:
+        """按 file_hash 查询文档，用于 L1 查重拦截"""
+        if not file_hash:
+            return []
+        async with self.pg_client.session_factory() as session:
+            stmt = select(RagDocument).where(RagDocument.file_hash == file_hash).where(
+                RagDocument.status.in_([RagDocumentStatus.ACTIVE.value, RagDocumentStatus.EMBEDDING.value, RagDocumentStatus.PARSING.value])
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def get_documents_by_filename(self, filename: str) -> list[RagDocument]:
+        """按 filename 查询文档，用于 L2 查重拦截"""
+        if not filename:
+            return []
+        async with self.pg_client.session_factory() as session:
+            stmt = select(RagDocument).where(RagDocument.filename == filename).where(
+                RagDocument.status.in_([RagDocumentStatus.ACTIVE.value, RagDocumentStatus.EMBEDDING.value, RagDocumentStatus.PARSING.value])
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+    async def get_chunk_hash_map(self, document_id: str) -> dict[str, str]:
+        """获取文档的全部切片 Hash 与 chunk_id 映射关系，用于增量切片比对"""
+        if not document_id:
+            return {}
+        async with self.pg_client.session_factory() as session:
+            stmt = select(RagChunk.chunk_hash, RagChunk.chunk_id).where(RagChunk.doc_id == document_id)
+            result = await session.execute(stmt)
+            return {row[0]: row[1] for row in result.all()}
 
     async def update_document_status(
         self,
@@ -101,6 +138,7 @@ class RagPGRepository:
                 parent_id=chunk.parent_id,
                 content_text=chunk.text,
                 meta_payload=chunk.metadata,
+                chunk_hash=chunk.chunk_hash,
             )
             for chunk in chunks
         ]
@@ -124,7 +162,7 @@ class RagPGRepository:
                 select(RagChunk, RagDocument)
                 .join(RagDocument, RagDocument.id == RagChunk.doc_id)
                 .where(RagChunk.chunk_id.in_(chunk_ids))
-                .where(RagDocument.status == RagDocumentStatus.COMPLETED.value)
+                .where(RagDocument.status == RagDocumentStatus.ACTIVE.value)
             )
             result = await session.execute(stmt)
             rows = result.all()
@@ -167,7 +205,7 @@ class RagPGRepository:
         async with self.pg_client.session_factory() as session:
             result = await session.execute(
                 sql,
-                {"query": query_text, "status": RagDocumentStatus.COMPLETED.value, "limit": top_k},
+                {"query": query_text, "status": RagDocumentStatus.ACTIVE.value, "limit": top_k},
             )
             rows = result.all()
         candidates: list[RagChunkCandidate] = []
@@ -219,7 +257,7 @@ class RagPGRepository:
             result = await session.execute(
                 sql,
                 {
-                    "status": RagDocumentStatus.COMPLETED.value,
+                    "status": RagDocumentStatus.ACTIVE.value,
                     "date_start": date_start,
                     "date_end": date_end,
                     "limit": top_k,
@@ -256,6 +294,8 @@ class RagPGRepository:
             "CREATE INDEX IF NOT EXISTS idx_rag_chunks_parent_id ON rag_chunks(parent_id)",
             "CREATE INDEX IF NOT EXISTS idx_rag_documents_status ON rag_documents(status)",
             "CREATE INDEX IF NOT EXISTS idx_rag_chunks_fts ON rag_chunks USING GIN (to_tsvector('simple', content_text))",
+            "CREATE INDEX IF NOT EXISTS idx_rag_documents_file_hash ON rag_documents(file_hash)",
+            "CREATE INDEX IF NOT EXISTS idx_rag_chunks_doc_hash ON rag_chunks(doc_id, chunk_hash)",
         ]
         async with self.pg_client.session_factory() as session:
             for statement in statements:

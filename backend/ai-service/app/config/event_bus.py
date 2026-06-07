@@ -14,6 +14,7 @@ Luna AI 事件总线模块
 """
 
 import asyncio
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Coroutine
 
@@ -21,6 +22,16 @@ from typing import Any, Callable, Coroutine
 class EventType(str, Enum):
     """定义事件类型"""
     CONFIG_CHANGED = "ConfigChanged"
+    RAG_DOCUMENT_DEPRECATED = "RagDocumentDeprecated"
+
+
+@dataclass
+class RagDocumentDeprecatedEvent:
+    doc_id: str
+    
+    @property
+    def type(self) -> EventType:
+         return EventType.RAG_DOCUMENT_DEPRECATED
 
 
 class Event:
@@ -31,7 +42,7 @@ class Event:
 
 
 # 事件处理器函数签名，支持同步和异步函数
-EventHandler = Callable[[Event], Coroutine[Any, Any, None] | None]
+EventHandler = Callable[[Any], Coroutine[Any, Any, None] | None]
 
 
 class EventBus:

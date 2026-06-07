@@ -355,6 +355,23 @@ async def lifespan(app: FastAPI):
         rag_ingestion_service = RagIngestionService(rag_pg_repo, rag_qdrant_repo, inference_svc)
         rag_retrieval_orchestrator = RagRetrievalOrchestrator(rag_pg_repo, rag_qdrant_repo, inference_svc)
 
+        # 注册知识库文档废弃 GC 事件处理器
+        from app.config.event_bus import EventType
+        from app.config.event_bus import RagDocumentDeprecatedEvent
+        
+        async def on_document_deprecated(event: RagDocumentDeprecatedEvent) -> None:
+             logger.info(f"收到文档废弃事件，启动后台 GC 任务 doc_id={event.doc_id}")
+             try:
+                 # 获取待清理的旧 chunks 并从 PG 硬删除
+                 chunk_ids_to_delete = await rag_pg_repo.delete_document(event.doc_id)
+                 if rag_qdrant_repo and chunk_ids_to_delete:
+                     await rag_qdrant_repo.delete_chunks(chunk_ids_to_delete)
+                 logger.info(f"后台文档 GC 任务完成，成功回收旧文档空间 doc_id={event.doc_id}")
+             except Exception as exc:
+                 logger.error(f"后台文档 GC 任务异常 doc_id={event.doc_id} error={exc}")
+                 
+        await event_bus.subscribe(EventType.RAG_DOCUMENT_DEPRECATED, on_document_deprecated)
+
     # 8.5 初始化全局配置容器
     if pg_client:
         preset_repo = ConfigPresetPGRepo(pg_client)

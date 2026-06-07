@@ -24,6 +24,15 @@ from app.types.constants import (
 )
 
 
+class RagDocumentUpdateRequest(BaseModel):
+    """知识库文档更新请求"""
+    schema_version: str = Field(default=RAG_SCHEMA_VERSION)
+    strategy: RagChunkStrategy = Field(default=RagChunkStrategy.STRUCTURED_AST)
+    chunk_size: int = Field(default=500, ge=80, le=2000)
+    overlap: int = Field(default=50, ge=0, le=500)
+    regex_pattern: str | None = Field(default=None, max_length=500)
+
+
 class ChunkUnit(BaseModel):
     """
     RAG 标准切片单元。
@@ -42,6 +51,7 @@ class ChunkUnit(BaseModel):
     text: str = Field(min_length=1)
     estimated_tokens: int = Field(ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    chunk_hash: str = Field(default="", max_length=64)
 
     @field_validator("text")
     @classmethod
@@ -89,6 +99,9 @@ class RagDocumentDTO(BaseModel):
     source_type: RagSourceType
     status: RagDocumentStatus
     estimated_tokens: int
+    file_hash: str | None = None
+    file_size: int | None = None
+    previous_version_id: str | None = None
     error_log: str | None = None
     created_at: datetime | None = None
 

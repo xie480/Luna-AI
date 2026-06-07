@@ -120,16 +120,34 @@ class BaseChunker(ABC):
         chunk_id: str | None = None,
     ) -> ChunkUnit:
         """创建标准 ChunkUnit，并执行空文本与 Token 估算。"""
+        import hashlib
+        import json
+
         cleaned = self._normalize_text(text)
         if not cleaned:
             raise ValueError("不能创建空切片")
+        
+        meta = metadata or {}
+        # 为了保证增量比对的 chunk_hash 一致性，我们将文本与关键元数据混合做 Hash
+        # 提取会影响内容语义的 metadata，如 title，但忽略动态或可变的警告标识
+        hash_payload = cleaned
+        summary = meta.get("summary", "")
+        title = meta.get("title", "")
+        if summary:
+            hash_payload += f"|summary:{summary}"
+        if title:
+            hash_payload += f"|title:{title}"
+            
+        chunk_hash = hashlib.sha256(hash_payload.encode('utf-8')).hexdigest()
+
         return ChunkUnit(
             chunk_id=chunk_id or generate_string_id(),
             document_id=document_id,
             parent_id=parent_id,
             text=cleaned,
             estimated_tokens=estimate_tokens(cleaned),
-            metadata=metadata or {},
+            metadata=meta,
+            chunk_hash=chunk_hash,
         )
 
     def _split_oversized_text(

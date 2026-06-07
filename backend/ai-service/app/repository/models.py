@@ -165,6 +165,9 @@ class RagDocument(Base):
     source_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     estimated_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    previous_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
@@ -189,4 +192,5 @@ class RagChunk(Base):
     parent_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     content_text: Mapped[str] = mapped_column(Text, nullable=False)
     meta_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    chunk_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

@@ -71,7 +71,24 @@ class RagIngestionService:
         options: IngestionOptions,
         trace_id: str,
     ) -> RagIngestionTaskDTO:
-        """提交本地文件摄入任务。"""
+        """提交本地文件摄入任务。实现 L1 与 L2 强防重逻辑。"""
+        import hashlib
+        
+        file_hash = hashlib.sha256(content).hexdigest()
+        file_size = len(content)
+        
+        # L1 物理 Hash 防重
+        existing_docs = await self.pg_repo.get_document_by_hash(file_hash)
+        if existing_docs:
+            doc = existing_docs[0]
+            raise ValueError(f"文档已存在于知识库中 (DOC_ID: {doc.id})")
+            
+        # L2 语义防重 (相同文件名且大小差异 < 1%)
+        similar_docs = await self.pg_repo.get_documents_by_filename(filename)
+        for doc in similar_docs:
+            if doc.file_size and abs(doc.file_size - file_size) / float(doc.file_size) < 0.01:
+                raise ValueError(f"存在高度相似的文档 (DOC_ID: {doc.id})，请使用更新覆盖代替新增")
+
         document_id = generate_string_id()
         task_id = generate_string_id()
         await self.pg_repo.create_document(
@@ -79,6 +96,8 @@ class RagIngestionService:
             filename=filename,
             source_type=RagSourceType.LOCAL_FILE,
             status=RagDocumentStatus.PARSING,
+            file_hash=file_hash,
+            file_size=file_size,
         )
         task = asyncio.create_task(
             self._run_file_ingestion(task_id, document_id, filename, content, options, trace_id)
@@ -87,7 +106,14 @@ class RagIngestionService:
         return RagIngestionTaskDTO(task_id=task_id, document_id=document_id)
 
     async def submit_url(self, request: RagUrlIngestionRequest, trace_id: str) -> RagIngestionTaskDTO:
-        """提交 URL 摄入任务。"""
+        """提交 URL 摄入任务。由于 URL 内容需抓取后才知晓，初期只依赖 URL 本身做 L2 防重。"""
+        
+        # L2 语义防重
+        similar_docs = await self.pg_repo.get_documents_by_filename(request.url)
+        if similar_docs:
+            doc = similar_docs[0]
+            raise ValueError(f"该网址已存在于知识库中 (DOC_ID: {doc.id})，请使用更新覆盖代替新增")
+
         document_id = generate_string_id()
         task_id = generate_string_id()
         await self.pg_repo.create_document(
@@ -182,7 +208,13 @@ class RagIngestionService:
         options: IngestionOptions,
         trace_id: str,
     ) -> None:
-        """执行清洗后内容的切片、向量化与双库提交。"""
+        """
+        执行清洗后内容的切片、向量化与双库提交。
+        如果当前文档是更新版本 (有 previous_version_id)，则执行切片级增量更新。
+        """
+        import hashlib
+        from app.infrastructure.qdrant import UpsertPoint
+        
         text_tokens = estimate_tokens(clean_content.text)
         config = ChunkerConfig(
             chunk_size=options.chunk_size,
@@ -200,6 +232,21 @@ class RagIngestionService:
                 "strategy": options.strategy.value,
             },
         )
+        
+        doc = await self.pg_repo.get_document(document_id)
+        if not doc:
+            raise ValueError(f"文档不存在: {document_id}")
+            
+        # 若为更新，URL 可能在这一步才能拿到 Hash
+        if not doc.file_hash:
+            file_hash = hashlib.sha256(clean_content.text.encode('utf-8')).hexdigest()
+            await self.pg_repo.pg_client.session_factory().execute(
+                f"UPDATE rag_documents SET file_hash = '{file_hash}' WHERE id = '{document_id}'"
+            )
+
+        original_doc_id = doc.previous_version_id
+        
+        # 1. 保存 Chunk 文本记录
         await self.pg_repo.save_chunks(chunks)
         await self.pg_repo.update_document_status(
             document_id=document_id,
@@ -209,22 +256,91 @@ class RagIngestionService:
             task_id=task_id,
             estimated_tokens=text_tokens,
         )
-        vectors = await self._embed_chunks(chunks)
+
         if self.qdrant_repo is None:
             raise RuntimeError("RAG Qdrant 仓库不可用，无法完成知识向量入库")
-        await self.qdrant_repo.upsert_chunks(chunks, vectors)
-        await self.pg_repo.update_document_status(
-            document_id=document_id,
-            from_status=RagDocumentStatus.EMBEDDING,
-            to_status=RagDocumentStatus.COMPLETED,
-            trace_id=trace_id,
-            task_id=task_id,
-            estimated_tokens=text_tokens,
-        )
+            
+        # 2. 增量比对与向量重用逻辑
+        if original_doc_id:
+            logger.info(f"触发增量更新逻辑 document_id={document_id} original_doc_id={original_doc_id}")
+            old_chunk_map = await self.pg_repo.get_chunk_hash_map(original_doc_id)
+            reused_chunks: list[ChunkUnit] = []
+            needs_embed_chunks: list[ChunkUnit] = []
+            old_to_new_id_map: dict[str, str] = {}
+            
+            for chunk in chunks:
+                if chunk.chunk_hash in old_chunk_map:
+                    old_chunk_id = old_chunk_map[chunk.chunk_hash]
+                    old_to_new_id_map[old_chunk_id] = chunk.chunk_id
+                    reused_chunks.append(chunk)
+                else:
+                    needs_embed_chunks.append(chunk)
+                    
+            # 2.1 从 Qdrant 取回可复用旧向量
+            old_vectors = await self.qdrant_repo.batch_retrieve_vectors(list(old_to_new_id_map.keys()))
+            reused_points: list[UpsertPoint] = []
+            for old_cid, new_cid in old_to_new_id_map.items():
+                if old_cid in old_vectors:
+                    reused_points.append(
+                        UpsertPoint(
+                            id=int(new_cid),
+                            vector=old_vectors[old_cid],
+                            payload={"chunk_id": new_cid, "doc_id": document_id}
+                        )
+                    )
+            
+            # 2.2 为新增切片计算向量
+            new_vectors = await self._embed_chunks(needs_embed_chunks)
+            new_points: list[UpsertPoint] = []
+            for chunk, vec in zip(needs_embed_chunks, new_vectors):
+                new_points.append(
+                    UpsertPoint(
+                        id=int(chunk.chunk_id),
+                        vector=vec,
+                        payload={"chunk_id": chunk.chunk_id, "doc_id": document_id}
+                    )
+                )
+            
+            # 2.3 批量注入所有切片
+            all_points = reused_points + new_points
+            await self.qdrant_repo.bulk_upsert(all_points)
+            logger.info(f"增量更新完成，复用 {len(reused_points)} 个旧切片，新增计算 {len(new_points)} 个切片")
+        else:
+            # 常规全量更新
+            vectors = await self._embed_chunks(chunks)
+            await self.qdrant_repo.upsert_chunks(chunks, vectors)
+
+        # 3. 原子切换 (Commit) 并处理废弃文档
+        async with self.pg_repo.pg_client.session_factory() as session:
+            from sqlalchemy import update
+            from app.repository.models import RagDocument
+            
+            # 激活新文档
+            stmt_active = update(RagDocument).where(RagDocument.id == document_id).values(
+                status=RagDocumentStatus.ACTIVE.value,
+                estimated_tokens=text_tokens
+            )
+            await session.execute(stmt_active)
+            
+            # 废弃旧文档
+            if original_doc_id:
+                stmt_deprecate = update(RagDocument).where(RagDocument.id == original_doc_id).values(
+                    status=RagDocumentStatus.DEPRECATED.value
+                )
+                await session.execute(stmt_deprecate)
+                
+            await session.commit()
+            
         logger.info(
             f"RAG 摄入任务完成 trace_id={trace_id} task_id={task_id} "
             f"document_id={document_id} chunks_count={len(chunks)}"
         )
+        
+        # 触发清理 Worker 回收旧文档
+        if original_doc_id:
+            from app.config.event_bus import event_bus
+            from app.config.event_bus import RagDocumentDeprecatedEvent
+            await event_bus.publish(RagDocumentDeprecatedEvent(doc_id=original_doc_id))
 
     async def _embed_chunks(self, chunks: list[ChunkUnit]) -> list[list[float]]:
         """串行向量化切片，避免本地 CPU 模型被并发压垮。"""

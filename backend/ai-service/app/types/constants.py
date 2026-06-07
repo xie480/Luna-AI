@@ -80,8 +80,9 @@ class RagDocumentStatus(str, Enum):
 
     PARSING = "parsing"
     EMBEDDING = "embedding"
-    COMPLETED = "completed"
+    ACTIVE = "active"
     FAILED = "failed"
+    DEPRECATED = "deprecated"
 
 
 class RagChunkStrategy(str, Enum):

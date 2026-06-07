@@ -64,6 +64,32 @@ class RagQdrantRepository:
         await self.client.upsert(RAG_QDRANT_COLLECTION, points)
         logger.info(f"RAG 知识切片向量写入完成 chunks_count={len(points)}")
 
+    async def bulk_upsert(self, points: list[UpsertPoint]) -> None:
+        """批量更新向量点（用于直接写入从旧文档取回的向量和新向量）"""
+        if not points:
+            return
+        await self.client.upsert(RAG_QDRANT_COLLECTION, points)
+        logger.info(f"RAG Qdrant 批量向量写入完成 count={len(points)}")
+
+    async def batch_retrieve_vectors(self, chunk_ids: list[str]) -> dict[str, list[float]]:
+        """从 Qdrant 批量拉取现有的向量，用于增量更新复用。"""
+        if not chunk_ids:
+            return {}
+        
+        # 将 chunk_id 转为 Qdrant 需要的 int ID
+        qdrant_ids = [int(cid) for cid in chunk_ids if cid.isdigit()]
+        if not qdrant_ids:
+            return {}
+            
+        results = await self.client.retrieve(RAG_QDRANT_COLLECTION, qdrant_ids)
+        vectors_map: dict[str, list[float]] = {}
+        for result in results:
+            if hasattr(result, 'vector') and result.vector:
+                vectors_map[str(result.id)] = result.vector
+        
+        logger.info(f"RAG Qdrant 批量检索向量命中 hit_count={len(vectors_map)} req_count={len(chunk_ids)}")
+        return vectors_map
+
     async def search(self, query_vector: list[float], top_k: int) -> list[RagVectorHit]:
         """执行知识库向量检索并返回轻量映射结果。"""
         if not query_vector:

@@ -28,7 +28,7 @@ from app.rag.types import (
     ChunkUnit,
 )
 from app.repository.rag_pg import RagPGRepository
-from app.types.constants import RagChunkStrategy
+from app.types.constants import RagChunkStrategy, RagSourceType, RagDocumentStatus
 from app.types.errors import ErrorCode, ResponseModel, create_error_response, create_success_response
 from app.utils.snowflake import generate_string_id
 
@@ -74,7 +74,7 @@ async def upload_knowledge_file(
     overlap: Annotated[int, Form(ge=0, le=500)] = 50,
     regex_pattern: Annotated[str | None, Form(max_length=500)] = None,
 ) -> ResponseModel:
-    """提交本地知识文件异步摄入任务。"""
+    """提交本地知识文件异步摄入任务。支持拦截重复上传。"""
     if not file.filename:
         return create_error_response(ErrorCode.BUSINESS_ERROR, "文件名不能为空", trace_id)
     content = await file.read()
@@ -88,6 +88,10 @@ async def upload_knowledge_file(
             trace_id=trace_id,
         )
         return create_success_response(result.model_dump(), trace_id)
+    except ValueError as exc:
+        # 特别捕获防重产生的 ValueError，不以严重错误级打日志
+        logger.warning(f"RAG 知识入库拦截 trace_id={trace_id} reason={exc}")
+        return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
     except Exception as exc:
         logger.error(f"提交 RAG 文件摄入失败 trace_id={trace_id} filename={file.filename} error={exc}")
         return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
@@ -103,9 +107,62 @@ async def ingest_knowledge_url(
     try:
         result = await service.submit_url(payload, trace_id)
         return create_success_response(result.model_dump(), trace_id)
+    except ValueError as exc:
+        logger.warning(f"RAG 知识 URL 入库拦截 trace_id={trace_id} reason={exc}")
+        return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
     except Exception as exc:
         logger.error(f"提交 RAG URL 摄入失败 trace_id={trace_id} url={payload.url} error={exc}")
         return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
+
+@router.put("/knowledge/{document_id}", response_model=ResponseModel)
+async def update_knowledge_document(
+    document_id: str,
+    file: Annotated[UploadFile, File(...)],
+    trace_id: Annotated[str, Depends(get_trace_id)],
+    service: Annotated[RagIngestionService, Depends(get_ingestion_service)],
+    repo: Annotated[RagPGRepository, Depends(get_rag_pg_repo)],
+    strategy: Annotated[RagChunkStrategy, Form()] = RagChunkStrategy.STRUCTURED_AST,
+    chunk_size: Annotated[int, Form(ge=80, le=2000)] = 500,
+    overlap: Annotated[int, Form(ge=0, le=500)] = 50,
+    regex_pattern: Annotated[str | None, Form(max_length=500)] = None,
+) -> ResponseModel:
+    """平滑更新本地知识库文档 (Blue-Green Update)，支持增量切片与向量复用。"""
+    if not file.filename:
+        return create_error_response(ErrorCode.BUSINESS_ERROR, "文件名不能为空", trace_id)
+        
+    doc = await repo.get_document(document_id)
+    if not doc:
+         return create_error_response(ErrorCode.BUSINESS_ERROR, "指定的知识库文档不存在", trace_id)
+         
+    content = await file.read()
+    if not content:
+        return create_error_response(ErrorCode.BUSINESS_ERROR, "上传文件内容不能为空", trace_id)
+        
+    import hashlib
+    file_hash = hashlib.sha256(content).hexdigest()
+    file_size = len(content)
+
+    new_doc_id = generate_string_id()
+    task_id = generate_string_id()
+    
+    # 建立具有 previous_version_id 的新记录
+    await repo.create_document(
+        document_id=new_doc_id,
+        filename=file.filename,
+        source_type=RagSourceType.LOCAL_FILE,
+        status=RagDocumentStatus.PARSING,
+        file_hash=file_hash,
+        file_size=file_size,
+        previous_version_id=document_id,
+    )
+    
+    options = IngestionOptions(strategy=strategy, chunk_size=chunk_size, overlap=overlap, regex_pattern=regex_pattern)
+    task = asyncio.create_task(
+        service._run_file_ingestion(task_id, new_doc_id, file.filename, content, options, trace_id)
+    )
+    service._track_task(task)
+    
+    return create_success_response({"task_id": task_id, "new_document_id": new_doc_id, "original_document_id": document_id}, trace_id)
 
 
 async def _generate_preview_response(
