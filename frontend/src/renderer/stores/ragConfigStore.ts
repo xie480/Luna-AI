@@ -22,6 +22,12 @@ export interface RagConfigState {
   regexParams: RegexParams;
   
   // 预览沙盒状态
+  isStrategyDebuggerOpen: boolean;
+  previewSourceType: 'text' | 'file' | 'url' | null;
+  previewSourceText: string;
+  previewSourceFile: File | null;
+  previewSourceUrl: string | null;
+  
   isPreviewLoading: boolean;
   previewError: string | null;
   previewResults: ChunkPreviewUnit[];
@@ -35,7 +41,11 @@ export interface RagConfigState {
   updateSemanticParams: (params: Partial<SemanticParams>) => void;
   updateRegexParams: (params: Partial<RegexParams>) => void;
   
-  fetchPreviewChunks: (testText: string) => Promise<void>;
+  setStrategyDebuggerOpen: (isOpen: boolean) => void;
+  setPreviewSourceText: (text: string) => void;
+  setPreviewSourceFile: (file: File) => void;
+  setPreviewSourceUrl: (url: string) => void;
+  fetchPreviewChunks: () => Promise<void>;
   clearPreview: () => void;
   
   // 辅助方法：生成用于 API 请求的 config
@@ -51,6 +61,12 @@ export const useRagConfigStore = create<RagConfigState>()(
       structuredParams: { includeMetadata: true, keepTablesIntact: true },
       semanticParams: { delimiters: ['\n\n', '\n', '.', '!', '?'], enableParentChild: true },
       regexParams: { startRegex: '', endRegex: '', maxTokenFallback: 1000 },
+      
+      isStrategyDebuggerOpen: false,
+      previewSourceType: null,
+      previewSourceText: '',
+      previewSourceFile: null,
+      previewSourceUrl: null,
       
       isPreviewLoading: false,
       previewError: null,
@@ -99,28 +115,50 @@ export const useRagConfigStore = create<RagConfigState>()(
         return payload;
       },
 
-      fetchPreviewChunks: async (testText) => {
-        if (!testText.trim()) {
+      setStrategyDebuggerOpen: (isOpen) => set({ isStrategyDebuggerOpen: isOpen }),
+      
+      setPreviewSourceText: (text) => set({ previewSourceType: 'text', previewSourceText: text, previewSourceFile: null, previewSourceUrl: null }),
+      setPreviewSourceFile: (file) => set({ previewSourceType: 'file', previewSourceFile: file, previewSourceText: '', previewSourceUrl: null }),
+      setPreviewSourceUrl: (url) => set({ previewSourceType: 'url', previewSourceUrl: url, previewSourceText: '', previewSourceFile: null }),
+
+      fetchPreviewChunks: async () => {
+        const state = get();
+        if (!state.previewSourceType) {
+          set({ previewError: '未选择预览目标，请先添加文本、文件或网址', previewResults: [], previewTotalChunks: 0, previewWarnings: [] });
+          return;
+        }
+        if (state.previewSourceType === 'text' && !state.previewSourceText.trim()) {
           set({ previewError: '预览文本不能为空', previewResults: [], previewTotalChunks: 0, previewWarnings: [] });
           return;
         }
         
         set({ isPreviewLoading: true, previewError: null });
         try {
-          const state = get();
           const basePayload = state.buildRequestPayload();
-          const payload = {
-            ...basePayload,
-            text: testText,
-            timeout_seconds: 8.0
-          };
+          let response;
           
-          const response = await ragService.getChunkPreview(payload);
-          set({ 
-            previewResults: response.chunks, 
+          if (state.previewSourceType === 'text') {
+            response = await ragService.getChunkPreview({
+              ...basePayload,
+              text: state.previewSourceText,
+              timeout_seconds: 8.0
+            });
+          } else if (state.previewSourceType === 'file' && state.previewSourceFile) {
+            response = await ragService.getChunkPreviewFromFile(state.previewSourceFile, basePayload);
+          } else if (state.previewSourceType === 'url' && state.previewSourceUrl) {
+            response = await ragService.getChunkPreviewFromUrl({
+              ...basePayload,
+              url: state.previewSourceUrl
+            });
+          } else {
+            throw new Error("预览状态异常");
+          }
+
+          set({
+            previewResults: response.chunks,
             previewTotalChunks: response.total_chunks,
             previewWarnings: response.warnings,
-            isPreviewLoading: false 
+            isPreviewLoading: false
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
@@ -128,7 +166,7 @@ export const useRagConfigStore = create<RagConfigState>()(
         }
       },
       
-      clearPreview: () => set({ previewResults: [], previewTotalChunks: 0, previewWarnings: [], previewError: null }),
+      clearPreview: () => set({ previewSourceType: null, previewSourceText: '', previewSourceFile: null, previewSourceUrl: null, previewResults: [], previewTotalChunks: 0, previewWarnings: [], previewError: null }),
     }),
     { 
       name: 'luna-rag-config-storage',

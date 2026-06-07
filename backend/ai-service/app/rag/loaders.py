@@ -138,8 +138,12 @@ class DocumentLoader:
         """解析 PDF 页面正文并去除常见页眉页脚区域。"""
         try:
             import pdfplumber
+            import logging
         except Exception as exc:
             raise ContentExtractionError("pdfplumber 依赖未安装，无法解析 PDF") from exc
+
+        # 抑制 pdfminer 关于字体 FontBBox 解析的常见警告，避免刷屏干扰
+        logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
         parts: list[str] = []
         with pdfplumber.open(io.BytesIO(content)) as pdf:

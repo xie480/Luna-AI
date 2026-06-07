@@ -13,6 +13,7 @@ import { ClothingPanel } from '../ClothingPanel/ClothingPanel';
 import { SettingsPanel } from '../Settings/SettingsPanel';
 import { PromptPanel } from '../PromptPanel/PromptPanel';
 import { MemoryPanel } from '../MemoryPanel/MemoryPanel';
+import { KnowledgeBasePanel } from '../KnowledgeBase/KnowledgeBasePanel';
 import './Modal.css';
 
 /** 最小窗口尺寸 */
@@ -27,6 +28,7 @@ const PANEL_TITLES: Record<ModalPanelType, string> = {
   dag: '任务流',
   memory: '记忆',
   prompts: 'Prompt 管理',
+  knowledge: '知识库',
   settings: '设置',
   logs: '日志',
   clothing: '服装配置',
@@ -69,7 +71,7 @@ export const Modal: React.FC = () => {
     if (panel === 'prompts') {
       return { w: 1300, h: 700 };
     }
-    if (panel === 'settings' || panel === 'memory') {
+    if (panel === 'settings' || panel === 'memory' || panel === 'knowledge') {
       return { w: 900, h: 600 };
     }
     return { w: 680, h: 520 };
@@ -297,6 +299,13 @@ export const Modal: React.FC = () => {
           {activeModalPanel === 'prompts' && (
             <div className="panel prompts-panel">
               <PromptPanel />
+            </div>
+          )}
+
+          {/* 知识库面板 */}
+          {activeModalPanel === 'knowledge' && (
+            <div className="panel knowledge-panel">
+              <KnowledgeBasePanel />
             </div>
           )}
 

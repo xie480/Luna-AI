@@ -5,7 +5,8 @@ import {
   IngestionProgressSnapshot,
   RAG_POLL_INTERVAL_MS,
   RAG_POLL_TIMEOUT_MS,
-  RagUrlIngestionPayload
+  RagUrlIngestionPayload,
+  RAG_MAX_UPLOAD_BYTES
 } from '../types/rag';
 import { ragService } from '../services/ragService';
 import { useRagConfigStore } from './ragConfigStore';
@@ -14,14 +15,24 @@ interface KnowledgeState {
   documents: KnowledgeDocumentView[];
   filterState: KnowledgeFilterState;
   
+  // 待处理队列（未真正调用后端入库 API 前）
+  pendingFiles: File[];
+  pendingUrls: string[];
+  
   globalUploadProgress: number; // 0-100
   isPolling: boolean;
   
   // Actions
   setFilterState: (filter: Partial<KnowledgeFilterState>) => void;
   fetchKnowledgeList: () => Promise<void>;
-  submitLocalFile: (file: File) => Promise<void>;
-  submitUrl: (url: string) => Promise<void>;
+  
+  addPendingFile: (file: File) => void;
+  removePendingFile: (index: number) => void;
+  addPendingUrl: (url: string) => void;
+  removePendingUrl: (index: number) => void;
+  clearPendingQueue: () => void;
+  
+  submitAllPending: () => Promise<void>;
   deleteKnowledge: (documentId: string) => Promise<void>;
   
   // Polling loop
@@ -44,6 +55,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     sourceType: 'all',
     status: 'all'
   },
+  
+  pendingFiles: [],
+  pendingUrls: [],
   
   globalUploadProgress: 0,
   isPolling: false,
@@ -77,50 +91,92 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
   },
   
-  submitLocalFile: async (file: File) => {
-    const config = useRagConfigStore.getState().buildRequestPayload();
-    const res = await ragService.submitLocalFile(file, config);
-    
-    // 添加一个占位的 document 到列表中
-    const newDoc: KnowledgeDocumentView = {
-      schema_version: 'rag.v1',
-      id: res.document_id,
-      filename: file.name,
-      source_type: 'local_file',
-      status: 'parsing',
-      display_status: 'parsing',
-      estimated_tokens: 0,
-      error_log: null,
-      created_at: new Date().toISOString()
-    };
-    
-    set((state) => ({ documents: [newDoc, ...state.documents] }));
-    pollingStartTimes[res.document_id] = Date.now();
-    get().startPolling();
+  addPendingFile: (file: File) => {
+    if (file.size > RAG_MAX_UPLOAD_BYTES) {
+      throw new Error(`文件大小超过限制 (最大 50MB)`);
+    }
+    const validExts = ['.txt', '.md', '.pdf', '.docx'];
+    const name = file.name.toLowerCase();
+    if (!validExts.some(ext => name.endsWith(ext))) {
+      throw new Error(`不支持的文件格式，仅支持 txt, md, pdf, docx`);
+    }
+    set((state) => ({ pendingFiles: [...state.pendingFiles, file] }));
   },
+  removePendingFile: (index: number) => set((state) => ({ pendingFiles: state.pendingFiles.filter((_, i) => i !== index) })),
+  addPendingUrl: (url: string) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('仅支持 http 或 https 协议');
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message === '仅支持 http 或 https 协议') {
+        throw e;
+      }
+      throw new Error(`非法的网址格式: ${url}`);
+    }
+    set((state) => ({ pendingUrls: [...state.pendingUrls, url] }));
+  },
+  removePendingUrl: (index: number) => set((state) => ({ pendingUrls: state.pendingUrls.filter((_, i) => i !== index) })),
+  clearPendingQueue: () => set({ pendingFiles: [], pendingUrls: [] }),
   
-  submitUrl: async (url: string) => {
+  submitAllPending: async () => {
+    const { pendingFiles, pendingUrls } = get();
+    if (pendingFiles.length === 0 && pendingUrls.length === 0) return;
+    
     const config = useRagConfigStore.getState().buildRequestPayload();
-    const payload: RagUrlIngestionPayload = {
-      ...config,
-      url
-    };
-    const res = await ragService.submitUrl(payload);
+    const newDocs: KnowledgeDocumentView[] = [];
     
-    const newDoc: KnowledgeDocumentView = {
-      schema_version: 'rag.v1',
-      id: res.document_id,
-      filename: url,
-      source_type: 'url',
-      status: 'parsing',
-      display_status: 'parsing',
-      estimated_tokens: 0,
-      error_log: null,
-      created_at: new Date().toISOString()
-    };
+    // 提交所有文件
+    for (const file of pendingFiles) {
+      try {
+        const res = await ragService.submitLocalFile(file, config);
+        newDocs.push({
+          schema_version: 'rag.v1',
+          id: res.document_id,
+          filename: file.name,
+          source_type: 'local_file',
+          status: 'parsing',
+          display_status: 'parsing',
+          estimated_tokens: 0,
+          error_log: null,
+          created_at: new Date().toISOString()
+        });
+        pollingStartTimes[res.document_id] = Date.now();
+      } catch (err) {
+        console.error(`提交文件 ${file.name} 失败`, err);
+        throw new Error(`提交文件 ${file.name} 失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     
-    set((state) => ({ documents: [newDoc, ...state.documents] }));
-    pollingStartTimes[res.document_id] = Date.now();
+    // 提交所有 URL
+    for (const url of pendingUrls) {
+      try {
+        const res = await ragService.submitUrl({ ...config, url });
+        newDocs.push({
+          schema_version: 'rag.v1',
+          id: res.document_id,
+          filename: url,
+          source_type: 'url',
+          status: 'parsing',
+          display_status: 'parsing',
+          estimated_tokens: 0,
+          error_log: null,
+          created_at: new Date().toISOString()
+        });
+        pollingStartTimes[res.document_id] = Date.now();
+      } catch (err) {
+        console.error(`提交 URL ${url} 失败`, err);
+        throw new Error(`提交 URL ${url} 失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    
+    set((state) => ({
+      documents: [...newDocs, ...state.documents],
+      pendingFiles: [],
+      pendingUrls: []
+    }));
+    
     get().startPolling();
   },
   

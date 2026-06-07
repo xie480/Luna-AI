@@ -135,6 +135,94 @@ class RagService {
     }
   }
 
+  /** 获取切片预览 (本地文件)，先提取文本再切片返回。 */
+  async getChunkPreviewFromFile(file: File, config: RagChunkRequestPayload): Promise<ChunkPreviewResponse> {
+    if (this.previewAbortController) {
+      this.previewAbortController.abort(PREVIEW_ABORT_REASON_NEW_REQUEST);
+    }
+
+    const controller = new AbortController();
+    this.previewAbortController = controller;
+    const timeoutId = window.setTimeout(() => {
+      controller.abort(PREVIEW_ABORT_REASON_TIMEOUT);
+    }, RAG_PREVIEW_TIMEOUT_MS);
+
+    try {
+      const formData = new FormData();
+      formData.set('file', file);
+      formData.set('strategy', config.strategy);
+      formData.set('chunk_size', String(config.chunk_size));
+      formData.set('overlap', String(config.overlap));
+      if (config.regex_pattern) {
+        formData.set('regex_pattern', config.regex_pattern);
+      }
+
+      const response = await fetch(`${RAG_API_BASE_URL}/chunk/preview/file`, {
+        method: 'POST',
+        headers: {
+          'X-Trace-ID': getTraceId(),
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+      return await parseRagResponse<ChunkPreviewResponse>(response);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const reason = String(controller.signal.reason || '');
+        if (reason === PREVIEW_ABORT_REASON_TIMEOUT) {
+          throw new Error('文件解析预览超时，可能文件过大或策略计算复杂度过高');
+        }
+        throw new Error('已取消上一轮文件切片预览请求');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (this.previewAbortController === controller) {
+        this.previewAbortController = null;
+      }
+    }
+  }
+
+  /** 获取切片预览 (URL)，前后端连通后抓取文本并切片返回。 */
+  async getChunkPreviewFromUrl(payload: RagUrlIngestionPayload): Promise<ChunkPreviewResponse> {
+    if (this.previewAbortController) {
+      this.previewAbortController.abort(PREVIEW_ABORT_REASON_NEW_REQUEST);
+    }
+
+    const controller = new AbortController();
+    this.previewAbortController = controller;
+    const timeoutId = window.setTimeout(() => {
+      controller.abort(PREVIEW_ABORT_REASON_TIMEOUT);
+    }, RAG_PREVIEW_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(`${RAG_API_BASE_URL}/chunk/preview/url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Trace-ID': getTraceId(),
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      return await parseRagResponse<ChunkPreviewResponse>(response);
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const reason = String(controller.signal.reason || '');
+        if (reason === PREVIEW_ABORT_REASON_TIMEOUT) {
+          throw new Error('网址抓取预览超时，可能是目标网站响应缓慢');
+        }
+        throw new Error('已取消上一轮网址切片预览请求');
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+      if (this.previewAbortController === controller) {
+        this.previewAbortController = null;
+      }
+    }
+  }
+
   /** 提交本地文件摄入任务，后端立即返回 task_id 与 document_id。 */
   async submitLocalFile(file: File, config: RagChunkRequestPayload): Promise<RagIngestionTaskResponse> {
     const formData = new FormData();

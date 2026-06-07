@@ -25,6 +25,7 @@ from app.rag.types import (
     RagDocumentDTO,
     RagSearchRequest,
     RagUrlIngestionRequest,
+    ChunkUnit,
 )
 from app.repository.rag_pg import RagPGRepository
 from app.types.constants import RagChunkStrategy
@@ -107,20 +108,30 @@ async def ingest_knowledge_url(
         return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
 
 
-@router.post("/chunk/preview", response_model=ResponseModel)
-async def preview_chunks(payload: ChunkPreviewRequest, trace_id: Annotated[str, Depends(get_trace_id)]) -> ResponseModel:
-    """同步预览切片策略，最多返回前 5 个切片。"""
+async def _generate_preview_response(
+    strategy: RagChunkStrategy,
+    chunk_size: int,
+    overlap: int,
+    max_fallback_tokens: int | None,
+    regex_pattern: str | None,
+    text: str,
+    timeout_seconds: float,
+    trace_id: str,
+) -> ResponseModel:
+    """内部辅助函数，统一执行切片预览并组装响应。"""
     try:
         config = ChunkerConfig(
-            chunk_size=payload.chunk_size,
-            overlap=payload.overlap,
-            max_fallback_tokens=payload.max_fallback_tokens,
-            regex_pattern=payload.regex_pattern,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            max_fallback_tokens=max_fallback_tokens,
+            regex_pattern=regex_pattern,
         )
-        chunker = build_chunker(payload.strategy, config)
+        chunker = build_chunker(strategy, config)
+        # 对待预览文本做长度硬截断，防止解析出超长文本导致的切片计算瘫痪
+        truncated_text = text[:10000]
         chunks = await asyncio.wait_for(
-            asyncio.to_thread(chunker.chunk, generate_string_id(), payload.text, {"preview": True}),
-            timeout=payload.timeout_seconds,
+            asyncio.to_thread(chunker.chunk, generate_string_id(), truncated_text, {"preview": True}),
+            timeout=timeout_seconds,
         )
         warnings = [chunk.metadata.get("warning", "") for chunk in chunks if chunk.metadata.get("warning")]
         response = ChunkPreviewResponse(chunks=chunks[:5], total_chunks=len(chunks), warnings=list(dict.fromkeys(warnings)))
@@ -128,8 +139,82 @@ async def preview_chunks(payload: ChunkPreviewRequest, trace_id: Annotated[str, 
     except asyncio.TimeoutError:
         return create_error_response(ErrorCode.BUSINESS_ERROR, "切片预览超时，策略可能存在计算风险", trace_id)
     except Exception as exc:
-        logger.warning(f"RAG 切片预览失败 trace_id={trace_id} error={exc}")
+        logger.warning(f"RAG 切片预览计算失败 trace_id={trace_id} error={exc}")
         return create_error_response(ErrorCode.BUSINESS_ERROR, str(exc), trace_id)
+
+
+@router.post("/chunk/preview", response_model=ResponseModel)
+async def preview_chunks(payload: ChunkPreviewRequest, trace_id: Annotated[str, Depends(get_trace_id)]) -> ResponseModel:
+    """同步预览切片策略 (纯文本)，最多返回前 5 个切片。"""
+    return await _generate_preview_response(
+        strategy=payload.strategy,
+        chunk_size=payload.chunk_size,
+        overlap=payload.overlap,
+        max_fallback_tokens=payload.max_fallback_tokens,
+        regex_pattern=payload.regex_pattern,
+        text=payload.text,
+        timeout_seconds=payload.timeout_seconds,
+        trace_id=trace_id,
+    )
+
+
+@router.post("/chunk/preview/file", response_model=ResponseModel)
+async def preview_chunks_file(
+    file: Annotated[UploadFile, File(...)],
+    trace_id: Annotated[str, Depends(get_trace_id)],
+    service: Annotated[RagIngestionService, Depends(get_ingestion_service)],
+    strategy: Annotated[RagChunkStrategy, Form()] = RagChunkStrategy.STRUCTURED_AST,
+    chunk_size: Annotated[int, Form(ge=80, le=2000)] = 500,
+    overlap: Annotated[int, Form(ge=0, le=500)] = 50,
+    regex_pattern: Annotated[str | None, Form(max_length=500)] = None,
+) -> ResponseModel:
+    """同步预览切片策略 (本地文件)，提取文本后进行切片。"""
+    if not file.filename:
+        return create_error_response(ErrorCode.BUSINESS_ERROR, "文件名不能为空", trace_id)
+    content = await file.read()
+    if not content:
+        return create_error_response(ErrorCode.BUSINESS_ERROR, "文件内容不能为空", trace_id)
+    try:
+        # 复用 IngestionService 中的 document_loader 提取文本
+        clean_content = await service.document_loader.extract_from_bytes(file.filename, content)
+        return await _generate_preview_response(
+            strategy=strategy,
+            chunk_size=chunk_size,
+            overlap=overlap,
+            max_fallback_tokens=1000,
+            regex_pattern=regex_pattern,
+            text=clean_content.text,
+            timeout_seconds=8.0,
+            trace_id=trace_id,
+        )
+    except Exception as exc:
+        logger.warning(f"RAG 文件预览提取文本失败 trace_id={trace_id} error={exc}")
+        return create_error_response(ErrorCode.BUSINESS_ERROR, f"解析文件失败: {exc}", trace_id)
+
+
+@router.post("/chunk/preview/url", response_model=ResponseModel)
+async def preview_chunks_url(
+    payload: RagUrlIngestionRequest,
+    trace_id: Annotated[str, Depends(get_trace_id)],
+    service: Annotated[RagIngestionService, Depends(get_ingestion_service)],
+) -> ResponseModel:
+    """同步预览切片策略 (URL)，抓取网页正文后进行切片。"""
+    try:
+        # 复用 IngestionService 中的 url_loader 提取文本
+        clean_content = await service.url_loader.extract(payload.url)
+        return await _generate_preview_response(
+            strategy=payload.strategy,
+            chunk_size=payload.chunk_size,
+            overlap=payload.overlap,
+            max_fallback_tokens=payload.max_fallback_tokens,
+            regex_pattern=payload.regex_pattern,
+            text=clean_content.text,
+            timeout_seconds=8.0,
+            trace_id=trace_id,
+        )
+    except Exception as exc:
+        logger.warning(f"RAG 网址预览抓取失败 trace_id={trace_id} error={exc}")
+        return create_error_response(ErrorCode.BUSINESS_ERROR, f"网页抓取失败: {exc}", trace_id)
 
 
 @router.post("/search", response_model=ResponseModel)

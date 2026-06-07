@@ -130,16 +130,16 @@ export const RegexStrategyForm: React.FC = () => {
 };
 
 // Chunk Preview Sandbox
-export const ChunkPreviewSandbox: React.FC = () => {
-  const [testText, setTestText] = useState('');
-  const { 
-    fetchPreviewChunks, 
-    clearPreview, 
-    isPreviewLoading, 
-    previewError, 
-    previewResults, 
+export const ChunkPreviewSandbox: React.FC<{ hideInput?: boolean }> = ({ hideInput }) => {
+  const {
+    fetchPreviewChunks,
+    clearPreview,
+    isPreviewLoading,
+    previewError,
+    previewResults,
     previewTotalChunks,
-    previewWarnings 
+    previewWarnings,
+    previewSourceText
   } = useRagConfigStore();
 
   useEffect(() => {
@@ -147,8 +147,7 @@ export const ChunkPreviewSandbox: React.FC = () => {
   }, [clearPreview]);
 
   const handlePreview = () => {
-    if (!testText.trim()) return;
-    fetchPreviewChunks(testText);
+    fetchPreviewChunks();
   };
 
   const getBorderColor = (tokens: number) => {
@@ -158,24 +157,16 @@ export const ChunkPreviewSandbox: React.FC = () => {
   };
 
   return (
-    <div className="chunk-preview-sandbox">
-      <div className="sandbox-input-area">
-        <textarea 
-          className="sandbox-textarea"
-          value={testText}
-          onChange={(e) => setTestText(e.target.value)}
-          placeholder="在此粘贴测试文本进行切片预览..."
-        />
-        <div className="sandbox-actions">
-          <button 
-            className="btn-confirm" 
-            onClick={handlePreview}
-            disabled={isPreviewLoading || !testText.trim()}
-          >
-            {isPreviewLoading ? '处理中...' : '▶ 预览切片效果'}
-          </button>
+    <div className={`chunk-preview-sandbox ${hideInput ? 'no-input' : ''}`}>
+      {!hideInput && (
+        <div className="sandbox-input-area">
+          <textarea
+            className="sandbox-textarea"
+            value="请先添加文档或URL并在待处理列表中点击预览按钮进行查看。"
+            readOnly
+          />
         </div>
-      </div>
+      )}
       
       {previewError && (
         <div className="sandbox-error">
@@ -201,13 +192,24 @@ export const ChunkPreviewSandbox: React.FC = () => {
           previewResults.length > 0 && (
             <>
               <div className="results-summary">
-                显示前 {previewResults.length} 个 Chunk，共产生 {previewTotalChunks} 个 Chunk。
+                显示前 {previewResults.length} 个 Chunk（对该文件/网页的前置部分处理后共生成 {previewTotalChunks} 个 Chunk）。
               </div>
               <div className="chunk-cards">
-                {previewResults.map((chunk, idx) => (
-                  <div key={chunk.chunk_id} className={`chunk-card ${getBorderColor(chunk.estimated_tokens)}`}>
+                {previewResults.map((chunk, idx) => {
+                  let chunkLabel = `Chunk #${idx + 1}`;
+                  
+                  if (chunk.metadata?.strategy === 'semantic_parent_child') {
+                    if (chunk.metadata?.chunk_role === 'parent') {
+                      chunkLabel = `父 Chunk #${(chunk.metadata.parent_index ?? 0) + 1}`;
+                    } else if (chunk.metadata?.chunk_role === 'child') {
+                      chunkLabel = `子 Chunk #${(chunk.metadata.parent_index ?? 0) + 1}.${(chunk.metadata.child_index ?? 0) + 1}`;
+                    }
+                  }
+
+                  return (
+                  <div key={chunk.chunk_id} className={`chunk-card ${getBorderColor(chunk.estimated_tokens)} ${chunk.metadata?.chunk_role === 'child' ? 'chunk-card-child' : ''}`}>
                     <div className="chunk-header">
-                      <span className="chunk-idx">Chunk #{idx + 1}</span>
+                      <span className="chunk-idx">{chunkLabel}</span>
                       <span className={`chunk-tokens ${chunk.estimated_tokens > 1000 ? 'text-red' : ''}`}>
                         {chunk.estimated_tokens} Tokens
                         {chunk.estimated_tokens > 1000 && ' ❗️'}
@@ -222,7 +224,7 @@ export const ChunkPreviewSandbox: React.FC = () => {
                       </div>
                     )}
                   </div>
-                ))}
+                )})}
               </div>
             </>
           )

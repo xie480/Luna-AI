@@ -103,6 +103,15 @@ const MENU_ITEMS: MenuItem[] = [
     ),
   },
   {
+    id: 'knowledge',
+    label: '知识库',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+      </svg>
+    ),
+  },
+  {
     id: 'settings',
     label: '设置',
     icon: (
@@ -185,7 +194,12 @@ export const Sidebar: React.FC = () => {
       {/* 侧边栏头部 */}
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <span className="logo-icon">😸</span>
+          <span className="logo-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+              <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+            </svg>
+          </span>
           <span className="logo-text">Luna</span>
         </div>
       </div>

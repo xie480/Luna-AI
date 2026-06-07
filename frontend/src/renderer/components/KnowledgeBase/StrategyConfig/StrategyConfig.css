@@ -1,19 +1,20 @@
 .strategy-selector {
   display: flex;
   align-items: center;
+  margin-top: 16px;
   margin-bottom: 16px;
   gap: 12px;
 }
 
 .strategy-form {
-  background-color: var(--editor-bg, #1e1e1e);
-  border: 1px solid var(--border-color, #333);
-  padding: 16px;
-  border-radius: 6px;
-  margin-bottom: 16px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color, #444);
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .form-group {
@@ -29,13 +30,14 @@
 }
 
 .text-input {
-  padding: 8px 12px;
-  border-radius: 4px;
-  background-color: var(--input-bg, #3c3c3c);
+  padding: 10px 12px;
+  border-radius: 6px;
+  background-color: var(--input-bg, #2d2d2d);
   color: var(--text-color, #e0e0e0);
   border: 1px solid var(--border-color, #555);
   font-size: 14px;
   outline: none;
+  transition: border-color 0.2s ease;
 }
 
 .text-input:focus {
@@ -44,7 +46,7 @@
 
 .chunk-preview-sandbox {
   margin-top: 24px;
-  border-top: 1px solid var(--border-color, #333);
+  border-top: 1px solid var(--border-color, #444);
   padding-top: 24px;
 }
 
@@ -57,21 +59,23 @@
 
 .sandbox-textarea {
   width: 100%;
-  height: 150px;
-  padding: 12px;
-  background-color: var(--editor-bg, #1e1e1e);
+  height: 160px;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.2);
   color: var(--editor-fg, #d4d4d4);
   font-family: 'Consolas', 'Courier New', monospace;
   font-size: 13px;
-  border: 1px solid var(--border-color, #333);
-  border-radius: 4px;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 8px;
   resize: vertical;
   outline: none;
   box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .sandbox-textarea:focus {
   border-color: var(--primary-color, #007acc);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
 }
 
 .sandbox-actions {
@@ -110,13 +114,19 @@
 }
 
 .chunk-card {
-  background-color: var(--editor-bg, #1e1e1e);
-  border: 1px solid var(--border-color, #333);
+  background-color: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color, #444);
   border-left-width: 4px;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.chunk-card-child {
+  margin-left: 24px;
+  border-left-width: 2px;
+  opacity: 0.9;
 }
 
 .chunk-card.border-green {
