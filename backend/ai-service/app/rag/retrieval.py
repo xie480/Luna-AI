@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 from app.logger import logger
 from app.rag.types import RagEvidence, RagSearchRequest, RagSearchResponse
+from app.rag.unicode_guard import inspect_unicode_text, sanitize_text_for_rag
 from app.repository.rag_pg import RagChunkCandidate, RagPGRepository
 from app.repository.rag_qdrant import RagQdrantRepository, RagVectorHit
 from app.types.constants import RAG_EVENT_CITATION, RAG_EVENT_THOUGHT, RagRetrievalRoute, RagSourceType
@@ -399,9 +400,10 @@ class RagRetrievalOrchestrator:
                 if chunk.parent_id in emitted_parent_ids:
                     # 同一父Chunk已有更高得分的子Chunk输出过，跳过本条避免重复
                     continue
-                # 使用父文档正文替代子Chunk短文本，提供更完整的上下文
+                # 使用父文档正文替代子 Chunk 短文本，提供更完整的上下文。
+                # 注意：引用仍保留原始命中的 child chunk_id，parent_id 字段单独记录扩展来源，
+                # 这样前端 citation 能定位实际召回命中点，同时 Prompt 内容获得父块上下文。
                 content = parent_map[chunk.parent_id].content_text
-                evidence_chunk_id = chunk.parent_id
                 emitted_parent_ids.add(chunk.parent_id)
 
             # 如果这个 chunk_id (可能是原来的子 chunk_id，也可能是被替换为的父 chunk_id) 已经被当作证据输出了，则跳过
@@ -451,11 +453,30 @@ class RagRetrievalOrchestrator:
 
     @staticmethod
     def _format_prompt_context(evidences: list[RagEvidence]) -> str:
-        """格式化 Prompt 证据上下文。"""
+        """
+        格式化 Prompt 证据上下文。
+
+        做什么：将 PostgreSQL 回查得到的证据正文拼接为可注入 Prompt 的文本，并记录 Unicode 诊断。
+        为什么这样做：如果 PDF 抽取阶段已经产生脏字符，Prompt 注入阶段应能证明自己只是继承数据，
+                 而不是在拼接或日志输出时发生错误转码。
+        输入输出：输入 RagEvidence 列表，输出包含引用编号、文档名和正文的 Prompt 片段。
+        """
         parts: list[str] = []
         for evidence in evidences:
+            report = inspect_unicode_text(evidence.content, f"Prompt注入前:evidence={evidence.citation_id}")
+            safe_content = evidence.content
+            if report.has_anomaly:
+                logger.warning(f"RAG 证据注入 Prompt 前存在 Unicode 污点 {report.to_log_text()}")
+                safe_content = sanitize_text_for_rag(evidence.content)
+                safe_report = inspect_unicode_text(safe_content, f"Prompt注入清洗后:evidence={evidence.citation_id}")
+                if safe_report.has_anomaly:
+                    logger.warning(f"RAG 证据注入 Prompt 清洗后仍存在 Unicode 污点 {safe_report.to_log_text()}")
             parts.append(
                 f"[引用 {evidence.citation_id}] 文档: {evidence.document_name} "
-                f"chunk_id={evidence.chunk_id}\n{evidence.content}"
+                f"chunk_id={evidence.chunk_id}\n{safe_content}"
             )
-        return "\n\n".join(parts)
+        result = "\n\n".join(parts)
+        result_report = inspect_unicode_text(result, "Prompt上下文拼接后")
+        if result_report.has_anomaly:
+            logger.warning(f"RAG Prompt 上下文拼接后存在 Unicode 污点 {result_report.to_log_text()}")
+        return result

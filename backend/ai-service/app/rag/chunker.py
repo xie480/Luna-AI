@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from app.logger import logger
 from app.rag.types import ChunkUnit
+from app.rag.unicode_guard import inspect_unicode_text, sanitize_text_for_rag
 from app.types.constants import MemoryChunkType, RagChunkStrategy
 from app.utils.snowflake import generate_string_id
 
@@ -199,13 +200,20 @@ class BaseChunker(ABC):
 
     @staticmethod
     def _normalize_text(text: str) -> str:
-        """标准化文本空白，保留段落边界，并执行 Unicode NFKC 正规化消除冷僻兼容字符。"""
-        import unicodedata
-        text = unicodedata.normalize('NFKC', text)
-        text = text.replace("\r\n", "\n").replace("\r", "\n")
-        text = re.sub(r"[\t\x0b\x0c]+", " ", text)
-        text = re.sub(r"\n{4,}", "\n\n\n", text)
-        return text.strip()
+        """
+        标准化文本空白并执行 RAG Unicode 安全清洗。
+
+        做什么：在 Chunk 构建前再次清理 PDF 抽取链路可能残留的私用区、替代字符和不可见控制字符。
+        为什么这样做：切片是入库前最后一道防线，必须保证 PostgreSQL 保存的是可解释的真实正文。
+        输入输出：输入解析正文片段，输出可向量化、可检索和可注入 Prompt 的 Chunk 正文。
+        """
+        cleaned = sanitize_text_for_rag(text)
+        report = inspect_unicode_text(cleaned, "Chunk正文归一化后")
+        if report.has_anomaly:
+            logger.warning(f"Chunk 正文归一化后仍存在 Unicode 污点 {report.to_log_text()}")
+        cleaned = re.sub(r"[\t\x0b\x0c]+", " ", cleaned)
+        cleaned = re.sub(r"\n{4,}", "\n\n\n", cleaned)
+        return cleaned.strip()
 
 
 class SlidingWindowChunker(BaseChunker):

@@ -19,6 +19,7 @@ from sqlalchemy import delete, func, select, text, update
 from app.infrastructure.postgres import PostgresClient
 from app.logger import logger
 from app.rag.types import ChunkUnit
+from app.rag.unicode_guard import inspect_unicode_text
 from app.repository.models import RagChunk, RagDocument
 from app.types.constants import RagDocumentStatus, RagSourceType
 
@@ -128,9 +129,19 @@ class RagPGRepository:
         )
 
     async def save_chunks(self, chunks: list[ChunkUnit]) -> None:
-        """批量保存知识切片正文到 PostgreSQL。"""
+        """
+        批量保存知识切片正文到 PostgreSQL。
+
+        做什么：在入库前抽样检查 Chunk 正文 Unicode 状态。
+        为什么这样做：验证 PDF 抽取/清洗后的字符串是否已经安全，区分入库前脏数据与数据库回查问题。
+        输入输出：输入 ChunkUnit 列表，写入 rag_chunks.content_text。
+        """
         if not chunks:
             raise ValueError("知识切片列表不能为空")
+        for chunk in chunks[:5]:
+            report = inspect_unicode_text(chunk.text, f"Chunk入库前:chunk_id={chunk.chunk_id}")
+            if report.has_anomaly:
+                logger.warning(f"RAG Chunk 入库前存在 Unicode 污点 {report.to_log_text()}")
         models = [
             RagChunk(
                 chunk_id=chunk.chunk_id,
@@ -168,6 +179,13 @@ class RagPGRepository:
             rows = result.all()
         order = {chunk_id: index for index, chunk_id in enumerate(chunk_ids)}
         candidates = [RagChunkCandidate(chunk=row[0], document=row[1], score=0.0) for row in rows]
+        for candidate in candidates[:5]:
+            report = inspect_unicode_text(
+                candidate.chunk.content_text,
+                f"Chunk按ID回查后:chunk_id={candidate.chunk.chunk_id}",
+            )
+            if report.has_anomaly:
+                logger.warning(f"RAG Chunk 按 ID 回查后存在 Unicode 污点 {report.to_log_text()}")
         candidates.sort(key=lambda item: order.get(item.chunk.chunk_id, len(order)))
         return candidates
 
@@ -179,6 +197,10 @@ class RagPGRepository:
             stmt = select(RagChunk).where(RagChunk.chunk_id.in_(parent_ids))
             result = await session.execute(stmt)
             chunks = list(result.scalars().all())
+        for chunk in chunks[:5]:
+            report = inspect_unicode_text(chunk.content_text, f"父Chunk回查后:chunk_id={chunk.chunk_id}")
+            if report.has_anomaly:
+                logger.warning(f"RAG 父 Chunk 回查后存在 Unicode 污点 {report.to_log_text()}")
         return {chunk.chunk_id: chunk for chunk in chunks}
 
     async def search_by_text(self, query_text: str, top_k: int) -> list[RagChunkCandidate]:
@@ -229,6 +251,13 @@ class RagPGRepository:
                         created_at=row[12],
                     )
                     candidates.append(RagChunkCandidate(chunk=chunk, document=document, score=float(row[13] or 0.0)))
+                for candidate in candidates[:5]:
+                    report = inspect_unicode_text(
+                        candidate.chunk.content_text,
+                        f"Chunk FTS回查后:chunk_id={candidate.chunk.chunk_id}",
+                    )
+                    if report.has_anomaly:
+                        logger.warning(f"RAG Chunk FTS 回查后存在 Unicode 污点 {report.to_log_text()}")
                 logger.info(f"RAG PG FTS 检索完成 hits={len(candidates)} top_k={top_k}")
                 return candidates
             except Exception as e:

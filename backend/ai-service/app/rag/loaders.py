@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.logger import logger
+from app.rag.unicode_guard import inspect_unicode_text, sanitize_text_for_rag
 from app.types.constants import RagSourceType
 
 
@@ -78,6 +79,9 @@ class DocumentLoader:
             raise ValueError(f"不支持的知识文件类型: {suffix}")
 
         cleaned = self._normalize_text(text)
+        final_report = inspect_unicode_text(cleaned, f"文档归一化完成:{suffix}")
+        if final_report.has_anomaly:
+            logger.warning(f"文档正文归一化后仍存在 Unicode 污点 {final_report.to_log_text()}")
         if len(cleaned) < 20:
             raise ContentExtractionError("文件未提取到足够有效正文")
         return CleanDocumentContent(
@@ -144,14 +148,21 @@ class DocumentLoader:
         return "\n\n".join(parts)
 
     def _extract_pdf(self, content: bytes) -> str:
-        """解析 PDF 页面正文并去除常见页眉页脚区域。"""
+        """
+        解析 PDF 页面正文并去除常见页眉页脚区域。
+
+        做什么：调用 pdfplumber 抽取每页文本，并在页面级别记录 Unicode 污点检测结果。
+        为什么这样做：长期记忆 RAG 不经过 PDF 字形映射，而知识库 PDF RAG 的中文脏字通常在
+                 extract_text() 返回时已经产生，必须在摄入入口记录可追溯证据。
+        边界条件：只清理不可见/不可逆脏字符，保留中文、特殊符号和换行；普通问号不回填。
+        """
         try:
             import pdfplumber
             import logging
         except Exception as exc:
             raise ContentExtractionError("pdfplumber 依赖未安装，无法解析 PDF") from exc
 
-        # 抑制 pdfminer 关于字体 FontBBox 解析的常见警告，避免刷屏干扰
+        # 抑制 pdfminer 关于字体 FontBBox 解析的常见警告，避免刷屏干扰。
         logging.getLogger("pdfminer").setLevel(logging.ERROR)
 
         parts: list[str] = []
@@ -163,10 +174,21 @@ class DocumentLoader:
                     crop_box = (0, height * 0.06, width, height * 0.94)
                     page = page.crop(crop_box)
                 page_text = page.extract_text(x_tolerance=1.5, y_tolerance=3) or ""
+                raw_report = inspect_unicode_text(page_text, f"PDF抽取原文:page={page_index + 1}")
+                if raw_report.has_anomaly:
+                    logger.warning(f"PDF 页面抽取后发现 Unicode 污点 {raw_report.to_log_text()}")
                 normalized_page = self._remove_repeated_page_noise(page_text, page_index)
-                if normalized_page:
-                    parts.append(normalized_page)
-        return "\n\n".join(parts)
+                cleaned_page = sanitize_text_for_rag(normalized_page)
+                clean_report = inspect_unicode_text(cleaned_page, f"PDF页面清洗后:page={page_index + 1}")
+                if clean_report.has_anomaly:
+                    logger.warning(f"PDF 页面清洗后仍存在 Unicode 污点 {clean_report.to_log_text()}")
+                if cleaned_page:
+                    parts.append(cleaned_page)
+        joined_text = "\n\n".join(parts)
+        joined_report = inspect_unicode_text(joined_text, "PDF抽取合并后")
+        if joined_report.has_anomaly:
+            logger.warning(f"PDF 合并正文仍存在 Unicode 污点 {joined_report.to_log_text()}")
+        return joined_text
 
     @staticmethod
     def _remove_repeated_page_noise(text: str, page_index: int) -> str:
@@ -188,17 +210,17 @@ class DocumentLoader:
     @staticmethod
     def _normalize_text(text: str) -> str:
         """
-        统一换行与空白，避免编码残留污染切片。
-        同时对文本执行 NFKC 正规化，修复由 PDF 解析器引入的康熙部首或类似特殊冷僻兼容字符。
-        例如将 U+2F34 (⼴) 规范化为正常的汉字 U+5E7F (广)，将 U+2F6C (⽬) 规范化为 U+76EE (目)。
-        这可以避免后续因为字符集不匹配导致的 BM25 召回失败以及终端打印乱码。
+        统一换行与空白，避免 PDF Unicode 污点污染切片。
+
+        做什么：使用 RAG Unicode Guard 执行安全清洗，而不是对全文做无差别 NFKC。
+        为什么这样做：全文 NFKC 会改写部分合法特殊符号；PDF 污点治理只应处理私用区、替代字符、
+                 不可见控制字符和 CJK 兼容/部首字符。
+        输入输出：输入解析正文，输出可入库和可注入 Prompt 的安全正文。
         """
-        import unicodedata
-        text = unicodedata.normalize('NFKC', text)
-        text = text.replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n")
-        text = re.sub(r"[ \t]+", " ", text)
-        text = re.sub(r"\n{4,}", "\n\n\n", text)
-        return text.strip()
+        cleaned = sanitize_text_for_rag(text)
+        cleaned = re.sub(r"[ \t]+", " ", cleaned)
+        cleaned = re.sub(r"\n{4,}", "\n\n\n", cleaned)
+        return cleaned.strip()
 
 
 class UrlContentLoader:
