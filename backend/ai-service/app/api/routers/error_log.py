@@ -16,7 +16,7 @@ Luna AI 错误日志上报 API
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request, Query
 from pydantic import BaseModel, Field
 
 from app.logger import logger
@@ -48,6 +48,25 @@ class ErrorLogResponse(BaseModel):
     id: str = ""
 
 
+class ErrorLogItem(BaseModel):
+    """错误日志列表项"""
+    id: str
+    level: str
+    source: str
+    message: str
+    detail: str
+    trace_id: str
+    user_agent: str
+    created_at: str  # 日期格式化字符串
+
+class ErrorLogListResponse(BaseModel):
+    """错误日志列表响应体"""
+    code: int
+    msg: str
+    data: list[ErrorLogItem]
+    total: int
+
+
 # ============================================================
 # 依赖注入
 # ============================================================
@@ -61,6 +80,43 @@ async def get_error_log_repo(request: Request) -> Optional[ErrorLogPGRepo]:
 # ============================================================
 # 接口实现
 # ============================================================
+
+
+@router.get("/error_logs", response_model=ErrorLogListResponse)
+async def get_error_logs(
+    request: Request,
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+    level: Optional[str] = Query(None, description="错误级别"),
+    source: Optional[str] = Query(None, description="错误来源"),
+    error_log_repo: Optional[ErrorLogPGRepo] = Depends(get_error_log_repo),
+) -> ErrorLogListResponse:
+    """
+    分页查询前端错误日志
+    """
+    if not error_log_repo:
+        return ErrorLogListResponse(code=500, msg="错误日志仓库不可用", data=[], total=0)
+
+    limit = page_size
+    offset = (page - 1) * page_size
+
+    total = await error_log_repo.count_error_logs(level=level, source=source)
+    logs = await error_log_repo.get_error_logs(limit=limit, offset=offset, level=level, source=source)
+
+    items = []
+    for log in logs:
+        items.append(ErrorLogItem(
+            id=log.id,
+            level=log.level,
+            source=log.source,
+            message=log.message,
+            detail=log.detail,
+            trace_id=log.trace_id,
+            user_agent=log.user_agent,
+            created_at=log.created_at.isoformat() if log.created_at else "",
+        ))
+
+    return ErrorLogListResponse(code=0, msg="success", data=items, total=total)
 
 
 @router.post("/error_logs", response_model=ErrorLogResponse)

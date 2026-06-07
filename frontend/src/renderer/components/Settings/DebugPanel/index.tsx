@@ -1,11 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import TraceViewer from './TraceViewer';
-import AuditLogViewer from './AuditLogViewer';
 import MetricsChart from './MetricsChart';
 import { useSystemStore } from '../../../stores/systemStore';
 import './DebugPanel.css';
 
-type TabType = 'trace' | 'audit' | 'metrics' | 'errors';
+type TabType = 'metrics' | 'errors';
 
 /** 最小窗口尺寸 */
 const MIN_WIDTH = 400;
@@ -21,7 +19,7 @@ type ResizeDirection = 'n' | 's' | 'w' | 'e' | 'nw' | 'ne' | 'sw' | 'se';
  */
 const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
   // 所有 hooks 必须在此无条件声明，且早于任何 if return
-  const [activeTab, setActiveTab] = useState<TabType>('trace');
+  const [activeTab, setActiveTab] = useState<TabType>('errors');
   const panelRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -149,10 +147,8 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
   if (!isOpen) return null;
 
   const tabs: { key: TabType; label: string }[] = [
-    { key: 'trace', label: '链路追踪' },
-    { key: 'audit', label: '审计日志' },
     { key: 'metrics', label: '监控指标' },
-    { key: 'errors', label: '前端异常' },
+    { key: 'errors', label: '异常日志' },
   ];
 
   /** 渲染缩放把手 */
@@ -211,8 +207,6 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
 
         {/* 标签页内容 */}
         <div className="debug-panel-content">
-          {activeTab === 'trace' && <TraceViewer />}
-          {activeTab === 'audit' && <AuditLogViewer />}
           {activeTab === 'metrics' && <MetricsChart />}
           {activeTab === 'errors' && <FrontendErrorViewer />}
         </div>
@@ -231,38 +225,128 @@ const DebugPanel: React.FC = () => {
   return <DebugPanelInner isOpen={isDiagnosticOpen} />;
 };
 
+import { AI_SERVICE_BASE_URL } from '../../../appConfig';
+
+/** 错误日志项接口 */
+interface ErrorLogItem {
+  id: string;
+  level: string;
+  source: string;
+  message: string;
+  detail: string;
+  trace_id: string;
+  user_agent: string;
+  created_at: string;
+}
+
 /**
  * FrontendErrorViewer: 前端异常日志查看器
- * 展示 systemStore 中缓冲的前端异常记录
+ * 从后端查询持久化的错误日志
  */
 const FrontendErrorViewer: React.FC = () => {
-  const frontendErrors = useSystemStore((s) => s.frontendErrors);
+  const [errors, setErrors] = useState<ErrorLogItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [levelFilter, setLevelFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fetchErrors = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('page', page.toString());
+      params.append('page_size', pageSize.toString());
+      if (levelFilter) params.append('level', levelFilter);
+      if (sourceFilter) params.append('source', sourceFilter);
+
+      const resp = await fetch(`${AI_SERVICE_BASE_URL}/api/error_logs?${params.toString()}`);
+      if (resp.ok) {
+        const result = await resp.json();
+        if (result.code === 0) {
+          setErrors(result.data || []);
+          setTotal(result.total || 0);
+        }
+      }
+    } catch (err) {
+      console.error('获取错误日志失败:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, pageSize, levelFilter, sourceFilter]);
+
+  useEffect(() => {
+    fetchErrors();
+  }, [fetchErrors]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="frontend-error-viewer">
-      <div className="error-header">
-        <span>前端异常日志 ({frontendErrors.length}/100)</span>
-        <button onClick={() => useSystemStore.getState().clearFrontendErrors()}>清空</button>
+      <div className="error-header" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <span>异常日志总数: {total}</span>
+        
+        <select
+          value={levelFilter}
+          onChange={(e) => { setLevelFilter(e.target.value); setPage(1); }}
+          style={{ padding: '4px', borderRadius: '4px', background: '#333', color: '#fff', border: '1px solid #555' }}
+        >
+          <option value="">所有级别</option>
+          <option value="ERROR">ERROR</option>
+          <option value="WARN">WARN</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+        
+        <input
+          type="text"
+          placeholder="来源 (如 react_renderer)"
+          value={sourceFilter}
+          onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }}
+          style={{ padding: '4px', borderRadius: '4px', background: '#333', color: '#fff', border: '1px solid #555' }}
+        />
+        
+        <button onClick={fetchErrors} disabled={isLoading}>
+          {isLoading ? '加载中...' : '刷新'}
+        </button>
       </div>
+
       <div className="error-list">
-        {frontendErrors.length === 0 ? (
-          <div className="error-empty">暂无异常日志</div>
+        {errors.length === 0 ? (
+          <div className="error-empty">{isLoading ? '加载中...' : '暂无异常日志'}</div>
         ) : (
-          Array.isArray(frontendErrors) && frontendErrors.map((err) => (
+          errors.map((err) => (
             <div key={err.id} className={`error-item level-${err.level.toLowerCase()}`}>
               <div className="error-item-header">
-                <span className="error-time">{new Date(err.timestamp).toLocaleString()}</span>
+                <span className="error-time">{new Date(err.created_at).toLocaleString()}</span>
                 <span className="error-level">{err.level}</span>
                 <span className="error-source">{err.source}</span>
               </div>
               <div className="error-message">{err.message}</div>
               {err.trace_id && <div className="error-trace">TraceID: {err.trace_id}</div>}
-              {err.stack && <pre className="error-stack">{err.stack}</pre>}
-              {err.component_stack && <pre className="error-stack">{err.component_stack}</pre>}
+              {err.detail && <pre className="error-stack">{err.detail}</pre>}
             </div>
           ))
         )}
       </div>
+
+      {total > 0 && (
+        <div className="audit-pagination" style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+          >
+            上一页
+          </button>
+          <span>第 {page} / {totalPages} 页</span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          >
+            下一页
+          </button>
+        </div>
+      )}
     </div>
   );
 };
