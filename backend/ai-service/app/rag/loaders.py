@@ -89,26 +89,35 @@ class DocumentLoader:
 
     def _decode_text(self, content: bytes) -> str:
         """探测文本编码并统一转换为 UTF-8 字符串。"""
-        try:
-            return content.decode("utf-8")
-        except UnicodeDecodeError:
+        # 对于中文字符集，gb18030 几乎覆盖了所有的中文甚至繁体字符
+        # 并且某些特殊的 GBK 编码（如果不完全符合标准）在使用 gbk decode 时会失败
+        # 我们按照最宽泛到最具体的顺序进行尝试：
+        for encoding in ["utf-8", "gb18030", "gbk", "big5"]:
             try:
-                import chardet
+                # 使用 strict 模式确保如果解码错误就会抛出异常，而不是用 ? 替换
+                return content.decode(encoding, errors="strict")
+            except UnicodeDecodeError:
+                continue
 
-                detected = chardet.detect(content)
-                encoding = detected.get("encoding") or "utf-8"
-                return content.decode(encoding, errors="replace")
-            except ImportError:
-                # 如果chardet未安装，则尝试常见编码
-                for encoding in ['gbk', 'gb2312', 'latin-1', 'cp1252']:
-                    try:
-                        return content.decode(encoding)
-                    except UnicodeDecodeError:
-                        continue
-                # 如果所有尝试都失败，使用默认处理
-                return content.decode('utf-8', errors='replace')
-            except Exception as exc:
-                raise ContentExtractionError(f"文本编码探测失败: {exc}") from exc
+        # 如果常见编码失败，尝试使用 chardet 探测
+        try:
+            import chardet
+
+            detected = chardet.detect(content)
+            encoding = detected.get("encoding")
+            if encoding:
+                try:
+                    return content.decode(encoding, errors="strict")
+                except UnicodeDecodeError:
+                    pass
+        except ImportError:
+            pass
+        except Exception as exc:
+            raise ContentExtractionError(f"文本编码探测失败: {exc}") from exc
+
+        # 如果所有尝试都失败，使用 utf-8 并忽略/替换错误字符作为最后的兜底
+        # 这总比将整个文件按单字节读取为无意义符号好
+        return content.decode("utf-8", errors="replace")
 
     def _extract_docx(self, content: bytes) -> str:
         """解析 DOCX 并将标题样式转换为 Markdown 标题。"""
@@ -178,7 +187,14 @@ class DocumentLoader:
 
     @staticmethod
     def _normalize_text(text: str) -> str:
-        """统一换行与空白，避免编码残留污染切片。"""
+        """
+        统一换行与空白，避免编码残留污染切片。
+        同时对文本执行 NFKC 正规化，修复由 PDF 解析器引入的康熙部首或类似特殊冷僻兼容字符。
+        例如将 U+2F34 (⼴) 规范化为正常的汉字 U+5E7F (广)，将 U+2F6C (⽬) 规范化为 U+76EE (目)。
+        这可以避免后续因为字符集不匹配导致的 BM25 召回失败以及终端打印乱码。
+        """
+        import unicodedata
+        text = unicodedata.normalize('NFKC', text)
         text = text.replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n")
         text = re.sub(r"[ \t]+", " ", text)
         text = re.sub(r"\n{4,}", "\n\n\n", text)

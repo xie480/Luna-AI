@@ -177,6 +177,26 @@ class QdrantClientWrapper:
             logger.error(f"Qdrant SearchGroups 失败 [collection={collection_name}]: {e}")
             raise
 
+    async def retrieve(self, collection_name: str, ids: List[int]) -> List[Any]:
+        """
+        根据 ID 列表批量拉取向量点
+        :param collection_name: 集合名称
+        :param ids: ID 列表
+        """
+        await self._ensure_client()
+        try:
+            results = await self.client.retrieve(
+                collection_name=collection_name,
+                ids=ids,
+                with_vectors=True,
+                with_payload=True
+            )
+            logger.info(f"Qdrant Retrieve 完成 [collection={collection_name}], count: {len(results)}")
+            return results
+        except Exception as e:
+            logger.error(f"Qdrant Retrieve 失败 [collection={collection_name}]: {e}")
+            raise
+
     async def search(self, collection_name: str, vector: List[float], top_k: int) -> List[QdrantSearchResult]:
         """
         执行向量相似度搜索

@@ -199,7 +199,9 @@ class BaseChunker(ABC):
 
     @staticmethod
     def _normalize_text(text: str) -> str:
-        """标准化文本空白，保留段落边界。"""
+        """标准化文本空白，保留段落边界，并执行 Unicode NFKC 正规化消除冷僻兼容字符。"""
+        import unicodedata
+        text = unicodedata.normalize('NFKC', text)
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         text = re.sub(r"[\t\x0b\x0c]+", " ", text)
         text = re.sub(r"\n{4,}", "\n\n\n", text)

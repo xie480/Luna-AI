@@ -351,49 +351,72 @@ class RagRetrievalOrchestrator:
         top_k: int,
     ) -> list[RagEvidence]:
         """
-        构建证据列表，对候选结果进行重排、父子文档扩展，并转换为可引用的证据格式。
-        
+        构建证据列表，对候选结果进行重排、父子文档去重扩展，并转换为可引用的证据格式。
+
+        改进：新增 parent_id 去重机制——同一父 Chunk 下的多个子 Chunk 只保留得分最高的那条，
+              并用父级完整正文替换，避免重复内容注入 Prompt 浪费 Token。
+
         参数:
             query (str): 检索查询字符串
             candidates (list[ScoredCandidate]): 待处理的候选结果列表，包含得分信息
             top_k (int): 需要保留的顶级结果数量
-        
+
         返回:
             list[RagEvidence]: 处理后的证据列表，每个证据包含引用ID、文档信息、内容等
         """
         # 如果没有候选结果，直接返回空列表
         if not candidates:
             return []
-        
+
         # 对候选结果进行重排，选择top_k个最佳结果
         reranked = await self._rerank(query, candidates, top_k)
-        
-        # 提取所有有父文档ID的候选结果的父ID
-        parent_ids = [item.candidate.chunk.parent_id for item in reranked if item.candidate.chunk.parent_id]
-        
-        # 根据父文档ID获取对应的父文档内容
+
+        # 提取所有有父文档ID的候选结果的父ID并去重，避免重复查询PG
+        parent_ids = list(set(
+            item.candidate.chunk.parent_id for item in reranked if item.candidate.chunk.parent_id
+        ))
+
+        # 根据去重后的父文档ID获取对应的父文档内容
         parent_map = await self.pg_repo.get_parent_chunks(parent_ids)
-        
+
+        # 记录已输出过的父ID，同一父Chunk下的多个子Chunk只保留最相关的一条
+        emitted_parent_ids: set[str] = set()
+        # 记录已输出的 chunk_id（包括独立的子 Chunk 和用来替换子 Chunk 的父 Chunk 的 id），避免混发
+        emitted_chunk_ids: set[str] = set()
+
         # 初始化证据列表
         evidences: list[RagEvidence] = []
-        
+
         # 遍历重排后的结果，构建最终的证据对象
         for index, item in enumerate(reranked, start=1):
             chunk = item.candidate.chunk
             document = item.candidate.document
             content = chunk.content_text
-            
-            # 如果当前块有父文档且在父文档映射中存在，则使用父文档的内容
+            evidence_chunk_id = chunk.chunk_id
+
+            # 如果当前块有父文档且在父文档映射中存在
             if chunk.parent_id and chunk.parent_id in parent_map:
+                if chunk.parent_id in emitted_parent_ids:
+                    # 同一父Chunk已有更高得分的子Chunk输出过，跳过本条避免重复
+                    continue
+                # 使用父文档正文替代子Chunk短文本，提供更完整的上下文
                 content = parent_map[chunk.parent_id].content_text
+                evidence_chunk_id = chunk.parent_id
+                emitted_parent_ids.add(chunk.parent_id)
+
+            # 如果这个 chunk_id (可能是原来的子 chunk_id，也可能是被替换为的父 chunk_id) 已经被当作证据输出了，则跳过
+            if evidence_chunk_id in emitted_chunk_ids:
+                continue
             
+            emitted_chunk_ids.add(evidence_chunk_id)
+
             # 创建RagEvidence对象并添加到证据列表
             evidences.append(
                 RagEvidence(
                     citation_id=index,  # 引用ID，从1开始递增
                     document_id=document.id,  # 文档唯一标识符
                     document_name=document.filename,  # 文档名称
-                    chunk_id=chunk.chunk_id,  # 块唯一标识符
+                    chunk_id=evidence_chunk_id,  # 块唯一标识符
                     parent_id=chunk.parent_id,  # 父文档ID
                     content=content,  # 内容文本（可能来自父文档）
                     score=max(item.score, 0.0),  # 得分，确保非负

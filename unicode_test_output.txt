@@ -1,0 +1,223 @@
+--- Unicode Codepoints Analysis ---
+Original Text: 18028071736 yilena0505@163.com ⼴州 后端开发 / Agent开发
+个⼈博客： https://blog.yilena.cloud/
+教育经历
+⼴州⼤学 - 软件⼯程 - 本科 2024.09-2028.06
+运营CSDN技术博客，持续输出原创技术⽅案、BUG排查与修复经验及技术栈学习笔记；累计发布⾼质量原创⽂章53篇，总访问量超6.8万，粉丝数突破500。
+项⽬经历
+
+Codepoints:
+Char: 1 | Unicode: U+0031 | Name: 1
+Char: 8 | Unicode: U+0038 | Name: 8
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 2 | Unicode: U+0032 | Name: 2
+Char: 8 | Unicode: U+0038 | Name: 8
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 7 | Unicode: U+0037 | Name: 7
+Char: 1 | Unicode: U+0031 | Name: 1
+Char: 7 | Unicode: U+0037 | Name: 7
+Char: 3 | Unicode: U+0033 | Name: 3
+Char: 6 | Unicode: U+0036 | Name: 6
+Char:   | Unicode: U+0020 | Name:  
+Char: y | Unicode: U+0079 | Name: y
+Char: i | Unicode: U+0069 | Name: i
+Char: l | Unicode: U+006C | Name: l
+Char: e | Unicode: U+0065 | Name: e
+Char: n | Unicode: U+006E | Name: n
+Char: a | Unicode: U+0061 | Name: a
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 5 | Unicode: U+0035 | Name: 5
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 5 | Unicode: U+0035 | Name: 5
+Char: @ | Unicode: U+0040 | Name: @
+Char: 1 | Unicode: U+0031 | Name: 1
+Char: 6 | Unicode: U+0036 | Name: 6
+Char: 3 | Unicode: U+0033 | Name: 3
+Char: . | Unicode: U+002E | Name: .
+Char: c | Unicode: U+0063 | Name: c
+Char: o | Unicode: U+006F | Name: o
+Char: m | Unicode: U+006D | Name: m
+Char:   | Unicode: U+0020 | Name:  
+Char: ⼴ | Unicode: U+2F34 | Name: \u2f34
+Char: 州 | Unicode: U+5DDE | Name: \u5dde
+Char:   | Unicode: U+0020 | Name:  
+Char: 后 | Unicode: U+540E | Name: \u540e
+Char: 端 | Unicode: U+7AEF | Name: \u7aef
+Char: 开 | Unicode: U+5F00 | Name: \u5f00
+Char: 发 | Unicode: U+53D1 | Name: \u53d1
+Char:   | Unicode: U+0020 | Name:  
+Char: / | Unicode: U+002F | Name: /
+Char:   | Unicode: U+0020 | Name:  
+Char: A | Unicode: U+0041 | Name: A
+Char: g | Unicode: U+0067 | Name: g
+Char: e | Unicode: U+0065 | Name: e
+Char: n | Unicode: U+006E | Name: n
+Char: t | Unicode: U+0074 | Name: t
+Char: 开 | Unicode: U+5F00 | Name: \u5f00
+Char: 发 | Unicode: U+53D1 | Name: \u53d1
+Char: 
+ | Unicode: U+000A | Name: \n
+Char: 个 | Unicode: U+4E2A | Name: \u4e2a
+Char: ⼈ | Unicode: U+2F08 | Name: \u2f08
+Char: 博 | Unicode: U+535A | Name: \u535a
+Char: 客 | Unicode: U+5BA2 | Name: \u5ba2
+Char: ： | Unicode: U+FF1A | Name: \uff1a
+Char:   | Unicode: U+0020 | Name:  
+Char: h | Unicode: U+0068 | Name: h
+Char: t | Unicode: U+0074 | Name: t
+Char: t | Unicode: U+0074 | Name: t
+Char: p | Unicode: U+0070 | Name: p
+Char: s | Unicode: U+0073 | Name: s
+Char: : | Unicode: U+003A | Name: :
+Char: / | Unicode: U+002F | Name: /
+Char: / | Unicode: U+002F | Name: /
+Char: b | Unicode: U+0062 | Name: b
+Char: l | Unicode: U+006C | Name: l
+Char: o | Unicode: U+006F | Name: o
+Char: g | Unicode: U+0067 | Name: g
+Char: . | Unicode: U+002E | Name: .
+Char: y | Unicode: U+0079 | Name: y
+Char: i | Unicode: U+0069 | Name: i
+Char: l | Unicode: U+006C | Name: l
+Char: e | Unicode: U+0065 | Name: e
+Char: n | Unicode: U+006E | Name: n
+Char: a | Unicode: U+0061 | Name: a
+Char: . | Unicode: U+002E | Name: .
+Char: c | Unicode: U+0063 | Name: c
+Char: l | Unicode: U+006C | Name: l
+Char: o | Unicode: U+006F | Name: o
+Char: u | Unicode: U+0075 | Name: u
+Char: d | Unicode: U+0064 | Name: d
+Char: / | Unicode: U+002F | Name: /
+Char: 
+ | Unicode: U+000A | Name: \n
+Char: 教 | Unicode: U+6559 | Name: \u6559
+Char: 育 | Unicode: U+80B2 | Name: \u80b2
+Char: 经 | Unicode: U+7ECF | Name: \u7ecf
+Char: 历 | Unicode: U+5386 | Name: \u5386
+Char: 
+ | Unicode: U+000A | Name: \n
+Char: ⼴ | Unicode: U+2F34 | Name: \u2f34
+Char: 州 | Unicode: U+5DDE | Name: \u5dde
+Char: ⼤ | Unicode: U+2F24 | Name: \u2f24
+Char: 学 | Unicode: U+5B66 | Name: \u5b66
+Char:   | Unicode: U+0020 | Name:  
+Char: - | Unicode: U+002D | Name: -
+Char:   | Unicode: U+0020 | Name:  
+Char: 软 | Unicode: U+8F6F | Name: \u8f6f
+Char: 件 | Unicode: U+4EF6 | Name: \u4ef6
+Char: ⼯ | Unicode: U+2F2F | Name: \u2f2f
+Char: 程 | Unicode: U+7A0B | Name: \u7a0b
+Char:   | Unicode: U+0020 | Name:  
+Char: - | Unicode: U+002D | Name: -
+Char:   | Unicode: U+0020 | Name:  
+Char: 本 | Unicode: U+672C | Name: \u672c
+Char: 科 | Unicode: U+79D1 | Name: \u79d1
+Char:   | Unicode: U+0020 | Name:  
+Char: 2 | Unicode: U+0032 | Name: 2
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 2 | Unicode: U+0032 | Name: 2
+Char: 4 | Unicode: U+0034 | Name: 4
+Char: . | Unicode: U+002E | Name: .
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 9 | Unicode: U+0039 | Name: 9
+Char: - | Unicode: U+002D | Name: -
+Char: 2 | Unicode: U+0032 | Name: 2
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 2 | Unicode: U+0032 | Name: 2
+Char: 8 | Unicode: U+0038 | Name: 8
+Char: . | Unicode: U+002E | Name: .
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 6 | Unicode: U+0036 | Name: 6
+Char: 
+ | Unicode: U+000A | Name: \n
+Char: 运 | Unicode: U+8FD0 | Name: \u8fd0
+Char: 营 | Unicode: U+8425 | Name: \u8425
+Char: C | Unicode: U+0043 | Name: C
+Char: S | Unicode: U+0053 | Name: S
+Char: D | Unicode: U+0044 | Name: D
+Char: N | Unicode: U+004E | Name: N
+Char: 技 | Unicode: U+6280 | Name: \u6280
+Char: 术 | Unicode: U+672F | Name: \u672f
+Char: 博 | Unicode: U+535A | Name: \u535a
+Char: 客 | Unicode: U+5BA2 | Name: \u5ba2
+Char: ， | Unicode: U+FF0C | Name: \uff0c
+Char: 持 | Unicode: U+6301 | Name: \u6301
+Char: 续 | Unicode: U+7EED | Name: \u7eed
+Char: 输 | Unicode: U+8F93 | Name: \u8f93
+Char: 出 | Unicode: U+51FA | Name: \u51fa
+Char: 原 | Unicode: U+539F | Name: \u539f
+Char: 创 | Unicode: U+521B | Name: \u521b
+Char: 技 | Unicode: U+6280 | Name: \u6280
+Char: 术 | Unicode: U+672F | Name: \u672f
+Char: ⽅ | Unicode: U+2F45 | Name: \u2f45
+Char: 案 | Unicode: U+6848 | Name: \u6848
+Char: 、 | Unicode: U+3001 | Name: \u3001
+Char: B | Unicode: U+0042 | Name: B
+Char: U | Unicode: U+0055 | Name: U
+Char: G | Unicode: U+0047 | Name: G
+Char: 排 | Unicode: U+6392 | Name: \u6392
+Char: 查 | Unicode: U+67E5 | Name: \u67e5
+Char: 与 | Unicode: U+4E0E | Name: \u4e0e
+Char: 修 | Unicode: U+4FEE | Name: \u4fee
+Char: 复 | Unicode: U+590D | Name: \u590d
+Char: 经 | Unicode: U+7ECF | Name: \u7ecf
+Char: 验 | Unicode: U+9A8C | Name: \u9a8c
+Char: 及 | Unicode: U+53CA | Name: \u53ca
+Char: 技 | Unicode: U+6280 | Name: \u6280
+Char: 术 | Unicode: U+672F | Name: \u672f
+Char: 栈 | Unicode: U+6808 | Name: \u6808
+Char: 学 | Unicode: U+5B66 | Name: \u5b66
+Char: 习 | Unicode: U+4E60 | Name: \u4e60
+Char: 笔 | Unicode: U+7B14 | Name: \u7b14
+Char: 记 | Unicode: U+8BB0 | Name: \u8bb0
+Char: ； | Unicode: U+FF1B | Name: \uff1b
+Char: 累 | Unicode: U+7D2F | Name: \u7d2f
+Char: 计 | Unicode: U+8BA1 | Name: \u8ba1
+Char: 发 | Unicode: U+53D1 | Name: \u53d1
+Char: 布 | Unicode: U+5E03 | Name: \u5e03
+Char: ⾼ | Unicode: U+2FBC | Name: \u2fbc
+Char: 质 | Unicode: U+8D28 | Name: \u8d28
+Char: 量 | Unicode: U+91CF | Name: \u91cf
+Char: 原 | Unicode: U+539F | Name: \u539f
+Char: 创 | Unicode: U+521B | Name: \u521b
+Char: ⽂ | Unicode: U+2F42 | Name: \u2f42
+Char: 章 | Unicode: U+7AE0 | Name: \u7ae0
+Char: 5 | Unicode: U+0035 | Name: 5
+Char: 3 | Unicode: U+0033 | Name: 3
+Char: 篇 | Unicode: U+7BC7 | Name: \u7bc7
+Char: ， | Unicode: U+FF0C | Name: \uff0c
+Char: 总 | Unicode: U+603B | Name: \u603b
+Char: 访 | Unicode: U+8BBF | Name: \u8bbf
+Char: 问 | Unicode: U+95EE | Name: \u95ee
+Char: 量 | Unicode: U+91CF | Name: \u91cf
+Char: 超 | Unicode: U+8D85 | Name: \u8d85
+Char: 6 | Unicode: U+0036 | Name: 6
+Char: . | Unicode: U+002E | Name: .
+Char: 8 | Unicode: U+0038 | Name: 8
+Char: 万 | Unicode: U+4E07 | Name: \u4e07
+Char: ， | Unicode: U+FF0C | Name: \uff0c
+Char: 粉 | Unicode: U+7C89 | Name: \u7c89
+Char: 丝 | Unicode: U+4E1D | Name: \u4e1d
+Char: 数 | Unicode: U+6570 | Name: \u6570
+Char: 突 | Unicode: U+7A81 | Name: \u7a81
+Char: 破 | Unicode: U+7834 | Name: \u7834
+Char: 5 | Unicode: U+0035 | Name: 5
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 0 | Unicode: U+0030 | Name: 0
+Char: 。 | Unicode: U+3002 | Name: \u3002
+Char: 
+ | Unicode: U+000A | Name: \n
+Char: 项 | Unicode: U+9879 | Name: \u9879
+Char: ⽬ | Unicode: U+2F6C | Name: \u2f6c
+Char: 经 | Unicode: U+7ECF | Name: \u7ecf
+Char: 历 | Unicode: U+5386 | Name: \u5386
+
+GBK Encode Test:
+FAILS at character: ⼴ (U+2F34)
+What terminal sees: 18028071736 yilena0505@163.com ?州 后端开发 / Agent开发
+个?博客： https://blog.yilena.cloud/
+教育经历
+?州?学 - 软件?程 - 本科 2024.09-2028.06
+运营CSDN技术博客，持续输出原创技术?案、BUG排查与修复经验及技术栈学习笔记；累计发布?质量原创?章53篇，总访问量超6.8万，粉丝数突破500。
+项?经历

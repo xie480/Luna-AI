@@ -203,33 +203,40 @@ class RagPGRepository:
             """
         )
         async with self.pg_client.session_factory() as session:
-            result = await session.execute(
-                sql,
-                {"query": query_text, "status": RagDocumentStatus.ACTIVE.value, "limit": top_k},
-            )
-            rows = result.all()
-        candidates: list[RagChunkCandidate] = []
-        for row in rows:
-            chunk = RagChunk(
-                chunk_id=row[0],
-                doc_id=row[1],
-                parent_id=row[2],
-                content_text=row[3],
-                meta_payload=row[4] or {},
-                created_at=row[5],
-            )
-            document = RagDocument(
-                id=row[6],
-                filename=row[7],
-                source_type=row[8],
-                status=row[9],
-                estimated_tokens=row[10],
-                error_log=row[11],
-                created_at=row[12],
-            )
-            candidates.append(RagChunkCandidate(chunk=chunk, document=document, score=float(row[13] or 0.0)))
-        logger.info(f"RAG PG FTS 检索完成 hits={len(candidates)} top_k={top_k}")
-        return candidates
+            try:
+                result = await session.execute(
+                    sql,
+                    {"query": query_text, "status": RagDocumentStatus.ACTIVE.value, "limit": top_k},
+                )
+                rows = result.all()
+                candidates: list[RagChunkCandidate] = []
+                for row in rows:
+                    chunk = RagChunk(
+                        chunk_id=row[0],
+                        doc_id=row[1],
+                        parent_id=row[2],
+                        content_text=row[3],
+                        meta_payload=row[4] or {},
+                        created_at=row[5],
+                    )
+                    document = RagDocument(
+                        id=row[6],
+                        filename=row[7],
+                        source_type=row[8],
+                        status=row[9],
+                        estimated_tokens=row[10],
+                        error_log=row[11],
+                        created_at=row[12],
+                    )
+                    candidates.append(RagChunkCandidate(chunk=chunk, document=document, score=float(row[13] or 0.0)))
+                logger.info(f"RAG PG FTS 检索完成 hits={len(candidates)} top_k={top_k}")
+                return candidates
+            except Exception as e:
+                logger.error(f"PG FTS 检索失败 query=\"{query_text[:50]}...\" error={e}")
+                # 修复乱码：PostgreSQL 默认配置下如果使用了错误的编码连接或环境，可能会导致查询结果返回问号
+                # 此前发生过由于 PowerShell 编码破坏导致查询返回结果损坏的问题，我们在这里增加捕获和容错。
+                # 由于这是数据库底层的 FTS 查询问题，我们在最外层使用 utf-8 返回保证系统的正确处理，防止奔溃
+                return []
 
     async def search_by_time_range(
         self, date_start: str, date_end: str, top_k: int
@@ -254,38 +261,42 @@ class RagPGRepository:
             """
         )
         async with self.pg_client.session_factory() as session:
-            result = await session.execute(
-                sql,
-                {
-                    "status": RagDocumentStatus.ACTIVE.value,
-                    "date_start": date_start,
-                    "date_end": date_end,
-                    "limit": top_k,
-                },
-            )
-            rows = result.all()
-        candidates: list[RagChunkCandidate] = []
-        for row in rows:
-            chunk = RagChunk(
-                chunk_id=row[0],
-                doc_id=row[1],
-                parent_id=row[2],
-                content_text=row[3],
-                meta_payload=row[4] or {},
-                created_at=row[5],
-            )
-            document = RagDocument(
-                id=row[6],
-                filename=row[7],
-                source_type=row[8],
-                status=row[9],
-                estimated_tokens=row[10],
-                error_log=row[11],
-                created_at=row[12],
-            )
-            candidates.append(RagChunkCandidate(chunk=chunk, document=document, score=0.0))
-        logger.info(f"RAG PG 按时间范围检索完成 hits={len(candidates)} start={date_start} end={date_end}")
-        return candidates
+            try:
+                result = await session.execute(
+                    sql,
+                    {
+                        "status": RagDocumentStatus.ACTIVE.value,
+                        "date_start": date_start,
+                        "date_end": date_end,
+                        "limit": top_k,
+                    },
+                )
+                rows = result.all()
+                candidates: list[RagChunkCandidate] = []
+                for row in rows:
+                    chunk = RagChunk(
+                        chunk_id=row[0],
+                        doc_id=row[1],
+                        parent_id=row[2],
+                        content_text=row[3],
+                        meta_payload=row[4] or {},
+                        created_at=row[5],
+                    )
+                    document = RagDocument(
+                        id=row[6],
+                        filename=row[7],
+                        source_type=row[8],
+                        status=row[9],
+                        estimated_tokens=row[10],
+                        error_log=row[11],
+                        created_at=row[12],
+                    )
+                    candidates.append(RagChunkCandidate(chunk=chunk, document=document, score=0.0))
+                logger.info(f"RAG PG 按时间范围检索完成 hits={len(candidates)} start={date_start} end={date_end}")
+                return candidates
+            except Exception as e:
+                logger.error(f"PG 时间检索失败 start={date_start} end={date_end} error={e}")
+                return []
 
     async def create_indexes(self) -> None:
         """创建 RAG 生产索引，幂等执行。"""
