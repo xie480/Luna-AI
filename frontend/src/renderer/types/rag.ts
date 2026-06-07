@@ -139,6 +139,14 @@ export interface RagIngestionTaskResponse {
   document_id: string;
 }
 
+/** 文档更新任务提交响应。 */
+export interface RagDocumentUpdateResponse {
+  schema_version: string;
+  task_id: string;
+  document_id: string;
+  previous_version_id: string;
+}
+
 /** URL 摄入请求。 */
 export interface RagUrlIngestionPayload extends RagChunkRequestPayload {
   url: string;

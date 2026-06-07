@@ -16,6 +16,7 @@ import {
   KnowledgeDocument,
   RagApiResponse,
   RagChunkRequestPayload,
+  RagDocumentUpdateResponse,
   RagIngestionTaskResponse,
   RagSearchResponse,
   RagUrlIngestionPayload,
@@ -280,6 +281,39 @@ class RagService {
       },
     });
     return await parseRagResponse<KnowledgeDocument>(response);
+  }
+
+  /**
+   * 提交文档更新任务。
+   *
+   * 做什么：基于 Blue-Green Update 策略，上传新文件替换已存在文档的内容。
+   * 旧文档保持 ACTIVE 不受影响，新版本在后台完成切片与向量化后通过原子状态翻转上线。
+   * 为什么这样做：避免"先删后插"导致检索真空期，保证更新期间知识库查询不中断。
+   * 输入输出：输入为原文档 ID + 新文件 FormData，输出为更新任务响应（含新 document_id 和版本关联信息）。
+   * 边界条件：原文档必须处于 ACTIVE 状态；新文件格式与大小限制同上传一致。
+   * 异常行为：若原文档不存在或处于处理中状态，后端返回业务错误。
+   */
+  async updateKnowledge(documentId: string, file: File, config: RagChunkRequestPayload): Promise<RagDocumentUpdateResponse> {
+    const formData = new FormData();
+    formData.set('file', file);
+    formData.set('strategy', config.strategy);
+    formData.set('chunk_size', String(config.chunk_size));
+    formData.set('overlap', String(config.overlap));
+    if (config.regex_pattern) {
+      formData.set('regex_pattern', config.regex_pattern);
+    }
+
+    const response = await fetch(
+      buildUrl(`/knowledge/${encodeURIComponent(documentId)}/update`),
+      {
+        method: 'PUT',
+        headers: {
+          'X-Trace-ID': getTraceId(),
+        },
+        body: formData,
+      }
+    );
+    return await parseRagResponse<RagDocumentUpdateResponse>(response);
   }
 
   /** 删除文档及其关联知识切片。当前后端未暴露删除接口时会返回明确错误而非假成功。 */

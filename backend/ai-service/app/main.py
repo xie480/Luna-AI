@@ -278,10 +278,49 @@ async def lifespan(app: FastAPI):
     try:
         pg_client = PostgresClient(settings.postgres_conn_str)
         
-        # 自动迁移数据库表结构
+        # 自动迁移数据库表结构 (自动检查并同步缺失的字段/表)
+        from sqlalchemy import inspect
+        
+        def _sync_schema(sync_conn):
+            inspector = inspect(sync_conn)
+            # 获取当前数据库中已存在的表
+            existing_tables = inspector.get_table_names()
+            
+            # 使用 Base.metadata.create_all 只能创建新表，不能修改现有表。
+            # 为了新增字段，需要对比模型和现有表的列。
+            Base.metadata.create_all(sync_conn)
+            
+            for table_name, table in Base.metadata.tables.items():
+                if table_name in existing_tables:
+                    existing_columns = {col['name'] for col in inspector.get_columns(table_name)}
+                    for column in table.columns:
+                        if column.name not in existing_columns:
+                            # 存在缺失的列，构建 ALTER TABLE 语句
+                            col_type = column.type.compile(sync_conn.dialect)
+                            nullable_str = "NULL" if column.nullable else "NOT NULL"
+                            # 暂时忽略默认值的复杂同步，只简单添加列
+                            alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{column.name}" {col_type} {nullable_str}'
+                            logger.info(f"检测到缺失字段，执行: {alter_stmt}")
+                            try:
+                                sync_conn.execute(from_sqlalchemy_text(alter_stmt))
+                            except Exception as alter_err:
+                                logger.warning(f"添加列失败: {alter_err}")
+                                
+                            # 如果列有索引，添加索引
+                            if column.index:
+                                index_name = f"ix_{table_name}_{column.name}"
+                                index_stmt = f'CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ("{column.name}")'
+                                logger.info(f"为新字段创建索引: {index_stmt}")
+                                try:
+                                    sync_conn.execute(from_sqlalchemy_text(index_stmt))
+                                except Exception as idx_err:
+                                    logger.warning(f"创建索引失败: {idx_err}")
+        
+        from sqlalchemy import text as from_sqlalchemy_text
+        
         async with pg_client.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info("自动迁移数据库表结构成功")
+            await conn.run_sync(_sync_schema)
+        logger.info("自动同步数据库表结构（含字段增量）成功")
         
         # 初始化 Telemetry Worker
         init_worker(pg_client)

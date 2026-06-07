@@ -22,7 +22,12 @@ const readFileAsText = (file: File): Promise<string> => {
   });
 };
 
-export const PendingItemsList: React.FC = () => {
+interface IngestionProps {
+  isUpdateMode?: boolean;
+  targetDocId?: string;
+}
+
+export const PendingItemsList: React.FC<IngestionProps> = ({ isUpdateMode }) => {
   const { pendingFiles, pendingUrls, removePendingFile, removePendingUrl } = useKnowledgeStore();
   const { setPreviewSourceFile, setPreviewSourceUrl, setStrategyDebuggerOpen } = useRagConfigStore();
   
@@ -40,23 +45,56 @@ export const PendingItemsList: React.FC = () => {
 
   return (
     <div className="pending-items-list">
-      <h4 className="pending-title">待处理列表（尚未入库）</h4>
+      <h4 className="pending-title">{isUpdateMode ? '待更新列表（仅限单文件/网址）' : '待处理列表（尚未入库）'}</h4>
       <div className="pending-items-container">
         {pendingFiles.map((f, idx) => (
           <div key={`file-${idx}`} className="pending-item">
-            <span className="pending-icon text-blue">📄</span>
+            <span className="pending-icon text-blue">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </span>
             <span className="pending-name" title={f.name}>{f.name}</span>
             <span className="pending-size">({(f.size / 1024 / 1024).toFixed(2)} MB)</span>
-            <button className="btn-preview-pending" onClick={() => handlePreviewFile(f)} title="预览此文件分片">👁</button>
-            <button className="btn-remove-pending" onClick={() => removePendingFile(idx)} title="移除">✕</button>
+            <button className="btn-preview-pending" onClick={() => handlePreviewFile(f)} title="预览此文件分片">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+            <button className="btn-remove-pending" onClick={() => removePendingFile(idx)} title="移除">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         ))}
         {pendingUrls.map((u, idx) => (
           <div key={`url-${idx}`} className="pending-item">
-            <span className="pending-icon text-green">🔗</span>
+            <span className="pending-icon text-green">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+            </span>
             <span className="pending-name" title={u}>{u}</span>
-            <button className="btn-preview-pending" onClick={() => handlePreviewUrl(u)} title="预览此网页分片">👁</button>
-            <button className="btn-remove-pending" onClick={() => removePendingUrl(idx)} title="移除">✕</button>
+            <button className="btn-preview-pending" onClick={() => handlePreviewUrl(u)} title="预览此网页分片">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+            <button className="btn-remove-pending" onClick={() => removePendingUrl(idx)} title="移除">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         ))}
       </div>
@@ -64,9 +102,9 @@ export const PendingItemsList: React.FC = () => {
   );
 };
 
-export const FileUploadDropzone: React.FC = () => {
+export const FileUploadDropzone: React.FC<IngestionProps> = ({ isUpdateMode }) => {
   const [isDragActive, setIsDragActive] = useState(false);
-  const addPendingFile = useKnowledgeStore(state => state.addPendingFile);
+  const { addPendingFile, pendingFiles, pendingUrls } = useKnowledgeStore();
   const { setPreviewSourceFile, setStrategyDebuggerOpen } = useRagConfigStore();
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -98,13 +136,22 @@ export const FileUploadDropzone: React.FC = () => {
   };
 
   const handleFiles = async (files: File[]) => {
+    if (isUpdateMode && files.length > 1) {
+      createErrorToast('WARN', 'FileUpload', '更新模式下只能选择一个文件');
+      return;
+    }
+    if (isUpdateMode && (pendingFiles.length > 0 || pendingUrls.length > 0)) {
+      createErrorToast('WARN', 'FileUpload', '更新模式下只能保留一个待处理项，请先移除现有项');
+      return;
+    }
+
     for (const file of files) {
       try {
         addPendingFile(file);
-        // File is successfully validated and added, now let's set it to be previewed
         setPreviewSourceFile(file);
         useRagConfigStore.getState().fetchPreviewChunks();
         setStrategyDebuggerOpen(true);
+        if (isUpdateMode) break; // 仅处理第一个文件
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         createErrorToast('WARN', 'FileUpload', `文件 [${file.name}] 拦截: ${message}`);
@@ -142,14 +189,19 @@ export const FileUploadDropzone: React.FC = () => {
   );
 };
 
-export const UrlScrapeInput: React.FC = () => {
+export const UrlScrapeInput: React.FC<IngestionProps> = ({ isUpdateMode }) => {
   const [url, setUrl] = useState('');
-  const addPendingUrl = useKnowledgeStore(state => state.addPendingUrl);
+  const { addPendingUrl, pendingFiles, pendingUrls } = useKnowledgeStore();
   const { setPreviewSourceText, setStrategyDebuggerOpen } = useRagConfigStore();
 
   const handleAdd = () => {
     const trimmed = url.trim();
     if (!trimmed) return;
+
+    if (isUpdateMode && (pendingFiles.length > 0 || pendingUrls.length > 0)) {
+      createErrorToast('WARN', 'UrlScrape', '更新模式下只能保留一个待处理项，请先移除现有项');
+      return;
+    }
     
     try {
       addPendingUrl(trimmed);
@@ -308,8 +360,8 @@ export const StrategyDebugger: React.FC = () => {
   );
 };
 
-export const GlobalSubmitButton: React.FC = () => {
-  const { pendingFiles, pendingUrls, submitAllPending } = useKnowledgeStore();
+export const GlobalSubmitButton: React.FC<IngestionProps> = ({ isUpdateMode, targetDocId }) => {
+  const { pendingFiles, pendingUrls, submitAllPending, updateKnowledge, clearPendingQueue, setDocumentToUpdate } = useKnowledgeStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const totalPending = pendingFiles.length + pendingUrls.length;
@@ -319,12 +371,22 @@ export const GlobalSubmitButton: React.FC = () => {
     
     setIsSubmitting(true);
     try {
-      await submitAllPending();
-      createErrorToast('INFO', 'Success', `成功提交 ${totalPending} 项待处理数据进入知识库`);
+      if (isUpdateMode && targetDocId) {
+        if (pendingFiles.length === 1) {
+          await updateKnowledge(targetDocId, pendingFiles[0]);
+          createErrorToast('SUCCESS', 'Success', '成功提交文档更新任务');
+          clearPendingQueue();
+          setDocumentToUpdate(null); // 返回列表视图
+        } else if (pendingUrls.length === 1) {
+          createErrorToast('WARN', 'Ingestion', '更新 URL 功能暂未实现');
+        }
+      } else {
+        await submitAllPending();
+        createErrorToast('SUCCESS', 'Success', `成功提交 ${totalPending} 项待处理数据进入知识库`);
+      }
     } catch (err: unknown) {
-      // Error is already logged and thrown in submitAllPending, so we can just catch it here
-      // createErrorToast will have been handled by the error boundary or we can show a generic one
-      createErrorToast('ERROR', 'Ingestion', '部分或全部数据入库失败，请查看控制台');
+      const errMsg = err instanceof Error ? err.message : '部分或全部数据入库失败，请查看控制台';
+      createErrorToast('ERROR', 'Ingestion', errMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -345,11 +407,11 @@ export const GlobalSubmitButton: React.FC = () => {
         onClick={handleGlobalSubmit}
         disabled={totalPending === 0 || isSubmitting}
       >
-        {isSubmitting ? '正在提交入库中...' : `确认开始入库 (${totalPending} 项)`}
+        {isSubmitting ? '正在提交入库中...' : (isUpdateMode ? `确认更新文档` : `确认开始入库 (${totalPending} 项)`)}
       </button>
       {totalPending > 0 && !isSubmitting && (
         <div className="global-submit-hint text-muted">
-          注意：将使用上方配置的【最新切片策略】统一处理所有暂存内容
+          注意：将使用上方配置的【最新切片策略】统一处理{isUpdateMode ? '该内容' : '所有暂存内容'}
         </div>
       )}
     </div>

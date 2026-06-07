@@ -15,7 +15,7 @@ export interface ErrorToastItem {
   /** 唯一标识（Snowflake ID） */
   id: string;
   /** 错误级别 */
-  level: 'ERROR' | 'WARN' | 'CRITICAL';
+  level: 'ERROR' | 'WARN' | 'CRITICAL' | 'INFO' | 'SUCCESS';
   /** 错误来源标识 */
   source: string;
   /** 错误摘要 */

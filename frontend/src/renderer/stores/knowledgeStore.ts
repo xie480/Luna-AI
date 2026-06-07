@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { 
-  KnowledgeDocumentView, 
-  KnowledgeFilterState, 
+import {
+  KnowledgeDocumentView,
+  KnowledgeFilterState,
   IngestionProgressSnapshot,
   RAG_POLL_INTERVAL_MS,
   RAG_POLL_TIMEOUT_MS,
@@ -18,27 +18,35 @@ interface KnowledgeState {
   // 待处理队列（未真正调用后端入库 API 前）
   pendingFiles: File[];
   pendingUrls: string[];
-  
+
   globalUploadProgress: number; // 0-100
   isPolling: boolean;
+
+  /** 当前正在执行更新操作的文档 ID 集合，用于 UI 展示更新中状态。 */
+  updatingDocIds: Set<string>;
   
+  /** 当前选中的要更新的文档对象上下文，用于"更新面板"的渲染 */
+  documentToUpdate: KnowledgeDocumentView | null;
+
   // Actions
   setFilterState: (filter: Partial<KnowledgeFilterState>) => void;
+  setDocumentToUpdate: (doc: KnowledgeDocumentView | null) => void;
   fetchKnowledgeList: () => Promise<void>;
-  
+
   addPendingFile: (file: File) => void;
   removePendingFile: (index: number) => void;
   addPendingUrl: (url: string) => void;
   removePendingUrl: (index: number) => void;
   clearPendingQueue: () => void;
-  
+
   submitAllPending: () => Promise<void>;
   deleteKnowledge: (documentId: string) => Promise<void>;
-  
+  updateKnowledge: (documentId: string, newFile: File) => Promise<void>;
+
   // Polling loop
   startPolling: () => void;
   stopPolling: () => void;
-  
+
   // Computed (accessed via function or component subscription)
   getFilteredDocuments: () => KnowledgeDocumentView[];
   getProgressSnapshot: () => IngestionProgressSnapshot;
@@ -61,8 +69,14 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   
   globalUploadProgress: 0,
   isPolling: false,
+
+  /** 当前正在执行更新操作的文档 ID 集合，初始为空。 */
+  updatingDocIds: new Set<string>(),
   
+  documentToUpdate: null,
+
   setFilterState: (filter) => set((state) => ({ filterState: { ...state.filterState, ...filter } })),
+  setDocumentToUpdate: (doc) => set({ documentToUpdate: doc }),
   
   fetchKnowledgeList: async () => {
     try {
@@ -185,10 +199,55 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     set((state) => ({
       documents: state.documents.filter(d => d.id !== documentId)
     }));
-    // Refresh to ensure UI stays consistent
-    get().fetchDocuments();
+    // 刷新列表确保 UI 一致性
+    get().fetchKnowledgeList();
   },
-  
+
+  /**
+   * 更新指定文档的内容（基于 Blue-Green Update 策略）。
+   *
+   * 做什么：上传新文件替换已存在文档的内容，后端在后台完成切片与向量化后通过原子状态翻转上线。
+   * 为什么这样做：更新期间旧文档保持 ACTIVE 服务不中断，详见 rag_deduplication_and_update_plan.md。
+   * 输入输出：输入为文档 ID 和新文件，成功后自动刷新知识库列表。
+   * 边界条件：仅允许对状态为 'completed' 的文档发起更新；更新期间 updatingDocIds 记录状态供 UI 展示。
+   * 异常行为：文件大小/格式校验失败或后端返回错误时抛出中文异常。
+   */
+  updateKnowledge: async (documentId: string, newFile: File) => {
+    // 文件大小校验
+    if (newFile.size > RAG_MAX_UPLOAD_BYTES) {
+      throw new Error(`文件大小超过限制 (最大 50MB)`);
+    }
+    const validExts = ['.txt', '.md', '.pdf', '.docx'];
+    const name = newFile.name.toLowerCase();
+    if (!validExts.some(ext => name.endsWith(ext))) {
+      throw new Error(`不支持的文件格式，仅支持 txt, md, pdf, docx`);
+    }
+
+    // 标记该文档为"更新中"
+    const { updatingDocIds } = get();
+    const newUpdatingIds = new Set(updatingDocIds);
+    newUpdatingIds.add(documentId);
+    set({ updatingDocIds: newUpdatingIds });
+
+    try {
+      const config = useRagConfigStore.getState().buildRequestPayload();
+      await ragService.updateKnowledge(documentId, newFile, config);
+
+      // 更新成功后刷新列表以反映新版本状态
+      await get().fetchKnowledgeList();
+    } catch (err) {
+      // 更新失败后也刷新列表（可能有部分失败信息）
+      await get().fetchKnowledgeList();
+      throw err;
+    } finally {
+      // 无论成功或失败，都从 updatingDocIds 中移除标记
+      const { updatingDocIds: currentIds } = get();
+      const updatedIds = new Set(currentIds);
+      updatedIds.delete(documentId);
+      set({ updatingDocIds: updatedIds });
+    }
+  },
+
   startPolling: () => {
     if (get().isPolling) return;
     set({ isPolling: true });

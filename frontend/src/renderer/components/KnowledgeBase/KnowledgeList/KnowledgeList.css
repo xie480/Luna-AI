@@ -136,6 +136,22 @@
   background-color: rgba(255, 255, 255, 0.1);
 }
 
+.btn-action.btn-updating {
+  animation: btn-update-pulse 1.2s ease-in-out infinite;
+  color: var(--primary-color, #007acc);
+  border-color: var(--primary-color, #007acc);
+}
+
+@keyframes btn-update-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.08); }
+}
+
+/* 隐藏的文件选择 input，仅用于触发系统文件选择弹窗 */
+.file-input-hidden {
+  display: none;
+}
+
 .knowledge-loading,
 .knowledge-empty {
   display: flex;

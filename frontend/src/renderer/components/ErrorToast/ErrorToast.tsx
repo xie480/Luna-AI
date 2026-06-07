@@ -25,6 +25,8 @@ const LEVEL_ICONS: Record<string, string> = {
   ERROR: '✕',
   CRITICAL: '⚠',
   WARN: '!',
+  INFO: 'i',
+  SUCCESS: '✓',
 };
 
 /** 级别对应的 CSS 类名 */
@@ -32,6 +34,8 @@ const LEVEL_CLASSES: Record<string, string> = {
   ERROR: 'level-error',
   CRITICAL: 'level-critical',
   WARN: 'level-warn',
+  INFO: 'level-info',
+  SUCCESS: 'level-success',
 };
 
 /**

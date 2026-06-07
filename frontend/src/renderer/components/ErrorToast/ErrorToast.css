@@ -71,6 +71,16 @@
   background: linear-gradient(135deg, rgba(230, 150, 30, 0.92), rgba(200, 120, 20, 0.92));
 }
 
+/* INFO 级别：蓝色背景 */
+.error-toast-item.level-info {
+  background: linear-gradient(135deg, rgba(50, 120, 220, 0.92), rgba(30, 80, 180, 0.92));
+}
+
+/* SUCCESS 级别：绿色背景 */
+.error-toast-item.level-success {
+  background: linear-gradient(135deg, rgba(50, 200, 80, 0.92), rgba(30, 160, 60, 0.92));
+}
+
 /* ============================================================
  * 级别图标
  * ============================================================ */
