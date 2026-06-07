@@ -7,6 +7,29 @@
 {{MESSAGES_TEXT}}
 
 ## 输出 JSON Schema
-{{OUTPUT_SCHEMA}}
+{
+  "schema_version": "user_profile.mutation.v1",
+  "mutations": [
+    {
+      "action": "add | confirm_existing | supersede | reject",
+      "target_item_id": "当 action 为 confirm_existing 或 supersede 时必填，否则为空",
+      "reason": "必须为中文，说明为什么这么处理",
+      "candidate": {
+        "category": "appearance | personality | likes | dislikes | fears | expectations | habits | custom",
+        "custom_category_name": "category=custom 时必填，否则为 null",
+        "content": "关于用户本人的稳定画像正文，长度 4 到 200 字",
+        "evidence": "必须摘自聊天记录的原始证据片段，长度 4 到 300 字",
+        "confidence": 0.0,
+        "source_risk_flags": ["hypothetical | joke | sarcasm | perfunctory | quote | roleplay | temporary_emotion | fictional"],
+        "reasoning": "必须为中文，说明为什么判断为该画像"
+      }
+    }
+  ]
+}
 
-请只返回符合 Schema 的 JSON。若没有可信画像候选，返回空 candidates，并把被拒绝的可疑内容放入 rejected_candidates。
+## 输出要求
+1. 如果没有可信画像，返回空 mutations。
+2. 对于假设、玩笑、反讽、敷衍、引用、角色扮演、临时情绪、虚构设定，应输出 action=reject。
+3. 对于与已有画像重复的内容，应优先输出 action=confirm_existing。
+4. 对于明确替换旧画像的新事实，应输出 action=supersede，并填写 target_item_id。
+5. 不要输出任何 JSON 之外的内容。

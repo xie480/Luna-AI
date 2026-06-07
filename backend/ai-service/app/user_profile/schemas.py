@@ -10,16 +10,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.types.constants import (
+    USER_PROFILE_AUTO_COMMIT_CONFIDENCE_THRESHOLD,
     USER_PROFILE_CACHE_SCHEMA_VERSION,
     USER_PROFILE_CATEGORY_LABELS,
-    USER_PROFILE_EXTRACT_SCHEMA_VERSION,
     USER_PROFILE_MUTATION_SCHEMA_VERSION,
     USER_PROFILE_SCHEMA_VERSION,
     UserProfileCacheStatus,
     UserProfileCategory,
+    UserProfileMutationAction,
     UserProfileSourceType,
     UserProfileStatus,
 )
@@ -28,21 +29,22 @@ CONTENT_MIN_LENGTH = 4
 CONTENT_MAX_LENGTH = 200
 EVIDENCE_MIN_LENGTH = 4
 EVIDENCE_MAX_LENGTH = 300
-MAX_EXTRACTED_CANDIDATES = 20
+MAX_MUTATIONS = 20
 UNCERTAIN_WORDS = ("可能", "也许", "似乎", "大概", "或许")
-HIGH_RISK_FLAGS = ("hypothetical", "joke", "sarcasm", "perfunctory", "quote", "roleplay", "temporary_emotion", "fictional")
+HIGH_RISK_FLAGS = (
+    "hypothetical",
+    "joke",
+    "sarcasm",
+    "perfunctory",
+    "quote",
+    "roleplay",
+    "temporary_emotion",
+    "fictional",
+)
 
 
 def validate_profile_content(value: str) -> str:
-    """
-    校验并清洗画像正文。
-
-    做什么：统一限制画像正文长度和不确定表达。
-    为什么这样做：避免把不稳定、不明确的信息写入用户画像。
-    输入输出：输入原始正文，输出去首尾空格后的正文。
-    边界条件：长度必须为 4 到 200 字。
-    异常行为：非法时抛出 ValueError，由 API 层转为明确错误码。
-    """
+    """校验并清洗画像正文。"""
     content = value.strip()
     if len(content) < CONTENT_MIN_LENGTH or len(content) > CONTENT_MAX_LENGTH:
         raise ValueError("用户画像内容长度必须在 4 到 200 字之间")
@@ -127,8 +129,8 @@ class UserProfileExtractionTaskRequest(BaseModel):
     messages_text: str = Field(min_length=1, max_length=20000)
 
 
-class ExtractedProfileCandidate(BaseModel):
-    """模型提取出的用户画像候选。"""
+class ProfileMutationCandidate(BaseModel):
+    """用户画像变更中的候选数据。"""
 
     category: UserProfileCategory
     custom_category_name: str | None = Field(default=None, max_length=64)
@@ -157,7 +159,7 @@ class ExtractedProfileCandidate(BaseModel):
         return [item.strip() for item in value if item.strip()]
 
     @model_validator(mode="after")
-    def _validate_candidate(self) -> "ExtractedProfileCandidate":
+    def _validate_candidate(self) -> "ProfileMutationCandidate":
         if self.category == UserProfileCategory.CUSTOM and not self.custom_category_name:
             raise ValueError("自定义类别候选必须填写类别名称")
         if any(flag in HIGH_RISK_FLAGS for flag in self.source_risk_flags) and self.confidence >= 0.6:
@@ -165,37 +167,34 @@ class ExtractedProfileCandidate(BaseModel):
         return self
 
 
-class RejectedProfileCandidate(BaseModel):
-    """模型拒绝入库的候选说明。"""
-
-    raw_claim: str = Field(min_length=1, max_length=300)
-    evidence: str = Field(min_length=1, max_length=300)
-    reject_reason: str = Field(min_length=1, max_length=500)
-
-
-class UserProfileExtractOutput(BaseModel):
-    """模型提取用户画像的结构化输出。"""
-
-    schema_version: Literal["user_profile.extract.v1"] = USER_PROFILE_EXTRACT_SCHEMA_VERSION
-    session_id: str
-    candidates: list[ExtractedProfileCandidate] = Field(default_factory=list, max_length=MAX_EXTRACTED_CANDIDATES)
-    rejected_candidates: list[RejectedProfileCandidate] = Field(default_factory=list, max_length=MAX_EXTRACTED_CANDIDATES)
-
-
 class ProfileMutation(BaseModel):
     """用户画像内部变更指令。"""
 
-    action: Literal["add", "confirm_existing", "supersede", "reject"]
-    candidate: ExtractedProfileCandidate
+    action: UserProfileMutationAction
+    candidate: ProfileMutationCandidate
     target_item_id: str | None = None
-    reason: str
+    reason: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def _validate_target_item_id(self) -> "ProfileMutation":
+        if self.action in (UserProfileMutationAction.CONFIRM_EXISTING, UserProfileMutationAction.SUPERSEDE):
+            if not self.target_item_id:
+                raise ValueError("confirm_existing 或 supersede 必须提供 target_item_id")
+        return self
 
 
 class ProfileMutationPlan(BaseModel):
     """用户画像内部变更计划。"""
 
     schema_version: Literal["user_profile.mutation.v1"] = USER_PROFILE_MUTATION_SCHEMA_VERSION
-    mutations: list[ProfileMutation]
+    mutations: list[ProfileMutation] = Field(default_factory=list, max_length=MAX_MUTATIONS)
+
+    @model_validator(mode="after")
+    def _validate_mutations(self) -> "ProfileMutationPlan":
+        for mutation in self.mutations:
+            if mutation.action != UserProfileMutationAction.REJECT and mutation.candidate.confidence < USER_PROFILE_AUTO_COMMIT_CONFIDENCE_THRESHOLD:
+                raise ValueError("自动提交的用户画像候选置信度不能低于阈值")
+        return self
 
 
 class UserProfileCacheRebuildResponse(BaseModel):

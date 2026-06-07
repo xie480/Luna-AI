@@ -1,12 +1,15 @@
 from enum import Enum
 
+
 class ModelSize(str, Enum):
     LARGE = "large"
     MEDIUM = "medium"
     SMALL = "small"
 
+
 class Role(str, Enum):
     """全局统一的角色枚举"""
+
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
@@ -36,6 +39,7 @@ HEALTH_STATUS_HEALTHY = "healthy"
 HEALTH_STATUS_UNHEALTHY = "unhealthy"
 HEALTH_STATUS_DEGRADED = "degraded"
 
+
 class PrimaryIntent(str, Enum):
     MODIFY_PLAN = "MODIFY_PLAN"
     GREETING = "GREETING"
@@ -44,17 +48,20 @@ class PrimaryIntent(str, Enum):
     SYSTEM_COMMAND = "SYSTEM_COMMAND"
     TOOL_INVOCATION = "TOOL_INVOCATION"
 
+
 class IntentCategory(str, Enum):
     TASK_MANAGEMENT = "TASK_MANAGEMENT"
     CHAT = "CHAT"
     KNOWLEDGE_QUERY = "KNOWLEDGE_QUERY"
     EMOTION_SUPPORT = "EMOTION_SUPPORT"
 
+
 class DagRouteHint(str, Enum):
     MULTI_SOURCE_RETRIEVAL_WORKFLOW = "MULTI_SOURCE_RETRIEVAL_WORKFLOW"
     FAST_CHAT = "FAST_CHAT"
     AGENTIC_WORKFLOW = "AGENTIC_WORKFLOW"
     GATING_APPROVAL = "GATING_APPROVAL"
+
 
 class RetrievalType(str, Enum):
     LONG_TERM_MEMORY = "LONG_TERM_MEMORY"
@@ -110,11 +117,42 @@ class UserProfileSourceRefType(str, Enum):
     LONG_SUMMARY = "long_summary"
 
 
+class UserProfileMutationAction(str, Enum):
+    """用户画像变更动作枚举。"""
+
+    ADD = "add"
+    CONFIRM_EXISTING = "confirm_existing"
+    SUPERSEDE = "supersede"
+    REJECT = "reject"
+
+
+class UserProfileConflictType(str, Enum):
+    """用户画像冲突类型枚举。"""
+
+    SEMANTIC_CONFLICT = "semantic_conflict"
+
+
+class UserProfileConflictResolution(str, Enum):
+    """用户画像冲突解决策略枚举。"""
+
+    SUPERSEDE = "supersede"
+
+
 USER_PROFILE_SCHEMA_VERSION = "user_profile.v1"
 USER_PROFILE_EXTRACT_SCHEMA_VERSION = "user_profile.extract.v1"
 USER_PROFILE_MUTATION_SCHEMA_VERSION = "user_profile.mutation.v1"
 USER_PROFILE_CACHE_SCHEMA_VERSION = "user_profile.cache.v1"
 USER_PROFILE_DEFAULT_USER_ID = "local_default_user"
+USER_PROFILE_AUTO_COMMIT_CONFIDENCE_THRESHOLD = 0.75
+
+USER_PROFILE_CHANGE_REASON_MANUAL_CREATE = "手动新增用户画像"
+USER_PROFILE_CHANGE_REASON_MANUAL_UPDATE_SNAPSHOT = "手动编辑前快照"
+USER_PROFILE_CHANGE_REASON_MANUAL_DELETE_SNAPSHOT = "手动删除前快照"
+USER_PROFILE_CHANGE_REASON_MODEL_ADD = "模型提取新增用户画像"
+USER_PROFILE_CHANGE_REASON_MODEL_SUPERSEDE_OLD = "模型提取冲突覆盖前快照"
+USER_PROFILE_CHANGE_REASON_MODEL_SUPERSEDE_NEW = "模型提取冲突覆盖新增画像"
+USER_PROFILE_REASON_DUPLICATE_CONFIRM = "新候选与已有画像重复，更新最近确认时间"
+USER_PROFILE_REASON_ADD = "新画像"
 
 USER_PROFILE_CATEGORY_LABELS = {
     UserProfileCategory.APPEARANCE.value: "外貌",
@@ -126,7 +164,6 @@ USER_PROFILE_CATEGORY_LABELS = {
     UserProfileCategory.HABITS.value: "癖好",
     UserProfileCategory.CUSTOM.value: "自定义",
 }
-
 
 RAG_SCHEMA_VERSION = "rag.v1"
 RAG_QDRANT_COLLECTION = "luna_rag_index"
