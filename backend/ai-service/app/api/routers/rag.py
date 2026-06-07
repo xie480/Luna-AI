@@ -158,7 +158,7 @@ async def update_knowledge_document(
     
     options = IngestionOptions(strategy=strategy, chunk_size=chunk_size, overlap=overlap, regex_pattern=regex_pattern)
     task = asyncio.create_task(
-        service._run_file_ingestion(task_id, new_doc_id, file.filename, content, options, trace_id, previous_version_id=document_id)
+        service._run_file_ingestion(task_id, new_doc_id, file.filename, content, options, trace_id)
     )
     service._track_task(task)
     

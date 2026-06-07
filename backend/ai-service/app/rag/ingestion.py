@@ -160,7 +160,6 @@ class RagIngestionService:
         content: bytes,
         options: IngestionOptions,
         trace_id: str,
-        previous_version_id: str | None = None,
     ) -> None:
         """执行文件摄入后台任务，带超时看门狗。"""
         try:
@@ -171,7 +170,6 @@ class RagIngestionService:
                     await self.document_loader.extract_from_bytes(filename, content),
                     options,
                     trace_id,
-                    previous_version_id=previous_version_id,
                 ),
                 timeout=self.task_timeout_seconds,
             )
