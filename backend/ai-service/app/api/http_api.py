@@ -295,6 +295,13 @@ async def test_reload():
     return {"status": "reloaded"}
 
 
+from app.rag.retrieval import RagRetrievalOrchestrator
+
+async def get_rag_orchestrator(request: Request) -> Optional[RagRetrievalOrchestrator]:
+    """从 app.state 获取 RagRetrievalOrchestrator 实例"""
+    return getattr(request.app.state, "rag_retrieval_orchestrator", None)
+
+
 @router.post("/chat")
 async def chat_request(
     payload: ChatRequestPayload,
@@ -303,6 +310,7 @@ async def chat_request(
     pg_repo: Optional[ChatHistoryPGRepo] = Depends(get_pg_repo),
     prompt_mgr: Optional[PromptManager] = Depends(get_prompt_manager),
     memory_manager: Optional[MemoryManager] = Depends(get_memory_manager),
+    rag_orchestrator: Optional[RagRetrievalOrchestrator] = Depends(get_rag_orchestrator),
 ) -> APIResponse:
     """
     处理聊天请求，执行完整的流式对话流程。
@@ -317,6 +325,18 @@ async def chat_request(
     6. 立即返回 HTTP 响应
 
     返回：立即返回 { status: "streaming", msgId }，实际流式内容通过 SSE 推送。
+
+    Args:
+        payload (ChatRequestPayload): 聊天请求的有效载荷，包含sessionId、message等信息
+        trace_id (str): 链路追踪ID，从请求头获取或自动生成
+        redis_repo (Optional[ChatHistoryRedisRepo]): Redis仓库实例，用于获取上下文
+        pg_repo (Optional[ChatHistoryPGRepo]): PostgreSQL仓库实例，用于持久化对话历史
+        prompt_mgr (Optional[PromptManager]): 提示词管理器实例，用于组装各种提示词
+        memory_manager (Optional[MemoryManager]): 记忆管理器实例，用于长期记忆检索
+        rag_orchestrator (Optional[RagRetrievalOrchestrator]): RAG检索编排器实例，用于外部知识检索
+
+    Returns:
+        APIResponse: 立即返回API响应，包含状态信息和消息ID，实际流式内容通过SSE推送
     """
     logger.info(f"收到 /api/chat 请求 trace_id={trace_id} sessionId={payload.sessionId} msgId={payload.msgId}")
     if not payload.sessionId:
@@ -327,6 +347,7 @@ async def chat_request(
     user_msg_id = payload.msgId or generate_string_id()
 
     # ---- 1. 加载上下文 ----
+    # 从Redis加载会话的摘要和最近的历史记录
     summary = ChatSummary()
     recent_history: List[Interaction] = []
     if redis_repo:
@@ -336,6 +357,7 @@ async def chat_request(
             logger.error(f"从 Redis 获取上下文失败 trace_id={trace_id} error={e}")
 
     # ---- 2. 组装上下文文本 ----
+    # 将历史对话转换为文本格式，便于后续组装提示词
     memory_snippets_parts = []
     for i, h in enumerate(recent_history):
         memory_snippets_parts.append(f"[对话 {i+1}]\n")
@@ -363,6 +385,7 @@ async def chat_request(
     }
 
     # ---- 3. 组装 Input Reconstruction Prompt ----
+    # 为Input Reconstruction阶段组装三个不同层次的提示词
     input_recon_system_prompt = ""
     input_recon_memory_prompt = ""
     input_recon_runtime_prompt = ""
@@ -400,6 +423,7 @@ async def chat_request(
     logger.info(f"组装 Input Reconstruction Prompt 成功 trace_id={trace_id}, input_recon_system_prompt={input_recon_system_prompt}, input_recon_memory_prompt={input_recon_memory_prompt}, input_recon_runtime_prompt={input_recon_runtime_prompt}")
 
     # ---- 4. 调用 Input Reconstruction Agent ----
+    # 使用InputReconstructorAgent对用户输入进行消歧和意图识别
     from app.agent.input_reconstructor import InputReconstructorAgent
     from app.llm.client import llm_client
 
@@ -411,6 +435,9 @@ async def chat_request(
     reference_time = None
     entity_mentions = []
     
+    external_knowledge_trigger = False
+    external_knowledge_strategy = "hybrid"
+
     try:
         recon_result = await agent.process(
             trace_id=trace_id,
@@ -423,15 +450,31 @@ async def chat_request(
         emotion_state = recon_data.get("emotion_state", {})
         reconstruction = recon_data.get("reconstruction", {})
         disambiguated_text = reconstruction.get("disambiguated_text", payload.message)
+        
+        intent_routing = recon_data.get("intent_routing", {})
+        required_retrieval_types = intent_routing.get("required_retrieval_types", [])
 
         retrieval_routing = recon_data.get("retrieval_routing", {})
-        long_term_memory_routing = retrieval_routing.get("long_term_memory", {})
-        long_term_memory_trigger = long_term_memory_routing.get("trigger", False)
-        search_queries = long_term_memory_routing.get("search_queries", [])
-        temporal_focus = long_term_memory_routing.get("temporal_focus", {})
-        reference_time = temporal_focus.get("reference_time")
-        temporal_deviation = temporal_focus.get("temporal_deviation", 0)
-        entity_mentions = long_term_memory_routing.get("entity_mentions", [])
+        
+        from app.types.constants import RetrievalType
+        if RetrievalType.LONG_TERM_MEMORY.value in required_retrieval_types:
+            long_term_memory_routing = retrieval_routing.get("long_term_memory", {})
+            long_term_memory_trigger = long_term_memory_routing.get("trigger", False)
+            search_queries = long_term_memory_routing.get("search_queries", [])
+            temporal_focus = long_term_memory_routing.get("temporal_focus", {})
+            reference_time = temporal_focus.get("reference_time")
+            temporal_deviation = temporal_focus.get("temporal_deviation", 0)
+            entity_mentions = long_term_memory_routing.get("entity_mentions", [])
+            
+        if RetrievalType.EXTERNAL_KNOWLEDGE.value in required_retrieval_types:
+            external_knowledge_routing = retrieval_routing.get("external_knowledge", {})
+            external_knowledge_trigger = external_knowledge_routing.get("trigger", False)
+            external_knowledge_strategy = retrieval_routing.get("route_strategy", "hybrid")
+            external_search_queries = external_knowledge_routing.get("search_queries", [])
+            ext_temporal_focus = external_knowledge_routing.get("temporal_focus") or {}
+            ext_reference_time = ext_temporal_focus.get("reference_time")
+            ext_temporal_deviation = ext_temporal_focus.get("temporal_deviation", 0)
+            ext_entity_mentions = external_knowledge_routing.get("entity_mentions", [])
 
         prompt_variables["EMOTION_PRIMARY"] = emotion_state.get("primary_emotion", "")
         prompt_variables["EMOTION_INTENSITY"] = f"{emotion_state.get('intensity', 0.0):.2f}"
@@ -470,7 +513,40 @@ async def chat_request(
         logger.info(f"记忆管理器不可用，跳过长期记忆 RAG 检索 trace_id={trace_id}")
         prompt_variables["LONG_TERM_MEMORY"] = ""
 
+    # ---- 5.5 外部知识库 RAG：从文档/网页检索并注入 Prompt ----
+    # 执行外部知识库检索并将结果注入提示词变量
+    # 与长期记忆RAG完全对齐的参数模式：
+    #   向量检索：使用 search_queries（由 InputReconstructor 从客观知识查询角度泛化）
+    #   BM25检索：使用 reference_time、temporal_deviation、entity_mentions + disambiguated_text
+    #   disambiguated_text 作为基础查询贯穿所有检索策略
+    if rag_orchestrator and external_knowledge_trigger:
+        try:
+            external_knowledge_text = await rag_orchestrator.retrieve_and_format_knowledge(
+                query_text=disambiguated_text,
+                query_vector=[],
+                search_queries=external_search_queries,
+                reference_time=ext_reference_time,
+                temporal_deviation=ext_temporal_deviation,
+                entity_mentions=ext_entity_mentions,
+            )
+            if external_knowledge_text:
+                prompt_variables["EXTERNAL_KNOWLEDGE"] = external_knowledge_text
+                logger.info(f"外部知识库 RAG 检索注入成功 trace_id={trace_id} text_length={len(external_knowledge_text)}")
+            else:
+                prompt_variables["EXTERNAL_KNOWLEDGE"] = ""
+                logger.info(f"外部知识库 RAG 检索未找到相关结果 trace_id={trace_id}")
+        except Exception as e:
+            logger.warning(f"外部知识库 RAG 检索注入失败（降级跳过） trace_id={trace_id} error={e}")
+            prompt_variables["EXTERNAL_KNOWLEDGE"] = ""
+    elif rag_orchestrator and not external_knowledge_trigger:
+        logger.info(f"外部知识库检索未触发 trace_id={trace_id}")
+        prompt_variables["EXTERNAL_KNOWLEDGE"] = ""
+    else:
+        logger.info(f"Rag Orchestrator 不可用，跳过外部知识 RAG 检索 trace_id={trace_id}")
+        prompt_variables["EXTERNAL_KNOWLEDGE"] = ""
+
     # ---- 6. 组装完整 Chat Prompt ----
+    # 使用更新后的变量组装最终的聊天提示词
     full_system_prompt = ""
     if prompt_mgr:
         try:
@@ -483,6 +559,7 @@ async def chat_request(
     logger.info(f"开始流式对话 trace_id={trace_id}, full_system_prompt={full_system_prompt}")
 
     # ---- 6. 将流式调用与持久化放入后台 Task，立即返回 HTTP 响应 ----
+    # 创建后台任务执行LLM流式调用和数据持久化，立即返回HTTP响应
     asyncio.create_task(
         _execute_llm_stream(
             trace_id=trace_id,

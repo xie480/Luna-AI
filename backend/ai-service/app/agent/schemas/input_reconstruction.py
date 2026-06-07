@@ -48,17 +48,17 @@ class TemporalFocus(BaseModel):
 
 class LongTermMemoryRouting(BaseModel):
     trigger: bool = Field(..., description="是否触发长期记忆检索")
-    trigger_reason: str = Field(..., description="触发原因")
-    search_queries: list[str] = Field(default_factory=list)
+    trigger_reason: str = Field(..., description="触发原因，例如需要回溯用户聊天历史或提取用户偏好")
+    search_queries: list[str] = Field(default_factory=list, description="侧重于找回过去交流片段的Query")
     temporal_focus: TemporalFocus
-    entity_mentions: list[str] = Field(default_factory=list)
+    entity_mentions: list[str] = Field(default_factory=list, description="历史对话中提及的实体或昵称")
 
 class ExternalKnowledgeRouting(BaseModel):
     trigger: bool = Field(..., description="是否触发外部知识检索")
-    trigger_reason: str = Field(..., description="触发原因")
-    search_queries: list[str] = Field(default_factory=list)
-    temporal_focus: TemporalFocus | None = Field(default=None)
-    entity_mentions: list[str] = Field(default_factory=list)
+    trigger_reason: str = Field(..., description="触发原因，例如用户查询客观事实、文档或操作手册")
+    search_queries: list[str] = Field(default_factory=list, description="侧重于客观事实查询的Query")
+    temporal_focus: TemporalFocus | None = Field(default=None, description="通常为空，除非明确要求特定时期的文档")
+    entity_mentions: list[str] = Field(default_factory=list, description="客观名词、术语或API名称等")
 
 class ExperienceReflectionRouting(BaseModel):
     trigger: bool = Field(..., description="是否触发经验教训检索")

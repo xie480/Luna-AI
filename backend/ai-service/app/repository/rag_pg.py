@@ -193,6 +193,62 @@ class RagPGRepository:
         logger.info(f"RAG PG FTS 检索完成 hits={len(candidates)} top_k={top_k}")
         return candidates
 
+    async def search_by_time_range(
+        self, date_start: str, date_end: str, top_k: int
+    ) -> list[RagChunkCandidate]:
+        """
+        按 created_at 时间范围检索切片候选。
+
+        用于纯时间维度的召回路径，返回的 score 默认设为 0.0。
+        """
+        sql = text(
+            """
+            SELECT c.chunk_id, c.doc_id, c.parent_id, c.content_text, c.meta_payload, c.created_at,
+                   d.id, d.filename, d.source_type, d.status, d.estimated_tokens, d.error_log, d.created_at,
+                   0.0 AS rank
+            FROM rag_chunks c
+            JOIN rag_documents d ON d.id = c.doc_id
+            WHERE d.status = :status
+              AND c.created_at >= :date_start
+              AND c.created_at <= :date_end
+            ORDER BY c.created_at DESC
+            LIMIT :limit
+            """
+        )
+        async with self.pg_client.session_factory() as session:
+            result = await session.execute(
+                sql,
+                {
+                    "status": RagDocumentStatus.COMPLETED.value,
+                    "date_start": date_start,
+                    "date_end": date_end,
+                    "limit": top_k,
+                },
+            )
+            rows = result.all()
+        candidates: list[RagChunkCandidate] = []
+        for row in rows:
+            chunk = RagChunk(
+                chunk_id=row[0],
+                doc_id=row[1],
+                parent_id=row[2],
+                content_text=row[3],
+                meta_payload=row[4] or {},
+                created_at=row[5],
+            )
+            document = RagDocument(
+                id=row[6],
+                filename=row[7],
+                source_type=row[8],
+                status=row[9],
+                estimated_tokens=row[10],
+                error_log=row[11],
+                created_at=row[12],
+            )
+            candidates.append(RagChunkCandidate(chunk=chunk, document=document, score=0.0))
+        logger.info(f"RAG PG 按时间范围检索完成 hits={len(candidates)} start={date_start} end={date_end}")
+        return candidates
+
     async def create_indexes(self) -> None:
         """创建 RAG 生产索引，幂等执行。"""
         statements = [

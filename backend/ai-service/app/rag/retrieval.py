@@ -112,6 +112,64 @@ class RagRetrievalOrchestrator:
         await self.event_publisher.publish_citations(trace_id, citations)
         return RagSearchResponse(route=route, evidences=evidences, prompt_context=prompt_context, citations=citations)
 
+    async def retrieve_and_format_knowledge(
+        self,
+        query_text: str,
+        query_vector: list[float],
+        search_queries: list[str] | None = None,
+        reference_time: str | None = None,
+        temporal_deviation: int = 0,
+        entity_mentions: list[str] | None = None,
+    ) -> str:
+        """
+        检索外部知识库并格式化为可注入 Prompt 的文本。
+
+        做什么：与长期记忆的 retrieve_and_format_memories 完全对齐的参数模式。
+                底层通过 KnowledgeRetriever 按规则分配参数：
+                - 向量检索：仅使用 search_queries（优先），降级到 [query_text]
+                - BM25 检索：使用 entity_mentions + query_text + reference_time/temporal_deviation
+                - query_text（即 disambiguated_text）作为基础查询贯穿所有策略
+        返回：格式化的知识文本，每段以 [来源 N]: <文档名>\n<内容>\n 形式组织。
+        """
+        from app.rag.knowledge_retriever import KnowledgeRetriever
+
+        retriever = KnowledgeRetriever(
+            pg_repo=self.pg_repo,
+            qdrant_repo=self.qdrant_repo,
+            inference_svc=self.inference_svc,
+            retrieval_top_k=20,
+            rerank_top_k=3,
+        )
+
+        # 执行混合检索，传递所有精化参数
+        candidates = await retriever.retrieve(
+            query_text=query_text,
+            search_mode="hybrid",
+            search_queries=search_queries,
+            reference_time=reference_time,
+            temporal_deviation=temporal_deviation,
+            entity_mentions=entity_mentions,
+        )
+        if not candidates:
+            return ""
+
+        # 格式化为可注入 Prompt 的文本
+        parts: list[str] = []
+        # 从 _build_evidences 借用重排逻辑以获得一致的 evidence 构建
+        from app.rag.types import RagEvidence, RagSourceType
+
+        for idx, (candidate, score) in enumerate(candidates, start=1):
+            chunk = candidate.chunk
+            document = candidate.document
+            parts.append(f"[来源 {idx}]: {document.filename}")
+            parts.append(chunk.content_text)
+            parts.append("")  # 空行分隔
+
+        result = "\n".join(parts).rstrip("\n")
+        await self.event_publisher.publish_thought(query_text, "formatting", f"外部知识格式化完成，共 {len(candidates)} 条证据")
+        logger.info(f"外部知识库检索格式化完成 hits={len(candidates)} text_length={len(result)}")
+        return result
+
     async def _keyword_search(self, request: RagSearchRequest) -> list[ScoredCandidate]:
         """执行纯 BM25/FTS 关键词检索。"""
         from app.rag.knowledge_retriever import KnowledgeRetriever
@@ -124,7 +182,11 @@ class RagRetrievalOrchestrator:
             rerank_top_k=request.retrieval_top_k # 内部重排数量与检索阶段对齐
         )
         
-        candidates = await retriever.retrieve(query_text=request.query, search_mode="keyword")
+        candidates = await retriever.retrieve(
+            query_text=request.query,
+            search_mode="keyword",
+            entity_mentions=None,
+        )
         return [ScoredCandidate(candidate=c, score=s) for c, s in candidates]
 
     async def _hybrid_search(self, request: RagSearchRequest, trace_id: str) -> list[ScoredCandidate]:
@@ -144,7 +206,10 @@ class RagRetrievalOrchestrator:
         # 直接使用我们新编写的 knowledge_retriever 执行双路召回并由它完成内部 Reranker 操作，
         # 在这里我们由于是在 _hybrid_search 里，外部也会进行一次 rerank,
         # 所以我们返回所有通过初筛与内部 rerank 的 candidates 给外部使用。
-        candidates = await retriever.retrieve(query_text=request.query, search_mode="hybrid")
+        candidates = await retriever.retrieve(
+            query_text=request.query,
+            search_mode="hybrid",
+        )
         return [ScoredCandidate(candidate=c, score=s) for c, s in candidates]
 
     async def _agentic_search(self, request: RagSearchRequest, trace_id: str) -> list[ScoredCandidate]:

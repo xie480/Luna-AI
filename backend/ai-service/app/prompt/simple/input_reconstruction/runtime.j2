@@ -52,25 +52,25 @@
   "retrieval_routing": {
     "long_term_memory": {
       "trigger": "布尔值，是否触发长期记忆检索",
-      "trigger_reason": "触发检索的具体原因描述",
-      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"],
+      "trigger_reason": "触发原因，例如：回溯用户聊天历史、提取用户偏好、补充未消歧实体的过去上下文等",
+      "search_queries": ["从历史对话角度泛化出的 Query，侧重于找回过去的交流片段"],
       "temporal_focus": {
         "reference_time": "具体的参考时间戳，如果没有则为 null， 示例格式：2026-06-05T10:00:00Z 或 ISO 8601 格式",
         "temporal_deviation": "允许前后偏差的天数，精准查找则为0，应为非负整数"
       },
-      "entity_mentions": ["提取出的核心实体词以及时间关键词，用于BM25精准检索"]
+      "entity_mentions": ["历史对话中提及的核心实体、昵称及时间关键词，用于精准定位过去事件"]
     },
     
     "external_knowledge": {
       "trigger": "布尔值，是否触发外部知识检索",
       "route_strategy": "必须从允许的 route_strategy 列表中选择 (keyword, hybrid, agentic)",
-      "trigger_reason": "触发检索的具体原因描述",
-      "search_queries": ["提取并泛化出的多个搜索 Query，用于向量检索"],
+      "trigger_reason": "触发原因，例如：用户询问客观事实、查询外部系统操作手册、查阅代码文档等",
+      "search_queries": ["从客观知识查询角度泛化出的 Query，侧重于概念解析和事实检索"],
       "temporal_focus": {
-        "reference_time": "具体的参考时间戳，如果没有则为 null， 示例格式：2026-06-05T10:00:00Z 或 ISO 8601 格式",
-        "temporal_deviation": "允许前后偏差的天数，精准查找则为0，应为非负整数"
+        "reference_time": "通常为 null，除非用户明确要求查阅某特定时间的文档资料",
+        "temporal_deviation": "同上，通常填 0"
       },
-      "entity_mentions": ["提取出的核心实体词以及时间关键词，用于BM25精准检索"]
+      "entity_mentions": ["客观存在的名词、术语、系统名、API名等，用于匹配文档标题或高频词"]
     },
     
     "experience_reflection": {
