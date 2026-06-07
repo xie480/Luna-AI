@@ -435,6 +435,7 @@ async def chat_request(
     reference_time = None
     entity_mentions = []
     
+    from app.types.constants import RagRetrievalRoute
     external_knowledge_trigger = False
     external_knowledge_strategy = RagRetrievalRoute.HYBRID
 
