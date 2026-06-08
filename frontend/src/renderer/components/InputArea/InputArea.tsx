@@ -159,6 +159,9 @@ export const InputArea: React.FC = () => {
 
   /**
    * 发送消息处理
+   *
+   * 加载动画期间 isWaiting=true，主输入框会被禁用并隐藏。
+   * 这里保留发送前防御判断，避免全屏编辑或异常事件在等待期间绕过 UI 限制重复提交。
    */
   const handleSendMessage = () => {
     const textToSend = isFullscreenMode ? fullscreenText : inputValue;
@@ -167,6 +170,12 @@ export const InputArea: React.FC = () => {
     if (connectionStatus !== 'connected') {
       addSystemLog('SSE 未连接，无法发送消息');
       useSystemStore.getState().showGlobalMessage('服务未连接，请稍后再试', 3000);
+      return;
+    }
+
+    if (isWaiting) {
+      addSystemLog('上一轮回复仍在处理中，已阻止重复发送');
+      useSystemStore.getState().showGlobalMessage('Luna 正在回复，请稍后发送', 2000);
       return;
     }
 
