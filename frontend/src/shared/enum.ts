@@ -112,6 +112,133 @@ export const USER_PROFILE_SCHEMA_VERSION = "user_profile.v1";
 /** 用户画像缓存协议版本。 */
 export const USER_PROFILE_CACHE_SCHEMA_VERSION = "user_profile.cache.v1";
 
+/** 压缩审计协议版本。 */
+export const COMPRESSION_AUDIT_SCHEMA_VERSION = "compression.audit.v1";
+
+/** 压缩回放协议版本。 */
+export const COMPRESSION_REPLAY_SCHEMA_VERSION = "compression.replay.v1";
+
+/** 压缩事件协议版本。 */
+export const COMPRESSION_EVENT_SCHEMA_VERSION = "compression.event.v1";
+
+/**
+ * 压缩阶段常量
+ * 做什么：定义上下文压缩治理各阶段的跨层稳定枚举值。
+ * 为什么这样做：压缩审计列表、回放详情和筛选器必须共用同一套值，禁止散落魔法字符串。
+ * 输入输出：无。
+ * 边界条件：新增后端阶段时必须同步补充中文标签。
+ * 异常行为：无。
+ */
+export const COMPRESSION_STAGE = {
+  MESSAGE_TRIM: "message_trim",
+  SHORT_SUMMARY: "short_summary",
+  LONG_SUMMARY: "long_summary",
+  MEMORY_SLOT_VARIABLE: "memory_slot_variable",
+  HISTORICAL_CONTEXT_MERGE: "historical_context_merge",
+  HARD_TRUNCATION: "hard_truncation",
+} as const;
+
+/**
+ * 压缩作用域常量
+ * 做什么：定义上下文压缩动作可能作用的 Prompt 或记忆范围。
+ * 为什么这样做：前端筛选与详情展示必须能覆盖当前后端真实返回的全部作用域。
+ * 输入输出：无。
+ * 边界条件：部分旧计划未列出的 memory_snippets/core_summary/key_facts 由后端实际枚举补齐。
+ * 异常行为：无。
+ */
+export const COMPRESSION_SCOPE = {
+  SESSION_HISTORY: "session_history",
+  LONG_TERM_MEMORY: "long_term_memory",
+  EXTERNAL_KNOWLEDGE: "external_knowledge",
+  USER_PROFILE: "user_profile",
+  MEMORY_SNIPPETS: "memory_snippets",
+  CORE_SUMMARY: "core_summary",
+  KEY_FACTS: "key_facts",
+  MEMORY_SLOT: "memory_slot",
+  HISTORICAL_CONTEXT: "historical_context",
+} as const;
+
+/**
+ * 压缩触发原因常量
+ * 做什么：定义触发压缩治理的稳定原因枚举。
+ * 为什么这样做：列表筛选、详情说明和复制摘要都必须展示稳定中文文案。
+ * 输入输出：无。
+ * 边界条件：未知原因由服务层兜底为 final_prompt_token_over_limit。
+ * 异常行为：无。
+ */
+export const COMPRESSION_TRIGGER_REASON = {
+  REDIS_WINDOW_OVERFLOW: "redis_window_overflow",
+  HISTORY_SESSION_ROLLOVER: "history_session_rollover",
+  MEMORY_SLOT_TOKEN_OVER_LIMIT: "memory_slot_token_over_limit",
+  SINGLE_VARIABLE_TOKEN_OVER_LIMIT: "single_variable_token_over_limit",
+  FINAL_PROMPT_TOKEN_OVER_LIMIT: "final_prompt_token_over_limit",
+} as const;
+
+/**
+ * 压缩状态常量
+ * 做什么：定义后端真实落盘的压缩审计状态。
+ * 为什么这样做：避免组件中直接书写 SUCCESS/FAILED/SKIPPED 字符串。
+ * 输入输出：无。
+ * 边界条件：前端“已降级/强制截断”属于派生展示态，不写入此常量。
+ * 异常行为：无。
+ */
+export const COMPRESSION_STATUS = {
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED",
+  SKIPPED: "SKIPPED",
+} as const;
+
+/**
+ * 压缩审计动作类型常量
+ * 做什么：定义当前写入 audit_logs.action_type 的压缩动作名称。
+ * 为什么这样做：兼容后端专用接口未就绪时从通用审计日志中过滤压缩记录。
+ * 输入输出：无。
+ * 边界条件：必须与 Python COMPRESSION_AUDIT_ACTION_TYPE 保持一致。
+ * 异常行为：无。
+ */
+export const COMPRESSION_AUDIT_ACTION_TYPE = "CONTEXT_COMPRESSION";
+
+/** 压缩阶段中文标签。 */
+export const COMPRESSION_STAGE_LABEL: Record<typeof COMPRESSION_STAGE[keyof typeof COMPRESSION_STAGE], string> = {
+  [COMPRESSION_STAGE.MESSAGE_TRIM]: "消息裁剪",
+  [COMPRESSION_STAGE.SHORT_SUMMARY]: "短摘要压缩",
+  [COMPRESSION_STAGE.LONG_SUMMARY]: "长摘要压缩",
+  [COMPRESSION_STAGE.MEMORY_SLOT_VARIABLE]: "变量压缩",
+  [COMPRESSION_STAGE.HISTORICAL_CONTEXT_MERGE]: "统一历史背景",
+  [COMPRESSION_STAGE.HARD_TRUNCATION]: "强制截断",
+};
+
+/** 压缩作用域中文标签。 */
+export const COMPRESSION_SCOPE_LABEL: Record<typeof COMPRESSION_SCOPE[keyof typeof COMPRESSION_SCOPE], string> = {
+  [COMPRESSION_SCOPE.SESSION_HISTORY]: "会话历史",
+  [COMPRESSION_SCOPE.LONG_TERM_MEMORY]: "长期记忆",
+  [COMPRESSION_SCOPE.EXTERNAL_KNOWLEDGE]: "外部知识",
+  [COMPRESSION_SCOPE.USER_PROFILE]: "用户画像",
+  [COMPRESSION_SCOPE.MEMORY_SNIPPETS]: "记忆片段",
+  [COMPRESSION_SCOPE.CORE_SUMMARY]: "核心摘要",
+  [COMPRESSION_SCOPE.KEY_FACTS]: "关键事实",
+  [COMPRESSION_SCOPE.MEMORY_SLOT]: "记忆槽位",
+  [COMPRESSION_SCOPE.HISTORICAL_CONTEXT]: "历史背景",
+};
+
+/** 压缩触发原因中文标签。 */
+export const COMPRESSION_TRIGGER_REASON_LABEL: Record<typeof COMPRESSION_TRIGGER_REASON[keyof typeof COMPRESSION_TRIGGER_REASON], string> = {
+  [COMPRESSION_TRIGGER_REASON.REDIS_WINDOW_OVERFLOW]: "短期窗口溢出",
+  [COMPRESSION_TRIGGER_REASON.HISTORY_SESSION_ROLLOVER]: "历史会话滚动",
+  [COMPRESSION_TRIGGER_REASON.MEMORY_SLOT_TOKEN_OVER_LIMIT]: "记忆槽位超限",
+  [COMPRESSION_TRIGGER_REASON.SINGLE_VARIABLE_TOKEN_OVER_LIMIT]: "单变量超限",
+  [COMPRESSION_TRIGGER_REASON.FINAL_PROMPT_TOKEN_OVER_LIMIT]: "最终 Prompt 超限",
+};
+
+/** 压缩状态中文标签。 */
+export const COMPRESSION_STATUS_LABEL: Record<string, string> = {
+  [COMPRESSION_STATUS.SUCCESS]: "成功",
+  [COMPRESSION_STATUS.FAILED]: "失败",
+  [COMPRESSION_STATUS.SKIPPED]: "已跳过",
+  DEGRADED: "已降级",
+  HARD_TRUNCATED: "强制截断",
+};
+
 /**
  * 全局统一的错误码枚举
  * 做什么：定义前后端统一的错误码常量。

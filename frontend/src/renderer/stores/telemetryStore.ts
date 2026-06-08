@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+import type {
+  CompressionAuditFilters,
+  CompressionAuditListItem,
+  CompressionReplayDetail,
+} from '../types/compressionAudit';
 
 /**
  * 链路 Span 数据结构（与后端 trace_spans 表对齐）
@@ -49,12 +54,16 @@ export interface MetricsDataPoint {
   tool_call_failure_rate: number;
 }
 
+/** 诊断面板标签类型。 */
+export type TelemetryDebugTab = 'metrics' | 'errors' | 'compressionAudit' | 'traces';
+
 /**
  * 可观测性/诊断面板状态
  */
 interface TelemetryState {
   // 面板可见性
   isOpen: boolean;
+  activeDebugTab: TelemetryDebugTab;
 
   // 链路查询
   currentTraceId: string | null;
@@ -77,6 +86,19 @@ interface TelemetryState {
   };
   isLoadingAuditLogs: boolean;
 
+  // 压缩审计查询
+  compressionAudits: CompressionAuditListItem[];
+  compressionAuditTotal: number;
+  compressionAuditPage: number;
+  compressionAuditPageSize: number;
+  compressionAuditFilters: CompressionAuditFilters;
+  isLoadingCompressionAudits: boolean;
+  compressionAuditError: string;
+  selectedCompressionReplay: CompressionReplayDetail | null;
+  isCompressionReplayOpen: boolean;
+  isLoadingCompressionReplay: boolean;
+  compressionReplayError: string;
+
   // 监控指标（Ring Buffer 镜像，最多保存 60 个数据点用于前端绘图）
   metrics: MetricsDataPoint[];
   metricsRange: '1h' | '6h' | '24h';
@@ -84,6 +106,7 @@ interface TelemetryState {
 
   // Actions
   setOpen: (isOpen: boolean) => void;
+  setActiveDebugTab: (tab: TelemetryDebugTab) => void;
 
   // 链路
   setCurrentTraceId: (traceId: string | null) => void;
@@ -97,6 +120,18 @@ interface TelemetryState {
   setAuditLogPage: (page: number) => void;
   setLoadingAuditLogs: (loading: boolean) => void;
 
+  // 压缩审计
+  setCompressionAudits: (items: CompressionAuditListItem[], total: number) => void;
+  setCompressionAuditFilters: (filters: Partial<CompressionAuditFilters>) => void;
+  resetCompressionAuditFilters: () => void;
+  setCompressionAuditPage: (page: number) => void;
+  setLoadingCompressionAudits: (loading: boolean) => void;
+  setCompressionAuditError: (error: string) => void;
+  setSelectedCompressionReplay: (detail: CompressionReplayDetail | null) => void;
+  setCompressionReplayOpen: (isOpen: boolean) => void;
+  setLoadingCompressionReplay: (loading: boolean) => void;
+  setCompressionReplayError: (error: string) => void;
+
   // 监控指标
   setMetrics: (points: MetricsDataPoint[]) => void;
   setMetricsRange: (range: '1h' | '6h' | '24h') => void;
@@ -105,6 +140,7 @@ interface TelemetryState {
 
 export const useTelemetryStore = create<TelemetryState>((set) => ({
   isOpen: false,
+  activeDebugTab: 'errors',
 
   currentTraceId: null,
   traceSpans: [],
@@ -120,11 +156,24 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   auditLogFilters: {},
   isLoadingAuditLogs: false,
 
+  compressionAudits: [],
+  compressionAuditTotal: 0,
+  compressionAuditPage: 1,
+  compressionAuditPageSize: 20,
+  compressionAuditFilters: {},
+  isLoadingCompressionAudits: false,
+  compressionAuditError: '',
+  selectedCompressionReplay: null,
+  isCompressionReplayOpen: false,
+  isLoadingCompressionReplay: false,
+  compressionReplayError: '',
+
   metrics: [],
   metricsRange: '1h',
   isLoadingMetrics: false,
 
   setOpen: (isOpen) => set({ isOpen }),
+  setActiveDebugTab: (activeDebugTab) => set({ activeDebugTab }),
 
   setCurrentTraceId: (currentTraceId) => set({ currentTraceId, tracePage: 1 }),
   setTraceSpans: (traceSpans, total) => set({ traceSpans, traceTotal: total }),
@@ -136,6 +185,22 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     set((state) => ({ auditLogFilters: { ...state.auditLogFilters, ...filters }, auditLogPage: 1 })),
   setAuditLogPage: (page) => set({ auditLogPage: page }),
   setLoadingAuditLogs: (isLoadingAuditLogs) => set({ isLoadingAuditLogs }),
+
+  setCompressionAudits: (compressionAudits, total) =>
+    set({ compressionAudits, compressionAuditTotal: total }),
+  setCompressionAuditFilters: (filters) =>
+    set((state) => ({
+      compressionAuditFilters: { ...state.compressionAuditFilters, ...filters },
+      compressionAuditPage: 1,
+    })),
+  resetCompressionAuditFilters: () => set({ compressionAuditFilters: {}, compressionAuditPage: 1 }),
+  setCompressionAuditPage: (page) => set({ compressionAuditPage: page }),
+  setLoadingCompressionAudits: (isLoadingCompressionAudits) => set({ isLoadingCompressionAudits }),
+  setCompressionAuditError: (compressionAuditError) => set({ compressionAuditError }),
+  setSelectedCompressionReplay: (selectedCompressionReplay) => set({ selectedCompressionReplay }),
+  setCompressionReplayOpen: (isCompressionReplayOpen) => set({ isCompressionReplayOpen }),
+  setLoadingCompressionReplay: (isLoadingCompressionReplay) => set({ isLoadingCompressionReplay }),
+  setCompressionReplayError: (compressionReplayError) => set({ compressionReplayError }),
 
   setMetrics: (metrics) => set({ metrics }),
   setMetricsRange: (metricsRange) => set({ metricsRange }),

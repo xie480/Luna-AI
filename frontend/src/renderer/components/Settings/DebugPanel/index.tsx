@@ -1,9 +1,12 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import MetricsChart from './MetricsChart';
+import CompressionAuditViewer from './CompressionAuditViewer';
+import TraceViewer from './TraceViewer';
 import { useSystemStore } from '../../../stores/systemStore';
+import { useTelemetryStore, type TelemetryDebugTab } from '../../../stores/telemetryStore';
 import './DebugPanel.css';
 
-type TabType = 'metrics' | 'errors';
+type TabType = TelemetryDebugTab;
 
 /** 最小窗口尺寸 */
 const MIN_WIDTH = 400;
@@ -19,7 +22,8 @@ type ResizeDirection = 'n' | 's' | 'w' | 'e' | 'nw' | 'ne' | 'sw' | 'se';
  */
 const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
   // 所有 hooks 必须在此无条件声明，且早于任何 if return
-  const [activeTab, setActiveTab] = useState<TabType>('errors');
+  const activeTab = useTelemetryStore((state) => state.activeDebugTab);
+  const setActiveTab = useTelemetryStore((state) => state.setActiveDebugTab);
   const panelRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragOffset = useRef({ x: 0, y: 0 });
@@ -149,6 +153,8 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
   const tabs: { key: TabType; label: string }[] = [
     { key: 'metrics', label: '监控指标' },
     { key: 'errors', label: '异常日志' },
+    { key: 'compressionAudit', label: '压缩审计' },
+    { key: 'traces', label: '链路追踪' },
   ];
 
   /** 渲染缩放把手 */
@@ -209,6 +215,8 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
         <div className="debug-panel-content">
           {activeTab === 'metrics' && <MetricsChart />}
           {activeTab === 'errors' && <FrontendErrorViewer />}
+          {activeTab === 'compressionAudit' && <CompressionAuditViewer />}
+          {activeTab === 'traces' && <TraceViewer />}
         </div>
       </div>
     </div>
