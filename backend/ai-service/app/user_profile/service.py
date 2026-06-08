@@ -17,7 +17,7 @@ from app.repository.models import UserProfileItem
 from app.repository.user_profile_pg import UserProfilePGRepository
 from app.types.constants import USER_PROFILE_DEFAULT_USER_ID, UserProfileCacheStatus, UserProfileCategory
 from app.user_profile.cache import UserProfileCache
-from app.user_profile.conflict_resolver import normalize_profile_content
+from app.user_profile.conflict_resolver import UserProfileConflictResolver
 from app.user_profile.extractor import UserProfileExtractor
 from app.user_profile.schemas import (
     ProfileMutationPlan,
@@ -43,11 +43,13 @@ class UserProfileService:
         cache: UserProfileCache | None,
         extractor: UserProfileExtractor,
         summarizer: UserProfileSummarizer,
+        conflict_resolver: UserProfileConflictResolver | None = None,
     ):
         self.repo = repo
         self.cache = cache
         self.extractor = extractor
         self.summarizer = summarizer
+        self.conflict_resolver = conflict_resolver or UserProfileConflictResolver()
         self._tracked_tasks: set[asyncio.Task[Any]] = set()
 
     async def list_items(
@@ -85,9 +87,14 @@ class UserProfileService:
     ) -> UserProfileItemDTO:
         """手动新增用户画像。"""
         existing = await self.repo.list_active_by_user(user_id)
-        normalized = normalize_profile_content(request.content)
+        normalized = self.conflict_resolver.normalize_content(request.content)
         for item in existing:
-            if item.category == request.category.value and item.normalized_content == normalized:
+            if self.conflict_resolver.is_duplicate(
+                existing_category=item.category,
+                existing_normalized_content=item.normalized_content,
+                candidate_category=request.category.value,
+                candidate_content=request.content,
+            ):
                 if self.cache:
                     await self.cache.invalidate(user_id, trace_id)
                 return self.to_dto(item)
@@ -119,7 +126,7 @@ class UserProfileService:
             category=request.category,
             custom_category_name=request.custom_category_name,
             content=request.content,
-            normalized_content=normalize_profile_content(request.content),
+            normalized_content=self.conflict_resolver.normalize_content(request.content),
             trace_id=trace_id,
         )
         if item and self.cache:
