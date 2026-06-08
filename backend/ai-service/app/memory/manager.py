@@ -17,11 +17,20 @@ Luna AI 长期记忆管理器模块
 """
 
 import asyncio
+import time
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 
 from app.config.event_bus import Event, EventBus, EventType
+from app.context.compression_audit import (
+    create_compression_audit_payload,
+    current_timestamp_ms,
+    record_compression_audit_payload,
+    record_compression_span,
+)
+from app.context.compression_types import CompressionActionEvent
 from app.infrastructure.qdrant import QdrantClientWrapper
+from app.llm.context_manager import count_tokens
 from app.logger import logger
 from app.prompt.manager import Manager as PromptManager
 from app.prompt.types import PromptCategory
@@ -31,6 +40,20 @@ from app.repository.chat_history_redis import ChatHistoryRedisRepo
 from app.repository.long_term_memory_pg import LongTermMemoryPGRepo
 from app.repository.long_term_memory_qdrant import LongTermMemoryQdrantRepo
 from app.repository.models import LongTermMemory, MemoryStatus
+from app.types.constants import (
+    COMPRESSION_EVENT_APPLIED,
+    COMPRESSION_EVENT_COMPLETED,
+    COMPRESSION_EVENT_EXECUTED,
+    COMPRESSION_EVENT_FAILED,
+    COMPRESSION_EVENT_INPUT_MEASURED,
+    COMPRESSION_EVENT_OUTPUT_MEASURED,
+    COMPRESSION_EVENT_TRIGGERED,
+    COMPRESSION_STATUS_FAILED,
+    COMPRESSION_STATUS_SUCCESS,
+    CompressionScope,
+    CompressionStage,
+    CompressionTriggerReason,
+)
 from app.utils.snowflake import generate_string_id
 
 
@@ -209,6 +232,29 @@ class Manager:
             context_parts.append("\n")
         
         messages_text = "".join(context_parts)
+        compression_before_text = (
+            f"当前核心摘要：\n{summary.core_summary}\n\n"
+            f"当前关键事实：\n{summary.key_facts}\n\n"
+            f"待压缩历史会话：\n{messages_text}"
+        )
+        compression_raw_tokens = count_tokens(compression_before_text)
+        compression_started_at = time.monotonic()
+        compression_trigger_timestamp_ms = current_timestamp_ms()
+        compression_events: list[CompressionActionEvent] = [
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_TRIGGERED,
+                timestamp_ms=compression_trigger_timestamp_ms,
+                detail="历史会话压缩已触发，准备生成长期摘要",
+                payload={"session_id": session_id},
+            ),
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_INPUT_MEASURED,
+                timestamp_ms=current_timestamp_ms(),
+                detail="已测量长期摘要压缩输入 Token",
+                payload={"raw_tokens": compression_raw_tokens},
+            ),
+        ]
+        memory_id = generate_string_id()
 
         # 组装长期记忆压缩提示词
         summarize_variables = {
@@ -232,15 +278,87 @@ class Manager:
             from app.api.internal_service import internal_service
             compressed_summary = await internal_service.long_summarize(session_id, full_summarize_prompt)
         except Exception as e:
+            compression_events.append(
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_FAILED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="长期摘要模型调用失败",
+                    payload={"error": str(e)},
+                )
+            )
+            payload = create_compression_audit_payload(
+                trace_id=trace_id,
+                session_id=session_id,
+                memory_id=memory_id,
+                stage=CompressionStage.LONG_SUMMARY,
+                scope=CompressionScope.SESSION_HISTORY,
+                trigger_reason=CompressionTriggerReason.HISTORY_SESSION_ROLLOVER,
+                source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+                before_text=compression_before_text,
+                after_text=compression_before_text,
+                raw_tokens=compression_raw_tokens,
+                final_tokens=compression_raw_tokens,
+                is_success=False,
+                failure_reason=str(e),
+                events=compression_events,
+                timestamp_ms=compression_trigger_timestamp_ms,
+            )
+            duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+            record_compression_audit_payload(payload, status=COMPRESSION_STATUS_FAILED)
+            record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_FAILED)
             raise RuntimeError(f"调用 LongSummarize 失败 [session_id={session_id}]: {e}")
 
         compressed_summary = compressed_summary.strip()
+        compressed_summary_tokens = count_tokens(compressed_summary) if compressed_summary else 0
+        compression_events.extend(
+            [
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_EXECUTED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="长期摘要模型执行完成",
+                    payload={"after_summary_tokens": compressed_summary_tokens},
+                ),
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_OUTPUT_MEASURED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="已测量长期摘要压缩输出 Token",
+                    payload={"after_summary_tokens": compressed_summary_tokens},
+                ),
+            ]
+        )
         if not compressed_summary:
+            compression_events.append(
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_FAILED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="长期摘要压缩结果为空，放弃提交",
+                    payload={"after_summary_tokens": compressed_summary_tokens},
+                )
+            )
+            payload = create_compression_audit_payload(
+                trace_id=trace_id,
+                session_id=session_id,
+                memory_id=memory_id,
+                stage=CompressionStage.LONG_SUMMARY,
+                scope=CompressionScope.SESSION_HISTORY,
+                trigger_reason=CompressionTriggerReason.HISTORY_SESSION_ROLLOVER,
+                source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+                before_text=compression_before_text,
+                after_text=compression_before_text,
+                raw_tokens=compression_raw_tokens,
+                after_summary_tokens=compressed_summary_tokens,
+                final_tokens=compression_raw_tokens,
+                is_success=False,
+                failure_reason=f"LongSummarize 返回空摘要 [session_id={session_id}]",
+                events=compression_events,
+                timestamp_ms=compression_trigger_timestamp_ms,
+            )
+            duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+            record_compression_audit_payload(payload, status=COMPRESSION_STATUS_FAILED)
+            record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_FAILED)
             raise RuntimeError(f"LongSummarize 返回空摘要 [session_id={session_id}]")
 
         logger.info(f"历史会话压缩完成 session_id={session_id} summary_length={len(compressed_summary)}")
-
-        memory_id = generate_string_id()
 
         # 5. 保存到 PostgreSQL
         if not self.ltm_pg_repo:
@@ -255,7 +373,72 @@ class Manager:
 
         try:
             await self.ltm_pg_repo.save(memory)
+            compression_events.extend(
+                [
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_APPLIED,
+                        timestamp_ms=current_timestamp_ms(),
+                        detail="长期摘要已写入 PostgreSQL 长期记忆主库",
+                        payload={"memory_id": memory_id},
+                    ),
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_COMPLETED,
+                        timestamp_ms=current_timestamp_ms(),
+                        detail="长期摘要压缩与提交流程完成",
+                        payload={"memory_id": memory_id},
+                    ),
+                ]
+            )
+            payload = create_compression_audit_payload(
+                trace_id=trace_id,
+                session_id=session_id,
+                memory_id=memory_id,
+                stage=CompressionStage.LONG_SUMMARY,
+                scope=CompressionScope.SESSION_HISTORY,
+                trigger_reason=CompressionTriggerReason.HISTORY_SESSION_ROLLOVER,
+                source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+                before_text=compression_before_text,
+                after_text=compressed_summary,
+                raw_tokens=compression_raw_tokens,
+                after_summary_tokens=compressed_summary_tokens,
+                final_tokens=compressed_summary_tokens,
+                is_success=True,
+                events=compression_events,
+                timestamp_ms=compression_trigger_timestamp_ms,
+            )
+            duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+            record_compression_audit_payload(payload, status=COMPRESSION_STATUS_SUCCESS)
+            record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_SUCCESS)
         except Exception as e:
+            compression_events.append(
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_FAILED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="长期摘要写入 PostgreSQL 失败",
+                    payload={"error": str(e), "memory_id": memory_id},
+                )
+            )
+            payload = create_compression_audit_payload(
+                trace_id=trace_id,
+                session_id=session_id,
+                memory_id=memory_id,
+                stage=CompressionStage.LONG_SUMMARY,
+                scope=CompressionScope.SESSION_HISTORY,
+                trigger_reason=CompressionTriggerReason.HISTORY_SESSION_ROLLOVER,
+                source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+                before_text=compression_before_text,
+                after_text=compressed_summary,
+                raw_tokens=compression_raw_tokens,
+                after_summary_tokens=compressed_summary_tokens,
+                final_tokens=compression_raw_tokens,
+                is_success=False,
+                failure_reason=str(e),
+                events=compression_events,
+                timestamp_ms=compression_trigger_timestamp_ms,
+            )
+            duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+            record_compression_audit_payload(payload, status=COMPRESSION_STATUS_FAILED)
+            record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_FAILED)
             raise RuntimeError(f"保存长期记忆到 PostgreSQL 失败 [session_id={session_id}]: {e}")
 
         # 6. 对压缩后的摘要进行向量化，写入 Qdrant 向量库

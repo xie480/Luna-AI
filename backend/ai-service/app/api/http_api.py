@@ -27,6 +27,15 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
+from app.context.compression_audit import (
+    create_compression_audit_payload,
+    current_timestamp_ms,
+    record_compression_audit_payload,
+    record_compression_span,
+)
+from app.context.compression_governor import MemorySlotCompressionGovernor
+from app.context.compression_types import CompressionActionEvent
+from app.llm.context_manager import count_tokens
 from app.logger import logger
 from app.memory.manager import Manager as MemoryManager
 from app.prompt.manager import Manager as PromptManager
@@ -36,6 +45,18 @@ from app.repository.chat_history_redis import ChatHistoryRedisRepo, ChatSummary,
 from app.repository.models import InteractionModel
 from app.user_profile.service import UserProfileService
 from app.types.constants import (
+    COMPRESSION_EVENT_APPLIED,
+    COMPRESSION_EVENT_COMPLETED,
+    COMPRESSION_EVENT_EXECUTED,
+    COMPRESSION_EVENT_FAILED,
+    COMPRESSION_EVENT_INPUT_MEASURED,
+    COMPRESSION_EVENT_OUTPUT_MEASURED,
+    COMPRESSION_EVENT_TRIGGERED,
+    COMPRESSION_STATUS_FAILED,
+    COMPRESSION_STATUS_SUCCESS,
+    CompressionScope,
+    CompressionStage,
+    CompressionTriggerReason,
     WS_MSG_TYPE_CHAT_STREAM,
     WS_MSG_TYPE_ERROR,
     WS_MSG_TYPE_EVT_INIT_STATE,
@@ -585,6 +606,25 @@ async def chat_request(
     else:
         prompt_variables["USER_PROFILE"] = ""
 
+    # ---- 5.9 memory 槽位压缩治理 ----
+    # 在最终 Chat Prompt 装配前，优先对 memory 槽位执行统一治理，避免最终 Prompt 整体粗暴截断。
+    try:
+        compression_result = await MemorySlotCompressionGovernor().govern(
+            trace_id=trace_id,
+            session_id=payload.sessionId,
+            message_id=user_msg_id,
+            prompt_variables=prompt_variables,
+        )
+        prompt_variables = compression_result.updated_variables
+        logger.info(
+            f"memory 槽位压缩治理结束 trace_id={trace_id} session_id={payload.sessionId} "
+            f"message_id={user_msg_id} skipped={compression_result.skipped} "
+            f"before_tokens={compression_result.before_tokens} after_tokens={compression_result.after_tokens} "
+            f"final_strategy={compression_result.final_strategy}"
+        )
+    except Exception as e:
+        logger.error(f"memory 槽位压缩治理失败，已降级使用原始变量 trace_id={trace_id} error={e}")
+
     # ---- 6. 组装完整 Chat Prompt ----
     # 使用更新后的变量组装最终的聊天提示词
     full_system_prompt = ""
@@ -670,6 +710,8 @@ async def _execute_llm_stream(
             current_message=user_message,
             trace_id=trace_id,
             disambiguated_text=disambiguated_text,
+            session_id=session_id,
+            message_id=user_msg_id,
         ):
             if chunk_data.get("error"):
                 stream_error = Exception(chunk_data.get("error"))
@@ -881,6 +923,28 @@ async def _trigger_compression(
             messages_text_parts.append(f"(内心独白: {interaction.thought})\n")
         messages_text_parts.append("\n")
     messages_text = "".join(messages_text_parts)
+    compression_before_text = (
+        f"当前核心摘要：\n{summary.core_summary}\n\n"
+        f"当前关键事实：\n{summary.key_facts}\n\n"
+        f"待压缩消息：\n{messages_text}"
+    )
+    compression_raw_tokens = count_tokens(compression_before_text)
+    compression_started_at = time.monotonic()
+    compression_trigger_timestamp_ms = current_timestamp_ms()
+    compression_events: list[CompressionActionEvent] = [
+        CompressionActionEvent(
+            event_type=COMPRESSION_EVENT_TRIGGERED,
+            timestamp_ms=compression_trigger_timestamp_ms,
+            detail="Redis 工作窗口超过阈值，触发短期摘要压缩",
+            payload={"compress_count": compress_count},
+        ),
+        CompressionActionEvent(
+            event_type=COMPRESSION_EVENT_INPUT_MEASURED,
+            timestamp_ms=current_timestamp_ms(),
+            detail="已测量短期摘要压缩输入 Token",
+            payload={"raw_tokens": compression_raw_tokens, "compress_count": compress_count},
+        ),
+    ]
 
     if user_profile_service:
         try:
@@ -913,10 +977,84 @@ async def _trigger_compression(
     try:
         new_core_summary, new_key_facts = await internal_service.short_summarize(trace_id, full_summarize_prompt)
     except Exception as e:
+        compression_events.append(
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_FAILED,
+                timestamp_ms=current_timestamp_ms(),
+                detail="短期摘要压缩模型调用失败",
+                payload={"error": str(e)},
+            )
+        )
+        payload = create_compression_audit_payload(
+            trace_id=trace_id,
+            session_id=session_id,
+            stage=CompressionStage.SHORT_SUMMARY,
+            scope=CompressionScope.SESSION_HISTORY,
+            trigger_reason=CompressionTriggerReason.REDIS_WINDOW_OVERFLOW,
+            source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+            before_text=compression_before_text,
+            after_text=compression_before_text,
+            raw_tokens=compression_raw_tokens,
+            final_tokens=compression_raw_tokens,
+            is_success=False,
+            failure_reason=str(e),
+            events=compression_events,
+            timestamp_ms=compression_trigger_timestamp_ms,
+        )
+        duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+        record_compression_audit_payload(payload, status=COMPRESSION_STATUS_FAILED)
+        record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_FAILED)
         logger.error(f"调用 ShortSummarize 失败 trace_id={trace_id} error={e}")
         return
 
+    summary_after_text = f"核心摘要：\n{new_core_summary.strip()}\n\n关键事实：\n{new_key_facts.strip()}"
+    summary_after_tokens = count_tokens(summary_after_text)
+    compression_events.extend(
+        [
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_EXECUTED,
+                timestamp_ms=current_timestamp_ms(),
+                detail="短期摘要压缩模型执行完成",
+                payload={"after_summary_tokens": summary_after_tokens},
+            ),
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_OUTPUT_MEASURED,
+                timestamp_ms=current_timestamp_ms(),
+                detail="已测量短期摘要压缩输出 Token",
+                payload={"after_summary_tokens": summary_after_tokens},
+            ),
+        ]
+    )
+
     if not new_core_summary.strip() or not new_key_facts.strip():
+        compression_events.append(
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_FAILED,
+                timestamp_ms=current_timestamp_ms(),
+                detail="短期摘要压缩结果存在空字段，放弃应用",
+                payload={"after_summary_tokens": summary_after_tokens},
+            )
+        )
+        payload = create_compression_audit_payload(
+            trace_id=trace_id,
+            session_id=session_id,
+            stage=CompressionStage.SHORT_SUMMARY,
+            scope=CompressionScope.SESSION_HISTORY,
+            trigger_reason=CompressionTriggerReason.REDIS_WINDOW_OVERFLOW,
+            source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+            before_text=compression_before_text,
+            after_text=summary_after_text,
+            raw_tokens=compression_raw_tokens,
+            after_summary_tokens=summary_after_tokens,
+            final_tokens=compression_raw_tokens,
+            is_success=False,
+            failure_reason="短期摘要压缩结果存在空字段",
+            events=compression_events,
+            timestamp_ms=compression_trigger_timestamp_ms,
+        )
+        duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+        record_compression_audit_payload(payload, status=COMPRESSION_STATUS_FAILED)
+        record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_FAILED)
         logger.warning(f"返回的摘要存在空字段，放弃本次更新 session_id={session_id}")
         return
 
@@ -924,6 +1062,69 @@ async def _trigger_compression(
 
     try:
         await redis_repo.update_summary_and_trim(session_id, new_summary, compress_count)
+        compression_events.extend(
+            [
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_APPLIED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="短期摘要压缩结果已写入 Redis 摘要并完成历史裁剪",
+                    payload={"trimmed_count": compress_count},
+                ),
+                CompressionActionEvent(
+                    event_type=COMPRESSION_EVENT_COMPLETED,
+                    timestamp_ms=current_timestamp_ms(),
+                    detail="短期摘要压缩流程完成",
+                    payload={"trimmed_count": compress_count},
+                ),
+            ]
+        )
+        payload = create_compression_audit_payload(
+            trace_id=trace_id,
+            session_id=session_id,
+            stage=CompressionStage.SHORT_SUMMARY,
+            scope=CompressionScope.SESSION_HISTORY,
+            trigger_reason=CompressionTriggerReason.REDIS_WINDOW_OVERFLOW,
+            source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+            before_text=compression_before_text,
+            after_text=summary_after_text,
+            raw_tokens=compression_raw_tokens,
+            after_summary_tokens=summary_after_tokens,
+            final_tokens=summary_after_tokens,
+            is_success=True,
+            events=compression_events,
+            timestamp_ms=compression_trigger_timestamp_ms,
+        )
+        duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+        record_compression_audit_payload(payload, status=COMPRESSION_STATUS_SUCCESS)
+        record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_SUCCESS)
         logger.info(f"摘要压缩完成 session_id={session_id} trimmed_count={compress_count}")
     except Exception as e:
+        compression_events.append(
+            CompressionActionEvent(
+                event_type=COMPRESSION_EVENT_FAILED,
+                timestamp_ms=current_timestamp_ms(),
+                detail="短期摘要压缩结果写入 Redis 失败",
+                payload={"error": str(e), "trimmed_count": compress_count},
+            )
+        )
+        payload = create_compression_audit_payload(
+            trace_id=trace_id,
+            session_id=session_id,
+            stage=CompressionStage.SHORT_SUMMARY,
+            scope=CompressionScope.SESSION_HISTORY,
+            trigger_reason=CompressionTriggerReason.REDIS_WINDOW_OVERFLOW,
+            source_keys=["CURRENT_CORE_SUMMARY", "CURRENT_KEY_FACTS", "MESSAGES_TEXT"],
+            before_text=compression_before_text,
+            after_text=summary_after_text,
+            raw_tokens=compression_raw_tokens,
+            after_summary_tokens=summary_after_tokens,
+            final_tokens=compression_raw_tokens,
+            is_success=False,
+            failure_reason=str(e),
+            events=compression_events,
+            timestamp_ms=compression_trigger_timestamp_ms,
+        )
+        duration_ms = max(1, int((time.monotonic() - compression_started_at) * 1000))
+        record_compression_audit_payload(payload, status=COMPRESSION_STATUS_FAILED)
+        record_compression_span(payload, duration_ms=duration_ms, status=COMPRESSION_STATUS_FAILED)
         logger.error(f"更新摘要并裁剪历史失败 trace_id={trace_id} error={e}")

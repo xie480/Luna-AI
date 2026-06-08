@@ -17,6 +17,8 @@ Luna AI 上下文历史管理与截断策略模块
 """
 
 
+from pydantic import BaseModel
+
 from app.logger import logger
 
 # ============================================================
@@ -38,6 +40,25 @@ FLUSH_CHAR_THRESHOLD: int = 5
 
 # 当 tiktoken 不可用时的估算系数（中文约 1.5 字符/token，英文约 4 字符/token）
 FALLBACK_CHARS_PER_TOKEN: float = 2.0
+
+
+class ContextTrimMetrics(BaseModel):
+    """
+    上下文消息级裁剪指标。
+
+    做什么：记录一次 `history` 消息滑动窗口裁剪前后的 Token 变化和裁剪结果。
+    为什么这样做：消息级裁剪已经存在稳定逻辑，但压缩审计链路还缺少统一测量口径。
+    输入输出：输入由 `measure_truncate_context()` 计算产生，输出为可序列化指标对象。
+    边界条件：history 为空时 `removed_history_count=0`，`before_tokens` 与 `after_tokens` 仍按完整消息列表计算。
+    异常行为：字段校验失败时由 Pydantic 抛出异常。
+    """
+
+    before_tokens: int
+    after_tokens: int
+    removed_history_count: int
+    reserved_output_tokens: int
+    max_context_tokens: int
+    is_over_limit_after_trim: bool
 
 
 # ============================================================
@@ -133,6 +154,74 @@ def should_flush_buffer(buffer: str) -> tuple[bool, str]:
 # ============================================================
 # 上下文截断核心逻辑
 # ============================================================
+
+
+def measure_truncate_context(
+    system_prompt: str,
+    history: list[dict[str, str]],
+    current_message: str,
+    max_context_tokens: int,
+    reserved_output: int = RESERVED_OUTPUT_TOKENS,
+    min_rounds: int = MIN_CONVERSATION_ROUNDS,
+    model_name: str = "gpt-3.5-turbo",
+) -> ContextTrimMetrics:
+    """
+    测量上下文截断前后的 Token 指标。
+
+    做什么：复用与 `truncate_context()` 相同的滑动窗口裁剪策略，只返回测量结果而不改变既有返回值契约。
+    为什么这样做：调用方需要把消息级裁剪纳入统一压缩审计，但不能破坏现有聊天主链路。
+    输入输出：输入与 `truncate_context()` 一致，输出 `ContextTrimMetrics`。
+    边界条件：保留 System Prompt 与当前消息；当历史为空时返回未裁剪指标。
+    异常行为：本函数不主动抛业务异常，底层 Token 计数失败会沿用既有字符估算回退逻辑。
+    """
+    max_input_tokens = max_context_tokens - reserved_output
+    system_msg: dict[str, str] = {"role": "system", "content": system_prompt}
+    user_msg: dict[str, str] = {"role": "user", "content": current_message}
+    candidate_messages: list[dict[str, str]] = [system_msg] + history + [user_msg]
+    before_tokens = count_messages_tokens(candidate_messages, model_name)
+
+    if not history:
+        return ContextTrimMetrics(
+            before_tokens=before_tokens,
+            after_tokens=before_tokens,
+            removed_history_count=0,
+            reserved_output_tokens=reserved_output,
+            max_context_tokens=max_context_tokens,
+            is_over_limit_after_trim=before_tokens > max_input_tokens,
+        )
+
+    if before_tokens <= max_input_tokens:
+        return ContextTrimMetrics(
+            before_tokens=before_tokens,
+            after_tokens=before_tokens,
+            removed_history_count=0,
+            reserved_output_tokens=reserved_output,
+            max_context_tokens=max_context_tokens,
+            is_over_limit_after_trim=False,
+        )
+
+    min_history_count: int = min_rounds * 2
+    truncated_history: list[dict[str, str]] = list(history)
+    removed_count: int = 0
+
+    while len(truncated_history) > min_history_count:
+        test_messages: list[dict[str, str]] = [system_msg] + truncated_history + [user_msg]
+        test_tokens: int = count_messages_tokens(test_messages, model_name)
+        if test_tokens <= max_input_tokens:
+            break
+        truncated_history.pop(0)
+        removed_count += 1
+
+    final_messages: list[dict[str, str]] = [system_msg] + truncated_history + [user_msg]
+    after_tokens = count_messages_tokens(final_messages, model_name)
+    return ContextTrimMetrics(
+        before_tokens=before_tokens,
+        after_tokens=after_tokens,
+        removed_history_count=removed_count,
+        reserved_output_tokens=reserved_output,
+        max_context_tokens=max_context_tokens,
+        is_over_limit_after_trim=after_tokens > max_input_tokens,
+    )
 
 def truncate_context(
     system_prompt: str,

@@ -98,6 +98,36 @@ class Settings(BaseSettings):
     # 为模型输出预留的 Token 数
     reserved_output_tokens: int = 60000
 
+    # memory 槽位压缩治理开关。
+    # 做什么：控制聊天主链路是否在最终 Prompt 装配前执行 memory 槽位压缩治理。
+    # 为什么这样做：上下文压缩治理属于增强能力，需要能在联调与回滚时快速关闭。
+    memory_slot_compression_enabled: bool = True
+
+    # memory 槽位总 Token 上限。
+    # 做什么：限制 LONG_TERM_MEMORY、EXTERNAL_KNOWLEDGE、USER_PROFILE、会话摘要等变量的总 Token 体积。
+    # 为什么这样做：当前 Prompt 最易膨胀的部分是 memory 槽位，必须独立治理而不是等最终 Prompt 超限后再整体截断。
+    memory_slot_max_tokens: int = 12000
+
+    # 单个 memory 变量的 Token 上限。
+    # 做什么：当某一类变量单独过长时，优先对该变量执行定向压缩。
+    # 为什么这样做：便于区分究竟是哪一类上下文导致膨胀，也更符合现有 Prompt 模板结构。
+    memory_slot_single_variable_max_tokens: int = 4000
+
+    # 统一历史背景最终上限。
+    # 做什么：限制历史背景降级后的统一文本上限，并作为硬截断保护目标。
+    # 为什么这样做：统一合并后的历史背景仍可能过长，需要最终可控的单字段上限。
+    historical_context_max_tokens: int = 3000
+
+    # 压缩回放预览最大字符数。
+    # 做什么：限制审计中 preview_before / preview_after 的长度。
+    # 为什么这样做：回放只需要最小可解释片段，不能让 audit_logs.details 因预览过长而膨胀。
+    compression_replay_preview_max_chars: int = 400
+
+    # 压缩审计开关。
+    # 做什么：控制上下文压缩相关审计日志与 Span 是否写入既有 telemetry 链路。
+    # 为什么这样做：联调或问题回滚时需要快速停写压缩审计，但不能影响聊天主链路。
+    compression_audit_enabled: bool = True
+
     # ============================================================
     # 模型路径配置（支持从 .env 文件读取）
     # 例如：

@@ -35,12 +35,29 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.context.compression_audit import (
+    create_compression_audit_payload,
+    current_timestamp_ms,
+    record_compression_audit_payload,
+    record_compression_span,
+)
+from app.context.compression_types import CompressionActionEvent
 from app.types.constants import (
+    COMPRESSION_EVENT_COMPLETED,
+    COMPRESSION_EVENT_FAILED,
+    COMPRESSION_EVENT_INPUT_MEASURED,
+    COMPRESSION_EVENT_TRIGGERED,
+    COMPRESSION_STATUS_FAILED,
+    COMPRESSION_STATUS_SUCCESS,
+    CompressionScope,
+    CompressionStage,
+    CompressionTriggerReason,
     LLM_STRUCTURED_OUTPUT_UNSUPPORTED_PROVIDER_KEYWORDS,
     Role,
 )
 from app.llm.context_manager import (
     format_messages_for_api,
+    measure_truncate_context,
     should_flush_buffer,
 )
 from app.logger import logger
@@ -717,18 +734,45 @@ class LLMClient:
         current_message: str,
         trace_id: str,
         disambiguated_text: str = "",
+        session_id: str = "",
+        message_id: str = "",
         **kwargs: Any
     ) -> AsyncGenerator[dict[str, Any], None]:
         """
-        带上下文管理的流式对话接口
+        带上下文管理的流式对话接口。
+
+        做什么：在发起流式对话前执行消息级上下文裁剪，并在发生实际裁剪时记录压缩审计与 Span。
+        为什么这样做：消息级裁剪是最终 Prompt 保护链路的一部分，必须纳入统一压缩审计口径。
+        输入输出：输入系统提示词、历史消息、当前消息和链路标识，输出流式 chunk 生成器。
+        边界条件：裁剪测量失败时降级为原始消息，不阻断主对话链路。
+        异常行为：审计写入失败由 telemetry helper 降级处理，流式主链路继续执行。
         """
+        session_id_from_kwargs = str(kwargs.pop("session_id", session_id)) if session_id or kwargs.get("session_id") else session_id
+        message_id_from_kwargs = str(kwargs.pop("message_id", message_id)) if message_id or kwargs.get("message_id") else message_id
+
+        def _serialize_messages(messages: list[dict[str, str]]) -> str:
+            parts: list[str] = []
+            for msg in messages:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                parts.append(f"[{role}]\n{content}")
+            return "\n\n".join(parts)
+
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
             from app.config.settings import global_config_container
             from app.types.constants import ModelSize
             config = global_config_container.get_model_config(ModelSize.MEDIUM)
             max_context_tokens = config.get("max_context_tokens", 128000)
-            
+
+            trim_started_at = current_timestamp_ms()
+            trim_metrics = measure_truncate_context(
+                system_prompt=system_prompt,
+                history=history,
+                current_message=current_message,
+                max_context_tokens=max_context_tokens,
+                model_name=self.model_name,
+            )
             truncated_messages = format_messages_for_api(
                 system_prompt=system_prompt,
                 history=history,
@@ -736,6 +780,62 @@ class LLMClient:
                 max_context_tokens=max_context_tokens,
                 model_name=self.model_name,
             )
+            if trim_metrics.removed_history_count > 0 or trim_metrics.is_over_limit_after_trim:
+                before_text = _serialize_messages(history)
+                after_text = _serialize_messages(truncated_messages[1:-1])
+                failure_reason = "消息级裁剪后仍超出上下文限制" if trim_metrics.is_over_limit_after_trim else ""
+                events = [
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_TRIGGERED,
+                        timestamp_ms=trim_started_at,
+                        detail="最终 Prompt 输入超过上限，触发消息级裁剪",
+                        payload={"removed_history_count": trim_metrics.removed_history_count},
+                    ),
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_INPUT_MEASURED,
+                        timestamp_ms=current_timestamp_ms(),
+                        detail="已测量消息级裁剪前后 Token",
+                        payload={
+                            "before_tokens": trim_metrics.before_tokens,
+                            "after_tokens": trim_metrics.after_tokens,
+                            "removed_history_count": trim_metrics.removed_history_count,
+                        },
+                    ),
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_COMPLETED if not trim_metrics.is_over_limit_after_trim else COMPRESSION_EVENT_FAILED,
+                        timestamp_ms=current_timestamp_ms(),
+                        detail="消息级裁剪完成" if not trim_metrics.is_over_limit_after_trim else "消息级裁剪后仍超出限制",
+                        payload={"removed_history_count": trim_metrics.removed_history_count},
+                    ),
+                ]
+                payload = create_compression_audit_payload(
+                    trace_id=trace_id,
+                    session_id=session_id_from_kwargs,
+                    message_id=message_id_from_kwargs,
+                    stage=CompressionStage.MESSAGE_TRIM,
+                    scope=CompressionScope.SESSION_HISTORY,
+                    trigger_reason=CompressionTriggerReason.FINAL_PROMPT_TOKEN_OVER_LIMIT,
+                    source_keys=["history"],
+                    before_text=before_text,
+                    after_text=after_text,
+                    raw_tokens=trim_metrics.before_tokens,
+                    after_trim_tokens=trim_metrics.after_tokens,
+                    final_tokens=trim_metrics.after_tokens,
+                    is_success=not trim_metrics.is_over_limit_after_trim,
+                    failure_reason=failure_reason,
+                    events=events,
+                    timestamp_ms=trim_started_at,
+                )
+                duration_ms = max(1, current_timestamp_ms() - trim_started_at)
+                record_compression_audit_payload(
+                    payload,
+                    status=COMPRESSION_STATUS_SUCCESS if payload.is_success else COMPRESSION_STATUS_FAILED,
+                )
+                record_compression_span(
+                    payload,
+                    duration_ms=duration_ms,
+                    status=COMPRESSION_STATUS_SUCCESS if payload.is_success else COMPRESSION_STATUS_FAILED,
+                )
         except Exception as e:
             logger.error(f"[TraceID:{trace_id}] 上下文截断失败，使用原始消息: {e}")
             truncated_messages = [

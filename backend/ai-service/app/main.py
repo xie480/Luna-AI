@@ -70,7 +70,7 @@ from app.repository.long_term_memory_qdrant import LongTermMemoryQdrantRepo
 from app.repository.models import Base
 from app.repository.prompt_pg import PromptPGRepo
 from app.repository.user_profile_pg import UserProfilePGRepository
-from app.telemetry.worker import get_worker, init_worker
+from app.telemetry.worker import Base as TelemetryBase, get_worker, init_worker
 
 # ============================================================
 # 模型路径通过 app.config.settings 统一管理（自动读取 .env 文件）
@@ -293,6 +293,7 @@ async def lifespan(app: FastAPI):
             # 使用 Base.metadata.create_all 只能创建新表，不能修改现有表。
             # 为了新增字段，需要对比模型和现有表的列。
             Base.metadata.create_all(sync_conn)
+            TelemetryBase.metadata.create_all(sync_conn)
             
             for table_name, table in Base.metadata.tables.items():
                 if table_name in existing_tables:

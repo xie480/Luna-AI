@@ -187,6 +187,59 @@ RAG_EVENT_THOUGHT = "EVT_RAG_THOUGHT"
 RAG_EVENT_CITATION = "EVT_RAG_CITATION"
 RAG_DEFAULT_VECTOR_SIZE = 768
 
+COMPRESSION_AUDIT_ACTION_TYPE = "CONTEXT_COMPRESSION"
+COMPRESSION_AUDIT_SCHEMA_VERSION = "compression.audit.v1"
+COMPRESSION_REPLAY_SCHEMA_VERSION = "compression.replay.v1"
+COMPRESSION_EVENT_SCHEMA_VERSION = "compression.event.v1"
+COMPRESSION_SPAN_NAME = "ContextCompression"
+COMPRESSION_SPAN_SERVICE = "python_ai"
+COMPRESSION_STATUS_SUCCESS = "SUCCESS"
+COMPRESSION_STATUS_FAILED = "FAILED"
+COMPRESSION_STATUS_SKIPPED = "SKIPPED"
+COMPRESSION_EVENT_TRIGGERED = "COMPRESSION_TRIGGERED"
+COMPRESSION_EVENT_INPUT_MEASURED = "COMPRESSION_INPUT_MEASURED"
+COMPRESSION_EVENT_EXECUTED = "COMPRESSION_EXECUTED"
+COMPRESSION_EVENT_OUTPUT_MEASURED = "COMPRESSION_OUTPUT_MEASURED"
+COMPRESSION_EVENT_APPLIED = "COMPRESSION_APPLIED"
+COMPRESSION_EVENT_COMPLETED = "COMPRESSION_COMPLETED"
+COMPRESSION_EVENT_FAILED = "COMPRESSION_FAILED"
+COMPRESSION_VARIABLE_HISTORICAL_CONTEXT = "HISTORICAL_CONTEXT"
+
+
+class CompressionStage(str, Enum):
+    """上下文压缩阶段枚举。"""
+
+    MESSAGE_TRIM = "message_trim"
+    SHORT_SUMMARY = "short_summary"
+    LONG_SUMMARY = "long_summary"
+    MEMORY_SLOT_VARIABLE = "memory_slot_variable"
+    HISTORICAL_CONTEXT_MERGE = "historical_context_merge"
+    HARD_TRUNCATION = "hard_truncation"
+
+
+class CompressionTriggerReason(str, Enum):
+    """上下文压缩触发原因枚举。"""
+
+    REDIS_WINDOW_OVERFLOW = "redis_window_overflow"
+    HISTORY_SESSION_ROLLOVER = "history_session_rollover"
+    MEMORY_SLOT_TOKEN_OVER_LIMIT = "memory_slot_token_over_limit"
+    SINGLE_VARIABLE_TOKEN_OVER_LIMIT = "single_variable_token_over_limit"
+    FINAL_PROMPT_TOKEN_OVER_LIMIT = "final_prompt_token_over_limit"
+
+
+class CompressionScope(str, Enum):
+    """上下文压缩作用域枚举。"""
+
+    SESSION_HISTORY = "session_history"
+    LONG_TERM_MEMORY = "long_term_memory"
+    EXTERNAL_KNOWLEDGE = "external_knowledge"
+    USER_PROFILE = "user_profile"
+    MEMORY_SNIPPETS = "memory_snippets"
+    CORE_SUMMARY = "core_summary"
+    KEY_FACTS = "key_facts"
+    MEMORY_SLOT = "memory_slot"
+    HISTORICAL_CONTEXT = "historical_context"
+
 
 class MemoryChunkType(str, Enum):
     SUMMARY = "SUMMARY"
