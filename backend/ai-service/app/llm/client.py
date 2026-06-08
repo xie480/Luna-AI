@@ -173,17 +173,20 @@ class CompressionLLMClient:
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
+            max_retries=0,
         )
         self.model_name = config.get("model_id") or "gpt-4o-mini"
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
-        reraise=True,
-        before_sleep=before_sleep_log(logger, 20),
-    )
-    async def summarize(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+    def _build_summarize_call_kwargs(self, messages: list[dict[str, str]], kwargs: dict[str, Any]) -> dict[str, Any]:
+        """
+        构建压缩模型调用参数。
+
+        做什么：从动态配置读取小模型名称、max_tokens 与 temperature，并合并调用方传入的请求参数。
+        为什么这样做：压缩模型调用入口需要共享同一套配置装配逻辑，避免重试版与单次版参数不一致。
+        输入输出：输入消息列表和额外参数字典，输出可传给 OpenAI Chat Completions 的参数字典。
+        边界条件：max_tokens 未配置或小于等于 0 时不下发，避免覆盖供应商默认策略。
+        异常行为：配置读取失败时让异常向上暴露，由调用方记录当前业务上下文。
+        """
         from app.config.settings import global_config_container
         from app.types.constants import ModelSize
         config = global_config_container.get_model_config(ModelSize.SMALL)
@@ -201,9 +204,40 @@ class CompressionLLMClient:
         }
         if max_tokens and max_tokens > 0:
             call_kwargs["max_tokens"] = max_tokens
+        return call_kwargs
 
+    async def summarize_once(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        """
+        单次调用压缩模型并返回摘要文本。
+
+        做什么：不使用 tenacity 额外重试，直接调用 OpenAI Compatible Chat Completions。
+        为什么这样做：用户画像摘要有本地兜底路径，额外重试会放大连接超时并导致后台缓存重建超过总时限。
+        输入输出：输入 Chat 消息与请求参数，输出模型返回文本，空响应转换为空字符串。
+        边界条件：调用方可传 timeout 控制单次请求耗时；max_tokens 仍由小模型动态配置控制。
+        异常行为：网络、限流、超时异常原样抛出，由业务层决定是否兜底或重试。
+        """
+        call_kwargs = self._build_summarize_call_kwargs(messages, kwargs)
         response = await self.client.chat.completions.create(**call_kwargs)
         return response.choices[0].message.content or ""
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
+        reraise=True,
+        before_sleep=before_sleep_log(logger, 20),
+    )
+    async def summarize(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
+        """
+        带重试调用压缩模型并返回摘要文本。
+
+        做什么：为会话压缩、RAG 查询改写等需要模型摘要质量的链路提供重试版入口。
+        为什么这样做：这些链路缺少用户画像那样的确定性本地兜底，网络瞬断时需要有限重试提升成功率。
+        输入输出：输入 Chat 消息与请求参数，输出模型返回文本，空响应转换为空字符串。
+        边界条件：重试仅覆盖限流和连接异常；业务层仍应设置 timeout 防止无限等待。
+        异常行为：重试耗尽后原样抛出异常，由上层记录 trace_id 和任务上下文。
+        """
+        return await self.summarize_once(messages, **kwargs)
 
 
 class LLMClient:

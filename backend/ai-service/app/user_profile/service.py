@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import asyncio
 import time
+import traceback
 from collections import defaultdict
 from typing import Any
 
 from app.logger import logger
 from app.repository.models import UserProfileItem
 from app.repository.user_profile_pg import UserProfilePGRepository
-from app.types.constants import USER_PROFILE_DEFAULT_USER_ID, UserProfileCacheStatus, UserProfileCategory
+from app.types.constants import (
+    USER_PROFILE_DEFAULT_USER_ID,
+    USER_PROFILE_SUMMARY_REBUILD_TASK_TIMEOUT_SECONDS,
+    UserProfileCacheStatus,
+    UserProfileCategory,
+)
 from app.user_profile.cache import UserProfileCache
 from app.user_profile.conflict_resolver import UserProfileConflictResolver
 from app.user_profile.extractor import UserProfileExtractor
@@ -334,18 +340,25 @@ class UserProfileService:
             raise
         # 处理其他异常情况
         except Exception as exc:
-            # 在缓存中标记任务失败状态
+            # 在缓存中标记任务失败状态；TimeoutError 等异常的 str(exc) 可能为空，必须保存可读诊断文本。
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            error_detail = self._format_exception_detail(exc)
             if self.cache:
-                await self.cache.mark_failed(user_id, str(exc))
+                await self.cache.mark_failed(user_id, error_detail)
                 await self.cache.save_task_status(
                     user_id,
                     task_id,
                     UserProfileCacheStatus.FAILED,
-                    {"error": str(exc)},
+                    {
+                        "error": error_detail,
+                        "error_type": type(exc).__qualname__,
+                        "latency_ms": latency_ms,
+                    },
                 )
-            logger.error(
+            logger.opt(exception=exc).error(
                 f"用户画像提取任务失败 trace_id={trace_id} task_id={task_id} "
-                f"session_id={session_id} user_id={user_id} error={exc}"
+                f"session_id={session_id} user_id={user_id} latency_ms={latency_ms} "
+                f"timeout_seconds=90.0 cache_enabled={self.cache is not None} {error_detail}"
             )
         # 无论任务成功、失败还是被取消，都要释放锁
         finally:
@@ -359,32 +372,82 @@ class UserProfileService:
         trace_id: str,
         task_id: str,
     ) -> None:
-        """后台执行摘要缓存重建任务。"""
+        """
+        后台执行摘要缓存重建任务。
+
+        做什么：异步重建 Redis 中可注入 Prompt 的用户画像摘要，并在失败时写入详细诊断日志。
+        为什么这样做：该任务通常由聊天链路后台触发，异常不会直接返回给前端；日志必须包含异常类型、
+        异常 repr、耗时、超时阈值和堆栈，避免 TimeoutError 等空消息异常只留下 error=。
+        输入输出：输入 user_id、trace_id、task_id；无直接返回值，结果写入缓存与日志。
+        边界条件：缓存不存在时仍可直接执行摘要重建；用户级锁被占用时标记失败并返回。
+        异常行为：取消任务继续向上抛出；其他异常记录详细上下文并把可读错误写入缓存状态。
+        """
+        start_time = time.monotonic()
+        timeout_seconds = USER_PROFILE_SUMMARY_REBUILD_TASK_TIMEOUT_SECONDS
         try:
             if self.cache:
                 await self.cache.mark_rebuilding(user_id, task_id)
                 acquired = await self.cache.acquire_lock(user_id, task_id)
                 if not acquired:
-                    await self.cache.mark_failed(user_id, "用户画像缓存重建锁已被占用")
+                    lock_error = "用户画像缓存重建锁已被占用"
+                    await self.cache.mark_failed(user_id, lock_error)
+                    logger.warning(
+                        f"用户画像摘要重建跳过 trace_id={trace_id} task_id={task_id} user_id={user_id} "
+                        f"reason={lock_error} cache_enabled=True"
+                    )
                     return
             await asyncio.wait_for(
                 self.rebuild_summary(user_id=user_id, trace_id=trace_id),
-                timeout=45.0,
+                timeout=timeout_seconds,
+            )
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            logger.info(
+                f"用户画像摘要重建完成 trace_id={trace_id} task_id={task_id} user_id={user_id} "
+                f"latency_ms={latency_ms} timeout_seconds={timeout_seconds} cache_enabled={self.cache is not None}"
             )
         except asyncio.CancelledError:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
-                f"用户画像摘要重建任务被取消 trace_id={trace_id} task_id={task_id} user_id={user_id}"
+                f"用户画像摘要重建任务被取消 trace_id={trace_id} task_id={task_id} user_id={user_id} "
+                f"latency_ms={latency_ms} timeout_seconds={timeout_seconds}"
             )
             raise
         except Exception as exc:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            error_detail = self._format_exception_detail(exc)
             if self.cache:
-                await self.cache.mark_failed(user_id, str(exc))
-            logger.error(
-                f"用户画像摘要重建失败 trace_id={trace_id} task_id={task_id} user_id={user_id} error={exc}"
+                await self.cache.mark_failed(user_id, error_detail)
+            logger.opt(exception=exc).error(
+                f"用户画像摘要重建失败 trace_id={trace_id} task_id={task_id} user_id={user_id} "
+                f"latency_ms={latency_ms} timeout_seconds={timeout_seconds} "
+                f"cache_enabled={self.cache is not None} {error_detail}"
             )
         finally:
             if self.cache:
                 await self.cache.release_lock(user_id, task_id)
+
+    @staticmethod
+    def _format_exception_detail(exc: Exception) -> str:
+        """
+        格式化异常诊断信息。
+
+        做什么：把异常类型、消息、repr、cause、context 和完整堆栈压缩成日志可读文本。
+        为什么这样做：部分异常（例如 asyncio.TimeoutError）的字符串为空，单独打印 error={exc}
+        会导致日志中看不到失败原因。
+        输入输出：输入异常对象，输出不会为空的中文诊断字符串。
+        边界条件：异常消息为空时使用 `<空异常消息>` 占位；堆栈换行转义，保证 JSON 日志单行可解析。
+        异常行为：本方法不抛出业务异常，仅根据已捕获异常生成诊断文本。
+        """
+        message = str(exc) or "<空异常消息>"
+        cause = repr(exc.__cause__) if exc.__cause__ else "无"
+        context = repr(exc.__context__) if exc.__context__ else "无"
+        stack = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()
+        normalized_stack = stack.replace("\r", "\\r").replace("\n", "\\n")
+        return (
+            f"error_type={type(exc).__module__}.{type(exc).__qualname__} "
+            f"error_message={message} error_repr={repr(exc)} "
+            f"error_cause={cause} error_context={context} traceback={normalized_stack}"
+        )
 
     def _track_task(self, task: asyncio.Task[Any]) -> None:
         """跟踪后台任务并在结束后释放引用。"""

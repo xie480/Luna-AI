@@ -144,6 +144,22 @@ USER_PROFILE_MUTATION_SCHEMA_VERSION = "user_profile.mutation.v1"
 USER_PROFILE_CACHE_SCHEMA_VERSION = "user_profile.cache.v1"
 USER_PROFILE_DEFAULT_USER_ID = "local_default_user"
 USER_PROFILE_AUTO_COMMIT_CONFIDENCE_THRESHOLD = 0.75
+# 用户画像摘要模型单次请求超时秒数。
+# 做什么：限制后台摘要模型调用的单次等待时间，避免 OpenAI 客户端连接阶段长时间阻塞。
+# 为什么这样做：用户画像摘要是辅助上下文，但小模型在本地或代理链路较慢时需要足够时间生成压缩结果。
+USER_PROFILE_SUMMARY_MODEL_TIMEOUT_SECONDS = 60.0
+# 用户画像摘要后台重建任务总超时秒数。
+# 做什么：限制摘要重建任务从获取锁到写入缓存的整体生命周期。
+# 为什么这样做：外层任务超时必须大于模型单次请求超时，避免模型还没到 60 秒就被后台任务提前取消。
+USER_PROFILE_SUMMARY_REBUILD_TASK_TIMEOUT_SECONDS = 75.0
+# 用户画像摘要最大字符数。
+# 做什么：限制写入 Redis 并注入 Prompt 的画像摘要长度。
+# 为什么这样做：防止画像条目过多导致 Prompt 上下文被辅助信息挤占。
+USER_PROFILE_SUMMARY_MAX_LENGTH = 2000
+# 用户画像本地兜底摘要最多拼接的条目数量。
+# 做什么：模型不可用时只选取前若干条 active 画像生成确定性摘要。
+# 为什么这样做：保证兜底摘要可控、可读，并避免 Redis 缓存与 Prompt 过长。
+USER_PROFILE_SUMMARY_FALLBACK_MAX_ITEMS = 40
 
 USER_PROFILE_CHANGE_REASON_MANUAL_CREATE = "手动新增用户画像"
 USER_PROFILE_CHANGE_REASON_MANUAL_UPDATE_SNAPSHOT = "手动编辑前快照"
