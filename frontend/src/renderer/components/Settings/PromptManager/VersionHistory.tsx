@@ -1,6 +1,10 @@
 /**
  * 版本历史组件
- * 做什么：展示选中模板的版本时间线，高亮当前 Published 版本，支持版本选择与发布操作。
+ * 做什么：展示选中模板的版本时间线，高亮当前 Published 版本，支持版本选择、发布、回滚与删除未使用旧版本。
+ * 为什么这样做：Prompt 历史版本会不断增长，前端需要给用户提供受控清理入口，但不能绕过后端对 active 版本的保护。
+ * 输入输出：输入当前模板 ID、当前选中版本 ID 与选择回调；输出版本列表 UI 和用户触发的版本操作。
+ * 边界条件：未选中模板、版本加载中、当前使用版本、published 版本均不会提供删除入口。
+ * 异常行为：操作失败由 zustand store 写入错误状态，本组件只负责恢复按钮 loading 状态。
  */
 import React, { useCallback, useState } from 'react';
 import { usePromptStore } from '../../../stores/promptStore';
@@ -23,14 +27,15 @@ const STATUS_LABELS: Record<string, string> = {
   archived: '已归档',
 };
 
-export const VersionHistory: React.FC<VersionHistoryProps> = ({
+export function VersionHistory({
   templateId,
   onSelectVersion,
   selectedVersionId,
-}) => {
-  const { versions, isLoadingVersions, publishVersion, rollbackVersion, templates } = usePromptStore();
+}: VersionHistoryProps): React.ReactElement {
+  const { versions, isLoadingVersions, publishVersion, rollbackVersion, deleteVersion, templates } = usePromptStore();
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const templateData = templateId ? templates.find(t => t.id === templateId) : null;
 
@@ -60,6 +65,31 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
       setRollingBackId(null);
     }
   }, [templateId, rollbackVersion]);
+
+  /**
+   * 删除未使用旧版本。
+   * 做什么：用户点击删除后进行二次确认，再调用 Store Action 删除指定版本。
+   * 为什么这样做：删除历史 Prompt 是不可恢复操作，必须避免误触；真实可删性仍以后端校验为准。
+   * 输入输出：输入 version 对象；成功后 Store 会刷新版本历史。
+   * 边界条件：当前 active 版本和 published 版本不允许发起删除。
+   * 异常行为：请求失败时由 Store 记录错误，本组件在 finally 中恢复按钮状态。
+   */
+  const handleDelete = useCallback(async (version: PromptVersion) => {
+    if (!templateId) return;
+    const isActive = templateData?.active_version_id === version.id;
+    if (isActive || version.status === 'published') return;
+    if (!window.confirm(`确定要删除 Prompt 版本 v${version.version_num} 吗？此操作不可恢复。`)) {
+      return;
+    }
+    setDeletingId(version.id);
+    try {
+      await deleteVersion(templateId, version.id);
+    } catch (err) {
+      // 错误由 store 层捕获并展示
+    } finally {
+      setDeletingId(null);
+    }
+  }, [templateId, templateData?.active_version_id, deleteVersion]);
 
   if (!templateId) {
     return (
@@ -92,6 +122,7 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
         <div className="version-timeline">
           {versions.map((v) => {
             const isActive = templateData?.active_version_id === v.id;
+            const canDelete = !isActive && v.status !== 'published';
             return (
               <div
                 key={v.id}
@@ -133,6 +164,19 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
                       {rollingBackId === v.id ? '回滚中...' : '回滚'}
                     </button>
                   )}
+                  {canDelete && (
+                    <button
+                      className="config-btn config-btn-danger config-btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(v);
+                      }}
+                      disabled={deletingId === v.id}
+                      title="删除未在使用中的旧版本"
+                    >
+                      {deletingId === v.id ? '删除中...' : '删除'}
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -141,4 +185,6 @@ export const VersionHistory: React.FC<VersionHistoryProps> = ({
       )}
     </div>
   );
-};
+}
+
+export default VersionHistory;

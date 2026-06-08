@@ -43,7 +43,7 @@ export interface PromptVersion {
   /** 模板变量（逗号分隔的字符串） */
   variables: string;
   /** 版本状态 */
-  status: 'draft' | 'published' | 'archived';
+  status: 'draft' | 'published' | 'deprecated' | 'archived';
   /** 创建时间 */
   created_at: string;
 }

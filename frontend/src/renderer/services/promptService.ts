@@ -179,4 +179,23 @@ export const promptService = {
     const data: ResponseModel = await res.json();
     if (data.code !== 0) throw new Error(data.msg || '回滚版本失败');
   },
+
+  /**
+   * 删除未在使用中的旧版本
+   */
+  deleteVersion: async (templateId: string, versionId: string): Promise<void> => {
+    const ready = await probePromptsEndpoint();
+    if (!ready) throw new Error('后端 Prompt 管理接口尚未就绪');
+
+    const res = await fetch(`${API_BASE}/templates/${templateId}/versions/${versionId}`, {
+      method: 'DELETE',
+    });
+    if (res.status === 404) {
+      _isPromptsReady = false;
+      throw new Error('后端 Prompt 管理接口尚未就绪');
+    }
+    const data: ResponseModel = await res.json();
+    if (!res.ok) throw new Error(data.msg || `删除版本失败: ${res.statusText}`);
+    if (data.code !== 0) throw new Error(data.msg || '删除版本失败');
+  },
 };

@@ -682,6 +682,22 @@
   color: #ef4444;
 }
 
+.version-status-badge.status-deprecated {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.config-btn-danger {
+  border: 1px solid #ef4444;
+  background-color: transparent;
+  color: #ef4444;
+}
+
+.config-btn-danger:hover:not(:disabled) {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
 .version-time { color: #6b7280; font-size: 11px; flex: 1; }
 .version-actions { display: flex; gap: 4px; }
 .version-actions-bar { display: flex; gap: 8px; margin-top: 8px; }

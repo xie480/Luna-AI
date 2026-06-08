@@ -35,6 +35,8 @@ interface PromptState {
   publishVersion: (templateId: string, versionId: string) => Promise<void>;
   /** 回滚版本 */
   rollbackVersion: (templateId: string, versionId: string) => Promise<void>;
+  /** 删除未在使用中的旧版本 */
+  deleteVersion: (templateId: string, versionId: string) => Promise<void>;
 }
 
 export const usePromptStore = create<PromptState>((set, get) => ({
@@ -135,6 +137,22 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       set({ error: message || 'Failed to rollback version' });
+      throw err;
+    }
+  },
+
+  deleteVersion: async (templateId, versionId) => {
+    set({ error: null });
+    try {
+      await promptService.deleteVersion(templateId, versionId);
+      // 删除后重新拉取模板与版本，确保 selectedVersionId 不再指向已删除记录。
+      await get().fetchTemplates();
+      if (get().selectedTemplateId === templateId) {
+        await get().selectTemplate(templateId);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to delete version' });
       throw err;
     }
   },

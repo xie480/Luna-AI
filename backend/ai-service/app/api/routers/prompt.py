@@ -162,3 +162,35 @@ async def rollback_version(req: RollbackVersionRequest, request: Request, mgr: P
     except Exception as e:
         logger.error(f"回滚版本失败 error={e}")
         return create_error_response(500, "回滚版本失败", trace_id)
+
+
+@router.delete("/templates/{template_id}/versions/{version_id}", response_model=ResponseModel)
+async def delete_unused_version(
+    template_id: str,
+    version_id: str,
+    request: Request,
+    mgr: PromptManager = Depends(get_prompt_manager),
+) -> ResponseModel:
+    """
+    删除未在使用中的 Prompt 旧版本。
+
+    做什么：提供前端历史版本删除入口，只允许删除不属于当前 active_version_id 的旧版本。
+    为什么这样做：当前生效版本必须被 Python 控制面保护，避免用户误删导致 Prompt 缓存和模板装配失效。
+    输入输出：路径参数包含模板 ID 与版本 ID；成功返回 success=true。
+    边界条件：缺少 ID、版本正在使用或版本归属不匹配时返回明确错误。
+    异常行为：业务校验失败返回 400；数据库异常返回 500 并记录中文日志。
+    """
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+
+    if not template_id or not version_id:
+        return create_error_response(400, "缺少模板 ID 或版本 ID", trace_id)
+
+    try:
+        await mgr.delete_unused_version(template_id, version_id)
+        return create_success_response({"success": True}, trace_id)
+    except ValueError as e:
+        logger.warning(f"删除 Prompt 旧版本被拒绝 template_id={template_id} version_id={version_id} error={e}")
+        return create_error_response(400, str(e), trace_id)
+    except Exception as e:
+        logger.error(f"删除 Prompt 旧版本失败 template_id={template_id} version_id={version_id} error={e}")
+        return create_error_response(500, "删除 Prompt 旧版本失败", trace_id)

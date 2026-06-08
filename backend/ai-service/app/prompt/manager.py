@@ -253,6 +253,39 @@ class Manager:
 
         await self.repo.run_in_transaction(_tx_fn)
 
+    async def delete_unused_version(self, template_id: str, version_id: str) -> None:
+        """
+        删除未在使用中的 Prompt 旧版本。
+
+        做什么：物理删除指定模板下未被 active_version_id 引用、且不是 published 状态的版本。
+        为什么这样做：历史版本会随着 Prompt 调整持续累积，允许用户清理未使用旧版本，同时保护当前生效版本不被误删。
+        输入输出：输入模板 ID 与版本 ID；成功无返回值。
+        边界条件：模板不存在、版本不存在、版本不属于模板、版本正在使用或仍处于 published 状态时拒绝删除。
+        异常行为：校验失败抛出 ValueError，由 API 层转成明确错误响应；数据库删除失败向上抛出。
+        """
+        async def _tx_fn(tx_repo: PromptPGRepo) -> None:
+            tmpl = await tx_repo.get_template(template_id)
+            if not tmpl:
+                raise ValueError(f"模板 {template_id} 不存在")
+
+            version = await tx_repo.get_version(version_id)
+            if not version:
+                raise ValueError(f"版本 {version_id} 不存在")
+
+            if version.template_id != template_id:
+                raise ValueError(f"版本 {version_id} 不属于模板 {template_id}")
+
+            if tmpl.active_version_id == version_id:
+                raise ValueError("不能删除当前正在使用的 Prompt 版本")
+
+            if version.status == "published":
+                raise ValueError("不能删除仍处于 published 状态的 Prompt 版本")
+
+            await tx_repo.delete_version(version_id)
+            logger.info(f"删除未使用 Prompt 版本成功 template_id={template_id} version_id={version_id} status={version.status}")
+
+        await self.repo.run_in_transaction(_tx_fn)
+
     async def rollback_version(self, template_id: str, target_version_id: str) -> None:
         """
         回滚版本
