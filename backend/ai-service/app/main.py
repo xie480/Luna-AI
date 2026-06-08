@@ -396,7 +396,12 @@ async def lifespan(app: FastAPI):
         from app.rag.ingestion import RagIngestionService
         from app.rag.retrieval import RagRetrievalOrchestrator
         rag_ingestion_service = RagIngestionService(rag_pg_repo, rag_qdrant_repo, inference_svc)
-        rag_retrieval_orchestrator = RagRetrievalOrchestrator(rag_pg_repo, rag_qdrant_repo, inference_svc)
+        rag_retrieval_orchestrator = RagRetrievalOrchestrator(
+            rag_pg_repo,
+            rag_qdrant_repo,
+            inference_svc,
+            prompt_manager=prompt_manager,
+        )
 
         # 注册知识库文档废弃 GC 事件处理器
         from app.config.event_bus import EventType

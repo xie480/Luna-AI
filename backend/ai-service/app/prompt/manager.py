@@ -13,10 +13,12 @@ Luna AI Prompt 管理器模块
 """
 
 import json
-from typing import Dict, List, Optional, Protocol
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Protocol
 
 from app.logger import logger
 from app.prompt.types import (
+    PG_ONLY_PROMPT_CATEGORIES,
     PLACEHOLDER_MEMORY,
     PLACEHOLDER_RUNTIME,
     PLACEHOLDER_SYSTEM,
@@ -27,9 +29,39 @@ from app.repository.prompt_pg import PromptPGRepo
 from app.utils.snowflake import generate_string_id
 
 
+@dataclass(frozen=True)
+class PromptPayload:
+    """
+    三槽位 Prompt 渲染载荷。
+
+    做什么：承载从 PostgreSQL active 版本渲染后的 system、memory、runtime 三段内容。
+    为什么这样做：RAG 证据评估等业务需要分别按 system message 注入三槽位，而不是拼接成单个字符串。
+    输入输出：由 Manager.render_prompt 返回，调用方读取三个字符串字段。
+    边界条件：某个槽位缺失时对应字段为空字符串。
+    异常行为：该数据类不抛异常，加载失败由 Manager 或 CacheManager 抛出。
+    """
+
+    system: str = ""
+    memory: str = ""
+    runtime: str = ""
+
+
 class PromptCache(Protocol):
-    """定义 Prompt 缓存接口"""
-    async def get_assembled_prompt(self, category: PromptCategory, variables: Dict[str, str]) -> str:
+    """定义 Prompt 缓存接口。"""
+
+    async def get_or_load(self, category: PromptCategory) -> Any:
+        """
+        获取未渲染的三槽位 Prompt 缓存。
+
+        做什么：供 Manager.render_prompt 从 PG/Redis 读取三槽位内容。
+        为什么这样做：部分业务需要保留槽位边界，而不是只获取拼接后的完整 Prompt。
+        输入输出：输入 PromptCategory，输出包含 system_content/memory_content/runtime_content 的对象。
+        边界条件：PG-only 分类缺失时由具体实现抛错。
+        异常行为：缓存或数据库异常向上抛出。
+        """
+        ...
+
+    async def get_assembled_prompt(self, category: PromptCategory, variables: Dict[str, Any]) -> str:
         ...
 
     async def invalidate_cache(self, category: PromptCategory) -> None:
@@ -43,9 +75,15 @@ class Manager:
         self.repo = repo
         self.cache_mgr = cache_mgr
 
-    async def assemble_prompt(self, category: PromptCategory, variables: Dict[str, str]) -> str:
+    async def assemble_prompt(self, category: PromptCategory, variables: Dict[str, Any]) -> str:
         """
-        根据业务分类组装完整的 Prompt 字符串
+        根据业务分类组装完整的 Prompt 字符串。
+
+        做什么：从 PromptCache 加载 PostgreSQL active Prompt 版本，并渲染为完整文本。
+        为什么这样做：业务 Prompt 组装必须通过 Python 控制面和 PG 版本管理，不允许业务代码直接读本地文件。
+        输入输出：输入 PromptCategory 与变量字典，输出完整 Prompt 文本。
+        边界条件：没有缓存管理器时返回最小兜底 Prompt；PG-only 分类缺失时由缓存层抛错后进入兜底。
+        异常行为：缓存/数据库异常记录 warning，并返回最小兜底 Prompt 保持主链路可解释。
         """
         prompt_str = ""
         if self.cache_mgr:
@@ -53,9 +91,13 @@ class Manager:
                 prompt_str = await self.cache_mgr.get_assembled_prompt(category, variables)
             except Exception as e:
                 logger.warning(f"获取组装 Prompt 失败 category={category.value} error={e}")
+                if category in PG_ONLY_PROMPT_CATEGORIES:
+                    raise RuntimeError(f"PG-only Prompt 组装失败 category={category.value} error={e}") from e
                 return self._build_minimal_prompt(variables)
         else:
-            # 如果没有缓存管理器，直接返回兜底文本
+            # 如果没有缓存管理器，普通聊天类 Prompt 返回兜底文本；PG-only 业务 Prompt 必须失败，避免绕过 PostgreSQL 版本管理。
+            if category in PG_ONLY_PROMPT_CATEGORIES:
+                raise RuntimeError(f"Prompt 缓存管理器不可用，无法从 PostgreSQL 组装 category={category.value}")
             return self._build_minimal_prompt(variables)
 
         # 清理剩余未被注入的占位符
@@ -69,7 +111,36 @@ class Manager:
         logger.info(f"组装 Prompt 成功 category={category.value} prompt_length={len(prompt_str)}")
         return prompt_str
 
-    def _build_minimal_prompt(self, variables: Dict[str, str]) -> str:
+    async def render_prompt(self, category: PromptCategory, variables: Dict[str, Any]) -> PromptPayload:
+        """
+        按三槽位分别渲染 Prompt。
+
+        做什么：读取缓存中的三槽位原始模板，并分别替换变量后返回 PromptPayload。
+        为什么这样做：Evidence Evaluator 需要把 system、memory、runtime 分别作为 message 注入模型。
+        输入输出：输入 PromptCategory 和变量字典，输出 PromptPayload。
+        边界条件：必须存在 cache_mgr；没有 cache_mgr 说明 PG Prompt 管理未初始化，直接抛错。
+        异常行为：PG-only 分类缺失、数据库异常或模板加载失败会抛 RuntimeError 给业务层降级处理。
+        """
+        if not self.cache_mgr:
+            raise RuntimeError("Prompt 缓存管理器不可用，无法按槽位渲染 Prompt")
+        try:
+            from app.prompt.types import render_template
+
+            cached_prompt = await self.cache_mgr.get_or_load(category)
+            payload = PromptPayload(
+                system=render_template(cached_prompt.system_content, variables),
+                memory=render_template(cached_prompt.memory_content, variables),
+                runtime=render_template(cached_prompt.runtime_content, variables),
+            )
+            logger.info(
+                f"按槽位渲染 Prompt 成功 category={category.value} "
+                f"system_length={len(payload.system)} memory_length={len(payload.memory)} runtime_length={len(payload.runtime)}"
+            )
+            return payload
+        except Exception as e:
+            raise RuntimeError(f"按槽位渲染 Prompt 失败 category={category.value} error={e}") from e
+
+    def _build_minimal_prompt(self, variables: Dict[str, Any]) -> str:
         """构建最基本的安全兜底提示文本"""
         parts = [
             "你是一个 AI 助手。\n\n",

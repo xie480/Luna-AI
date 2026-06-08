@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.logger import logger
+from app.prompt.manager import Manager as PromptManager
+from app.prompt.types import PromptCategory
 from app.rag.types import RagEvidence, RagSearchRequest, RagSearchResponse
 from app.rag.unicode_guard import inspect_unicode_text, sanitize_text_for_rag
 from app.repository.rag_pg import RagChunkCandidate, RagPGRepository
@@ -83,11 +85,22 @@ class RagRetrievalOrchestrator:
         qdrant_repo: RagQdrantRepository | None,
         inference_svc: RetrievalInferenceService | None,
         event_publisher: RagEventPublisher | None = None,
+        prompt_manager: PromptManager | None = None,
     ) -> None:
+        """
+        初始化 RAG 检索编排器。
+
+        做什么：保存 RAG 仓库、向量检索依赖、事件发布器与 PromptManager。
+        为什么这样做：Agentic 证据评估需要从 PostgreSQL 读取 evidence_evaluator Prompt，禁止再直接读取本地模板。
+        输入输出：输入各基础设施依赖，无业务返回值。
+        边界条件：prompt_manager 为空时 Agentic 证据评估会明确降级，不会伪造 Prompt。
+        异常行为：构造阶段不抛业务异常，运行期缺依赖由评估方法记录 warning。
+        """
         self.pg_repo = pg_repo
         self.qdrant_repo = qdrant_repo
         self.inference_svc = inference_svc
         self.event_publisher = event_publisher or RagEventPublisher()
+        self.prompt_manager = prompt_manager
 
     async def search(self, request: RagSearchRequest, trace_id: str) -> RagSearchResponse:
         """执行完整检索编排。"""
@@ -292,8 +305,10 @@ class RagRetrievalOrchestrator:
             
         # 执行动态打分
         try:
-            from app.prompt.manager import prompt_manager
             from app.llm.client import compression_llm_client
+
+            if not self.prompt_manager:
+                raise RuntimeError("PromptManager 未初始化，无法从 PostgreSQL 读取 evidence_evaluator Prompt")
             
             # 使用 LLM 对首个证据内容进行有效性评价
             content_to_evaluate = candidates[0].candidate.chunk.content_text
@@ -307,9 +322,9 @@ class RagRetrievalOrchestrator:
                 "content_to_evaluate": content_to_evaluate,
             }
             
-            prompt_payload = await prompt_manager.render_prompt(
-                preset_id="evidence_evaluator",
-                variables=context,
+            prompt_payload = await self.prompt_manager.render_prompt(
+                PromptCategory.EVIDENCE_EVALUATOR,
+                context,
             )
             
             messages = []

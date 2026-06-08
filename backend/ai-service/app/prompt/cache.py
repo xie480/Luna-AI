@@ -10,13 +10,14 @@ Luna AI Prompt 缓存管理器模块
 
 import asyncio
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 
 from app.infrastructure.redis import RedisClient
 from app.logger import logger
 from app.prompt.types import (
+    PG_ONLY_PROMPT_CATEGORIES,
     PLACEHOLDER_MEMORY,
     PLACEHOLDER_RUNTIME,
     PLACEHOLDER_SYSTEM,
@@ -56,8 +57,9 @@ class CacheManager:
         """从缓存获取，缓存未命中时从数据库加载"""
         cache_key = self._cache_key(category)
 
-        # 1. 尝试从 Redis 读取
-        if self.redis_client:
+        # 1. 尝试从 Redis 读取。
+        # PG-only 分类必须每次从 PostgreSQL active 版本加载，避免历史 simple 文件缓存继续参与业务组装。
+        if self.redis_client and category not in PG_ONLY_PROMPT_CATEGORIES:
             try:
                 client = self.redis_client.get_client()
                 cached = await client.get(cache_key)
@@ -73,8 +75,9 @@ class CacheManager:
             # 从数据库加载
             cp = await self._load_from_db(category)
 
-            # 3. 写入 Redis 缓存（异步写入，不阻塞主流程）
-            if self.redis_client:
+            # 3. 写入 Redis 缓存（异步写入，不阻塞主流程）。
+            # PG-only 分类不写入 Redis，确保业务 Prompt 每次以 PostgreSQL active_version 为准。
+            if self.redis_client and category not in PG_ONLY_PROMPT_CATEGORIES:
                 asyncio.create_task(self._save_to_cache(cache_key, category, cp))
 
             return cp
@@ -82,7 +85,15 @@ class CacheManager:
         return await self._singleflight.do(cache_key, _load_and_cache)
 
     async def _load_from_db(self, category: PromptCategory) -> CachedPrompt:
-        """从 PostgreSQL 加载指定分类的模板，按 SlotPosition 分类提取内容"""
+        """
+        从 PostgreSQL 加载指定分类的模板，按 SlotPosition 分类提取内容。
+
+        做什么：通过 PromptPGRepo 读取 prompt_templates 与 active prompt_versions。
+        为什么这样做：PromptTemplate 是系统提示词版本管理的 SSOT，业务组装必须以 PG 发布版本为准。
+        输入输出：输入 PromptCategory，输出三槽位 CachedPrompt。
+        边界条件：PG_ONLY_PROMPT_CATEGORIES 没有任何有效 PG 模板时直接抛错，不回退本地 simple 文件。
+        异常行为：数据库查询失败或强制 PG 分类缺失时抛 RuntimeError，由业务层记录并降级。
+        """
         try:
             templates = await self.pg_repo.get_templates_by_category(category.value)
         except Exception as e:
@@ -91,6 +102,8 @@ class CacheManager:
         cp = CachedPrompt()
 
         if not templates:
+            if category in PG_ONLY_PROMPT_CATEGORIES:
+                raise RuntimeError(f"分类 {category.value} 未在 PostgreSQL 中配置 Prompt 模板，禁止回退本地 simple 文件")
             fallback = self._load_from_simple_files(category)
             if fallback.system_content or fallback.memory_content or fallback.runtime_content:
                 logger.info(f"从 simple 文件加载 Prompt 模板成功 category={category.value}")
@@ -125,6 +138,8 @@ class CacheManager:
         )
 
         if not cp.system_content and not cp.memory_content and not cp.runtime_content:
+            if category in PG_ONLY_PROMPT_CATEGORIES:
+                raise RuntimeError(f"分类 {category.value} 未找到可用的 PostgreSQL active Prompt 版本，禁止回退本地 simple 文件")
             fallback = self._load_from_simple_files(category)
             if fallback.system_content or fallback.memory_content or fallback.runtime_content:
                 return fallback
@@ -182,7 +197,7 @@ class CacheManager:
             except Exception as e:
                 raise RuntimeError(f"清除 Prompt 缓存失败: {e}")
 
-    async def get_assembled_prompt(self, category: PromptCategory, variables: Dict[str, str]) -> str:
+    async def get_assembled_prompt(self, category: PromptCategory, variables: Dict[str, Any]) -> str:
         """
         获取并组装完整的 Prompt 字符串
         使用固定占位符模板 {system}\n\n{memory}\n\n{runtime}
