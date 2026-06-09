@@ -152,7 +152,7 @@ export const useBubble = () => {
    * - 只有队列中 renderIndex 最小（最早渲染）的气泡才能执行消失
    * - 消失完成后，继续检查队列中下一个气泡是否可以消失
    */
-  const processRemovalQueue = useCallback(() => {
+  const processRemovalQueue = useCallback(function processRemovalQueueImpl() {
     // 如果当前有气泡正在执行消失动画，则不处理
     if (removalInProgressRef.current) {
       return;
@@ -204,7 +204,7 @@ export const useBubble = () => {
           notifySpaceAvailable();
           
           // 继续处理待消失队列中的下一个气泡
-          processRemovalQueue();
+          processRemovalQueueImpl();
           requestCompletionCheck();
         }, 300);
         
@@ -214,7 +214,7 @@ export const useBubble = () => {
       }
       return prev;
     });
-  }, [notifySpaceAvailable, processRemovalQueue, requestCompletionCheck]);
+  }, [notifySpaceAvailable, requestCompletionCheck]);
 
   /**
    * 将气泡加入待消失队列
