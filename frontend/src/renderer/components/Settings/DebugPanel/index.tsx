@@ -1,7 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { AI_SERVICE_BASE_URL } from '../../../appConfig';
 import MetricsChart from './MetricsChart';
 import CompressionAuditViewer from './CompressionAuditViewer';
 import TraceViewer from './TraceViewer';
+import { ChatWorkflowDebugDrawer } from '../../ChatWorkflow/ChatWorkflowDebugDrawer';
 import { useSystemStore } from '../../../stores/systemStore';
 import { useTelemetryStore, type TelemetryDebugTab } from '../../../stores/telemetryStore';
 import './DebugPanel.css';
@@ -155,6 +157,7 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
     { key: 'errors', label: '异常日志' },
     { key: 'compressionAudit', label: '压缩审计' },
     { key: 'traces', label: '链路追踪' },
+    { key: 'workflow', label: '节点时间线' },
   ];
 
   /** 渲染缩放把手 */
@@ -217,6 +220,7 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
           {activeTab === 'errors' && <FrontendErrorViewer />}
           {activeTab === 'compressionAudit' && <CompressionAuditViewer />}
           {activeTab === 'traces' && <TraceViewer />}
+          {activeTab === 'workflow' && <ChatWorkflowDebugDrawer />}
         </div>
       </div>
     </div>
@@ -232,8 +236,6 @@ const DebugPanel: React.FC = () => {
   const isDiagnosticOpen = useSystemStore((s) => s.isDiagnosticOpen);
   return <DebugPanelInner isOpen={isDiagnosticOpen} />;
 };
-
-import { AI_SERVICE_BASE_URL } from '../../../appConfig';
 
 /** 错误日志项接口 */
 interface ErrorLogItem {
@@ -278,7 +280,8 @@ const FrontendErrorViewer: React.FC = () => {
         }
       }
     } catch (err) {
-      console.error('获取错误日志失败:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      useSystemStore.getState().addSystemLog(`获取错误日志失败: ${message}`);
     } finally {
       setIsLoading(false);
     }

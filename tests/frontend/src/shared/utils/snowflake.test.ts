@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { Snowflake, generateId, initGlobalNode } from './snowflake';
+import { describe, expect, it } from 'vitest';
+import { Snowflake, generateId, initGlobalNode } from '../../../../../frontend/src/shared/utils/snowflake';
 
 describe('Snowflake', () => {
   it('should generate unique IDs', () => {

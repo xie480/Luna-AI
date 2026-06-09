@@ -44,6 +44,7 @@ from app.repository.chat_history_pg import ChatHistoryPGRepo
 from app.repository.chat_history_redis import ChatHistoryRedisRepo, ChatSummary, Interaction
 from app.repository.models import InteractionModel
 from app.user_profile.service import UserProfileService
+from app.workflow.service import ChatWorkflowService
 from app.types.constants import (
     COMPRESSION_EVENT_APPLIED,
     COMPRESSION_EVENT_COMPLETED,
@@ -154,6 +155,11 @@ async def get_memory_manager(request: Request) -> Optional[MemoryManager]:
 async def get_user_profile_service(request: Request) -> Optional[UserProfileService]:
     """从 app.state 获取 UserProfileService 实例"""
     return getattr(request.app.state, "user_profile_service", None)
+
+
+async def get_chat_workflow_service(request: Request) -> Optional[ChatWorkflowService]:
+    """从 app.state 获取 Phase 8.5 ChatWorkflowService 实例"""
+    return getattr(request.app.state, "chat_workflow_service", None)
 
 
 # ============================================================
@@ -333,45 +339,50 @@ async def get_rag_orchestrator(request: Request) -> Optional[RagRetrievalOrchest
 async def chat_request(
     payload: ChatRequestPayload,
     trace_id: str = Depends(get_trace_id),
-    redis_repo: Optional[ChatHistoryRedisRepo] = Depends(get_redis_repo),
-    pg_repo: Optional[ChatHistoryPGRepo] = Depends(get_pg_repo),
-    prompt_mgr: Optional[PromptManager] = Depends(get_prompt_manager),
-    memory_manager: Optional[MemoryManager] = Depends(get_memory_manager),
-    rag_orchestrator: Optional[RagRetrievalOrchestrator] = Depends(get_rag_orchestrator),
-    user_profile_service: Optional[UserProfileService] = Depends(get_user_profile_service),
+    chat_workflow_service: Optional[ChatWorkflowService] = Depends(get_chat_workflow_service),
 ) -> APIResponse:
     """
-    处理聊天请求，执行完整的流式对话流程。
+    处理聊天请求，启动 Phase 8.5 LangGraph daily_chat.default.v1 主链路。
 
-    替代原有的 CMD_USER_INPUT WebSocket 消息。
-    流程：
-    1. 从 Redis 加载上下文
-    2. 组装 Input Reconstruction Prompt
-    3. 调用 InputReconstructor 消歧
-    4. 组装 Chat Prompt
-    5. 通过 asyncio.create_task 在后台执行 LLM 流式调用和 SSE 推送
-    6. 立即返回 HTTP 响应
-
-    返回：立即返回 { status: "streaming", msgId }，实际流式内容通过 SSE 推送。
-
-    Args:
-        payload (ChatRequestPayload): 聊天请求的有效载荷，包含sessionId、message等信息
-        trace_id (str): 链路追踪ID，从请求头获取或自动生成
-        redis_repo (Optional[ChatHistoryRedisRepo]): Redis仓库实例，用于获取上下文
-        pg_repo (Optional[ChatHistoryPGRepo]): PostgreSQL仓库实例，用于持久化对话历史
-        prompt_mgr (Optional[PromptManager]): 提示词管理器实例，用于组装各种提示词
-        memory_manager (Optional[MemoryManager]): 记忆管理器实例，用于长期记忆检索
-        rag_orchestrator (Optional[RagRetrievalOrchestrator]): RAG检索编排器实例，用于外部知识检索
-
-    Returns:
-        APIResponse: 立即返回API响应，包含状态信息和消息ID，实际流式内容通过SSE推送
+    做什么：API 层只做请求校验并调用 ChatWorkflowService，立即返回 streaming 状态。
+    为什么这样做：调度、记忆、RAG、画像、Prompt、LLM 与落盘均收口在 Python Workflow 控制面。
+    输入输出：输入 ChatRequestPayload，输出兼容旧前端的 {status, msgId}，实际流式内容通过 SSE 推送。
+    边界条件：sessionId/message 为空返回 400；workflow 服务未初始化返回 503。
+    异常行为：后台图执行错误由 ChatWorkflowService 转换为最终 SSE 错误块。
     """
     logger.info(f"收到 /api/chat 请求 trace_id={trace_id} sessionId={payload.sessionId} msgId={payload.msgId}")
     if not payload.sessionId:
         raise HTTPException(status_code=400, detail="sessionId is required")
     if not payload.message:
         raise HTTPException(status_code=400, detail="message is required")
+    if not chat_workflow_service:
+        raise HTTPException(status_code=503, detail="ChatWorkflowService 未初始化")
 
+    result_payload = await chat_workflow_service.start_daily_chat(
+        trace_id=trace_id,
+        session_id=payload.sessionId,
+        message=payload.message,
+        frontend_message_id=payload.msgId,
+    )
+
+    return APIResponse(
+        type=WS_MSG_TYPE_CHAT_STREAM,
+        trace_id=trace_id,
+        payload=result_payload,
+    )
+
+
+async def _legacy_chat_request(
+    payload: ChatRequestPayload,
+    trace_id: str,
+    redis_repo: Optional[ChatHistoryRedisRepo],
+    pg_repo: Optional[ChatHistoryPGRepo],
+    prompt_mgr: Optional[PromptManager],
+    memory_manager: Optional[MemoryManager],
+    rag_orchestrator: Optional[RagRetrievalOrchestrator],
+    user_profile_service: Optional[UserProfileService],
+) -> APIResponse:
+    """旧版串行 Chat 主链路，保留为回归参考，不再由 /api/chat 直接调用。"""
     user_msg_id = payload.msgId or generate_string_id()
 
     # ---- 1. 加载上下文 ----

@@ -18,6 +18,7 @@ import { TopStatusPanel } from '../TopStatusPanel/TopStatusPanel';
 import { BubbleStack } from '../BubbleStack/BubbleStack';
 import { InputArea } from '../InputArea/InputArea';
 import { RecentMemoryPanel } from '../RecentMemoryPanel/RecentMemoryPanel';
+import { ChatWorkflowOverlay } from '../ChatWorkflow/ChatWorkflowOverlay';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { createErrorToast } from '../../stores/errorToastStore';
 import { reportError } from '../../services/errorLogService';
@@ -111,6 +112,7 @@ export const ChatView: React.FC = () => {
       <div className="interaction-layer">
         <ErrorBoundary source="chat_view">
           <TopStatusPanel />
+          <ChatWorkflowOverlay />
           <BubbleStack />
           <InputArea />
         </ErrorBoundary>

@@ -55,7 +55,7 @@ export interface MetricsDataPoint {
 }
 
 /** 诊断面板标签类型。 */
-export type TelemetryDebugTab = 'metrics' | 'errors' | 'compressionAudit' | 'traces';
+export type TelemetryDebugTab = 'metrics' | 'errors' | 'compressionAudit' | 'traces' | 'workflow';
 
 /**
  * 可观测性/诊断面板状态

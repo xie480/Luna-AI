@@ -2,6 +2,11 @@
 .DS_Store
 Thumbs.db
 
+# Accidental shell redirection artifacts
+$null
+null
+nul
+
 # IDE
 .vscode/
 .idea/

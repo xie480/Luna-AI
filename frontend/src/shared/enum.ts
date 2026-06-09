@@ -240,6 +240,141 @@ export const COMPRESSION_STATUS_LABEL: Record<string, string> = {
 };
 
 /**
+ * Chat Workflow schema_version 常量。
+ * 做什么：定义 Phase 8.5 聊天主链路节点化事件协议版本。
+ * 为什么这样做：跨层通信必须版本化，禁止在组件和服务层散落魔法字符串。
+ * 输入输出：无。
+ * 边界条件：后端升级协议版本时必须同步更新前端解析层与测试。
+ * 异常行为：无。
+ */
+export const CHAT_WORKFLOW_SCHEMA_VERSION = {
+  CHAT_WORKFLOW_V1: 'chat.workflow.v1',
+} as const;
+
+/**
+ * Chat 模式常量。
+ * 做什么：定义当前前后端共享的聊天模式标识。
+ * 为什么这样做：Plan 投影视图、调试事件和消息元数据都需要稳定模式枚举。
+ * 输入输出：无。
+ * 边界条件：Phase 8.5 仅支持 daily_chat。
+ * 异常行为：无。
+ */
+export const CHAT_MODE = {
+  DAILY_CHAT: 'daily_chat',
+} as const;
+
+/**
+ * Chat Plan 预设常量。
+ * 做什么：定义当前聊天主链路使用的单一预设计划标识。
+ * 为什么这样做：前端需要区分普通闲聊计划与未来 Phase 9 可能出现的更多计划。
+ * 输入输出：无。
+ * 边界条件：当前仅允许 daily_chat.default.v1。
+ * 异常行为：无。
+ */
+export const CHAT_PLAN_PRESET = {
+  DAILY_CHAT_DEFAULT: 'daily_chat.default.v1',
+} as const;
+
+/**
+ * Chat Workflow 节点类型常量。
+ * 做什么：定义日常闲聊主链路中所有可观测节点的稳定枚举值。
+ * 为什么这样做：SSE 事件消费、Store 状态更新和 UI 展示必须共用同一套节点标识。
+ * 输入输出：无。
+ * 边界条件：新增节点时必须同步补充中文标签与状态映射。
+ * 异常行为：无。
+ */
+export const CHAT_WORKFLOW_NODE_TYPE = {
+  MESSAGE_INGRESS: 'message_ingress',
+  INPUT_RECONSTRUCTION: 'input_reconstruction',
+  SESSION_CONTEXT_LOAD: 'session_context_load',
+  LONG_TERM_MEMORY_RAG: 'long_term_memory_rag',
+  USER_PROFILE_INJECTION: 'user_profile_injection',
+  KNOWLEDGE_RAG: 'knowledge_rag',
+  CONTEXT_GOVERNANCE: 'context_governance',
+  PROMPT_ASSEMBLY: 'prompt_assembly',
+  MAIN_CHAT_LLM: 'main_chat_llm',
+  RESPONSE_PERSISTENCE: 'response_persistence',
+  LONG_TERM_MEMORY_COMPRESSION: 'long_term_memory_compression',
+  USER_PROFILE_EXTRACTION: 'user_profile_extraction',
+  POSTPROCESS_COMMIT: 'postprocess_commit',
+  ERROR_RECOVERY: 'error_recovery',
+  FINALIZE: 'finalize',
+} as const;
+
+/**
+ * Chat 节点状态常量。
+ * 做什么：定义前后端共享的节点运行状态。
+ * 为什么这样做：条件未进入、降级继续和真实失败必须被显式区分，避免错误语义混淆。
+ * 输入输出：无。
+ * 边界条件：NOT_ENTERED_BY_CONDITION 属于正常条件路由结果，绝不能当作错误处理。
+ * 异常行为：无。
+ */
+export const CHAT_NODE_STATUS = {
+  PENDING: 'pending',
+  RUNNING: 'running',
+  SUCCEEDED: 'succeeded',
+  FAILED: 'failed',
+  DEGRADED: 'degraded',
+  NOT_ENTERED_BY_CONDITION: 'not_entered_by_condition',
+} as const;
+
+/**
+ * Chat Workflow 事件类型常量。
+ * 做什么：定义 Phase 8.5 聊天工作流会通过 SSE 推送的事件类型。
+ * 为什么这样做：SSEManager 与调试面板必须集中依赖统一事件枚举，避免条件分支散落字符串。
+ * 输入输出：无。
+ * 边界条件：过渡期仍需兼容既有 CHAT_STREAM。
+ * 异常行为：无。
+ */
+export const CHAT_WORKFLOW_EVENT_TYPE = {
+  EVT_CHAT_PLAN_STARTED: 'EVT_CHAT_PLAN_STARTED',
+  EVT_CHAT_NODE_STARTED: 'EVT_CHAT_NODE_STARTED',
+  EVT_CHAT_NODE_COMPLETED: 'EVT_CHAT_NODE_COMPLETED',
+  EVT_CHAT_NODE_FAILED: 'EVT_CHAT_NODE_FAILED',
+  EVT_CHAT_NODE_DEGRADED: 'EVT_CHAT_NODE_DEGRADED',
+  EVT_CHAT_CONDITION_EVALUATED: 'EVT_CHAT_CONDITION_EVALUATED',
+  EVT_CHAT_STREAM_CHUNK: 'EVT_CHAT_STREAM_CHUNK',
+  EVT_CHAT_POSTPROCESS_STARTED: 'EVT_CHAT_POSTPROCESS_STARTED',
+  EVT_CHAT_POSTPROCESS_COMPLETED: 'EVT_CHAT_POSTPROCESS_COMPLETED',
+  EVT_CHAT_PLAN_COMPLETED: 'EVT_CHAT_PLAN_COMPLETED',
+} as const;
+
+/** Chat Workflow 节点中文标签。 */
+export const CHAT_WORKFLOW_NODE_LABEL: Record<
+  typeof CHAT_WORKFLOW_NODE_TYPE[keyof typeof CHAT_WORKFLOW_NODE_TYPE],
+  string
+> = {
+  [CHAT_WORKFLOW_NODE_TYPE.MESSAGE_INGRESS]: '接收用户输入',
+  [CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION]: '输入重构',
+  [CHAT_WORKFLOW_NODE_TYPE.SESSION_CONTEXT_LOAD]: '会话上下文加载',
+  [CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG]: '长期记忆检索',
+  [CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION]: '用户画像注入',
+  [CHAT_WORKFLOW_NODE_TYPE.KNOWLEDGE_RAG]: '知识库检索',
+  [CHAT_WORKFLOW_NODE_TYPE.CONTEXT_GOVERNANCE]: '上下文治理',
+  [CHAT_WORKFLOW_NODE_TYPE.PROMPT_ASSEMBLY]: 'Prompt 装配',
+  [CHAT_WORKFLOW_NODE_TYPE.MAIN_CHAT_LLM]: '主对话生成',
+  [CHAT_WORKFLOW_NODE_TYPE.RESPONSE_PERSISTENCE]: '回复持久化',
+  [CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_COMPRESSION]: '长期记忆压缩',
+  [CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_EXTRACTION]: '用户画像提取',
+  [CHAT_WORKFLOW_NODE_TYPE.POSTPROCESS_COMMIT]: '后处理提交',
+  [CHAT_WORKFLOW_NODE_TYPE.ERROR_RECOVERY]: '错误恢复',
+  [CHAT_WORKFLOW_NODE_TYPE.FINALIZE]: '流程收尾',
+};
+
+/** Chat 节点状态中文标签。 */
+export const CHAT_NODE_STATUS_LABEL: Record<
+  typeof CHAT_NODE_STATUS[keyof typeof CHAT_NODE_STATUS],
+  string
+> = {
+  [CHAT_NODE_STATUS.PENDING]: '等待中',
+  [CHAT_NODE_STATUS.RUNNING]: '进行中',
+  [CHAT_NODE_STATUS.SUCCEEDED]: '已完成',
+  [CHAT_NODE_STATUS.FAILED]: '失败',
+  [CHAT_NODE_STATUS.DEGRADED]: '已降级',
+  [CHAT_NODE_STATUS.NOT_ENTERED_BY_CONDITION]: '条件未进入',
+};
+
+/**
  * 全局统一的错误码枚举
  * 做什么：定义前后端统一的错误码常量。
  * 为什么这样做：避免代码中出现魔法数字，统一错误处理逻辑。
@@ -293,6 +428,15 @@ export const WS_MSG_TYPE = {
   EVT_MEMORY_UPDATED: "EVT_MEMORY_UPDATED",
   EVT_DEBUG_LOG: "EVT_DEBUG_LOG",
   EVT_CHAT_STREAM_CHUNK: "EVT_CHAT_STREAM_CHUNK",
+  EVT_CHAT_PLAN_STARTED: "EVT_CHAT_PLAN_STARTED",
+  EVT_CHAT_NODE_STARTED: "EVT_CHAT_NODE_STARTED",
+  EVT_CHAT_NODE_COMPLETED: "EVT_CHAT_NODE_COMPLETED",
+  EVT_CHAT_NODE_FAILED: "EVT_CHAT_NODE_FAILED",
+  EVT_CHAT_NODE_DEGRADED: "EVT_CHAT_NODE_DEGRADED",
+  EVT_CHAT_CONDITION_EVALUATED: "EVT_CHAT_CONDITION_EVALUATED",
+  EVT_CHAT_POSTPROCESS_STARTED: "EVT_CHAT_POSTPROCESS_STARTED",
+  EVT_CHAT_POSTPROCESS_COMPLETED: "EVT_CHAT_POSTPROCESS_COMPLETED",
+  EVT_CHAT_PLAN_COMPLETED: "EVT_CHAT_PLAN_COMPLETED",
   // 流式渲染事件类型 —— 参考 streaming_rendering_plan.md §3.1
   EVT_EMOTION_UPDATE: "EVT_EMOTION_UPDATE",
   EVT_REPLY_CHUNK: "EVT_REPLY_CHUNK",

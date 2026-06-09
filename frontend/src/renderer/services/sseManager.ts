@@ -26,8 +26,9 @@ import { AI_SERVICE_BASE_URL, AI_SERVICE_PORT } from '../appConfig';
 import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore, type EmotionState } from '../stores/systemStore';
 import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/telemetryStore';
+import { useChatWorkflowStore } from '../stores/chatWorkflowStore';
 import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
-import { WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
+import { CHAT_PLAN_PRESET, CHAT_WORKFLOW_SCHEMA_VERSION, WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
 import { createErrorToast } from '../stores/errorToastStore';
 import { reportError } from '../services/errorLogService';
@@ -35,7 +36,13 @@ import {
   WSMessage,
   PongPayload,
   ErrorPayload,
+  ChatConditionEvaluatedPayload,
+  ChatNodeStatusPayload,
+  ChatPlanLifecyclePayload,
+  ChatPostprocessPayload,
   ChatStreamPayload,
+  ChatWorkflowEventEnvelope,
+  ChatWorkflowNodeType,
   EmotionUpdatePayload,
   ReplyChunkPayload,
   InitStatePayload,
@@ -96,6 +103,111 @@ class SSEManager {
       this.pendingAssistantContent = '';
       this.hasPendingMemory = false;
     });
+  }
+
+  /**
+   * 注册结构化 SSE 事件监听。
+   * 做什么：统一解析后端以命名事件形式推送的结构化消息并转交给 [`handleMessage()`](frontend/src/renderer/services/sseManager.ts:235)。
+   * 为什么这样做：Phase 8.5 新增了多种 workflow 事件，若继续逐个复制监听代码，容易出现漏接和解析逻辑漂移。
+   * 输入输出：输入事件名，输出为内部消息分发副作用。
+   * 边界条件：`eventSource` 未初始化时直接返回。
+   * 异常行为：解析失败时会写系统日志并上报错误提示，不伪造成功。
+   */
+  private registerStructuredEventListener(eventName: string): void {
+    if (!this.eventSource) return;
+    this.eventSource.addEventListener(eventName, (event) => {
+      try {
+        const sseEvent: SSEEvent = JSON.parse(event.data);
+        const msg: WSMessage = {
+          type: sseEvent.type as WSMsgType,
+          trace_id: sseEvent.trace_id,
+          payload: sseEvent.payload,
+        };
+        this.handleMessage(msg);
+      } catch (err) {
+        const errMsg = `解析 ${eventName} 消息失败: ${err}`;
+        useSystemStore.getState().addSystemLog(errMsg);
+        createErrorToast('ERROR', 'SSE', errMsg);
+        reportError('sse', errMsg).catch(() => {});
+      }
+    });
+  }
+
+  /**
+   * 把未知值缩小为记录对象。
+   * 做什么：为 workflow 事件 envelope 做最小结构校验。
+   * 为什么这样做：SSE payload 来自跨层通信，前端禁止假设输入一定合法。
+   * 输入输出：输入未知值，输出对象记录或 null。
+   * 边界条件：数组与 null 都视为非法对象。
+   * 异常行为：无。
+   */
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  /** 读取字符串字段。 */
+  private asString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  /** 读取数字字段。 */
+  private asNumber(value: unknown): number | undefined {
+    return typeof value === 'number' ? value : undefined;
+  }
+
+  /** 读取布尔字段。 */
+  private asBoolean(value: unknown): boolean | undefined {
+    return typeof value === 'boolean' ? value : undefined;
+  }
+
+  /**
+   * 解析 Phase 8.5 Chat Workflow 事件信封。
+   * 做什么：把后端 snake_case envelope 转为前端 camelCase 强类型结构。
+   * 为什么这样做：Store 和组件层统一使用 camelCase，避免在消费层反复解析原始对象。
+   * 输入输出：输入后端原始 payload 与内部 payload 映射器，输出强类型事件或 null。
+   * 边界条件：核心字段缺失时直接返回 null，不进入业务 Store。
+   * 异常行为：无。
+   */
+  private mapWorkflowEventEnvelope<TPayload>(
+    rawPayload: unknown,
+    mapPayload: (payload: Record<string, unknown>) => TPayload
+  ): ChatWorkflowEventEnvelope<TPayload> | null {
+    const envelope = this.asRecord(rawPayload);
+    const nestedPayload = this.asRecord(envelope?.payload);
+    const eventId = this.asString(envelope?.event_id);
+    const eventType = this.asString(envelope?.event_type);
+    const traceId = this.asString(envelope?.trace_id);
+    const interactionId = this.asString(envelope?.interaction_id);
+    const sessionId = this.asString(envelope?.session_id);
+    const timestampMs = this.asNumber(envelope?.timestamp_ms);
+    if (
+      !envelope ||
+      !nestedPayload ||
+      !eventId ||
+      !eventType ||
+      !traceId ||
+      !interactionId ||
+      !sessionId ||
+      timestampMs === undefined
+    ) {
+      useSystemStore.getState().addSystemLog('收到非法 Chat Workflow 事件，已忽略');
+      return null;
+    }
+    return {
+      schemaVersion: CHAT_WORKFLOW_SCHEMA_VERSION.CHAT_WORKFLOW_V1,
+      eventId,
+      eventType: eventType as ChatWorkflowEventEnvelope<TPayload>['eventType'],
+      traceId,
+      interactionId,
+      sessionId,
+      planPresetId: CHAT_PLAN_PRESET.DAILY_CHAT_DEFAULT,
+      nodeType: this.asString(envelope.node_type) as ChatWorkflowNodeType | undefined,
+      timestampMs,
+      payload: mapPayload(nestedPayload),
+    };
   }
 
   /**
@@ -164,40 +276,19 @@ class SSEManager {
       useSystemStore.getState().setConnectionStatus('connected');
     });
 
-    // CHAT_STREAM 事件
-    this.eventSource.addEventListener('CHAT_STREAM', (event) => {
-      try {
-        const sseEvent: SSEEvent = JSON.parse(event.data);
-        // 转换为旧的 WSMessage 格式再分发
-        const msg: WSMessage = {
-          type: sseEvent.type as WSMsgType,
-          trace_id: sseEvent.trace_id,
-          payload: sseEvent.payload,
-        };
-        this.handleMessage(msg);
-      } catch (err) {
-        const errMsg = `解析 SSE 消息失败: ${err}`;
-        useSystemStore.getState().addSystemLog(errMsg);
-        // 显示全局错误提示并持久化
-        createErrorToast('ERROR', 'SSE', errMsg);
-        reportError('sse', errMsg).catch(() => {});
-      }
-    });
-
-    // EVT_INIT_STATE 事件
-    this.eventSource.addEventListener('EVT_INIT_STATE', (event) => {
-      try {
-        const sseEvent: SSEEvent = JSON.parse(event.data);
-        const msg: WSMessage = {
-          type: sseEvent.type as WSMsgType,
-          trace_id: sseEvent.trace_id,
-          payload: sseEvent.payload,
-        };
-        this.handleMessage(msg);
-      } catch (err) {
-        useSystemStore.getState().addSystemLog(`解析 EVT_INIT_STATE 消息失败: ${err}`);
-      }
-    });
+    // 结构化业务事件
+    this.registerStructuredEventListener(WS_MSG_TYPE.CHAT_STREAM);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_INIT_STATE);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_STREAM_CHUNK);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_PLAN_STARTED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_NODE_STARTED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_NODE_COMPLETED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_NODE_FAILED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_NODE_DEGRADED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_CONDITION_EVALUATED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_POSTPROCESS_STARTED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_POSTPROCESS_COMPLETED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_PLAN_COMPLETED);
 
     // 通用消息事件（兜底处理所有未注册的事件类型）
     this.eventSource.onmessage = (event) => {
@@ -263,9 +354,98 @@ class SSEManager {
         break;
       }
 
-      case WS_MSG_TYPE.CHAT_STREAM: {
+      case WS_MSG_TYPE.CHAT_STREAM:
+      case WS_MSG_TYPE.EVT_CHAT_STREAM_CHUNK: {
         const chatPayload = msg.payload as ChatStreamPayload;
         this.handleChatStream(chatPayload);
+        break;
+      }
+
+      case WS_MSG_TYPE.EVT_CHAT_PLAN_STARTED: {
+        const workflowStore = useChatWorkflowStore.getState();
+        const event = this.mapWorkflowEventEnvelope(msg.payload, (payload): ChatPlanLifecyclePayload => ({
+          nodeObservationCount: this.asNumber(payload.node_observation_count) ?? 0,
+          assistantMessageId: this.asString(payload.assistant_message_id) ?? '',
+        }));
+        if (event && event.payload.assistantMessageId) {
+          workflowStore.onPlanStarted(event);
+          sessionStore.updateMessageMetadata(event.sessionId, event.payload.assistantMessageId, {
+            schemaVersion: event.schemaVersion,
+            traceId: event.traceId,
+            interactionId: event.interactionId,
+            assistantMessageId: event.payload.assistantMessageId,
+            planPresetId: event.planPresetId,
+          });
+        }
+        break;
+      }
+
+      case WS_MSG_TYPE.EVT_CHAT_NODE_STARTED:
+      case WS_MSG_TYPE.EVT_CHAT_NODE_COMPLETED:
+      case WS_MSG_TYPE.EVT_CHAT_NODE_FAILED:
+      case WS_MSG_TYPE.EVT_CHAT_NODE_DEGRADED: {
+        const workflowStore = useChatWorkflowStore.getState();
+        const event = this.mapWorkflowEventEnvelope(msg.payload, (payload): ChatNodeStatusPayload => ({
+          nodeType: (this.asString(payload.node_type) ?? '') as ChatWorkflowNodeType,
+          status: (this.asString(payload.status) ?? '') as ChatNodeStatusPayload['status'],
+          startedAtMs: this.asNumber(payload.started_at_ms),
+          endedAtMs: this.asNumber(payload.ended_at_ms),
+          latencyMs: this.asNumber(payload.latency_ms),
+          degradedReason: this.asString(payload.degraded_reason),
+          errorCode: this.asString(payload.error_code),
+        }));
+        if (event && event.payload.nodeType && event.payload.status) {
+          workflowStore.onNodeStatus(event);
+        }
+        break;
+      }
+
+      case WS_MSG_TYPE.EVT_CHAT_CONDITION_EVALUATED: {
+        const workflowStore = useChatWorkflowStore.getState();
+        const event = this.mapWorkflowEventEnvelope(msg.payload, (payload): ChatConditionEvaluatedPayload => ({
+          sourceNodeType: (this.asString(payload.source_node_type) ?? '') as ChatWorkflowNodeType,
+          targetNodeType: (this.asString(payload.target_node_type) ?? '') as ChatWorkflowNodeType,
+          conditionEntered: this.asBoolean(payload.condition_entered) ?? false,
+          routeName: this.asString(payload.route_name) ?? '',
+          reason: this.asString(payload.reason) ?? '',
+        }));
+        if (event && event.payload.sourceNodeType && event.payload.targetNodeType && event.payload.routeName) {
+          workflowStore.onConditionEvaluated(event);
+        }
+        break;
+      }
+
+      case WS_MSG_TYPE.EVT_CHAT_POSTPROCESS_STARTED:
+      case WS_MSG_TYPE.EVT_CHAT_POSTPROCESS_COMPLETED: {
+        const workflowStore = useChatWorkflowStore.getState();
+        const event = this.mapWorkflowEventEnvelope(msg.payload, (payload): ChatPostprocessPayload => ({
+          nodeObservationCount: this.asNumber(payload.node_observation_count) ?? 0,
+          assistantMessageId: this.asString(payload.assistant_message_id) ?? '',
+        }));
+        if (event && event.payload.assistantMessageId) {
+          workflowStore.onPostprocessStatus(
+            event,
+            msgType === WS_MSG_TYPE.EVT_CHAT_POSTPROCESS_STARTED ? 'started' : 'completed'
+          );
+          sessionStore.updateMessageMetadata(event.sessionId, event.payload.assistantMessageId, {
+            postprocessStatus: msgType === WS_MSG_TYPE.EVT_CHAT_POSTPROCESS_STARTED ? 'running' : 'completed',
+          });
+        }
+        break;
+      }
+
+      case WS_MSG_TYPE.EVT_CHAT_PLAN_COMPLETED: {
+        const workflowStore = useChatWorkflowStore.getState();
+        const event = this.mapWorkflowEventEnvelope(msg.payload, (payload): ChatPlanLifecyclePayload => ({
+          nodeObservationCount: this.asNumber(payload.node_observation_count) ?? 0,
+          assistantMessageId: this.asString(payload.assistant_message_id) ?? '',
+        }));
+        if (event && event.payload.assistantMessageId) {
+          workflowStore.onPlanCompleted(event);
+          sessionStore.updateMessageMetadata(event.sessionId, event.payload.assistantMessageId, {
+            workflowCompletedAt: event.timestampMs,
+          });
+        }
         break;
       }
 
@@ -416,6 +596,7 @@ class SSEManager {
     const systemStore = useSystemStore.getState();
     const sessionStore = useSessionStore.getState();
     const currentSessionId = sessionStore.currentSessionId;
+    const assistantMessageId = payload.assistant_message_id || payload.node_id;
     const msgType = payload.type || 'reply_chunk';
 
     // ---- 第一步：处理所有消息类型共有的内容更新 ----
@@ -444,7 +625,29 @@ class SSEManager {
       }
 
       if (currentSessionId) {
-        sessionStore.updateMessageChunk(currentSessionId, payload.node_id, payload.chunk);
+        sessionStore.updateMessageChunk(currentSessionId, assistantMessageId, payload.chunk);
+        const streamMetadata: Record<string, unknown> = {};
+        if (payload.schema_version) {
+          streamMetadata.schemaVersion = payload.schema_version;
+        }
+        if (payload.interaction_id) {
+          streamMetadata.interactionId = payload.interaction_id;
+        }
+        if (payload.assistant_message_id) {
+          streamMetadata.assistantMessageId = payload.assistant_message_id;
+        }
+        if (payload.plan_preset_id) {
+          streamMetadata.planPresetId = payload.plan_preset_id;
+        }
+        if (payload.current_node_type) {
+          streamMetadata.currentNodeType = payload.current_node_type;
+        }
+        if (payload.citations) {
+          streamMetadata.citations = payload.citations;
+        }
+        if (Object.keys(streamMetadata).length > 0) {
+          sessionStore.updateMessageMetadata(currentSessionId, assistantMessageId, streamMetadata);
+        }
       }
 
       this.pendingAssistantContent += payload.chunk;
@@ -457,7 +660,7 @@ class SSEManager {
       // 2a. 更新消息状态（释放 isWaiting 锁定）
       const status = payload.error ? 'error' : 'completed';
       if (currentSessionId) {
-        sessionStore.updateMessageStatus(currentSessionId, payload.node_id, status);
+        sessionStore.updateMessageStatus(currentSessionId, assistantMessageId, status);
       }
 
       // 2b. 处理错误通知

@@ -325,7 +325,27 @@ async def lifespan(app: FastAPI):
         
         async with pg_client.engine.begin() as conn:
             await conn.run_sync(_sync_schema)
-        logger.info("自动同步数据库表结构（含字段增量）成功")
+            await conn.execute(from_sqlalchemy_text(
+                "CREATE TABLE IF NOT EXISTS langgraph_chat_checkpoints ("
+                "checkpoint_id VARCHAR(64) PRIMARY KEY, "
+                "thread_id VARCHAR(64) NOT NULL, "
+                "checkpoint_ns VARCHAR(255) NOT NULL, "
+                "trace_id VARCHAR(64) NOT NULL, "
+                "interaction_id VARCHAR(64) NOT NULL, "
+                "node_type VARCHAR(100) NOT NULL, "
+                "payload JSONB NOT NULL, "
+                "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()"
+                ")"
+            ))
+            await conn.execute(from_sqlalchemy_text(
+                "CREATE INDEX IF NOT EXISTS idx_langgraph_chat_checkpoints_trace "
+                "ON langgraph_chat_checkpoints (trace_id)"
+            ))
+            await conn.execute(from_sqlalchemy_text(
+                "CREATE INDEX IF NOT EXISTS idx_langgraph_chat_checkpoints_thread_ns "
+                "ON langgraph_chat_checkpoints (thread_id, checkpoint_ns, created_at)"
+            ))
+        logger.info("自动同步数据库表结构（含字段增量）与 Chat Workflow checkpoint 表成功")
         
         # 初始化 Telemetry Worker
         init_worker(pg_client)
@@ -524,6 +544,26 @@ async def lifespan(app: FastAPI):
 
         app.state.user_profile_pg_repo = user_profile_pg_repo
         app.state.user_profile_service = user_profile_service
+
+    # 13. 初始化 Phase 8.5 Chat Workflow 服务
+    try:
+        from app.workflow.events import ChatWorkflowEventPublisher
+        from app.workflow.service import ChatWorkflowService
+
+        app.state.chat_workflow_service = ChatWorkflowService(
+            redis_repo=redis_repo,
+            pg_repo=pg_repo,
+            pg_client=pg_client,
+            prompt_manager=prompt_manager,
+            memory_manager=memory_manager,
+            rag_orchestrator=rag_retrieval_orchestrator,
+            user_profile_service=user_profile_service,
+            event_publisher=ChatWorkflowEventPublisher(),
+        )
+        logger.info("Phase 8.5 ChatWorkflowService 初始化完成")
+    except Exception as e:
+        app.state.chat_workflow_service = None
+        logger.error(f"Phase 8.5 ChatWorkflowService 初始化失败 error={e}")
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector
