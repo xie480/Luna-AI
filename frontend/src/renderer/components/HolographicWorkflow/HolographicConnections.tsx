@@ -93,18 +93,114 @@ export const HolographicConnections: React.FC<HolographicConnectionsProps> = ({
         const endY = toRect.top - svgRect.top;
         const curveFactor = Math.max(24, Math.abs(endY - startY) * 0.45);
 
-        const d = `M ${startX} ${startY} C ${startX} ${startY + curveFactor}, ${endX} ${endY - curveFactor}, ${endX} ${endY}`;
-        const targetStatus = nodeStatusMap.get(toId);
+        // Check if the current node is a condition node
+        const isConditionNode = fromElement.classList.contains('node-type-condition');
 
-        nextPaths.push({
-          id: `${fromId}->${toId}`,
-          d,
-          isActive:
-            activePlan?.status !== 'completed' &&
-            activePlan?.status !== 'failed' &&
-            toId === activeNodeId,
-          isFailed: targetStatus ? FAILED_STATUSES.has(targetStatus) : false,
-        });
+        if (isConditionNode && index + 1 < domNodes.length) {
+          // Find the previous node (source of the branch)
+          const prevElement = index > 0 ? domNodes[index - 1] : null;
+
+          if (prevElement) {
+            const prevRect = prevElement.getBoundingClientRect();
+            const prevX = prevRect.left + prevRect.width / 2 - svgRect.left;
+            const prevY = prevRect.bottom - svgRect.top;
+
+            const conditionCenterX = fromRect.left + fromRect.width / 2 - svgRect.left;
+            const conditionCenterY = fromRect.top + fromRect.height / 2 - svgRect.top;
+            
+            // 旋转 45° 菱形（88×88）的半对角线长度 ≈ 88 / √2 ≈ 62
+            const diamondHalfDiagonal = 62;
+            
+            // 菱形上端点（顶部顶点）：center 向上偏移半对角线
+            const diamondTopX = conditionCenterX;
+            const diamondTopY = conditionCenterY - diamondHalfDiagonal;
+            // 菱形下端点（底部顶点）：center 向下偏移半对角线
+            const diamondBottomX = conditionCenterX;
+            const diamondBottomY = conditionCenterY + diamondHalfDiagonal;
+            
+            const conditionStatus = nodeStatusMap.get(fromId);
+            
+            // 1. 分支线（前置节点 → 条件节点上端点）
+            const branchCurveFactor = Math.max(24, Math.abs(diamondTopY - prevY) * 0.45);
+            const branchPath = `M ${prevX} ${prevY} C ${prevX} ${prevY + branchCurveFactor}, ${diamondTopX} ${diamondTopY - branchCurveFactor}, ${diamondTopX} ${diamondTopY}`;
+            
+            nextPaths.push({
+              id: `${prevElement.dataset.nodeType}->${fromId}`,
+              d: branchPath,
+              isActive:
+                activePlan?.status !== 'completed' &&
+                activePlan?.status !== 'failed' &&
+                fromId === activeNodeId,
+              isFailed: conditionStatus ? FAILED_STATUSES.has(conditionStatus) : false,
+            });
+            
+            // 2. 合并线（条件节点下端点 → 目标节点）
+            const toRect = toElement.getBoundingClientRect();
+            const endX = toRect.left + toRect.width / 2 - svgRect.left;
+            const endY = toRect.top - svgRect.top;
+            
+            const mergeCurveFactor = Math.max(24, Math.abs(endY - diamondBottomY) * 0.45);
+            const mergePath = `M ${diamondBottomX} ${diamondBottomY} C ${diamondBottomX} ${diamondBottomY + mergeCurveFactor}, ${endX} ${endY - mergeCurveFactor}, ${endX} ${endY}`;
+            
+            const targetStatus = nodeStatusMap.get(toId);
+            
+            nextPaths.push({
+              id: `${fromId}->${toId}`,
+              d: mergePath,
+              isActive:
+                activePlan?.status !== 'completed' &&
+                activePlan?.status !== 'failed' &&
+                toId === activeNodeId &&
+                conditionStatus !== 'not_entered_by_condition', // Only active if actually entered
+              isFailed: targetStatus ? FAILED_STATUSES.has(targetStatus) : false,
+            });
+            
+            // 3. Main trunk path (bypassing condition) — 向左弯曲绕过菱形节点
+            const bypassLeftOffset = Math.min(60, prevRect.width * 0.35); // 向左偏移量
+            const bypassStartX = prevX - bypassLeftOffset;
+            const bypassEndX = endX - bypassLeftOffset;
+            
+            const bypassCurveFactor = Math.max(24, Math.abs(endY - prevY) * 0.45);
+            const bypassPath = `M ${prevX} ${prevY} C ${bypassStartX} ${prevY + bypassCurveFactor}, ${bypassEndX} ${endY - bypassCurveFactor}, ${endX} ${endY}`;
+            
+            nextPaths.push({
+              id: `${prevElement.dataset.nodeType}->${toId}_bypass`,
+              d: bypassPath,
+              isActive:
+                activePlan?.status !== 'completed' &&
+                activePlan?.status !== 'failed' &&
+                toId === activeNodeId &&
+                conditionStatus === 'not_entered_by_condition', // Active if condition was bypassed
+              isFailed: targetStatus ? FAILED_STATUSES.has(targetStatus) : false,
+            });
+          }
+        } else {
+          // Normal sequential path
+          const isNextNodeCondition = toElement.classList.contains('node-type-condition');
+          
+          // Only draw normal line if the next node is NOT a condition node
+          // Condition nodes handle their own incoming lines from the previous node
+          if (!isNextNodeCondition) {
+            const startX = fromRect.left + fromRect.width / 2 - svgRect.left;
+            const startY = fromRect.bottom - svgRect.top;
+            const endX = toRect.left + toRect.width / 2 - svgRect.left;
+            const endY = toRect.top - svgRect.top;
+            const curveFactor = Math.max(24, Math.abs(endY - startY) * 0.45);
+
+            const d = `M ${startX} ${startY} C ${startX} ${startY + curveFactor}, ${endX} ${endY - curveFactor}, ${endX} ${endY}`;
+            const targetStatus = nodeStatusMap.get(toId);
+
+            nextPaths.push({
+              id: `${fromId}->${toId}`,
+              d,
+              isActive:
+                activePlan?.status !== 'completed' &&
+                activePlan?.status !== 'failed' &&
+                toId === activeNodeId,
+              isFailed: targetStatus ? FAILED_STATUSES.has(targetStatus) : false,
+            });
+          }
+        }
       }
 
       setPaths(nextPaths);

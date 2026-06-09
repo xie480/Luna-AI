@@ -13,6 +13,12 @@
   z-index: 5;
 }
 
+.holographic-node-container.node-type-condition {
+  left: 40px; /* 向右偏移以形成分支视觉 */
+  width: 75%;
+  margin: 8px 0; /* 增加上下间距为分支连线腾出空间 */
+}
+
 /* Common Labels */
 .node-label {
   font-family: 'Courier New', Courier, monospace;
@@ -65,15 +71,15 @@
 
 /* 2. Diamond (Condition) */
 .node-diamond {
-  height: 48px;
+  height: 84px;
 }
 
 .diamond-shape {
   position: absolute;
-  width: 48px;
-  height: 48px;
+  width: 88px;
+  height: 88px;
   background: rgba(44, 62, 80, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
   transform: rotate(45deg);
   transition: all 0.3s ease;
 }
@@ -81,7 +87,7 @@
 .diamond-content {
   position: relative;
   z-index: 2;
-  padding: 0 10px;
+  padding: 0 14px;
   width: 100%;
   text-align: center;
 }
@@ -118,6 +124,16 @@
 .status-pending .diamond-shape { border-color: rgba(44, 62, 80, 0.5); }
 .status-pending .card-glass { border-color: rgba(44, 62, 80, 0.5); }
 .status-pending .node-label { color: rgba(255, 255, 255, 0.3); }
+
+/* BYPASSED - Grayed out */
+.status-bypassed {
+  opacity: 0.4;
+  filter: grayscale(100%);
+}
+.status-bypassed .stargate-ring { border-color: rgba(255, 255, 255, 0.2); }
+.status-bypassed .diamond-shape { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); }
+.status-bypassed .card-glass { border-color: rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); }
+.status-bypassed .node-label { color: rgba(255, 255, 255, 0.3); }
 
 /* RUNNING - Cyber Blue/Purple Glow */
 .status-running .stargate-ring {

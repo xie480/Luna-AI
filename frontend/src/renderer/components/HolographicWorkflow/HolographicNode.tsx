@@ -30,7 +30,8 @@ export const HolographicNode: React.FC<HolographicNodeProps> = ({
   // Map backend status to visual status
   let visualStatus = 'pending';
   if (status === 'running') visualStatus = 'running';
-  else if (status === 'succeeded' || status === 'not_entered_by_condition') visualStatus = 'success';
+  else if (status === 'succeeded') visualStatus = 'success';
+  else if (status === 'not_entered_by_condition') visualStatus = 'bypassed';
   else if (status === 'failed' || status === 'degraded') visualStatus = 'failed';
 
   // Specific classes
