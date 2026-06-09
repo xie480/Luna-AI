@@ -75,33 +75,46 @@ class SSEManager {
   private isMemoryListenerRegistered: boolean = false;
 
   /**
+   * 立即提交待写入的近期记忆。
+   * 做什么：把当前暂存的一轮问答写入 [`recentQA`](frontend/src/renderer/stores/sessionStore.ts:70)。
+   * 为什么这样做：当气泡早于 `is_finished` 结束或当前根本没有气泡时，不能继续依赖下一次完成事件。
+   * 输入输出：无输入；成功时写入 store 并清空暂存字段。
+   * 边界条件：缺少用户消息 ID、用户文本或未处于待写入状态时直接返回。
+   * 异常行为：无。
+   */
+  private flushPendingRecentMemory(): void {
+    if (!this.hasPendingMemory || !this.pendingUserMsgId || !this.pendingUserMessage.trim()) {
+      return;
+    }
+
+    const newQA: InteractionQA = {
+      msgId: this.pendingUserMsgId,
+      userContent: this.pendingUserMessage,
+      assistantContent: this.pendingAssistantContent,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    useSessionStore.getState().addRecentQA(newQA);
+
+    this.pendingUserMessage = '';
+    this.pendingUserMsgId = '';
+    this.pendingAssistantContent = '';
+    this.hasPendingMemory = false;
+  }
+
+  /**
    * 注册 luna:all-bubbles-complete 事件监听
    * 当所有气泡渲染和消失动画完成时，插入近期记忆
    *
-   * 优化说明：此监听器是 recentQA 更新的唯一入口。
-   * handleChatStream 的 is_finished 处理中不再直接插入，
-   * 而是只标记 hasPendingMemory=true，由本监听器在气泡
-   * 队列完全清空后执行实际插入，确保与气泡生命周期对齐。
+   * 优化说明：此监听器是 recentQA 更新入口之一。
+   * 若 `is_finished` 到达时气泡已空闲，则会直接调用 [`flushPendingRecentMemory()`](frontend/src/renderer/services/sseManager.ts:82) 立即写入；
+   * 若仍存在气泡，则继续等待本事件触发后写入，确保与气泡生命周期严格对齐。
    */
   private registerAllBubblesCompleteListener(): void {
     if (this.isMemoryListenerRegistered) return;
     this.isMemoryListenerRegistered = true;
 
     window.addEventListener('luna:all-bubbles-complete', () => {
-      if (!this.hasPendingMemory) return;
-
-      const newQA: InteractionQA = {
-        msgId: this.pendingUserMsgId,
-        userContent: this.pendingUserMessage,
-        assistantContent: this.pendingAssistantContent,
-        timestamp: Math.floor(Date.now() / 1000),
-      };
-      useSessionStore.getState().addRecentQA(newQA);
-
-      this.pendingUserMessage = '';
-      this.pendingUserMsgId = '';
-      this.pendingAssistantContent = '';
-      this.hasPendingMemory = false;
+      this.flushPendingRecentMemory();
     });
   }
 
@@ -672,18 +685,17 @@ class SSEManager {
         }));
       }
 
-      // 2c. 标记待处理记忆，供气泡完成事件的监听器使用
-      // 优化：不再在此处直接插入 recentQA，而是等待气泡队列完全清空后，
-      // 由 luna:all-bubbles-complete 事件触发插入，确保与气泡生命周期对齐。
+      // 2c. 标记待处理记忆，供气泡完成事件或空闲态即时提交逻辑使用
       this.hasPendingMemory = true;
 
       // Ensure waiting lock is removed here immediately upon finished signal,
-      // but memory insertion waits for bubbles
+      // but memory insertion waits for bubbles unless the queue is already idle
       sessionStore.clearAllWaitingStates();
 
-      // 2d. 如果内容为空、出错，或者气泡队列当前已经空闲，立即触发气泡完成事件
+      // 2d. 如果当前没有可等待的气泡，则立即写入近期记忆；
+      // 否则继续等待 luna:all-bubbles-complete 事件触发。
       if (payload.error || !this.pendingAssistantContent.trim() || (window as any).__LUNA_IS_BUBBLES_IDLE__) {
-        window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
+        this.flushPendingRecentMemory();
       }
 
       // 2e. 当日聊天记录实时更新

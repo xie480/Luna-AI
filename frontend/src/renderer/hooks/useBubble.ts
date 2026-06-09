@@ -59,10 +59,8 @@ export const useBubble = () => {
 
   // Phase 5: 标记所有气泡是否已完成渲染和消失
   const hasPendingWorkRef = useRef(false);
-  const idleCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 标记当前批次是否已触发过 luna:all-bubbles-complete 事件
-  // 防止每 500ms 无限重复触发导致 sseManager 重复添加近期记忆
-  // Note: completedRef should be initialized to true so it doesn't fire immediately on mount
+  // 防止重复触发导致 [`addRecentQA()`](frontend/src/renderer/stores/sessionStore.ts:233) 重复追加
   const completedRef = useRef(true);
 
   /**
@@ -71,6 +69,10 @@ export const useBubble = () => {
    * 注意：每个气泡批次只触发一次，触发后将 completedRef 置为 true，
    * 直至新的气泡任务到来（showBubble 调用时重置该标记）。
    */
+  const updateBubbleIdleFlag = useCallback((isIdle: boolean) => {
+    (window as any).__LUNA_IS_BUBBLES_IDLE__ = isIdle;
+  }, []);
+
   const checkAllWorkDone = useCallback(() => {
     const hasQueue = queueRef.current.length > 0;
     const hasBubbles = bubblesRef.current.length > 0;
@@ -79,7 +81,7 @@ export const useBubble = () => {
     const isRemoving = removalInProgressRef.current;
 
     const isIdle = !hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving;
-    (window as any).__LUNA_IS_BUBBLES_IDLE__ = isIdle;
+    updateBubbleIdleFlag(isIdle);
 
     // 如果已经触发完成事件，不再重复触发
     if (completedRef.current) {
@@ -97,20 +99,28 @@ export const useBubble = () => {
         useSessionStore.getState().clearAllWaitingStates();
       }).catch(console.error);
     }
-  }, []);
+  }, [updateBubbleIdleFlag]);
 
-  // Phase 5: 启动一个空闲轮询定时器，持续检查是否所有气泡工作已完成
-  useEffect(() => {
-    idleCheckTimerRef.current = setInterval(() => {
+  /**
+   * 立即请求一次完成态检查。
+   * 做什么：在关键状态变更后下一帧执行 [`checkAllWorkDone()`](frontend/src/renderer/hooks/useBubble.ts:79)。
+   * 为什么这样做：替代 500ms 轮询，确保最后一个气泡消失后能立刻触发完成事件。
+   * 输入输出：无。
+   * 边界条件：依赖 `requestAnimationFrame` 等待 React 提交最新 DOM 与状态。
+   * 异常行为：无。
+   */
+  const requestCompletionCheck = useCallback(() => {
+    requestAnimationFrame(() => {
       checkAllWorkDone();
-    }, 500);
-
-    return () => {
-      if (idleCheckTimerRef.current) {
-        clearInterval(idleCheckTimerRef.current);
-      }
-    };
+    });
   }, [checkAllWorkDone]);
+
+  useEffect(() => {
+    updateBubbleIdleFlag(true);
+    return () => {
+      updateBubbleIdleFlag(true);
+    };
+  }, [updateBubbleIdleFlag]);
 
   // 同步最新状态到 ref，方便在异步循环中读取最新气泡数量
   useEffect(() => {
@@ -180,7 +190,11 @@ export const useBubble = () => {
       if (target && !target.leaving) {
         // 消失动画结束后（300ms），真正移除 DOM
         setTimeout(() => {
-          setBubbles(current => current.filter(b => b.id !== nextRemoval.id));
+          setBubbles(current => {
+            const nextBubbles = current.filter(b => b.id !== nextRemoval.id);
+            bubblesRef.current = nextBubbles;
+            return nextBubbles;
+          });
           bubbleElsRef.current.delete(nextRemoval.id);
           
           // 消失动画完成，标记为可处理下一个
@@ -191,13 +205,16 @@ export const useBubble = () => {
           
           // 继续处理待消失队列中的下一个气泡
           processRemovalQueue();
+          requestCompletionCheck();
         }, 300);
         
-        return prev.map(b => b.id === nextRemoval.id ? { ...b, leaving: true } : b);
+        const nextBubbles = prev.map(b => b.id === nextRemoval.id ? { ...b, leaving: true } : b);
+        bubblesRef.current = nextBubbles;
+        return nextBubbles;
       }
       return prev;
     });
-  }, [notifySpaceAvailable]);
+  }, [notifySpaceAvailable, processRemovalQueue, requestCompletionCheck]);
 
   /**
    * 将气泡加入待消失队列
@@ -247,7 +264,11 @@ export const useBubble = () => {
       });
 
       // 3. 添加新气泡（不再执行强制淘汰逻辑）
-      setBubbles(prev => [...prev, { id, text, leaving: false, renderIndex }]);
+      setBubbles(prev => {
+        const nextBubbles = [...prev, { id, text, leaving: false, renderIndex }];
+        bubblesRef.current = nextBubbles;
+        return nextBubbles;
+      });
 
       // 4. 等待 DOM 更新后执行动画
       requestAnimationFrame(() => {
@@ -275,7 +296,8 @@ export const useBubble = () => {
 
     isProcessingRef.current = false;
     hasPendingWorkRef.current = false;
-  }, [scheduleRemoval]);
+    requestCompletionCheck();
+  }, [requestCompletionCheck, scheduleRemoval]);
 
   /**
    * 显示气泡
@@ -286,8 +308,9 @@ export const useBubble = () => {
     const id = bubbleIdCounter.current++;
     const renderIndex = renderIndexCounter.current++;
     
-    // 新气泡任务开始时，重置 completedRef，以便完成时能再次触发事件
+    // 新气泡任务开始时，重置完成标记并立刻更新全局空闲态。
     completedRef.current = false;
+    updateBubbleIdleFlag(false);
 
     // 动态 TTL 计算策略：
     // 基础存活时间 2000ms，每个字符增加 250ms 的阅读时间。
@@ -296,7 +319,7 @@ export const useBubble = () => {
     
     queueRef.current.push({ id, text, duration: calcDuration, renderIndex });
     processQueue();
-  }, [processQueue]);
+  }, [processQueue, updateBubbleIdleFlag]);
 
   return { bubbles, showBubble, registerBubble };
 };

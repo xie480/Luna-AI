@@ -99,7 +99,10 @@ export const HolographicConnections: React.FC<HolographicConnectionsProps> = ({
         nextPaths.push({
           id: `${fromId}->${toId}`,
           d,
-          isActive: toId === activeNodeId,
+          isActive:
+            activePlan?.status !== 'completed' &&
+            activePlan?.status !== 'failed' &&
+            toId === activeNodeId,
           isFailed: targetStatus ? FAILED_STATUSES.has(targetStatus) : false,
         });
       }
