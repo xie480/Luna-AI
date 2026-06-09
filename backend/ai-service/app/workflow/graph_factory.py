@@ -1,9 +1,4 @@
-"""
-Phase 8.5 LangGraph Chat Plan 工厂。
-
-做什么：构建 daily_chat.default.v1 固定预设图。
-为什么这样做：Phase 8.5 要求日常闲聊请求由 LangGraph chat plan 执行，并为 Phase 9 复用节点库与状态模型打基础。
-"""
+"""Phase 8.5 LangGraph Chat Plan 工厂。"""
 
 from __future__ import annotations
 
@@ -12,7 +7,7 @@ from typing import Any, TypedDict
 from langgraph.graph import END, StateGraph
 
 from app.workflow.constants import ChatWorkflowGraphNodeName
-from app.workflow.nodes.adapters import WorkflowDependencies
+from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.registry import ChatWorkflowNodeRegistry
 
 
@@ -26,119 +21,117 @@ class ChatGraphFactory:
     """Chat Workflow LangGraph 图工厂。"""
 
     def __init__(self, dependencies: WorkflowDependencies):
-        """初始化图工厂并创建节点注册表。"""
         self.dependencies = dependencies
         self.registry = ChatWorkflowNodeRegistry(dependencies)
 
     def build_daily_chat_graph(self):
         """
-        构建 daily_chat.default.v1 预设图。
+        构建 daily_chat.default.v1 主图。
 
-        做什么：按 Phase 8.5 主图结构注册节点、条件边、汇合边和结束边。
-        为什么这样做：固定 chat plan 先服务日常闲聊，不实现通用 Plan 自动生成。
-        输入输出：输出已编译 LangGraph 图；输入状态使用 ChatWorkflowState 的 JSON dict。
-        边界条件：长期记忆与知识库 RAG 由条件边决定是否进入；用户画像固定进入。
-        异常行为：节点异常由节点适配器与 service 归一化处理。
+        此方法创建一个 LangGraph 工作流，用于处理日常聊天任务。
+        它设置了一系列节点和它们之间的边，形成一个有向无环图 (DAG)，
+        用于管理聊天工作流的状态转换和执行逻辑。
+
+        工作流流程概述：
+        1. 输入重构 -> 会话上下文加载
+        2. 会话上下文加载 -> 长期记忆 RAG 或绕过（条件分支）
+        3. 长期记忆 RAG/绕过 -> 用户资料注入
+        4. 用户资料注入 -> 知识 RAG 或绕过（条件分支）
+        5. 知识 RAG/绕过 -> 上下文治理 -> 提示组装 -> 主聊天 LLM
+        6. 主聊天 LLM -> 响应持久化 -> 最终化 -> 结束
+
+        Returns:
+            CompiledGraph: 编译后的 LangGraph 图对象，可用于执行聊天工作流
         """
-        # 创建状态图实例
         graph = StateGraph(WorkflowGraphState)
-        
-        # 注册所有工作流节点
-        for node_name in ChatWorkflowGraphNodeName:
+        # 定义工作流中使用的所有活动节点
+        active_nodes = [
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION,
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
+            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG,
+            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS,
+            ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION,
+            ChatWorkflowGraphNodeName.KNOWLEDGE_RAG,
+            ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE,
+            ChatWorkflowGraphNodeName.FINALIZE,
+        ]
+        # 将所有活动节点添加到图中
+        for node_name in active_nodes:
             graph.add_node(node_name.value, self.registry.get_node(node_name))
 
         # 设置入口点
         graph.set_entry_point(ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value)
-        
-        # 添加输入重建到会话上下文加载的边
+        # 添加从输入重构到会话上下文加载的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
         )
-        
-        # 添加会话上下文加载后的条件边，决定是否进行长期记忆RAG
+        # 添加从会话上下文加载到长期记忆的条件边（RAG 或绕过）
         graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
             self.registry.router.route_long_term_memory,
             {
-                ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value: ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value,
-                ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value: ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value,
+                ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value:
+                    ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value,
+                ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value:
+                    ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value,
             },
         )
-        
-        # 连接长期记忆RAG和绕过路径到用户画像注入节点
+        # 添加从长期记忆 RAG 到用户资料注入的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value,
             ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value,
         )
+        # 添加从长期记忆绕过到用户资料注入的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value,
             ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value,
         )
-        
-        # 添加用户画像注入后的条件边，决定是否进行知识库RAG
+        # 添加从用户资料注入到知识 RAG 的条件边（RAG 或绕过）
         graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value,
             self.registry.router.route_knowledge_rag,
             {
-                ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value: ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value,
-                ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value: ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value,
+                ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value:
+                    ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value,
+                ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value:
+                    ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value,
             },
         )
-        
-        # 连接知识库RAG和绕过路径到上下文治理节点
+        # 添加从知识 RAG 到上下文治理的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value,
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
         )
+        # 添加从知识 RAG 绕过到上下文治理的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value,
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
         )
-        
-        # 上下文治理连接到提示词组装节点
+        # 添加从上下文治理到提示组装的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
         )
-
-        # 链接主要LLM chat节点
+        # 添加从提示组装到主聊天 LLM 的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
         )
-
-        # 链接响应持久化节点
+        # 添加从主聊天 LLM 到响应持久化的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
         )
-
-        # 长期记忆压缩节点
+        # 添加从响应持久化到最终化的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
-            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_COMPRESSION.value,
-        )
-
-        # 用户画像提取节点
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_COMPRESSION.value,
-            ChatWorkflowGraphNodeName.USER_PROFILE_EXTRACTION.value,
-        )
-
-        # 持久化提交节点
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.USER_PROFILE_EXTRACTION.value,
-            ChatWorkflowGraphNodeName.POSTPROCESS_COMMIT.value,
-        )
-
-        # 结束节点
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.POSTPROCESS_COMMIT.value,
             ChatWorkflowGraphNodeName.FINALIZE.value,
         )
-        
-        # 添加最终边到结束节点
+        # 添加从最终化到 END 的边
         graph.add_edge(ChatWorkflowGraphNodeName.FINALIZE.value, END)
-        
         return graph.compile()

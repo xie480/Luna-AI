@@ -56,7 +56,7 @@ class TestWorkflowConstants:
         assert "user_profile_injection" in actual
         assert "knowledge_rag" in actual
         assert "main_chat_llm" in actual
-        assert "postprocess_commit" in actual
+        assert "finalize" in actual
 
     def test_event_types_exist(self) -> None:
         """验证前端调试所需的计划、节点、条件事件存在。"""
@@ -155,8 +155,7 @@ class TestWorkflowService:
             return SimpleNamespace(cancel=lambda: None)
 
         monkeypatch.setattr("app.workflow.service.asyncio.create_task", fake_create_task)
-        monkeypatch.setattr(service, "_track_task", lambda task: None)
-        service._publish_plan_event = AsyncMock()  # type: ignore[method-assign]
+        service.publish_plan_event = AsyncMock()  # type: ignore[method-assign]
         payload = await service.start_daily_chat(
             trace_id="trace-1",
             session_id="session-1",
@@ -166,7 +165,7 @@ class TestWorkflowService:
         assert payload["status"] == "streaming"
         assert payload["msgId"] == "msg-1"
         assert payload["interaction_id"]
-        service._publish_plan_event.assert_awaited_once()  # type: ignore[attr-defined]
+        service.publish_plan_event.assert_awaited_once()  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
     async def test_start_daily_chat_empty_message_invalid(self) -> None:

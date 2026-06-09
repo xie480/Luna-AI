@@ -1,1 +1,1 @@
-"""Phase 8.5 Chat Workflow 节点包。"""
+"""Phase 8.5 workflow 节点包。"""

@@ -1,29 +1,19 @@
-"""
-Phase 8.5 Chat Workflow 节点注册表。
-
-做什么：集中创建 daily_chat.default.v1 图需要的节点适配器与路由器。
-为什么这样做：为 Phase 9 Node Registry 迁移提供稳定入口，并避免 graph_factory 直接散落构造逻辑。
-"""
+"""Phase 8.5 Chat Workflow 节点注册表。"""
 
 from __future__ import annotations
 
 from app.workflow.constants import ChatWorkflowGraphNodeName
-from app.workflow.nodes.adapters import (
-    ContextGovernanceNode,
-    FinalizeNode,
-    InputReconstructionNode,
-    KnowledgeRagNode,
-    LongTermMemoryCompressionNode,
-    LongTermMemoryNode,
-    MainChatLlmNode,
-    PostprocessCommitNode,
-    PromptAssemblyNode,
-    ResponsePersistenceNode,
-    SessionContextLoadNode,
-    UserProfileExtractionNode,
-    UserProfileInjectionNode,
-    WorkflowDependencies,
-)
+from app.workflow.nodes.dependencies import WorkflowDependencies
+from app.workflow.nodes.impl.context_governance_node import ContextGovernanceNode
+from app.workflow.nodes.impl.finalize_node import FinalizeNode
+from app.workflow.nodes.impl.input_reconstruction_node import InputReconstructionNode
+from app.workflow.nodes.impl.knowledge_rag_node import KnowledgeRagNode
+from app.workflow.nodes.impl.long_term_memory_node import LongTermMemoryNode
+from app.workflow.nodes.impl.main_chat_llm_node import MainChatLlmNode
+from app.workflow.nodes.impl.prompt_assembly_node import PromptAssemblyNode
+from app.workflow.nodes.impl.response_persistence_node import ResponsePersistenceNode
+from app.workflow.nodes.impl.session_context_load_node import SessionContextLoadNode
+from app.workflow.nodes.impl.user_profile_injection_node import UserProfileInjectionNode
 from app.workflow.routers import ChatWorkflowRouter
 
 
@@ -31,8 +21,6 @@ class ChatWorkflowNodeRegistry:
     """Chat Workflow 节点注册表。"""
 
     def __init__(self, dependencies: WorkflowDependencies):
-        """根据依赖创建节点实例，节点无跨请求可变状态，可安全复用。"""
-        self.dependencies = dependencies
         self.router = ChatWorkflowRouter(dependencies.event_publisher)
         self.nodes = {
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value: InputReconstructionNode(dependencies),
@@ -46,12 +34,8 @@ class ChatWorkflowNodeRegistry:
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value: PromptAssemblyNode(dependencies),
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value: MainChatLlmNode(dependencies),
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value: ResponsePersistenceNode(dependencies),
-            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_COMPRESSION.value: LongTermMemoryCompressionNode(dependencies),
-            ChatWorkflowGraphNodeName.USER_PROFILE_EXTRACTION.value: UserProfileExtractionNode(dependencies),
-            ChatWorkflowGraphNodeName.POSTPROCESS_COMMIT.value: PostprocessCommitNode(dependencies),
             ChatWorkflowGraphNodeName.FINALIZE.value: FinalizeNode(dependencies),
         }
 
     def get_node(self, name: ChatWorkflowGraphNodeName):
-        """按图节点名读取节点适配器。"""
         return self.nodes[name.value]

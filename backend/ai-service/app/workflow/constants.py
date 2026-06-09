@@ -1,9 +1,4 @@
-"""
-Phase 8.5 Chat Workflow 常量模块。
-
-做什么：集中定义日常闲聊 LangGraph 主链路使用的 schema、模式、节点、状态、事件、路由与 Prompt 槽位常量。
-为什么这样做：Phase 8.5 要求禁止魔法字符串，所有跨节点、跨层通信字段必须有统一命名来源。
-"""
+"""Phase 8.5 workflow 常量定义。"""
 
 from __future__ import annotations
 
@@ -12,27 +7,26 @@ from typing import Final
 
 
 class ChatWorkflowSchemaVersion(str, Enum):
-    """Chat Workflow 事件与状态协议版本。"""
+    """Workflow 协议版本。"""
 
     CHAT_WORKFLOW_V1 = "chat.workflow.v1"
 
 
 class ChatMode(str, Enum):
-    """当前 Phase 8.5 支持的 Chat 模式。"""
+    """当前支持的聊天模式。"""
 
     DAILY_CHAT = "daily_chat"
 
 
 class ChatPlanPreset(str, Enum):
-    """内置 Chat Plan 预设标识。"""
+    """当前启用的内置预设图。"""
 
     DAILY_CHAT_DEFAULT = "daily_chat.default.v1"
 
 
 class ChatWorkflowNodeType(str, Enum):
-    """Chat 主链路节点类型枚举。"""
+    """当前主图真实使用的节点类型。"""
 
-    MESSAGE_INGRESS = "message_ingress"
     INPUT_RECONSTRUCTION = "input_reconstruction"
     SESSION_CONTEXT_LOAD = "session_context_load"
     LONG_TERM_MEMORY_RAG = "long_term_memory_rag"
@@ -42,15 +36,11 @@ class ChatWorkflowNodeType(str, Enum):
     PROMPT_ASSEMBLY = "prompt_assembly"
     MAIN_CHAT_LLM = "main_chat_llm"
     RESPONSE_PERSISTENCE = "response_persistence"
-    LONG_TERM_MEMORY_COMPRESSION = "long_term_memory_compression"
-    USER_PROFILE_EXTRACTION = "user_profile_extraction"
-    POSTPROCESS_COMMIT = "postprocess_commit"
-    ERROR_RECOVERY = "error_recovery"
     FINALIZE = "finalize"
 
 
 class ChatNodeStatus(str, Enum):
-    """Chat 节点运行状态枚举。"""
+    """节点运行状态。"""
 
     PENDING = "pending"
     RUNNING = "running"
@@ -61,18 +51,16 @@ class ChatNodeStatus(str, Enum):
 
 
 class ChatConditionalRoute(str, Enum):
-    """Chat 条件边路由结果枚举。"""
+    """条件边结果。"""
 
     ENTER_LONG_TERM_MEMORY_RAG = "enter_long_term_memory_rag"
     BYPASS_LONG_TERM_MEMORY_RAG = "bypass_long_term_memory_rag"
     ENTER_KNOWLEDGE_RAG = "enter_knowledge_rag"
     BYPASS_KNOWLEDGE_RAG = "bypass_knowledge_rag"
-    ENTER_POSTPROCESS = "enter_postprocess"
-    ENTER_ERROR_RECOVERY = "enter_error_recovery"
 
 
 class ChatWorkflowEventType(str, Enum):
-    """Chat Workflow 对外事件类型枚举。"""
+    """当前真实发送的事件类型。"""
 
     EVT_CHAT_PLAN_STARTED = "EVT_CHAT_PLAN_STARTED"
     EVT_CHAT_NODE_STARTED = "EVT_CHAT_NODE_STARTED"
@@ -80,25 +68,19 @@ class ChatWorkflowEventType(str, Enum):
     EVT_CHAT_NODE_FAILED = "EVT_CHAT_NODE_FAILED"
     EVT_CHAT_NODE_DEGRADED = "EVT_CHAT_NODE_DEGRADED"
     EVT_CHAT_CONDITION_EVALUATED = "EVT_CHAT_CONDITION_EVALUATED"
-    EVT_CHAT_STREAM_CHUNK = "EVT_CHAT_STREAM_CHUNK"
-    EVT_CHAT_POSTPROCESS_STARTED = "EVT_CHAT_POSTPROCESS_STARTED"
-    EVT_CHAT_POSTPROCESS_COMPLETED = "EVT_CHAT_POSTPROCESS_COMPLETED"
     EVT_CHAT_PLAN_COMPLETED = "EVT_CHAT_PLAN_COMPLETED"
 
 
 class ChatWorkflowErrorCode(str, Enum):
-    """Chat Workflow 内部错误码，供节点观测与错误恢复使用。"""
+    """当前真实使用的错误码。"""
 
-    INVALID_CHAT_INPUT = "CHAT_WORKFLOW_INVALID_CHAT_INPUT"
     PROMPT_ASSEMBLY_FAILED = "CHAT_WORKFLOW_PROMPT_ASSEMBLY_FAILED"
     MAIN_LLM_FAILED = "CHAT_WORKFLOW_MAIN_LLM_FAILED"
-    PERSISTENCE_DEGRADED = "CHAT_WORKFLOW_PERSISTENCE_DEGRADED"
     NODE_UNEXPECTED_FAILED = "CHAT_WORKFLOW_NODE_UNEXPECTED_FAILED"
-    CHECKPOINT_WRITE_FAILED = "CHAT_WORKFLOW_CHECKPOINT_WRITE_FAILED"
 
 
 class ChatWorkflowGraphNodeName(str, Enum):
-    """LangGraph 内部节点名称。"""
+    """LangGraph 内部节点名。"""
 
     INPUT_RECONSTRUCTION = "input_reconstruction"
     SESSION_CONTEXT_LOAD = "session_context_load"
@@ -111,9 +93,6 @@ class ChatWorkflowGraphNodeName(str, Enum):
     PROMPT_ASSEMBLY = "prompt_assembly"
     MAIN_CHAT_LLM = "main_chat_llm"
     RESPONSE_PERSISTENCE = "response_persistence"
-    LONG_TERM_MEMORY_COMPRESSION = "long_term_memory_compression"
-    USER_PROFILE_EXTRACTION = "user_profile_extraction"
-    POSTPROCESS_COMMIT = "postprocess_commit"
     FINALIZE = "finalize"
 
 
@@ -124,11 +103,10 @@ CHAT_WORKFLOW_DEFAULT_TIMEZONE: Final[str] = "Asia/Shanghai"
 CHAT_WORKFLOW_DEFAULT_USER_ID: Final[str] = "local_default_user"
 CHAT_WORKFLOW_CONTEXT_WINDOW_READY: Final[str] = "ready"
 CHAT_WORKFLOW_CONTEXT_WINDOW_DEGRADED: Final[str] = "degraded"
-CHAT_WORKFLOW_EMPTY_PROFILE_REASON: Final[str] = "用户画像为空，已输出显式空画像槽位"
-CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON: Final[str] = "输入重构结果未触发长期记忆检索"
-CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON: Final[str] = "输入重构结果未触发知识库检索"
-CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON: Final[str] = "输入重构失败，已使用原始输入与保守规则路由降级"
-CHAT_WORKFLOW_POSTPROCESS_SUCCESS_REASON: Final[str] = "主回复已完成，后处理副作用已按降级容错策略执行"
+CHAT_WORKFLOW_EMPTY_PROFILE_REASON: Final[str] = "用户画像为空"
+CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON: Final[str] = "未触发长期记忆检索"
+CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON: Final[str] = "未触发知识库检索"
+CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON: Final[str] = "输入重构失败并降级为规则路由"
 
 PROMPT_VARIABLE_CURRENT_TIME: Final[str] = "CURRENT_TIME"
 PROMPT_VARIABLE_CURRENT_MESSAGE: Final[str] = "CURRENT_MESSAGE"
