@@ -96,7 +96,8 @@ export const HolographicARPanel: React.FC<HolographicARPanelProps> = ({
 
   useEffect(() => {
     setPosition(null);
-  }, [initialPosition.x, initialPosition.y, nodeType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeType]); // 仅在节点切换时重置位置，避免滚动时初始位置变化导致拖拽状态失效
 
   useEffect(() => {
     setTypedText('');

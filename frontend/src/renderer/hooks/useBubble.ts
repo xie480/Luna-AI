@@ -78,13 +78,16 @@ export const useBubble = () => {
     const isProcessing = isProcessingRef.current;
     const isRemoving = removalInProgressRef.current;
 
+    const isIdle = !hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving;
+    (window as any).__LUNA_IS_BUBBLES_IDLE__ = isIdle;
+
     // 如果已经触发完成事件，不再重复触发
     if (completedRef.current) {
       return;
     }
 
     // 如果没有气泡、没有队列、没有待消失、没有在处理中 → 全部完成
-    if (!hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving) {
+    if (isIdle) {
       completedRef.current = true;
       // 触发全局事件，通知外部（如 sseManager）可以安全插入近期记忆
       window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));

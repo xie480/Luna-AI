@@ -141,7 +141,7 @@ export const HolographicConnections: React.FC<HolographicConnectionsProps> = ({
   }, [activeNodeId, activePlan?.status, nodeStatusMap, nodes, width]);
 
   return (
-    <svg className="holographic-connections-svg" ref={svgRef}>
+    <svg className="holographic-connections-svg" ref={svgRef} style={{ overflow: 'visible' }}>
       <defs>
         <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="3" result="blur" />

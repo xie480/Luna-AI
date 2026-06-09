@@ -223,13 +223,17 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                 />
             ))}
             
-            {/* End Node：仅在存在活动计划且计划已结束时渲染，避免 activePlan 为空时访问 status 导致运行时异常 */}
-            {activePlan && (activePlan.status === 'completed' || activePlan.status === 'failed') && (
+            {/* End Node：只要存在活动计划就始终渲染，确保连线完整贯穿流程收尾阶段 */}
+            {activePlan && (
                 <HolographicNode
                     type="end"
                     nodeType="workflow_end"
-                    status={activePlan.status === 'completed' ? 'succeeded' : 'failed'}
-                    isActive={false}
+                    status={
+                        activePlan.status === 'completed' ? 'succeeded' :
+                        activePlan.status === 'failed' ? 'failed' :
+                        'pending'
+                    }
+                    isActive={activePlan.status === 'postprocessing'}
                 />
             )}
         </div>

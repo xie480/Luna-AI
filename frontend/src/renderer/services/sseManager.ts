@@ -681,8 +681,8 @@ class SSEManager {
       // but memory insertion waits for bubbles
       sessionStore.clearAllWaitingStates();
 
-      // 2d. 如果内容为空或出错，立即触发气泡完成事件（无需等待气泡动画）
-      if (payload.error || !this.pendingAssistantContent.trim()) {
+      // 2d. 如果内容为空、出错，或者气泡队列当前已经空闲，立即触发气泡完成事件
+      if (payload.error || !this.pendingAssistantContent.trim() || (window as any).__LUNA_IS_BUBBLES_IDLE__) {
         window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
       }
 
