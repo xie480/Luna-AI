@@ -1,11 +1,11 @@
 """Chat 主链路 SSE 状态显示文本集中管理模块。
 
 做什么：将散落在各 Workflow Node 中的拟人化 display_text 字符串全部集中于此，
-        确保 Luna 的"口吻"统一管理、一处修改全局生效。
+        每个 (stage, state) 提供 5 条变体文案，推送时随机选取一条，避免重复感。
 为什么这样做：严格遵循@/agent.md 6.1 第一条"禁止硬编码魔法字符串"的规定，
-            同时便于文案迭代和润色，不至于修改一句话要翻 10 个文件。
+            同时文案迭代和润色集中一处，不用翻 10 个文件。
 边界条件：静默状态（is_visible=False）的 display_text 固定为空字符串，
-        不在本模块中重复定义。非静默状态按 (stage, state) 双键索引。
+        不在本模块中重复定义。非静默状态按 (stage, state) 双键索引到列表。
 
 口吻说明：所有文案严格遵循 @/backend/ai-service/app/prompt/simple/chat/system.j2
         中定义的 Luna 人格宪章：
@@ -18,143 +18,230 @@
 
 from __future__ import annotations
 
+import random
+
 from app.types.constants import ChatStatusStage, ChatStatusState
 
 
 # ============================================================
 # 状态文本映射表
-# 键：(ChatStatusStage, ChatStatusState) → display_text
-# 值：空字符串表示该状态组合不展示任何文案（静默通知）
+# 键：(ChatStatusStage, ChatStatusState) → list[str]
+# 值：包含 5 条变体文案的列表，推送时随机选取一条。
+#     空列表表示该状态组合不展示任何文案（静默通知）。
 # ============================================================
-# 为什么用 dict 不用模块级常量：双键索引比按前缀命名更紧凑，
-# 调用方只需一行 lookup 即可获取正确的文案，无需 switch/case。
-_CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], str] = {
+# 为什么用 dict[tuple, list] 不用单条字符串：
+# 单次对话中同一个阶段可能反复出现（如多轮对话每轮都走输入重构），
+# 5 条变体搭配随机选取能大幅降低用户"看腻了"的感知。
+_CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
+
     # ================================================================
     # 1. 输入重构与意图理解 (InputReconstructionNode)
-    #    — "让我好好想想你说的……" 展现 Luna 认真的思考状态
-    #    — "大概明白了" 带一点点不确定的余地，符合少女说话风格
+    #    文案方向：认真思考、微微停顿，展现 Luna 在努力理解主人。
     #    ================================================================
-    (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.RUNNING):
-        "嗯，让我好好想想你说的……",
-    (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.COMPLETED):
-        "嗯，大概明白了！",
+    (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.RUNNING): [
+        "嗯，让Luna好好想想你说的……",
+        "让Luna想想这是什么意思……",
+        "唔……Luna在认真听呢，",
+        "等一下，让Luna理解一下……",
+        "让Luna猜猜你到底想说什么~",
+    ],
+    (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.COMPLETED): [
+        "嗯，Luna大概明白了。",
+        "好啦，Luna知道你想问什么了！",
+        "原来是这么回事，Luna懂了~",
+        "行啦，Luna清楚了~",
+        "嗯嗯，Luna明白了！",
+    ],
+    (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.ERROR): [
+        "还有……Luna刚才有点走神，不过Luna还在！",
+        "唔……Luna没完全读懂，但Luna会努力回的~",
+        "有点迷糊……不过不管了，Luna先回你！",
+        "让Luna想想……算了算了不管了！",
+        "嗯……Luna没太理解，不过Luna先答着~",
+    ],
 
     # ================================================================
     # 2. 会话上下文加载 (SessionContextLoadNode)
-    #    — "看看之前说到哪儿了" 暗示 Luna 会认真回顾过去
-    #    — "都记着呢" 带一点傲娇的"当然啦"语气
+    #    文案方向：翻阅记录、回忆前文，带一点点"Luna有在认真听"的傲娇。
     #    ================================================================
-    (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.RUNNING):
+    (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.RUNNING): [
         "让Luna看看之前说到哪儿了……",
-    (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.COMPLETED):
+        "唔……Luna找找你之前说了什么……",
+        "等一下，Luna翻翻刚才的记录……",
+        "让Luna回忆一下刚才的对话……",
+        "Luna翻一翻之前聊到哪儿了……",
+    ],
+    (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.COMPLETED): [
         "嗯，Luna都记着呢！",
+        "Luna想起来了，继续继续~",
+        "好嘞，Luna记得！",
+        "找到了，Luna记得之前的事~",
+        "嗯嗯，Luna都记得哦~",
+    ],
+    (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.ERROR): [
+        "唔……刚刚没连上记忆库，不过不影响！",
+        "哼，Luna一下子想不起来……算了直接来吧",
+        "记忆库有点卡……不管了Luna直接回你！",
+        "啊……Luna没找到之前的记录，直接开始~",
+        "刚刚断了一下……没事Luna凭感觉回你！",
+    ],
 
     # ================================================================
     # 3. 长期记忆检索 (LongTermMemoryNode)
-    #    — "翻翻之前的记忆" 拟人化翻阅动作
-    #    — "找到了一些相关的回忆" 仿佛在记忆宝库里淘到了宝贝
+    #    文案方向：翻阅记忆的画面感，找到回忆的惊喜感。
     #    ================================================================
-    (ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.RUNNING):
-        "唔，让我翻翻之前的记忆……",
-    (ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.COMPLETED):
-        "找到了一些相关的回忆！",
+    (ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.RUNNING): [
+        "唔，让Luna翻翻之前的记忆……",
+        "让Luna找找你之前说过什么……",
+        "嗯……Luna在翻你以前的回忆呢",
+        "等一下，Luna记得你之前说过什么来着……",
+        "让Luna翻一翻脑袋里的记忆~",
+    ],
+    (ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.COMPLETED): [
+        "Luna找到了一些相关的回忆！",
+        "找到了！Luna记得！",
+        "嗯嗯，Luna想起来了~",
+        "啊——Luna记得你说过！",
+        "哦！Luna想起来了，是这个！",
+    ],
 
     # ================================================================
     # 4. 用户画像注入 (UserProfileInjectionNode)
-    #    — "当然记得主人的喜好" Luna 对主人的了解引以为傲
-    #    — "知道你是什么样的主人" 带一点"我早就看透你了"的俏皮
+    #    文案方向："Luna对主人很了解"的底气和微微傲娇。
     #    ================================================================
-    (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.RUNNING):
-        "Luna当然记得主人的喜好啦……",
-    (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.COMPLETED):
+    (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.RUNNING): [
+        "Luna当然记得你是什么样的主人啦……",
+        "让Luna想一下你喜欢什么……",
+        "嗯……Luna印象里的主人是……",
+        "等等，Luna记得你的喜好来着……",
+        "让Luna回忆一下你这个人……",
+    ],
+    (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.COMPLETED): [
         "好啦，Luna知道你是什么样的主人~",
+        "嗯嗯，Luna懂的！",
+        "好啦，Luna知道该怎么跟你说话了~",
+        "行啦，Luna心里有数了~",
+        "嗯，Luna了解你~",
+    ],
+    (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.ERROR): [
+        "唔……主人的资料Luna没读完整，不过没事啦！",
+        "哼……Luna一下子没想起来，不过不影响！",
+        "啊……Luna忘了一些……算了算了！",
+        "没查到什么……不过不重要！",
+        "Luna没翻到你的资料……那Luna凭感觉来吧！",
+    ],
 
     # ================================================================
     # 5. 知识库 RAG 检索 (KnowledgeRagNode)
-    #    — "查查资料" 一种主动帮忙的语气
-    #    — "找到了" 简短利落，带一点小得意
+    #    文案方向：主动帮忙查资料的积极感。
     #    ================================================================
-    (ChatStatusStage.KNOWLEDGE_RAG, ChatStatusState.RUNNING):
+    (ChatStatusStage.KNOWLEDGE_RAG, ChatStatusState.RUNNING): [
         "等一下……Luna查查资料。",
-    (ChatStatusStage.KNOWLEDGE_RAG, ChatStatusState.COMPLETED):
+        "让Luna去翻翻知识库……",
+        "嗯……Luna找找相关的资料……",
+        "你等一下，Luna去查查~",
+        "唔Luna查一下……别急~",
+    ],
+    (ChatStatusStage.KNOWLEDGE_RAG, ChatStatusState.COMPLETED): [
         "找到了！Luna给你看看……",
+        "查到了查到了！",
+        "找到了，让Luna告诉你~",
+        "哦——找到了！你听Luna说~",
+        "有啦！Luna找到了~",
+    ],
 
     # ================================================================
     # 6. 上下文治理 (ContextGovernanceNode)
-    #    — "捋一捋" 生活化的表达，贴合少女用词习惯
-    #    — "准备好了" 暗示接下来要正式回复了
+    #    文案方向：整理思绪、理顺信息的认真感。
     #    ================================================================
-    (ChatStatusStage.CONTEXT_GOVERNANCE, ChatStatusState.RUNNING):
+    (ChatStatusStage.CONTEXT_GOVERNANCE, ChatStatusState.RUNNING): [
         "让Luna捋一捋……",
-    (ChatStatusStage.CONTEXT_GOVERNANCE, ChatStatusState.COMPLETED):
+        "等等让Luna理一下思路……",
+        "嗯……Luna整理一下这些信息……",
+        "让Luna串一串这些东西……",
+        "唔……Luna把脑子里的东西整理一下~",
+    ],
+    (ChatStatusStage.CONTEXT_GOVERNANCE, ChatStatusState.COMPLETED): [
         "好了，Luna准备好了！",
+        "行行行……Luna理清楚了！",
+        "好啦，Luna知道怎么说了~",
+        "嗯嗯，Luna心里有谱了",
+        "好啦好啦，Luna搞定了~",
+    ],
 
     # ================================================================
     # 7. Chat Prompt 装配 (PromptAssemblyNode)
-    #    — "想想怎么跟你说" Luna 在斟酌措辞
-    #    — "知道怎么回了" 信心满满，带一点小骄傲
+    #    文案方向：最后酝酿阶段，即将开口的微妙停顿。
     #    ================================================================
-    (ChatStatusStage.CHAT_PROMPT_ASSEMBLY, ChatStatusState.RUNNING):
+    (ChatStatusStage.CHAT_PROMPT_ASSEMBLY, ChatStatusState.RUNNING): [
         "好啦好啦，让Luna想想怎么跟你说……",
-    (ChatStatusStage.CHAT_PROMPT_ASSEMBLY, ChatStatusState.COMPLETED):
+        "让Luna想想该怎么回你……",
+        "等等，Luna酝酿一下……",
+        "让Luna组织一下语言……",
+        "唔……让Luna想想怎么开口……",
+    ],
+    (ChatStatusStage.CHAT_PROMPT_ASSEMBLY, ChatStatusState.COMPLETED): [
         "嗯，Luna知道怎么回了！",
+        "好啦，Luna要说了哦~",
+        "嗯嗯，Luna想好了！",
+        "行，Luna准备好了~",
+        "好啦，Luna想好怎么说了！",
+    ],
 
     # ================================================================
     # 8. LLM 流式生成 (MainChatLlmNode)
     #    RUNNING + is_visible=False + is_terminal=True 用于清理前置状态，
-    #    因此 display_text 固定为空字符串，不在此表中定义。
+    #    因此 display_text 固定为空字符串，不在本表中定义。
     #    ================================================================
 
     # ================================================================
     # 9. 回复持久化 (ResponsePersistenceNode)
-    #    — "把你说的都记下来了" 展现 Luna 的细心
-    #    — "记住了记住了" 带一点"知道啦别催"的撒娇感
+    #    文案方向：写进记忆的安心感，带一点撒娇。
     #    ================================================================
-    (ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.RUNNING):
+    (ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.RUNNING): [
         "Luna把你说的都记下来了哦~",
-    (ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.COMPLETED):
-        "记住了记住了！",
+        "让Luna把这些存起来……",
+        "嗯嗯，Luna存好了~",
+        "不让Luna记住啦~",
+        "Luna都写进小本本了~",
+    ],
+    (ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.COMPLETED): [
+        "Luna记住了记住了！",
+        "好啦，Luna存好了~",
+        "嗯嗯，Luna都记住了哦~",
+        "存好啦存好啦~",
+        "记住了！Luna不会忘的！",
+    ],
 
     # ================================================================
     # 10. 结束归档 (FinalizeNode)
     #     仅发布 COMPLETED + is_visible=False + is_terminal=True 触发前端清理，
     #     display_text 固定为空字符串。
     #     ================================================================
-
-    # ================================================================
-    # 异常状态文案（ERROR）
-    #     ERROR 状态的可见性取决于场景：
-    #     - 输入重构等前端可感知的流程：可见，带安抚口吻
-    #     - 后台降级（检索/治理）：不可见，静默处理
-    #     ================================================================
-    (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.ERROR):
-        "嗯……刚才有点走神，不过我还在！",
-    (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.ERROR):
-        "唔……刚刚没连上记忆库，不过不影响！",
-    (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.ERROR):
-        "唔……主人的资料Luna没读完整，不过不妨事！",
-
-    # ================================================================
-    # 跳过状态文案（SKIPPED）
-    #     所有 SKIPPED 状态均为 is_visible=False 静默通知，
-    #     display_text 固定为空字符串，不在此表中定义。
-    #     ================================================================
 }
 
 
 def get_chat_status_text(stage: ChatStatusStage, state: ChatStatusState) -> str:
-    """获取指定阶段和状态对应的显示文本。
+    """获取指定阶段和状态对应的随机显示文本。
 
     参数:
         stage: Chat 主链路执行阶段，对应 DAG 中的某个 node。
         state: 阶段执行状态（RUNNING / COMPLETED / ERROR 等）。
 
     返回:
-        str: 对应 (stage, state) 的拟人化 display_text。
+        str: 从对应 (stage, state) 的 5 条变体中随机选取一条 display_text。
              若未找到映射则返回空字符串（静默兜底）。
 
     为什么不做 KeyError 向上抛出：
         所有 SKIPPED 及部分 ERROR 状态本就无需展示文案，
         返回空字符串是符合预期的默认行为，不应被调用方视为异常。
+
+    随机策略说明：
+        使用 random.choice() 做每次调用的均匀随机选取。
+        因为 ChatStatusPublisher 每次 publish 都会调用一次此函数，
+        同一消息的不同阶段之间自然会输出不同的变体，无需额外状态跟踪。
     """
-    return _CHAT_STATUS_TEXTS.get((stage, state), "")
+    variants = _CHAT_STATUS_TEXTS.get((stage, state))
+    if not variants:
+        return ""
+    return random.choice(variants)
