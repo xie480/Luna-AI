@@ -99,7 +99,6 @@ export const ChatWorkflowStepBar: React.FC = () => {
     }
     return [
       CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG,
-      CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION,
       CHAT_WORKFLOW_NODE_TYPE.KNOWLEDGE_RAG,
     ].map((nodeType) => ({
       nodeType,

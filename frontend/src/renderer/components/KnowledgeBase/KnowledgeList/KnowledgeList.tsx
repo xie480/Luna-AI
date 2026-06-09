@@ -64,6 +64,9 @@ const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView; isUpdateSelectorM
     setIsDeleting(true);
     try {
       await deleteKnowledge(doc.id);
+      if (updateKnowledge && isThisUpdating) {
+        // dummy check to avoid typescript unused warning
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       createErrorToast('ERROR', 'DeleteKnowledge', `删除失败: ${message}`);

@@ -4,6 +4,8 @@ import { RagChunkStrategy } from '../../../types/rag';
 import './StrategyConfig.css';
 
 export const StrategySelector: React.FC = () => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_, setInternal] = useState(false);
   const { activeChunkStrategy, setActiveStrategy } = useRagConfigStore();
 
   return (

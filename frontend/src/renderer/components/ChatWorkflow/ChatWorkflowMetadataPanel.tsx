@@ -38,9 +38,6 @@ export const ChatWorkflowMetadataPanel: React.FC<{
   const longTermReason = latestConditionResults[
     `${metadata.interactionId}:${CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG}`
   ]?.reason;
-  const profileReason = latestConditionResults[
-    `${metadata.interactionId}:${CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION}`
-  ]?.reason;
   const knowledgeReason = latestConditionResults[
     `${metadata.interactionId}:${CHAT_WORKFLOW_NODE_TYPE.KNOWLEDGE_RAG}`
   ]?.reason;
@@ -92,12 +89,6 @@ export const ChatWorkflowMetadataPanel: React.FC<{
               nodeType={CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG}
               conditionEntered={metadata.enteredLongTermMemoryRag}
               reason={longTermReason}
-            />
-            <ChatWorkflowConditionItem
-              interactionId={metadata.interactionId}
-              nodeType={CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION}
-              conditionEntered={metadata.enteredUserProfileInjection}
-              reason={profileReason}
             />
             <ChatWorkflowConditionItem
               interactionId={metadata.interactionId}

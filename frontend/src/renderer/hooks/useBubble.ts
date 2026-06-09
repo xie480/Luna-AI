@@ -62,7 +62,8 @@ export const useBubble = () => {
   const idleCheckTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 标记当前批次是否已触发过 luna:all-bubbles-complete 事件
   // 防止每 500ms 无限重复触发导致 sseManager 重复添加近期记忆
-  const completedRef = useRef(false);
+  // Note: completedRef should be initialized to true so it doesn't fire immediately on mount
+  const completedRef = useRef(true);
 
   /**
    * Phase 5: 检查是否有未完成的渲染/消失工作
@@ -87,6 +88,11 @@ export const useBubble = () => {
       completedRef.current = true;
       // 触发全局事件，通知外部（如 sseManager）可以安全插入近期记忆
       window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
+      
+      // Also release input lock just in case backend missed `is_finished` event
+      import('../stores/sessionStore').then(({ useSessionStore }) => {
+        useSessionStore.getState().clearAllWaitingStates();
+      }).catch(console.error);
     }
   }, []);
 

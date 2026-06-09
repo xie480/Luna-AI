@@ -1,0 +1,207 @@
+.holographic-sidebar {
+  position: absolute;
+  top: 60px; /* Offset to stay below the sidebar trigger button (40px + 12px top + 8px gap) */
+  bottom: 0;
+  left: 0;
+  height: calc(100% - 60px);
+  background: rgba(15, 20, 30, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(0, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 15; /* Above ChatView background, below Modals/RecentMemory */
+  pointer-events: auto;
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+  transform: translateX(0);
+  opacity: 1;
+  overflow: hidden;
+}
+
+.holographic-sidebar.debug-open {
+  /* Optionally shift or hide if debug panel is open */
+}
+
+/* Background Parallax and Grid */
+.holographic-background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.holographic-grid-overlay {
+  position: absolute;
+  width: 200%;
+  height: 200%;
+  top: -50%;
+  left: -50%;
+  background-image: 
+    linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 20px 20px;
+  transform: perspective(500px) rotateX(60deg) translateY(0);
+  animation: gridMove 20s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes gridMove {
+  0% {
+    transform: perspective(500px) rotateX(60deg) translateY(0);
+  }
+  100% {
+    transform: perspective(500px) rotateX(60deg) translateY(40px);
+  }
+}
+
+/* Header */
+.holographic-header {
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.4), transparent);
+}
+
+.header-title {
+  color: #00ffff;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+}
+
+.global-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2c3e50;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+}
+
+.global-status-indicator.running {
+  background: #00ffff;
+  box-shadow: 0 0 10px #00ffff;
+  animation: pulseStatus 2s infinite;
+}
+
+.global-status-indicator.completed {
+  background: #00fa9a;
+  box-shadow: 0 0 10px #00fa9a;
+}
+
+.global-status-indicator.failed {
+  background: #ff003c;
+  box-shadow: 0 0 10px #ff003c;
+}
+
+@keyframes pulseStatus {
+  0% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.6; transform: scale(0.9); }
+}
+
+/* Canvas */
+.holographic-canvas {
+  flex: 1;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 40px 0;
+  /* Hide scrollbar but keep functionality */
+  scrollbar-width: none; 
+}
+.holographic-canvas::-webkit-scrollbar {
+  display: none;
+}
+
+.node-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px; /* Space for connections */
+  position: relative;
+  z-index: 2;
+}
+
+/* Toggle Button Position */
+.workflow-trigger {
+  top: 60px !important; /* Positioned directly below the original sidebar trigger (12 + 40 + 8) */
+  border-color: #00ffff !important; /* Cyberpunk touch to distinguish */
+}
+
+.workflow-trigger:hover {
+  background-color: rgba(0, 255, 255, 0.2) !important;
+}
+
+/* Hidden state for sidebar */
+.holographic-sidebar.hidden {
+  transform: translateX(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Stylized Workflow Trigger Button */
+.workflow-trigger {
+  top: 60px !important; /* Positioned directly below the original sidebar trigger (12 + 40 + 8) */
+  border: 1px solid rgba(0, 255, 255, 0.3) !important;
+  background-color: rgba(15, 20, 30, 0.8) !important;
+  color: #00ffff !important;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.1) !important;
+  transition: all 0.3s ease !important;
+}
+
+.workflow-trigger.workflow-open {
+  color: #00ffff !important;
+  background-color: rgba(0, 255, 255, 0.2) !important;
+}
+
+.workflow-trigger:hover {
+  background-color: rgba(0, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4) !important;
+}
+
+.workflow-trigger:disabled {
+  opacity: 0.6 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  background-color: rgba(15, 20, 30, 0.4) !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+
+/* Resize Handle */
+.holographic-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.holographic-resize-handle .resize-glow {
+  width: 2px;
+  height: 100%;
+  background: rgba(0, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.holographic-resize-handle:hover .resize-glow,
+.holographic-resize-handle.dragging .resize-glow {
+  background: rgba(0, 255, 255, 0.8);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+  width: 4px;
+}

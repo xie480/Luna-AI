@@ -45,9 +45,21 @@ const MAX_DEBUG_EVENTS_PER_TRACE = 200;
  */
 const CONDITION_NODE_TYPES = new Set<ChatWorkflowNodeType>([
   CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG,
-  CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION,
   CHAT_WORKFLOW_NODE_TYPE.KNOWLEDGE_RAG,
 ]);
+
+function resolveConditionReason(payload: ChatConditionEvaluatedPayload): string {
+  if (payload.targetNodeType === CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG) {
+    return payload.longTermMemoryReason ?? payload.reason;
+  }
+  if (payload.targetNodeType === CHAT_WORKFLOW_NODE_TYPE.KNOWLEDGE_RAG) {
+    return payload.knowledgeRagReason ?? payload.reason;
+  }
+  if (payload.targetNodeType === CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION) {
+    return payload.userProfileReason ?? payload.reason;
+  }
+  return payload.reason;
+}
 
 /**
  * Store 状态结构。
@@ -391,18 +403,27 @@ export const useChatWorkflowStore = create<ChatWorkflowStoreState>((set, get) =>
 
   onConditionEvaluated: (event) =>
     set((state) => {
+      if (!CONDITION_NODE_TYPES.has(event.payload.targetNodeType)) {
+        return state;
+      }
+
+      const resolvedReason = resolveConditionReason(event.payload);
+      const normalizedPayload: ChatConditionEvaluatedPayload = {
+        ...event.payload,
+        reason: resolvedReason,
+      };
       const nodes = cloneNodeList(state.nodesByInteractionId[event.interactionId]);
-      const nextStatus = event.payload.conditionEntered
+      const nextStatus = normalizedPayload.conditionEntered
         ? CHAT_NODE_STATUS.PENDING
         : CHAT_NODE_STATUS.NOT_ENTERED_BY_CONDITION;
       const mergedNodes = upsertNodeProjection(nodes, {
-        nodeType: event.payload.targetNodeType,
+        nodeType: normalizedPayload.targetNodeType,
         status: nextStatus,
-        conditionEntered: event.payload.conditionEntered,
-        conditionReason: event.payload.reason,
+        conditionEntered: normalizedPayload.conditionEntered,
+        conditionReason: resolvedReason,
         updatedAtMs: event.timestampMs,
       });
-      const resultKey = buildConditionResultKey(event.interactionId, event.payload.targetNodeType);
+      const resultKey = buildConditionResultKey(event.interactionId, normalizedPayload.targetNodeType);
       const traceTimeline = state.debugTimelineByTraceId[event.traceId];
       return {
         nodesByInteractionId: {
@@ -411,7 +432,7 @@ export const useChatWorkflowStore = create<ChatWorkflowStoreState>((set, get) =>
         },
         latestConditionResults: {
           ...state.latestConditionResults,
-          [resultKey]: event.payload,
+          [resultKey]: normalizedPayload,
         },
         debugTimelineByTraceId: {
           ...state.debugTimelineByTraceId,
@@ -422,10 +443,10 @@ export const useChatWorkflowStore = create<ChatWorkflowStoreState>((set, get) =>
               ...(traceTimeline?.events || []),
               buildDebugEvent(
                 '条件判断',
-                `${CHAT_WORKFLOW_NODE_LABEL[event.payload.targetNodeType]}：${
-                  event.payload.conditionEntered ? '已进入' : '未进入'
+                `${CHAT_WORKFLOW_NODE_LABEL[normalizedPayload.targetNodeType]}：${
+                  normalizedPayload.conditionEntered ? '已进入' : '未进入'
                 }`,
-                `route=${event.payload.routeName} | reason=${event.payload.reason}`,
+                `route=${normalizedPayload.routeName} | reason=${resolvedReason}`,
                 event
               ),
             ]),

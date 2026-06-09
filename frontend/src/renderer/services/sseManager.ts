@@ -677,6 +677,10 @@ class SSEManager {
       // 由 luna:all-bubbles-complete 事件触发插入，确保与气泡生命周期对齐。
       this.hasPendingMemory = true;
 
+      // Ensure waiting lock is removed here immediately upon finished signal,
+      // but memory insertion waits for bubbles
+      sessionStore.clearAllWaitingStates();
+
       // 2d. 如果内容为空或出错，立即触发气泡完成事件（无需等待气泡动画）
       if (payload.error || !this.pendingAssistantContent.trim()) {
         window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
@@ -872,10 +876,10 @@ class SSEManager {
       if (resp.ok) {
         const data = await resp.json();
         const { useHistoryStore } = await import('../stores/historyStore');
-        // @ts-expect-error message mismatch for now
         useHistoryStore.getState().setChatHistory(
           data.payload.date,
-          data.payload.messages || [],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (data.payload.messages as any) || [],
         );
       } else {
         // 非 200 响应也要关闭 loading

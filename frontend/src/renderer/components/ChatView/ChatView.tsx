@@ -18,7 +18,7 @@ import { TopStatusPanel } from '../TopStatusPanel/TopStatusPanel';
 import { BubbleStack } from '../BubbleStack/BubbleStack';
 import { InputArea } from '../InputArea/InputArea';
 import { RecentMemoryPanel } from '../RecentMemoryPanel/RecentMemoryPanel';
-import { ChatWorkflowOverlay } from '../ChatWorkflow/ChatWorkflowOverlay';
+import { HolographicWorkflowSidebar } from '../HolographicWorkflow/HolographicWorkflowSidebar';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { createErrorToast } from '../../stores/errorToastStore';
 import { reportError } from '../../services/errorLogService';
@@ -108,11 +108,15 @@ export const ChatView: React.FC = () => {
       {/* 近期记忆面板层 z-index: 25 — 位于交互层之上，右上角 */}
       <RecentMemoryPanel />
 
+      {/* 工作流侧边栏 (Holographic UI) */}
+      <ErrorBoundary source="workflow_sidebar">
+         <HolographicWorkflowSidebar />
+      </ErrorBoundary>
+
       {/* 交互层 z-index: 20 */}
       <div className="interaction-layer">
         <ErrorBoundary source="chat_view">
           <TopStatusPanel />
-          <ChatWorkflowOverlay />
           <BubbleStack />
           <InputArea />
         </ErrorBoundary>

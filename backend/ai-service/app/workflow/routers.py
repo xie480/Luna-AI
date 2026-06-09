@@ -36,7 +36,7 @@ class ChatWorkflowRouter:
         """评估是否进入长期记忆 RAG 条件节点。"""
         state = ChatWorkflowState.from_graph_state(graph_state)
         entered = state.route_state.should_enter_long_term_memory_rag
-        reason = _first_reason(state.route_state.route_reasons, CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON)
+        reason = _first_reason([state.route_state.route_reasons[0]] if state.route_state.route_reasons else [], CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON)
         await self._publish_condition(
             state=state,
             source_node_type=ChatWorkflowNodeType.SESSION_CONTEXT_LOAD,
@@ -59,7 +59,7 @@ class ChatWorkflowRouter:
         """评估是否进入知识库 RAG 条件节点。"""
         state = ChatWorkflowState.from_graph_state(graph_state)
         entered = state.route_state.should_enter_knowledge_rag
-        reason = _first_reason(state.route_state.route_reasons, CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON)
+        reason = _first_reason([state.route_state.route_reasons[1]] if len(state.route_state.route_reasons) > 1 else [], CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON)
         await self._publish_condition(
             state=state,
             source_node_type=ChatWorkflowNodeType.USER_PROFILE_INJECTION,
@@ -84,7 +84,7 @@ class ChatWorkflowRouter:
         _append_not_entered_observation(
             state,
             ChatWorkflowNodeType.LONG_TERM_MEMORY_RAG,
-            _first_reason(state.route_state.route_reasons, CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON),
+            _first_reason([state.route_state.route_reasons[0]] if state.route_state.route_reasons else [], CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON),
         )
         return state.as_graph_state()
 
@@ -94,7 +94,7 @@ class ChatWorkflowRouter:
         _append_not_entered_observation(
             state,
             ChatWorkflowNodeType.KNOWLEDGE_RAG,
-            _first_reason(state.route_state.route_reasons, CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON),
+            _first_reason([state.route_state.route_reasons[1]] if len(state.route_state.route_reasons) > 1 else [], CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON),
         )
         return state.as_graph_state()
 

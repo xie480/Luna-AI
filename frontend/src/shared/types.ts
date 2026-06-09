@@ -289,6 +289,9 @@ export interface ChatConditionEvaluatedPayload {
   conditionEntered: boolean;
   routeName: string;
   reason: string;
+  longTermMemoryReason?: string;
+  knowledgeRagReason?: string;
+  userProfileReason?: string;
 }
 
 /**

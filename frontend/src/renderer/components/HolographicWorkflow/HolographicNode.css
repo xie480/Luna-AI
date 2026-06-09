@@ -1,0 +1,230 @@
+.holographic-node-container {
+  position: relative;
+  width: 80%;
+  max-width: 240px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.holographic-node-container.is-active {
+  transform: scale(1.05);
+  z-index: 5;
+}
+
+/* Common Labels */
+.node-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.5px;
+  z-index: 2;
+}
+
+/* Base Node Styles */
+.node-stargate, .node-diamond, .node-card {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+/* 1. Stargate (Start/End) */
+.node-stargate {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+}
+
+.stargate-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+}
+
+.stargate-core {
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  background: rgba(44, 62, 80, 0.5);
+  transition: all 0.3s ease;
+}
+
+.node-stargate .node-label {
+  position: absolute;
+  bottom: -20px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* 2. Diamond (Condition) */
+.node-diamond {
+  height: 48px;
+}
+
+.diamond-shape {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  background: rgba(44, 62, 80, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transform: rotate(45deg);
+  transition: all 0.3s ease;
+}
+
+.diamond-content {
+  position: relative;
+  z-index: 2;
+  padding: 0 10px;
+  width: 100%;
+  text-align: center;
+}
+
+/* 3. Card (Normal) */
+.node-card {
+  height: 56px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-glass {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+}
+
+.card-content {
+  position: relative;
+  z-index: 2;
+  padding: 0 20px;
+}
+
+/* =========================================
+   Status Colors & Effects
+   ========================================= */
+
+/* PENDING */
+.status-pending .stargate-ring { border-color: rgba(44, 62, 80, 0.5); }
+.status-pending .diamond-shape { border-color: rgba(44, 62, 80, 0.5); }
+.status-pending .card-glass { border-color: rgba(44, 62, 80, 0.5); }
+.status-pending .node-label { color: rgba(255, 255, 255, 0.3); }
+
+/* RUNNING - Cyber Blue/Purple Glow */
+.status-running .stargate-ring {
+  border-color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.6), inset 0 0 10px rgba(0, 255, 255, 0.4);
+  animation: spinRing 4s linear infinite;
+}
+.status-running .stargate-core {
+  background: radial-gradient(circle, rgba(138, 43, 226, 0.8) 0%, transparent 70%);
+  animation: pulseCore 2s ease-in-out infinite;
+}
+
+.status-running .diamond-shape {
+  border-color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.4), rgba(0, 255, 255, 0.1));
+}
+
+.status-running .card-glass {
+  border-color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(138, 43, 226, 0.2);
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.2), rgba(0, 255, 255, 0.05));
+}
+
+.status-running.is-active {
+  animation: floatNode 3s ease-in-out infinite;
+}
+.status-running .node-label { color: #ffffff; text-shadow: 0 0 5px #00ffff; }
+
+
+/* SUCCESS - Mint Green */
+.status-success .stargate-ring { border-color: #00fa9a; box-shadow: 0 0 10px rgba(0, 250, 154, 0.2); }
+.status-success .diamond-shape { border-color: #00fa9a; background: rgba(0, 250, 154, 0.05); }
+.status-success .card-glass { border-color: #00fa9a; background: rgba(0, 250, 154, 0.05); }
+.status-success .node-label { color: #00fa9a; }
+
+/* FAILED - Glitch Red */
+.status-failed .stargate-ring { border-color: #ff003c; }
+.status-failed .diamond-shape { border-color: #ff003c; background: rgba(255, 0, 60, 0.1); }
+.status-failed .card-glass { border-color: #ff003c; background: rgba(255, 0, 60, 0.1); }
+.status-failed .node-label { color: #ff003c; text-shadow: 2px 0 0 rgba(255,0,0,0.5), -2px 0 0 rgba(0,255,255,0.5); }
+
+/* Glitch Overlay */
+.glitch-overlay {
+  position: absolute;
+  inset: -2px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="1" fill="rgba(255,0,60,0.2)"/></svg>');
+  opacity: 0.5;
+  pointer-events: none;
+  animation: glitchAnim 0.2s linear infinite alternate;
+}
+
+
+/* =========================================
+   AR Trigger (Info Button)
+   ========================================= */
+.ar-trigger {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 24px;
+  height: 24px;
+  background: rgba(15, 20, 30, 0.8);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: all 0.2s ease;
+}
+
+.node-diamond .ar-trigger {
+  right: -20px;
+  bottom: 0px;
+}
+
+.holographic-node-container:hover .ar-trigger,
+.is-active .ar-trigger {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ar-trigger:hover {
+  background: rgba(0, 255, 255, 0.2);
+  border-color: #00ffff;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+}
+
+.trigger-icon {
+  color: #00ffff;
+  font-size: 10px;
+  font-family: monospace;
+}
+
+/* Animations */
+@keyframes spinRing { 100% { transform: rotate(360deg); } }
+@keyframes pulseCore { 50% { transform: scale(1.2); opacity: 0.8; } }
+@keyframes floatNode { 50% { transform: scale(1.05) translateY(-5px); } }
+@keyframes glitchAnim {
+  0% { transform: translate(0); opacity: 0.5; }
+  20% { transform: translate(-2px, 1px); opacity: 0.7; }
+  40% { transform: translate(2px, -1px); opacity: 0.4; }
+  60% { transform: translate(-1px, 2px); opacity: 0.8; }
+  80% { transform: translate(1px, -2px); opacity: 0.5; }
+  100% { transform: translate(0); opacity: 0.6; }
+}
