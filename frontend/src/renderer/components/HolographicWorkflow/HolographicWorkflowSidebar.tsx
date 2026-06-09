@@ -179,7 +179,7 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       <div className="holographic-header">
         <div className="header-title">Orbital Flow</div>
         <div className="header-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className={`global-status-indicator ${activePlan.status}`}></div>
+          {activePlan && <div className={`global-status-indicator ${activePlan.status}`}></div>}
           <button
             onClick={() => setIsVisible(false)}
             style={{
@@ -223,11 +223,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                 />
             ))}
             
-            {/* End Node (only show if plan is completed/failed) */}
-            {(activePlan.status === 'completed' || activePlan.status === 'failed') && (
-                <HolographicNode 
-                    type="end" 
-                    nodeType="workflow_end" 
+            {/* End Node：仅在存在活动计划且计划已结束时渲染，避免 activePlan 为空时访问 status 导致运行时异常 */}
+            {activePlan && (activePlan.status === 'completed' || activePlan.status === 'failed') && (
+                <HolographicNode
+                    type="end"
+                    nodeType="workflow_end"
                     status={activePlan.status === 'completed' ? 'succeeded' : 'failed'}
                     isActive={false}
                 />
