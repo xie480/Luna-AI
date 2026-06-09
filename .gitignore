@@ -18,6 +18,10 @@ nul
 .env.local
 .env.*.local
 
+# Ignore generated/working docs directories
+backend/docs/
+frontend/docs/
+
 # Node.js (Frontend)
 frontend/node_modules/
 frontend/dist/
