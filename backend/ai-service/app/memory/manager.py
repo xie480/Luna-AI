@@ -95,6 +95,9 @@ class Manager:
         self.retrieval_top_k = retrieval_top_k
         self.rerank_top_k = rerank_top_k if rerank_top_k > 0 else 3
 
+        # 延迟注入的用户画像服务
+        self.user_profile_service = None
+
         self.listeners: List[MemoryEventHandler] = []
         self._lock = asyncio.Lock()
         self.enable_sync_notify = True
@@ -232,6 +235,21 @@ class Manager:
             context_parts.append("\n")
         
         messages_text = "".join(context_parts)
+        
+        # 触发用户画像并行提取任务
+        if getattr(self, "user_profile_service", None):
+            try:
+                from app.types.constants import USER_PROFILE_DEFAULT_USER_ID
+                self.user_profile_service.start_extract_from_messages(
+                    user_id=USER_PROFILE_DEFAULT_USER_ID,
+                    session_id=session_id,
+                    messages_text=messages_text,
+                    trace_id=trace_id,
+                )
+                logger.info(f"[TraceID:{trace_id}] 已异步启动画像提取任务 session_id={session_id}")
+            except Exception as e:
+                logger.error(f"[TraceID:{trace_id}] 启动画像提取任务失败 session_id={session_id} error={e}")
+
         compression_before_text = (
             f"当前核心摘要：\n{summary.core_summary}\n\n"
             f"当前关键事实：\n{summary.key_facts}\n\n"

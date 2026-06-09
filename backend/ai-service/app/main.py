@@ -545,6 +545,10 @@ async def lifespan(app: FastAPI):
         app.state.user_profile_pg_repo = user_profile_pg_repo
         app.state.user_profile_service = user_profile_service
 
+        # 依赖注入：将 user_profile_service 提供给 memory_manager
+        if memory_manager:
+            memory_manager.user_profile_service = user_profile_service
+
     # 13. 初始化 Phase 8.5 Chat Workflow 服务
     try:
         from app.workflow.events import ChatWorkflowEventPublisher
