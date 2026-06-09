@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     max_context_tokens: int = 128000
 
     # 为模型输出预留的 Token 数
-    reserved_output_tokens: int = 60000
+    reserved_output_tokens: int = 2048
 
     # memory 槽位压缩治理开关。
     # 做什么：控制聊天主链路是否在最终 Prompt 装配前执行 memory 槽位压缩治理。
