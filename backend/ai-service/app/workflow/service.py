@@ -58,6 +58,9 @@ class ChatWorkflowService:
     ):
         self.pg_client = pg_client
         self.event_publisher = event_publisher or ChatWorkflowEventPublisher()
+        from app.api.chat_status import ChatStatusPublisher
+
+        chat_status_publisher = ChatStatusPublisher()
         dependencies = WorkflowDependencies(
             redis_repo=redis_repo,
             pg_repo=pg_repo,
@@ -66,6 +69,7 @@ class ChatWorkflowService:
             rag_orchestrator=rag_orchestrator,
             user_profile_service=user_profile_service,
             event_publisher=self.event_publisher,
+            chat_status_publisher=chat_status_publisher,
         )
         self.graph = ChatGraphFactory(dependencies).build_daily_chat_graph()
         self.tasks: set[asyncio.Task[Any]] = set()
@@ -82,7 +86,7 @@ class ChatWorkflowService:
     ) -> dict[str, str]:
         """
         启动日常聊天工作流
-        
+
         参数:
             self: 类实例引用
             trace_id: 跟踪ID，用于追踪请求
@@ -91,10 +95,10 @@ class ChatWorkflowService:
             frontend_message_id: 前端消息ID，用于前端标识消息
             locale: 本地化设置，默认为CHAT_WORKFLOW_DEFAULT_LOCALE
             timezone: 时区设置，默认为CHAT_WORKFLOW_DEFAULT_TIMEZONE
-            
+
         返回:
             dict[str, str]: 包含状态信息的字典，包括'status'、'msgId'和'interaction_id'
-        
+
         异常:
             ValueError: 当session_id或message为空时抛出异常
         """
@@ -223,7 +227,6 @@ class ChatWorkflowService:
                 "payload": payload.model_dump(mode="json"),
             }
         )
-
 
     def register_task(self, task: asyncio.Task[Any] | Any) -> None:
         if not isinstance(task, asyncio.Task):

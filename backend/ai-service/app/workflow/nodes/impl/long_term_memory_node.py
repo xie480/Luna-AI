@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.api.chat_status import ChatStatusPublisher
+from app.api.chat_status_texts import get_chat_status_text
 from app.logger import logger
+from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.constants import CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON, ChatWorkflowNodeType
 from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
@@ -26,32 +29,35 @@ class LongTermMemoryNode(ChatWorkflowNode):
         return await self.run_with_observation(state, self._handle)
 
     async def _handle(self, state: ChatWorkflowState) -> ChatWorkflowState:
-        """
-        处理长期记忆检索逻辑
-        
-        Args:
-            state (ChatWorkflowState): 当前工作流状态
-            
-        Returns:
-            ChatWorkflowState: 更新后的状态，包含长期记忆信息或错误状态
-        """
-        # 标记进入条件节点
         state.memory_state.entered_by_condition = True
         state.memory_state.condition_reason = first_reason(
             state.route_state.route_reasons,
             CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
         )
-        
-        # 检查内存管理器是否可用
+
+        if self.dependencies.memory_manager:
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.RAG_RETRIEVAL,
+                status=ChatStatusState.RUNNING,
+                display_text=get_chat_status_text(ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.RUNNING),
+            )
+
         if not self.dependencies.memory_manager:
             state.memory_state.degraded = True
             state.memory_state.degraded_reason = "长期记忆管理器不可用"
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.RAG_RETRIEVAL,
+                status=ChatStatusState.SKIPPED,
+                display_text="",
+                is_visible=False,
+                is_terminal=True,
+            )
             return state
-            
+
         try:
-            # 获取时间焦点参数
             temporal_focus = state.route_state.temporal_focus
-            # 从内存管理器检索并格式化记忆
             text = await self.dependencies.memory_manager.retrieve_and_format_memories(
                 query_text=state.route_state.disambiguated_text or state.input_payload.raw_user_message,
                 query_vector=[],
@@ -60,14 +66,56 @@ class LongTermMemoryNode(ChatWorkflowNode):
                 temporal_deviation=int(temporal_focus.get("temporal_deviation") or 0),
                 entity_mentions=state.route_state.entity_mentions,
             )
-            # 将检索到的记忆文本存储到状态中
             state.memory_state.prompt_memory_text = text
+
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.RAG_RETRIEVAL,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.COMPLETED),
+                is_terminal=True,
+            )
+
         except Exception as exc:
-            # 设置降级状态并记录错误原因
             state.memory_state.degraded = True
             state.memory_state.degraded_reason = f"长期记忆检索失败: {exc}"
             logger.warning(
                 f"长期记忆 RAG 降级 trace_id={state.runtime.trace_id} "
                 f"session_id={state.runtime.session_id} error={exc}"
             )
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.RAG_RETRIEVAL,
+                status=ChatStatusState.ERROR,
+                display_text="",
+                is_visible=False,
+                is_terminal=True,
+                error=str(exc),
+            )
+
         return state
+
+    async def _publish_chat_status(
+        self,
+        state: ChatWorkflowState,
+        stage: ChatStatusStage,
+        status: ChatStatusState,
+        display_text: str,
+        is_visible: bool = True,
+        is_terminal: bool = False,
+        error: str = "",
+    ) -> None:
+        publisher: ChatStatusPublisher | None = self.dependencies.chat_status_publisher
+        if publisher is None:
+            return
+        await publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=stage,
+            state=status,
+            display_text=display_text,
+            is_visible=is_visible,
+            is_terminal=is_terminal,
+            error=error,
+        )

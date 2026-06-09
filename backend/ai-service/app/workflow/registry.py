@@ -21,7 +21,10 @@ class ChatWorkflowNodeRegistry:
     """Chat Workflow 节点注册表。"""
 
     def __init__(self, dependencies: WorkflowDependencies):
-        self.router = ChatWorkflowRouter(dependencies.event_publisher)
+        self.router = ChatWorkflowRouter(
+            event_publisher=dependencies.event_publisher,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
         self.nodes = {
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value: InputReconstructionNode(dependencies),
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value: SessionContextLoadNode(dependencies),

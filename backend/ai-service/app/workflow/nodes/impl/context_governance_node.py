@@ -5,8 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from app.api.chat_status import ChatStatusPublisher
+from app.api.chat_status_texts import get_chat_status_text
 from app.context.compression_governor import MemorySlotCompressionGovernor
 from app.logger import logger
+from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.constants import (
     PROMPT_VARIABLE_CORE_SUMMARY,
     PROMPT_VARIABLE_CURRENT_MESSAGE,
@@ -42,24 +45,16 @@ class ContextGovernanceNode(ChatWorkflowNode):
         return await self.run_with_observation(state, self._handle)
 
     async def _handle(self, state: ChatWorkflowState) -> ChatWorkflowState:
-        """
-        处理上下文治理逻辑
-        
-        此方法收集当前会话的各种状态信息，将其组织成变量字典，
-        然后通过MemorySlotCompressionGovernor进行治理，最终更新状态中的提示变量。
-        
-        Args:
-            state (ChatWorkflowState): 当前工作流状态，包含用户输入、会话状态、记忆状态等
-            
-        Returns:
-            ChatWorkflowState: 更新后的状态对象，其中prompt_state.prompt_variables被更新为治理后的变量
-        """
-        # 收集当前时间信息
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.CONTEXT_GOVERNANCE,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.CONTEXT_GOVERNANCE, ChatStatusState.RUNNING),
+        )
+
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
-        # 获取情绪状态
         emotion_state = state.route_state.emotion_state
-        
-        # 构建用于提示的变量字典
+
         variables = {
             PROMPT_VARIABLE_CURRENT_TIME: current_time,
             PROMPT_VARIABLE_CURRENT_MESSAGE: state.input_payload.raw_user_message,
@@ -75,8 +70,7 @@ class ContextGovernanceNode(ChatWorkflowNode):
             PROMPT_VARIABLE_EMOTION_AROUSAL: f"{float(emotion_state.get('arousal', 0.0)):.2f}",
             PROMPT_VARIABLE_EMOTION_TRIGGER: str(emotion_state.get("emotion_trigger", "")),
         }
-        
-        # 尝试通过MemorySlotCompressionGovernor治理变量
+
         try:
             result = await MemorySlotCompressionGovernor().govern(
                 trace_id=state.runtime.trace_id,
@@ -85,11 +79,53 @@ class ContextGovernanceNode(ChatWorkflowNode):
                 prompt_variables=variables,
             )
             state.prompt_state.prompt_variables = result.updated_variables
+
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.CONTEXT_GOVERNANCE,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(ChatStatusStage.CONTEXT_GOVERNANCE, ChatStatusState.COMPLETED),
+                is_terminal=True,
+            )
+
         except Exception as exc:
-            # 治理失败时记录警告并使用原始变量
             logger.warning(
                 f"上下文治理降级使用原始变量 trace_id={state.runtime.trace_id} "
                 f"session_id={state.runtime.session_id} error={exc}"
             )
             state.prompt_state.prompt_variables = variables
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.CONTEXT_GOVERNANCE,
+                status=ChatStatusState.ERROR,
+                display_text="",
+                is_visible=False,
+                is_terminal=True,
+                error=str(exc),
+            )
         return state
+
+    async def _publish_chat_status(
+        self,
+        state: ChatWorkflowState,
+        stage: ChatStatusStage,
+        status: ChatStatusState,
+        display_text: str,
+        is_visible: bool = True,
+        is_terminal: bool = False,
+        error: str = "",
+    ) -> None:
+        publisher: ChatStatusPublisher | None = self.dependencies.chat_status_publisher
+        if publisher is None:
+            return
+        await publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=stage,
+            state=status,
+            display_text=display_text,
+            is_visible=is_visible,
+            is_terminal=is_terminal,
+            error=error,
+        )

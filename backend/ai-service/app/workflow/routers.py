@@ -1,8 +1,10 @@
-"""
-Phase 8.5 Chat Workflow 条件路由模块。
+"""Phase 8.5 Chat Workflow 条件路由模块。
 
 做什么：集中定义长期记忆 RAG 与知识库 RAG 条件边评估、旁路汇合节点和条件事件发送。
-为什么这样做：条件节点未进入不是静默跳过，必须记录 NOT_ENTERED_BY_CONDITION 与 EVT_CHAT_CONDITION_EVALUATED。
+        旁路节点同时发布 EVT_CHAT_STATUS SKIPPED 状态，确保前端不会因为条件未命中
+        而陷入"等待某个阶段超时"的困惑。
+为什么这样做：条件节点未进入不是静默跳过，必须记录 NOT_ENTERED_BY_CONDITION 与
+            EVT_CHAT_CONDITION_EVALUATED；同时 SKIPPED 状态让前端可观测到阶段被跳过。
 """
 
 from __future__ import annotations
@@ -10,7 +12,9 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from app.api.chat_status import ChatStatusPublisher
 from app.logger import logger
+from app.types.constants import ChatStatusStage, ChatStatusState
 from app.utils.snowflake import generate_string_id
 from app.workflow.constants import (
     CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
@@ -28,15 +32,23 @@ from app.workflow.events import ChatConditionEvaluatedPayload, ChatWorkflowEvent
 class ChatWorkflowRouter:
     """Chat Workflow 条件路由器。"""
 
-    def __init__(self, event_publisher: ChatWorkflowEventPublisher | None = None):
-        """绑定事件发布器，供条件边评估时输出调试事件。"""
+    def __init__(
+        self,
+        event_publisher: ChatWorkflowEventPublisher | None = None,
+        chat_status_publisher: ChatStatusPublisher | None = None,
+    ):
+        """绑定事件发布器，供条件边评估时输出调试事件及 Chat 状态。"""
         self.event_publisher = event_publisher
+        self.chat_status_publisher = chat_status_publisher or ChatStatusPublisher()
 
     async def route_long_term_memory(self, graph_state: dict[str, Any]) -> str:
         """评估是否进入长期记忆 RAG 条件节点。"""
         state = ChatWorkflowState.from_graph_state(graph_state)
         entered = state.route_state.should_enter_long_term_memory_rag
-        reason = _first_reason([state.route_state.route_reasons[0]] if state.route_state.route_reasons else [], CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON)
+        reason = _first_reason(
+            [state.route_state.route_reasons[0]] if state.route_state.route_reasons else [],
+            CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
+        )
         await self._publish_condition(
             state=state,
             source_node_type=ChatWorkflowNodeType.SESSION_CONTEXT_LOAD,
@@ -59,7 +71,10 @@ class ChatWorkflowRouter:
         """评估是否进入知识库 RAG 条件节点。"""
         state = ChatWorkflowState.from_graph_state(graph_state)
         entered = state.route_state.should_enter_knowledge_rag
-        reason = _first_reason([state.route_state.route_reasons[1]] if len(state.route_state.route_reasons) > 1 else [], CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON)
+        reason = _first_reason(
+            [state.route_state.route_reasons[1]] if len(state.route_state.route_reasons) > 1 else [],
+            CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
+        )
         await self._publish_condition(
             state=state,
             source_node_type=ChatWorkflowNodeType.USER_PROFILE_INJECTION,
@@ -79,23 +94,49 @@ class ChatWorkflowRouter:
         )
 
     async def bypass_long_term_memory(self, graph_state: dict[str, Any]) -> dict[str, Any]:
-        """长期记忆条件未进入时写入显式观测记录并汇合。"""
+        """长期记忆条件未进入时写入显式观测记录、推送 SKIPPED 状态并汇合。"""
         state = ChatWorkflowState.from_graph_state(graph_state)
-        _append_not_entered_observation(
-            state,
-            ChatWorkflowNodeType.LONG_TERM_MEMORY_RAG,
-            _first_reason([state.route_state.route_reasons[0]] if state.route_state.route_reasons else [], CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON),
+        reason = _first_reason(
+            [state.route_state.route_reasons[0]] if state.route_state.route_reasons else [],
+            CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
         )
+        _append_not_entered_observation(state, ChatWorkflowNodeType.LONG_TERM_MEMORY_RAG, reason)
+
+        # 发布 EVT_CHAT_STATUS：长期记忆阶段被跳过（SKIPPED，不可见）
+        await self.chat_status_publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=ChatStatusStage.RAG_RETRIEVAL,
+            state=ChatStatusState.SKIPPED,
+            display_text="",
+            is_visible=False,
+            is_terminal=True,
+        )
+
         return state.as_graph_state()
 
     async def bypass_knowledge_rag(self, graph_state: dict[str, Any]) -> dict[str, Any]:
-        """知识库 RAG 条件未进入时写入显式观测记录并汇合。"""
+        """知识库 RAG 条件未进入时写入显式观测记录、推送 SKIPPED 状态并汇合。"""
         state = ChatWorkflowState.from_graph_state(graph_state)
-        _append_not_entered_observation(
-            state,
-            ChatWorkflowNodeType.KNOWLEDGE_RAG,
-            _first_reason([state.route_state.route_reasons[1]] if len(state.route_state.route_reasons) > 1 else [], CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON),
+        reason = _first_reason(
+            [state.route_state.route_reasons[1]] if len(state.route_state.route_reasons) > 1 else [],
+            CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
         )
+        _append_not_entered_observation(state, ChatWorkflowNodeType.KNOWLEDGE_RAG, reason)
+
+        # 发布 EVT_CHAT_STATUS：知识库 RAG 阶段被跳过（SKIPPED，不可见）
+        await self.chat_status_publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=ChatStatusStage.KNOWLEDGE_RAG,
+            state=ChatStatusState.SKIPPED,
+            display_text="",
+            is_visible=False,
+            is_terminal=True,
+        )
+
         return state.as_graph_state()
 
     async def _publish_condition(

@@ -33,6 +33,8 @@ WS_MSG_TYPE_RES_CALENDAR_METADATA = "RES_CALENDAR_METADATA"
 WS_MSG_TYPE_REQ_GET_CHAT_HISTORY = "REQ_GET_CHAT_HISTORY"
 WS_MSG_TYPE_RES_CHAT_HISTORY = "RES_CHAT_HISTORY"
 WS_MSG_TYPE_EVT_MEMORY_SYNC = "EVT_MEMORY_SYNC"
+WS_MSG_TYPE_EVT_CHAT_STATUS = "EVT_CHAT_STATUS"
+CHAT_STATUS_SCHEMA_VERSION = "chat_status.v1"
 
 # 健康检查状态常量
 HEALTH_STATUS_HEALTHY = "healthy"
@@ -144,21 +146,9 @@ USER_PROFILE_MUTATION_SCHEMA_VERSION = "user_profile.mutation.v1"
 USER_PROFILE_CACHE_SCHEMA_VERSION = "user_profile.cache.v1"
 USER_PROFILE_DEFAULT_USER_ID = "local_default_user"
 USER_PROFILE_AUTO_COMMIT_CONFIDENCE_THRESHOLD = 0.75
-# 用户画像摘要模型单次请求超时秒数。
-# 做什么：限制后台摘要模型调用的单次等待时间，避免 OpenAI 客户端连接阶段长时间阻塞。
-# 为什么这样做：用户画像摘要是辅助上下文，但小模型在本地或代理链路较慢时需要足够时间生成压缩结果。
 USER_PROFILE_SUMMARY_MODEL_TIMEOUT_SECONDS = 60.0
-# 用户画像摘要后台重建任务总超时秒数。
-# 做什么：限制摘要重建任务从获取锁到写入缓存的整体生命周期。
-# 为什么这样做：外层任务超时必须大于模型单次请求超时，避免模型还没到 60 秒就被后台任务提前取消。
 USER_PROFILE_SUMMARY_REBUILD_TASK_TIMEOUT_SECONDS = 75.0
-# 用户画像摘要最大字符数。
-# 做什么：限制写入 Redis 并注入 Prompt 的画像摘要长度。
-# 为什么这样做：防止画像条目过多导致 Prompt 上下文被辅助信息挤占。
 USER_PROFILE_SUMMARY_MAX_LENGTH = 2000
-# 用户画像本地兜底摘要最多拼接的条目数量。
-# 做什么：模型不可用时只选取前若干条 active 画像生成确定性摘要。
-# 为什么这样做：保证兜底摘要可控、可读，并避免 Redis 缓存与 Prompt 过长。
 USER_PROFILE_SUMMARY_FALLBACK_MAX_ITEMS = 40
 
 USER_PROFILE_CHANGE_REASON_MANUAL_CREATE = "手动新增用户画像"
@@ -278,3 +268,59 @@ class RagRetrievalRoute(str, Enum):
     KEYWORD = "keyword"
     HYBRID = "hybrid"
     AGENTIC = "agentic"
+
+
+# ============================================================
+# EVT_CHAT_STATUS — SSE Chat 状态通知协议常量
+# ============================================================
+# 做什么：定义 Chat 主链路 SSE 状态推送的事件类型、Schema 版本以及阶段/状态枚举。
+# 为什么这样做：前端需要区分"理解中"、"检索中"、"流式输出中"等不同阶段，并且后端
+#              必须按 node 粒度精准推送状态，而不是由前端靠猜测渲染。所有枚举值和
+#              常量在此集中管理，避免事件名、枚举值散落在业务代码中出现不一致。
+# 边界条件：ChatStatusStage 和 ChatStatusState 均为 str Enum，保证与 SSE 外层
+#           JSON 序列化时直接产出可读字符串，无需二次映射。
+
+
+class ChatStatusStage(str, Enum):
+    """Chat 主链路阶段枚举，对应 DAG 图中的各个 node 执行阶段。
+
+    每个阶段都对应一个具体的 Workflow Node，由 Node 内部的 ChatStatusPublisher
+    在 Node 执行入口和出口触发。前端根据 stage 判断当前正在执行什么类型的操作，
+    从而展示对应的拟人化状态文本。
+
+    以下为 DAG 完整执行顺序所对应的所有阶段：
+      1. INPUT_RECONSTRUCTION    — 输入重构与意图理解
+      2. SESSION_CONTEXT_LOAD    — 会话上下文加载（Redis 窗口）
+      3. RAG_RETRIEVAL           — 长期记忆检索
+      4. KNOWLEDGE_RAG           — 知识库检索
+      5. USER_PROFILE_INJECTION  — 用户画像注入
+      6. CONTEXT_GOVERNANCE      — 上下文治理与压缩
+      7. CHAT_PROMPT_ASSEMBLY    — 最终 Chat Prompt 装配
+      8. LLM_STREAMING           — 主模型流式生成
+      9. RESPONSE_PERSISTENCE    — 回复持久化落盘
+     10. FINALIZE                — 结束归档
+    """
+    INPUT_RECONSTRUCTION = "input_reconstruction"
+    SESSION_CONTEXT_LOAD = "session_context_load"
+    RAG_RETRIEVAL = "rag_retrieval"
+    KNOWLEDGE_RAG = "knowledge_rag"
+    USER_PROFILE_INJECTION = "user_profile_injection"
+    CONTEXT_GOVERNANCE = "context_governance"
+    CHAT_PROMPT_ASSEMBLY = "chat_prompt_assembly"
+    LLM_STREAMING = "llm_streaming"
+    RESPONSE_PERSISTENCE = "response_persistence"
+    FINALIZE = "finalize"
+
+
+class ChatStatusState(str, Enum):
+    """Chat 主链路状态枚举，标识当前阶段的执行状态。
+
+    每个 node 至少会触发 RUNNING 和 COMPLETED 两个状态。异常场景下
+    会触发 ERROR 或 SKIPPED。CANCELLED 由取消接口触发。
+    """
+    STARTED = "started"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+    ERROR = "error"
+    CANCELLED = "cancelled"

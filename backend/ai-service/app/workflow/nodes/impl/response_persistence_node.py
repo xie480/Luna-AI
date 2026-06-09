@@ -6,9 +6,12 @@ import json
 import time
 from typing import Any
 
+from app.api.chat_status import ChatStatusPublisher
+from app.api.chat_status_texts import get_chat_status_text
 from app.logger import logger
 from app.repository.chat_history_redis import Interaction
 from app.repository.models import InteractionModel
+from app.types.constants import ChatStatusStage, ChatStatusState
 from app.utils.snowflake import generate_string_id
 from app.workflow.constants import (
     CHAT_STREAM_EMPTY_RESPONSE_ERROR,
@@ -40,22 +43,16 @@ class ResponsePersistenceNode(ChatWorkflowNode):
         return await self.run_with_observation(state, self._handle)
 
     async def _handle(self, state: ChatWorkflowState) -> ChatWorkflowState:
-        """
-        处理聊天工作流状态并持久化交互数据到数据库和Redis
-        
-        该方法负责处理助手生成的内容，处理错误情况，并将交互数据保存到PostgreSQL和Redis中。
-        
-        Args:
-            state (ChatWorkflowState): 当前聊天工作流的状态，包含用户输入、助手响应等信息
-            
-        Returns:
-            ChatWorkflowState: 返回相同的状态对象，可能已更新了持久化相关的状态信息
-        """
-        # 提取助手生成的内容
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.RESPONSE_PERSISTENCE,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.RUNNING),
+        )
+
         assistant_content = state.generation_state.full_text
         error_json = ""
-        
-        # 检查是否发生错误或内容为空，如果是则设置相应的错误JSON
+
         if state.generation_state.error:
             error_json = json.dumps(
                 {"error": CHAT_STREAM_GENERATION_ERROR, "details": state.generation_state.error},
@@ -69,8 +66,7 @@ class ResponsePersistenceNode(ChatWorkflowNode):
                 ensure_ascii=False,
             )
             assistant_content = error_json
-        
-        # 创建交互对象用于持久化
+
         interaction = Interaction(
             msgId=state.generation_state.assistant_message_id,
             userContent=state.input_payload.raw_user_message,
@@ -80,12 +76,10 @@ class ResponsePersistenceNode(ChatWorkflowNode):
             error=error_json,
             timestamp=int(time.time()),
         )
-        
-        # 初始化数据库和Redis写入状态
+
         pg_status = CHAT_WORKFLOW_PG_WRITE_SKIPPED
         redis_status = CHAT_WORKFLOW_REDIS_WRITE_SKIPPED
-        
-        # 尝试将交互数据保存到PostgreSQL数据库
+
         if self.dependencies.pg_repo:
             try:
                 await self.dependencies.pg_repo.save_interaction(
@@ -104,8 +98,7 @@ class ResponsePersistenceNode(ChatWorkflowNode):
             except Exception as exc:
                 pg_status = CHAT_WORKFLOW_PG_WRITE_FAILED
                 logger.error(f"Workflow 保存 Interaction 到 PG 失败 trace_id={state.runtime.trace_id} error={exc}")
-        
-        # 尝试将交互数据保存到Redis缓存
+
         if self.dependencies.redis_repo:
             try:
                 await self.dependencies.redis_repo.save_interaction(state.runtime.session_id, interaction)
@@ -113,11 +106,44 @@ class ResponsePersistenceNode(ChatWorkflowNode):
             except Exception as exc:
                 redis_status = CHAT_WORKFLOW_REDIS_WRITE_FAILED
                 logger.error(f"Workflow 保存 Interaction 到 Redis 失败 trace_id={state.runtime.trace_id} error={exc}")
-        
-        # 记录持久化操作的完成状态
+
         logger.info(
             f"回复持久化完成 trace_id={state.runtime.trace_id} interaction_id={state.runtime.interaction_id} "
             f"session_id={state.runtime.session_id} node_type={self.node_type.value} "
             f"pg_status={pg_status} redis_status={redis_status}"
         )
+
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.RESPONSE_PERSISTENCE,
+            status=ChatStatusState.COMPLETED,
+            display_text=get_chat_status_text(ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.COMPLETED),
+            is_terminal=True,
+        )
+
         return state
+
+    async def _publish_chat_status(
+        self,
+        state: ChatWorkflowState,
+        stage: ChatStatusStage,
+        status: ChatStatusState,
+        display_text: str,
+        is_visible: bool = True,
+        is_terminal: bool = False,
+        error: str = "",
+    ) -> None:
+        publisher: ChatStatusPublisher | None = self.dependencies.chat_status_publisher
+        if publisher is None:
+            return
+        await publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=stage,
+            state=status,
+            display_text=display_text,
+            is_visible=is_visible,
+            is_terminal=is_terminal,
+            error=error,
+        )
