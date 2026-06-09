@@ -110,26 +110,25 @@ class MainChatLlmNode(ChatWorkflowNode):
                     if chunk_data.get("is_finished", False):
                         # 清空解析器中的剩余内容
                         flushed = parser.flush()
-                        if not flushed:
-                            # 如果没有剩余内容，则发送空的消息块
-                            await publish_stream_payload(
+                        for msg_type, content in flushed:
+                            await handle_stream_piece(
                                 state,
-                                CHAT_STREAM_TYPE_REPLY_CHUNK,
-                                "",
-                                True,
+                                msg_type,
+                                content,
+                                False,  # 强制为 False，因为我们要通过专门的空块确保 is_finished 信号被准确送达
                                 self.dependencies.event_publisher,
-                                error=chunk_data.get("error") or "",
                             )
-                        else:
-                            # 发送解析器中剩余的内容
-                            for msg_type, content in flushed:
-                                await handle_stream_piece(
-                                    state,
-                                    msg_type,
-                                    content,
-                                    True,
-                                    self.dependencies.event_publisher,
-                                )
+                        
+                        # 统一发送一个明确的结束包，保证 is_finished 信号一定送达前端，
+                        # 解决当 flushed 仅包含 thought_content 时信号被丢弃导致的卡死问题。
+                        await publish_stream_payload(
+                            state,
+                            CHAT_STREAM_TYPE_REPLY_CHUNK,
+                            "",
+                            True,
+                            self.dependencies.event_publisher,
+                            error=chunk_data.get("error") or "",
+                        )
                         # 记录结束原因
                         state.generation_state.finish_reason = chunk_data.get("finish_reason") or "stop"
                         break

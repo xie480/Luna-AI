@@ -8,35 +8,12 @@
  * - 采用：监听 window 自定义事件 luna:show-bubble，直接调用 showBubble 渲染。
  * - 后端已按标点断句并下发语义完整的句子，前端无需再分句。
  */
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useBubble } from '../../hooks/useBubble';
 import './BubbleStack.css';
 
-interface ShowBubbleEventDetail {
-  text: string;
-  duration?: number;
-}
-
 export const BubbleStack: React.FC = () => {
-  const { bubbles, registerBubble, showBubble } = useBubble();
-
-  /**
-   * 监听 sseManager 分发的 luna:show-bubble 事件
-   * 直接以独立气泡策略渲染每个文本块
-   */
-  useEffect(() => {
-    const handleShowBubble = (e: Event) => {
-      const customEvent = e as CustomEvent<ShowBubbleEventDetail>;
-      const { text, duration } = customEvent.detail;
-      if (!text || !text.trim()) return;
-      showBubble(text, duration ?? Math.max(3000, text.length * 200));
-    };
-
-    window.addEventListener('luna:show-bubble', handleShowBubble);
-    return () => {
-      window.removeEventListener('luna:show-bubble', handleShowBubble);
-    };
-  }, [showBubble]);
+  const { bubbles, registerBubble } = useBubble();
 
   return (
     <div className="bubble-stack">
@@ -45,6 +22,8 @@ export const BubbleStack: React.FC = () => {
           key={bubble.id}
           ref={(el) => registerBubble(el, bubble.id)}
           className={`css-chat-bubble ${bubble.leaving ? 'leaving' : ''}`}
+          data-batch-id={bubble.batchId}
+          data-bubble-stage={bubble.stage}
         >
           {bubble.text}
         </div>

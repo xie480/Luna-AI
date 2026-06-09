@@ -59,6 +59,34 @@ interface SSEEvent {
 }
 
 /**
+ * 待提交的近期记忆批次。
+ * 做什么：按 assistant 回复批次聚合用户问题、assistant 内容与提交状态。
+ * 为什么这样做：近期记忆提交必须以“单轮回答批次”为单位，而不能依赖全局气泡是否全部完成。
+ */
+interface PendingRecentMemoryEntry {
+  batchId: string;
+  userMsgId: string;
+  userMessage: string;
+  assistantContent: string;
+  hasBubbleContent: boolean;
+  streamFinished: boolean;
+  committed: boolean;
+  createdAt: number;
+}
+
+interface BubbleBatchSettledEventDetail {
+  batchId: string;
+  reason: string;
+}
+
+const BUBBLE_EVENT_NAME = {
+  SHOW: 'luna:show-bubble',
+  STREAM_FINISHED: 'luna:bubble-stream-finished',
+  BATCH_SETTLED: 'luna:bubble-batch-settled',
+  RECENT_MEMORY_COMMITTED: 'luna:recent-memory-committed',
+} as const;
+
+/**
  * SSE 管理器类
  * 替代原有的 WSManager，使用 EventSource + fetch 实现通信。
  */
@@ -67,54 +95,85 @@ class SSEManager {
   private backendUrl: string = AI_SERVICE_BASE_URL;
   private isManualDisconnect: boolean = false;
 
-  // 记录当前正在交互的用户消息，用于气泡渲染完成后插入近期记忆
-  private pendingUserMessage: string = '';
-  private pendingUserMsgId: string = '';
-  private pendingAssistantContent: string = '';
-  private hasPendingMemory: boolean = false;
-  private isMemoryListenerRegistered: boolean = false;
+  // 待提交近期记忆改为按 batchId 管理，彻底消除“全局最后一个气泡完成”造成的批次串扰
+  private pendingRecentMemoryMap: Map<string, PendingRecentMemoryEntry> = new Map();
+  private isBubbleBatchSettledListenerRegistered: boolean = false;
 
   /**
-   * 立即提交待写入的近期记忆。
-   * 做什么：把当前暂存的一轮问答写入 [`recentQA`](frontend/src/renderer/stores/sessionStore.ts:70)。
-   * 为什么这样做：当气泡早于 `is_finished` 结束或当前根本没有气泡时，不能继续依赖下一次完成事件。
-   * 输入输出：无输入；成功时写入 store 并清空暂存字段。
-   * 边界条件：缺少用户消息 ID、用户文本或未处于待写入状态时直接返回。
+   * 创建或覆盖一条待提交近期记忆记录。
+   * 做什么：在用户发起新一轮问答时，提前建立该轮 assistant 批次的提交上下文。
+   * 为什么这样做：后续流式 chunk、气泡沉降和 recentQA 提交都必须围绕同一个 batchId 聚合。
+   * 输入输出：输入 batchId、用户消息 ID 和用户文本；输出为写入 map 的副作用。
+   * 边界条件：同一 batchId 再次创建会覆盖旧值，避免脏状态遗留到下一轮。
    * 异常行为：无。
    */
-  private flushPendingRecentMemory(): void {
-    if (!this.hasPendingMemory || !this.pendingUserMsgId || !this.pendingUserMessage.trim()) {
+  private createPendingRecentMemory(batchId: string, userMsgId: string, userMessage: string): void {
+    this.pendingRecentMemoryMap.set(batchId, {
+      batchId,
+      userMsgId,
+      userMessage,
+      assistantContent: '',
+      hasBubbleContent: false,
+      streamFinished: false,
+      committed: false,
+      createdAt: Date.now(),
+    });
+  }
+
+  /**
+   * 立即提交指定批次的近期记忆。
+   * 做什么：把某个 batchId 对应的一轮问答写入 [`recentQA`](frontend/src/renderer/stores/sessionStore.ts:70)。
+   * 为什么这样做：近期记忆提交必须精确绑定到某个 assistant 回复批次，不能再用全局临时字段。
+   * 输入输出：输入 batchId 与触发原因；成功时写入 store、派发提交确认事件并删除暂存记录。
+   * 边界条件：已提交、缺少用户消息 ID、缺少用户文本时直接返回，确保一次只提交一次。
+   * 异常行为：无。
+   */
+  private flushPendingRecentMemory(batchId: string, reason: string): void {
+    const entry = this.pendingRecentMemoryMap.get(batchId);
+    if (!entry || entry.committed || !entry.userMsgId || !entry.userMessage.trim()) {
       return;
     }
 
     const newQA: InteractionQA = {
-      msgId: this.pendingUserMsgId,
-      userContent: this.pendingUserMessage,
-      assistantContent: this.pendingAssistantContent,
+      msgId: entry.userMsgId,
+      userContent: entry.userMessage,
+      assistantContent: entry.assistantContent,
       timestamp: Math.floor(Date.now() / 1000),
     };
     useSessionStore.getState().addRecentQA(newQA);
 
-    this.pendingUserMessage = '';
-    this.pendingUserMsgId = '';
-    this.pendingAssistantContent = '';
-    this.hasPendingMemory = false;
+    entry.committed = true;
+    window.dispatchEvent(
+      new CustomEvent(BUBBLE_EVENT_NAME.RECENT_MEMORY_COMMITTED, {
+        detail: {
+          batchId,
+          msgId: entry.userMsgId,
+          reason,
+        },
+      })
+    );
+    this.pendingRecentMemoryMap.delete(batchId);
   }
 
   /**
-   * 注册 luna:all-bubbles-complete 事件监听
-   * 当所有气泡渲染和消失动画完成时，插入近期记忆
-   *
-   * 优化说明：此监听器是 recentQA 更新入口之一。
-   * 若 `is_finished` 到达时气泡已空闲，则会直接调用 [`flushPendingRecentMemory()`](frontend/src/renderer/services/sseManager.ts:82) 立即写入；
-   * 若仍存在气泡，则继续等待本事件触发后写入，确保与气泡生命周期严格对齐。
+   * 注册批次沉降监听。
+   * 做什么：当某个回答批次的气泡全部移除且流已结束时，提交该批次的近期记忆。
+   * 为什么这样做：提交判定改为按 batch 生命周期触发，而不是依赖脆弱的全局空闲事件。
+   * 输入输出：无输入；输出为事件监听副作用。
+   * 边界条件：监听器只注册一次。
+   * 异常行为：无。
    */
-  private registerAllBubblesCompleteListener(): void {
-    if (this.isMemoryListenerRegistered) return;
-    this.isMemoryListenerRegistered = true;
+  private registerBubbleBatchSettledListener(): void {
+    if (this.isBubbleBatchSettledListenerRegistered) return;
+    this.isBubbleBatchSettledListenerRegistered = true;
 
-    window.addEventListener('luna:all-bubbles-complete', () => {
-      this.flushPendingRecentMemory();
+    window.addEventListener(BUBBLE_EVENT_NAME.BATCH_SETTLED, (event) => {
+      const customEvent = event as CustomEvent<BubbleBatchSettledEventDetail>;
+      const batchId = customEvent.detail?.batchId;
+      if (!batchId) {
+        return;
+      }
+      this.flushPendingRecentMemory(batchId, customEvent.detail?.reason || 'bubble-batch-settled');
     });
   }
 
@@ -591,19 +650,14 @@ class SSEManager {
   }
 
   /**
-   * 处理聊天流式输出（通过 SSE 接收的 ChatStreamPayload）
+   * 处理聊天流式输出（通过 SSE 接收的 ChatStreamPayload）。
    *
-   * Bug 1 修复说明：
-   * - 将 emotion_update 处理从 return 改为不阻断后续处理路径的方式，
-   *   确保所有消息类型都能正确参与状态流转。
-   * - 在第一次调用时立即获取 sessionStore 引用，避免每次调用
-   *   getState() 可能产生的陈旧引用问题。
-   *
-   * 近期记忆插入时机优化说明：
-   * - is_finished 处理中不再直接插入 recentQA。
-   * - 改为仅设置 hasPendingMemory=true，交由气泡完成事件
-   *   (luna:all-bubbles-complete) 触发实际插入。
-   * - 确保 recentQA 更新与气泡渲染队列生命周期严格对齐。
+   * 重构说明：
+   * - 近期记忆提交不再依赖“全局所有气泡完成”事件。
+   * - 当前实现改为：每个 assistant 回复批次独立聚合内容，并在对应批次收到
+   *   “stream finished + bubble batch settled” 后提交 recentQA。
+   * - 因此这里的职责变为：维护批次内容、派发带 batchId 的气泡事件、
+   *   在终态时派发该批次的流结束信号。
    */
   private handleChatStream(payload: ChatStreamPayload): void {
     const systemStore = useSystemStore.getState();
@@ -611,6 +665,7 @@ class SSEManager {
     const currentSessionId = sessionStore.currentSessionId;
     const assistantMessageId = payload.assistant_message_id || payload.node_id;
     const msgType = payload.type || 'reply_chunk';
+    const recentMemoryEntry = this.pendingRecentMemoryMap.get(assistantMessageId);
 
     // ---- 第一步：处理所有消息类型共有的内容更新 ----
     if (msgType === 'emotion_update') {
@@ -627,18 +682,21 @@ class SSEManager {
         new CustomEvent('luna:emotion-update', { detail: { emotion: emotionValue } })
       );
     } else if (msgType === 'reply_chunk') {
+      const normalizedChunk = payload.chunk || '';
+      const hasRenderableChunk = normalizedChunk.trim().length > 0;
+
       // 回复块：拼接内容和触发气泡渲染
-      if (payload.chunk && payload.chunk.trim()) {
-        const duration = Math.max(3000, payload.chunk.length * 200);
+      if (hasRenderableChunk) {
+        const duration = Math.max(3000, normalizedChunk.length * 200);
         window.dispatchEvent(
-          new CustomEvent('luna:show-bubble', {
-            detail: { text: payload.chunk, duration },
+          new CustomEvent(BUBBLE_EVENT_NAME.SHOW, {
+            detail: { text: normalizedChunk, duration, batchId: assistantMessageId },
           })
         );
       }
 
       if (currentSessionId) {
-        sessionStore.updateMessageChunk(currentSessionId, assistantMessageId, payload.chunk);
+        sessionStore.updateMessageChunk(currentSessionId, assistantMessageId, normalizedChunk);
         const streamMetadata: Record<string, unknown> = {};
         if (payload.schema_version) {
           streamMetadata.schemaVersion = payload.schema_version;
@@ -663,20 +721,19 @@ class SSEManager {
         }
       }
 
-      this.pendingAssistantContent += payload.chunk;
+      if (recentMemoryEntry) {
+        recentMemoryEntry.assistantContent += normalizedChunk;
+        recentMemoryEntry.hasBubbleContent = recentMemoryEntry.hasBubbleContent || hasRenderableChunk;
+      }
     }
 
     // ---- 第二步：统一处理所有消息类型的完成标记 ----
-    // 注意：is_finished 标记独立于 msgType，无论 emotion_update 还是
-    // reply_chunk 都可能携带 is_finished=true（实际后端只有 reply_chunk 会带）
     if (payload.is_finished) {
-      // 2a. 更新消息状态（释放 isWaiting 锁定）
       const status = payload.error ? 'error' : 'completed';
       if (currentSessionId) {
         sessionStore.updateMessageStatus(currentSessionId, assistantMessageId, status);
       }
 
-      // 2b. 处理错误通知
       if (payload.error) {
         const errMsg = `生成失败: ${payload.error}`;
         systemStore.addSystemLog(errMsg);
@@ -685,17 +742,24 @@ class SSEManager {
         }));
       }
 
-      // 2c. 标记待处理记忆，供气泡完成事件或空闲态即时提交逻辑使用
-      this.hasPendingMemory = true;
-
-      // Ensure waiting lock is removed here immediately upon finished signal,
-      // but memory insertion waits for bubbles unless the queue is already idle
       sessionStore.clearAllWaitingStates();
 
-      // 2d. 如果当前没有可等待的气泡，则立即写入近期记忆；
-      // 否则继续等待 luna:all-bubbles-complete 事件触发。
-      if (payload.error || !this.pendingAssistantContent.trim() || (window as any).__LUNA_IS_BUBBLES_IDLE__) {
-        this.flushPendingRecentMemory();
+      if (recentMemoryEntry) {
+        recentMemoryEntry.streamFinished = true;
+
+        // 没有任何可渲染气泡时，说明这一轮不存在需要等待的视觉生命周期，直接提交。
+        if (!recentMemoryEntry.hasBubbleContent) {
+          this.flushPendingRecentMemory(assistantMessageId, 'stream-finished-without-bubbles');
+        } else {
+          window.dispatchEvent(
+            new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
+              detail: {
+                batchId: assistantMessageId,
+                finishedAt: Date.now(),
+              },
+            })
+          );
+        }
       }
 
       // 2e. 当日聊天记录实时更新
@@ -774,14 +838,11 @@ class SSEManager {
       return;
     }
 
-    this.registerAllBubblesCompleteListener();
+    this.registerBubbleBatchSettledListener();
 
     const userMsgId = generateId();
     const assistantMsgId = generateId();
-    this.pendingUserMessage = message;
-    this.pendingUserMsgId = userMsgId;
-    this.pendingAssistantContent = '';
-    this.hasPendingMemory = false;
+    this.createPendingRecentMemory(assistantMsgId, userMsgId, message);
 
     // 追加用户消息（sending 状态）
     sessionStore.appendMessage(sessionId, {
@@ -794,7 +855,7 @@ class SSEManager {
       status: 'sending',
     });
 
-    // Bug 1 修复：预先插入 assistant 消息占位（streaming 状态）
+    // 预先插入 assistant 消息占位（streaming 状态）
     // 确保 isWaiting 在 HTTP 响应和 SSE 首块之间保持为 true
     sessionStore.appendMessage(sessionId, {
       messageId: assistantMsgId,
@@ -822,10 +883,9 @@ class SSEManager {
     }).then((resp) => {
       if (!resp.ok) {
         systemStore.addSystemLog(`发送聊天消息失败: ${resp.status}`);
-        // 关键修复：HTTP 失败时必须将用户和 assistant 消息都标记为 error，
-        // 确保 isWaiting 锁被正确释放
         sessionStore.updateMessageStatus(sessionId, userMsgId, 'error');
         sessionStore.updateMessageStatus(sessionId, assistantMsgId, 'error');
+        this.flushPendingRecentMemory(assistantMsgId, 'http-request-failed');
       } else {
         // HTTP 返回 200（表示后端已接收），用户消息变为 completed
         sessionStore.updateMessageStatus(sessionId, userMsgId, 'completed');
@@ -833,10 +893,9 @@ class SSEManager {
       }
     }).catch((err) => {
       systemStore.addSystemLog(`发送聊天消息失败: ${err}`);
-      // 关键修复：网络异常时必须将用户和 assistant 消息都标记为 error，
-      // 否则 isWaiting 永久为 true
       sessionStore.updateMessageStatus(sessionId, userMsgId, 'error');
       sessionStore.updateMessageStatus(sessionId, assistantMsgId, 'error');
+      this.flushPendingRecentMemory(assistantMsgId, 'http-request-exception');
     });
   }
 

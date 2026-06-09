@@ -9,22 +9,54 @@
  * - 优化：基于生命周期的平滑等待机制，不再强制淘汰最老气泡
  * - 修复：气泡必须严格按照渲染顺序依次消失，确保消失顺序与出现顺序严格一致
  *
- * Phase 5 增强：当所有气泡渲染并消失完成后，触发 luna:all-bubbles-complete 事件
- * 用于通知外部模块（如 sseManager）可以安全地插入近期记忆，防止内容被截断
+ * 本次重构目标：
+ * - 不再依赖脆弱的“全部气泡完成后再猜测是否该提交近期记忆”
+ * - 改为围绕“批次（batch）”建立确定性的生命周期状态机
+ * - 每个回答批次都显式经历：收集中 → 等待沉降 → 可提交近期记忆 → 已提交
+ * - 每个气泡都显式经历：队列中 → 显示中 → 等待消失 → 消失动画中 → 已移除
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import gsap from 'gsap';
 
+const BUBBLE_EVENT_NAME = {
+  SHOW: 'luna:show-bubble',
+  STREAM_FINISHED: 'luna:bubble-stream-finished',
+  BATCH_SETTLED: 'luna:bubble-batch-settled',
+  RECENT_MEMORY_COMMITTED: 'luna:recent-memory-committed',
+  ALL_COMPLETE: 'luna:all-bubbles-complete',
+  BATCH_STAGE_CHANGED: 'luna:bubble-batch-stage-changed',
+} as const;
+
+const LEGACY_BUBBLE_BATCH_ID = '__legacy_bubble_batch__';
+const MAX_BUBBLES = 3;
+const MIN_BUBBLE_GAP_MS = 800;
+const BUBBLE_LEAVING_ANIMATION_MS = 300;
+
+type BubbleLifecycleStage =
+  | 'visible'
+  | 'awaiting-removal'
+  | 'leaving';
+
+type BubbleBatchStage =
+  | 'collecting'
+  | 'waiting-settle'
+  | 'ready-to-commit'
+  | 'committed';
+
 export interface Bubble {
   id: number;
+  batchId: string;
   text: string;
   leaving: boolean;
   /** 气泡在渲染队列中的序号，用于确保消失顺序 */
   renderIndex: number;
+  /** 当前气泡生命周期阶段 */
+  stage: BubbleLifecycleStage;
 }
 
 interface QueueItem {
   id: number;
+  batchId: string;
   text: string;
   duration: number;
   renderIndex: number;
@@ -33,7 +65,62 @@ interface QueueItem {
 /** 待消失气泡的信息 */
 interface PendingRemoval {
   id: number;
+  batchId: string;
   renderIndex: number;
+}
+
+interface BubbleBatchRuntime {
+  batchId: string;
+  stage: BubbleBatchStage;
+  totalCreated: number;
+  queuedCount: number;
+  visibleCount: number;
+  awaitingRemovalCount: number;
+  leavingCount: number;
+  removedCount: number;
+  finishedSignalReceived: boolean;
+  settledEmitted: boolean;
+  committed: boolean;
+  lastUpdatedAt: number;
+}
+
+interface ShowBubbleEventDetail {
+  text: string;
+  duration?: number;
+  batchId?: string;
+}
+
+interface BubbleStreamFinishedEventDetail {
+  batchId: string;
+  finishedAt?: number;
+}
+
+interface RecentMemoryCommittedEventDetail {
+  batchId: string;
+  msgId?: string;
+  reason?: string;
+}
+
+interface BubbleBatchSettledEventDetail {
+  batchId: string;
+  reason: string;
+  summary: BubbleBatchSnapshot;
+}
+
+interface BubbleBatchSnapshot {
+  batchId: string;
+  stage: BubbleBatchStage;
+  totalCreated: number;
+  queuedCount: number;
+  visibleCount: number;
+  awaitingRemovalCount: number;
+  leavingCount: number;
+  removedCount: number;
+  finishedSignalReceived: boolean;
+  settledEmitted: boolean;
+  committed: boolean;
+  activeBubbleCount: number;
+  lastUpdatedAt: number;
 }
 
 export const useBubble = () => {
@@ -46,10 +133,9 @@ export const useBubble = () => {
   // 缓冲队列和调度器状态
   const queueRef = useRef<QueueItem[]>([]);
   const isProcessingRef = useRef(false);
-  
+
   // 阻塞等待队列，用于在气泡达到上限时挂起新的渲染任务
   const spaceAvailableResolversRef = useRef<(() => void)[]>([]);
-  const MAX_BUBBLES = 3;
 
   // 消失顺序控制相关状态
   // 待消失队列：存储所有 TTL 已到期但尚未执行消失的气泡（按 renderIndex 排序）
@@ -57,23 +143,222 @@ export const useBubble = () => {
   // 标记当前是否有气泡正在执行消失动画
   const removalInProgressRef = useRef(false);
 
-  // Phase 5: 标记所有气泡是否已完成渲染和消失
-  const hasPendingWorkRef = useRef(false);
-  // 标记当前批次是否已触发过 luna:all-bubbles-complete 事件
-  // 防止重复触发导致 [`addRecentQA()`](frontend/src/renderer/stores/sessionStore.ts:233) 重复追加
-  const completedRef = useRef(true);
+  // 批次状态机：以 assistant 回复批次为单位聚合生命周期
+  const batchRuntimeMapRef = useRef<Map<string, BubbleBatchRuntime>>(new Map());
+
+  // 全局空闲态兼容标记，保留给现有链路做兜底观察
+  const allCompleteDispatchedRef = useRef(true);
 
   /**
-   * Phase 5: 检查是否有未完成的渲染/消失工作
-   * 当所有工作完成时，触发 luna:all-bubbles-complete 事件
-   * 注意：每个气泡批次只触发一次，触发后将 completedRef 置为 true，
-   * 直至新的气泡任务到来（showBubble 调用时重置该标记）。
+   * 统一更新全局空闲标记。
+   * 做什么：向 window 暴露当前是否完全没有气泡工作在执行。
+   * 为什么这样做：兼容既有链路中的全局空闲态读取，但不再作为近期记忆提交的唯一依据。
+   * 输入输出：输入是否空闲；无返回值。
+   * 边界条件：仅反映全局气泡系统是否空闲，不代表某个批次是否已可提交。
+   * 异常行为：无。
    */
-  const updateBubbleIdleFlag = useCallback((isIdle: boolean) => {
+  const updateGlobalBubbleIdleFlag = useCallback((isIdle: boolean) => {
     (window as any).__LUNA_IS_BUBBLES_IDLE__ = isIdle;
   }, []);
 
-  const checkAllWorkDone = useCallback(() => {
+  /**
+   * 构建批次快照。
+   * 做什么：把运行时批次状态压平成适合事件透出的调试快照。
+   * 为什么这样做：近期记忆提交问题本质是生命周期问题，必须让状态可追踪。
+   * 输入输出：输入批次运行时对象，输出只读快照。
+   * 边界条件：activeBubbleCount 由各阶段计数实时聚合，避免外部推断。
+   * 异常行为：无。
+   */
+  const buildBatchSnapshot = useCallback((batch: BubbleBatchRuntime): BubbleBatchSnapshot => {
+    const activeBubbleCount =
+      batch.queuedCount +
+      batch.visibleCount +
+      batch.awaitingRemovalCount +
+      batch.leavingCount;
+
+    return {
+      batchId: batch.batchId,
+      stage: batch.stage,
+      totalCreated: batch.totalCreated,
+      queuedCount: batch.queuedCount,
+      visibleCount: batch.visibleCount,
+      awaitingRemovalCount: batch.awaitingRemovalCount,
+      leavingCount: batch.leavingCount,
+      removedCount: batch.removedCount,
+      finishedSignalReceived: batch.finishedSignalReceived,
+      settledEmitted: batch.settledEmitted,
+      committed: batch.committed,
+      activeBubbleCount,
+      lastUpdatedAt: batch.lastUpdatedAt,
+    };
+  }, []);
+
+  /**
+   * 获取或创建批次运行时对象。
+   * 做什么：确保每个 batchId 都有独立的状态机记录。
+   * 为什么这样做：近期记忆提交必须按“回答批次”而不是按全局气泡池判断。
+   * 输入输出：输入 batchId，输出对应运行时对象。
+   * 边界条件：相同 batchId 只会复用同一条记录。
+   * 异常行为：无。
+   */
+  const ensureBatchRuntime = useCallback((batchId: string): BubbleBatchRuntime => {
+    const existing = batchRuntimeMapRef.current.get(batchId);
+    if (existing) {
+      return existing;
+    }
+
+    const created: BubbleBatchRuntime = {
+      batchId,
+      stage: 'collecting',
+      totalCreated: 0,
+      queuedCount: 0,
+      visibleCount: 0,
+      awaitingRemovalCount: 0,
+      leavingCount: 0,
+      removedCount: 0,
+      finishedSignalReceived: false,
+      settledEmitted: false,
+      committed: false,
+      lastUpdatedAt: Date.now(),
+    };
+
+    batchRuntimeMapRef.current.set(batchId, created);
+    return created;
+  }, []);
+
+  /**
+   * 派发批次阶段变化事件。
+   * 做什么：在批次阶段切换时对外广播快照。
+   * 为什么这样做：便于调试“为什么该轮还不能提交近期记忆”。
+   * 输入输出：输入批次对象与触发原因；输出为事件副作用。
+   * 边界条件：仅在阶段实际发生变化时派发，避免噪音。
+   * 异常行为：无。
+   */
+  const emitBatchStageChanged = useCallback((batch: BubbleBatchRuntime, reason: string) => {
+    window.dispatchEvent(
+      new CustomEvent(BUBBLE_EVENT_NAME.BATCH_STAGE_CHANGED, {
+        detail: {
+          batchId: batch.batchId,
+          reason,
+          summary: buildBatchSnapshot(batch),
+        },
+      })
+    );
+  }, [buildBatchSnapshot]);
+
+  /**
+   * 切换批次阶段。
+   * 做什么：统一更新批次 stage，并记录更新时间。
+   * 为什么这样做：避免在多个异步回调中散落修改 stage，导致状态漂移。
+   * 输入输出：输入批次对象、目标阶段和原因；无返回值。
+   * 边界条件：相同阶段不会重复派发事件。
+   * 异常行为：无。
+   */
+  const setBatchStage = useCallback((batch: BubbleBatchRuntime, nextStage: BubbleBatchStage, reason: string) => {
+    batch.lastUpdatedAt = Date.now();
+    if (batch.stage === nextStage) {
+      return;
+    }
+    batch.stage = nextStage;
+    emitBatchStageChanged(batch, reason);
+  }, [emitBatchStageChanged]);
+
+  /**
+   * 统一同步气泡列表。
+   * 做什么：同时写入 ref 与 React state。
+   * 为什么这样做：React state 更新是异步批处理；生命周期检查必须始终读取同一份最新数据。
+   * 输入输出：输入新的气泡数组；无返回值。
+   * 边界条件：ref 作为单一事实来源，state 仅用于渲染。
+   * 异常行为：无。
+   */
+  const syncBubblesState = useCallback((nextBubbles: Bubble[]) => {
+    bubblesRef.current = nextBubbles;
+    setBubbles(nextBubbles);
+  }, []);
+
+  /**
+   * 触发某个批次“已沉降，可提交近期记忆”的事件。
+   * 做什么：当且仅当批次收到流结束信号，且该批次所有气泡都已完全移除时派发。
+   * 为什么这样做：这是真正稳健的提交判定点，比“全局所有气泡都没了”更精确。
+   * 输入输出：输入 batchId 与原因；输出为批次沉降事件。
+   * 边界条件：同一批次只派发一次。
+   * 异常行为：无。
+   */
+  const settleBatchIfReady = useCallback((batchId: string, reason: string) => {
+    const batch = batchRuntimeMapRef.current.get(batchId);
+    if (!batch) {
+      return;
+    }
+
+    batch.lastUpdatedAt = Date.now();
+
+    const activeBubbleCount =
+      batch.queuedCount +
+      batch.visibleCount +
+      batch.awaitingRemovalCount +
+      batch.leavingCount;
+
+    if (!batch.finishedSignalReceived) {
+      return;
+    }
+
+    if (activeBubbleCount > 0) {
+      setBatchStage(batch, 'waiting-settle', reason);
+      return;
+    }
+
+    if (batch.settledEmitted) {
+      return;
+    }
+
+    batch.settledEmitted = true;
+    setBatchStage(batch, 'ready-to-commit', reason);
+
+    window.dispatchEvent(
+      new CustomEvent<BubbleBatchSettledEventDetail>(BUBBLE_EVENT_NAME.BATCH_SETTLED, {
+        detail: {
+          batchId,
+          reason,
+          summary: buildBatchSnapshot(batch),
+        },
+      })
+    );
+  }, [buildBatchSnapshot, setBatchStage]);
+
+  /**
+   * 清理已终态的批次。
+   * 做什么：在近期记忆确认提交后释放批次运行时记录。
+   * 为什么这样做：避免长时间运行后批次状态无限累积。
+   * 输入输出：输入 batchId；无返回值。
+   * 边界条件：只有 committed 且没有任何活跃气泡时才删除。
+   * 异常行为：无。
+   */
+  const cleanupBatchIfTerminal = useCallback((batchId: string) => {
+    const batch = batchRuntimeMapRef.current.get(batchId);
+    if (!batch) {
+      return;
+    }
+
+    const activeBubbleCount =
+      batch.queuedCount +
+      batch.visibleCount +
+      batch.awaitingRemovalCount +
+      batch.leavingCount;
+
+    if (batch.committed && activeBubbleCount === 0) {
+      batchRuntimeMapRef.current.delete(batchId);
+    }
+  }, []);
+
+  /**
+   * 检查全局气泡系统是否空闲。
+   * 做什么：仅作为兼容性的全局状态广播，不参与近期记忆提交的主判定。
+   * 为什么这样做：提交判定现在按 batch 进行，但历史链路仍可能关心全局是否无气泡。
+   * 输入输出：无输入；输出为空闲标记和兼容事件副作用。
+   * 边界条件：全局事件仍然保持“一批工作只发一次”。
+   * 异常行为：无。
+   */
+  const checkGlobalIdleState = useCallback(() => {
     const hasQueue = queueRef.current.length > 0;
     const hasBubbles = bubblesRef.current.length > 0;
     const hasPendingRemoval = pendingRemovalQueueRef.current.length > 0;
@@ -81,51 +366,99 @@ export const useBubble = () => {
     const isRemoving = removalInProgressRef.current;
 
     const isIdle = !hasQueue && !hasBubbles && !hasPendingRemoval && !isProcessing && !isRemoving;
-    updateBubbleIdleFlag(isIdle);
+    updateGlobalBubbleIdleFlag(isIdle);
 
-    // 如果已经触发完成事件，不再重复触发
-    if (completedRef.current) {
+    if (isIdle) {
+      if (!allCompleteDispatchedRef.current) {
+        allCompleteDispatchedRef.current = true;
+        window.dispatchEvent(new CustomEvent(BUBBLE_EVENT_NAME.ALL_COMPLETE));
+      }
       return;
     }
 
-    // 如果没有气泡、没有队列、没有待消失、没有在处理中 → 全部完成
-    if (isIdle) {
-      completedRef.current = true;
-      // 触发全局事件，通知外部（如 sseManager）可以安全插入近期记忆
-      window.dispatchEvent(new CustomEvent('luna:all-bubbles-complete'));
-      
-      // Also release input lock just in case backend missed `is_finished` event
-      import('../stores/sessionStore').then(({ useSessionStore }) => {
-        useSessionStore.getState().clearAllWaitingStates();
-      }).catch(console.error);
-    }
-  }, [updateBubbleIdleFlag]);
+    allCompleteDispatchedRef.current = false;
+  }, [updateGlobalBubbleIdleFlag]);
 
   /**
-   * 立即请求一次完成态检查。
-   * 做什么：在关键状态变更后下一帧执行 [`checkAllWorkDone()`](frontend/src/renderer/hooks/useBubble.ts:79)。
-   * 为什么这样做：替代 500ms 轮询，确保最后一个气泡消失后能立刻触发完成事件。
+   * 下一帧执行一次全局空闲态检查。
+   * 做什么：等待 React 提交 DOM 后再检查是否完全空闲。
+   * 为什么这样做：某些阶段切换只影响 CSS class 或 DOM 位置，需要等待浏览器完成一次提交。
    * 输入输出：无。
-   * 边界条件：依赖 `requestAnimationFrame` 等待 React 提交最新 DOM 与状态。
+   * 边界条件：仅做全局兼容态检查，不影响批次沉降主逻辑。
    * 异常行为：无。
    */
-  const requestCompletionCheck = useCallback(() => {
+  const requestGlobalIdleCheck = useCallback(() => {
     requestAnimationFrame(() => {
-      checkAllWorkDone();
+      checkGlobalIdleState();
     });
-  }, [checkAllWorkDone]);
+  }, [checkGlobalIdleState]);
 
   useEffect(() => {
-    updateBubbleIdleFlag(true);
+    updateGlobalBubbleIdleFlag(true);
     return () => {
-      updateBubbleIdleFlag(true);
+      updateGlobalBubbleIdleFlag(true);
     };
-  }, [updateBubbleIdleFlag]);
+  }, [updateGlobalBubbleIdleFlag]);
 
-  // 同步最新状态到 ref，方便在异步循环中读取最新气泡数量
   useEffect(() => {
-    bubblesRef.current = bubbles;
-  }, [bubbles]);
+    /**
+     * 处理“流式输出结束”信号。
+     * 做什么：把某个 batch 标记为“不会再有新气泡进入”。
+     * 为什么这样做：近期记忆提交必须同时满足“流已结束”与“气泡已沉降”。
+     * 输入输出：输入 batchId；输出为批次状态切换。
+     * 边界条件：如果结束信号到来时该批次已经没有任何活跃气泡，则立即进入可提交状态。
+     * 异常行为：无。
+     */
+    const handleStreamFinished = (event: Event) => {
+      const customEvent = event as CustomEvent<BubbleStreamFinishedEventDetail>;
+      const batchId = customEvent.detail?.batchId;
+      if (!batchId) {
+        return;
+      }
+
+      const batch = ensureBatchRuntime(batchId);
+      batch.finishedSignalReceived = true;
+      batch.lastUpdatedAt = Date.now();
+
+      settleBatchIfReady(batchId, 'stream-finished');
+      checkGlobalIdleState();
+    };
+
+    /**
+     * 处理“近期记忆已提交”确认信号。
+     * 做什么：把批次从 ready-to-commit 推进到 committed，并尝试清理运行时状态。
+     * 为什么这样做：只有外部真正写入 recentQA 成功后，该批次生命周期才算闭环。
+     * 输入输出：输入 batchId；输出为批次终态切换。
+     * 边界条件：如果批次已被提前清理，则安全忽略。
+     * 异常行为：无。
+     */
+    const handleRecentMemoryCommitted = (event: Event) => {
+      const customEvent = event as CustomEvent<RecentMemoryCommittedEventDetail>;
+      const batchId = customEvent.detail?.batchId;
+      if (!batchId) {
+        return;
+      }
+
+      const batch = batchRuntimeMapRef.current.get(batchId);
+      if (!batch) {
+        return;
+      }
+
+      batch.committed = true;
+      batch.lastUpdatedAt = Date.now();
+      setBatchStage(batch, 'committed', customEvent.detail?.reason ?? 'recent-memory-committed');
+      cleanupBatchIfTerminal(batchId);
+      checkGlobalIdleState();
+    };
+
+    window.addEventListener(BUBBLE_EVENT_NAME.STREAM_FINISHED, handleStreamFinished);
+    window.addEventListener(BUBBLE_EVENT_NAME.RECENT_MEMORY_COMMITTED, handleRecentMemoryCommitted);
+
+    return () => {
+      window.removeEventListener(BUBBLE_EVENT_NAME.STREAM_FINISHED, handleStreamFinished);
+      window.removeEventListener(BUBBLE_EVENT_NAME.RECENT_MEMORY_COMMITTED, handleRecentMemoryCommitted);
+    };
+  }, [checkGlobalIdleState, cleanupBatchIfTerminal, ensureBatchRuntime, settleBatchIfReady, setBatchStage]);
 
   const registerBubble = useCallback((el: HTMLDivElement | null, id: number) => {
     if (!el) {
@@ -136,190 +469,267 @@ export const useBubble = () => {
   }, []);
 
   /**
-   * 触发等待队列继续执行
-   * 当有气泡自然消亡后，调用此函数唤醒被阻塞的渲染任务
+   * 触发等待队列继续执行。
+   * 做什么：当有气泡被真正移除后，唤醒因屏幕容量限制而阻塞的渲染任务。
+   * 为什么这样做：保证最大气泡数量限制下的串行推进。
+   * 输入输出：无。
+   * 边界条件：没有等待者时直接返回。
+   * 异常行为：无。
    */
   const notifySpaceAvailable = useCallback(() => {
-    if (spaceAvailableResolversRef.current.length > 0) {
-      const resolve = spaceAvailableResolversRef.current.shift();
-      resolve?.();
-    }
+    const resolve = spaceAvailableResolversRef.current.shift();
+    resolve?.();
   }, []);
 
   /**
-   * 处理待消失队列
-   * 确保气泡按照渲染顺序依次消失：
-   * - 只有队列中 renderIndex 最小（最早渲染）的气泡才能执行消失
-   * - 消失完成后，继续检查队列中下一个气泡是否可以消失
+   * 把可见气泡推进到“等待消失”阶段。
+   * 做什么：TTL 到期后不立即删除，而是先进入等待消失队列。
+   * 为什么这样做：需要保证多个气泡严格按 renderIndex 先后退场。
+   * 输入输出：输入气泡 id、batchId、renderIndex；输出为阶段迁移副作用。
+   * 边界条件：只有当前仍处于 visible 阶段的气泡才会被推进。
+   * 异常行为：无。
+   */
+  const scheduleRemoval = useCallback((id: number, batchId: string, renderIndex: number) => {
+    const batch = batchRuntimeMapRef.current.get(batchId);
+    const targetBubble = bubblesRef.current.find((bubble) => bubble.id === id);
+
+    if (!batch || !targetBubble || targetBubble.stage !== 'visible') {
+      return;
+    }
+
+    batch.visibleCount = Math.max(0, batch.visibleCount - 1);
+    batch.awaitingRemovalCount += 1;
+    batch.lastUpdatedAt = Date.now();
+
+    const nextBubbles = bubblesRef.current.map((bubble) =>
+      bubble.id === id
+        ? { ...bubble, stage: 'awaiting-removal' as const }
+        : bubble
+    );
+    syncBubblesState(nextBubbles);
+
+    pendingRemovalQueueRef.current.push({ id, batchId, renderIndex });
+    settleBatchIfReady(batchId, 'bubble-waiting-removal');
+    requestGlobalIdleCheck();
+  }, [requestGlobalIdleCheck, settleBatchIfReady, syncBubblesState]);
+
+  /**
+   * 处理待消失队列。
+   * 做什么：让最早渲染的气泡优先进入离场动画，直到完全移除。
+   * 为什么这样做：保持视觉顺序与语义顺序一致，避免后出现的气泡先消失。
+   * 输入输出：无输入；输出为气泡阶段流转副作用。
+   * 边界条件：同一时刻只允许一个气泡执行离场动画。
+   * 异常行为：无。
    */
   const processRemovalQueue = useCallback(function processRemovalQueueImpl() {
-    // 如果当前有气泡正在执行消失动画，则不处理
     if (removalInProgressRef.current) {
       return;
     }
 
-    // 按 renderIndex 排序，确保最早渲染的气泡排在队列头部
     pendingRemovalQueueRef.current.sort((a, b) => a.renderIndex - b.renderIndex);
 
-    // 检查队列头部气泡是否可以消失
     if (pendingRemovalQueueRef.current.length === 0) {
+      requestGlobalIdleCheck();
       return;
     }
 
     const nextRemoval = pendingRemovalQueueRef.current[0];
-    
-    // 检查该气泡是否是当前所有活跃气泡中 renderIndex 最小的
-    // 即：只有最早渲染的气泡才能先消失
-    const activeBubbles = bubblesRef.current.filter(b => !b.leaving);
-    const minRenderIndex = Math.min(...activeBubbles.map(b => b.renderIndex));
-    
-    if (nextRemoval.renderIndex !== minRenderIndex) {
-      // 队列头部的气泡不是最早渲染的，需要等待更早的气泡先消失
+    const onScreenBubbles = bubblesRef.current.filter((bubble) => bubble.stage !== 'leaving');
+
+    if (onScreenBubbles.length === 0) {
+      requestGlobalIdleCheck();
       return;
     }
 
-    // 标记正在执行消失动画
+    const minRenderIndex = Math.min(...onScreenBubbles.map((bubble) => bubble.renderIndex));
+    if (nextRemoval.renderIndex !== minRenderIndex) {
+      return;
+    }
+
+    pendingRemovalQueueRef.current.shift();
     removalInProgressRef.current = true;
 
-    // 从待消失队列中移除
-    pendingRemovalQueueRef.current.shift();
+    const batch = batchRuntimeMapRef.current.get(nextRemoval.batchId);
+    const targetBubble = bubblesRef.current.find((bubble) => bubble.id === nextRemoval.id);
 
-    // 执行消失逻辑
-    setBubbles(prev => {
-      const target = prev.find(b => b.id === nextRemoval.id);
-      if (target && !target.leaving) {
-        // 消失动画结束后（300ms），真正移除 DOM
-        setTimeout(() => {
-          setBubbles(current => {
-            const nextBubbles = current.filter(b => b.id !== nextRemoval.id);
-            bubblesRef.current = nextBubbles;
-            return nextBubbles;
-          });
-          bubbleElsRef.current.delete(nextRemoval.id);
-          
-          // 消失动画完成，标记为可处理下一个
-          removalInProgressRef.current = false;
-          
-          // 唤醒可能在等待的下一个气泡渲染
-          notifySpaceAvailable();
-          
-          // 继续处理待消失队列中的下一个气泡
-          processRemovalQueueImpl();
-          requestCompletionCheck();
-        }, 300);
-        
-        const nextBubbles = prev.map(b => b.id === nextRemoval.id ? { ...b, leaving: true } : b);
-        bubblesRef.current = nextBubbles;
-        return nextBubbles;
+    if (!batch || !targetBubble) {
+      removalInProgressRef.current = false;
+      settleBatchIfReady(nextRemoval.batchId, 'bubble-missing-before-leaving');
+      processRemovalQueueImpl();
+      requestGlobalIdleCheck();
+      return;
+    }
+
+    if (targetBubble.stage === 'awaiting-removal') {
+      batch.awaitingRemovalCount = Math.max(0, batch.awaitingRemovalCount - 1);
+      batch.leavingCount += 1;
+      batch.lastUpdatedAt = Date.now();
+    }
+
+    const leavingBubbles = bubblesRef.current.map((bubble) =>
+      bubble.id === nextRemoval.id
+        ? { ...bubble, leaving: true, stage: 'leaving' as const }
+        : bubble
+    );
+    syncBubblesState(leavingBubbles);
+
+    setTimeout(() => {
+      const runtime = batchRuntimeMapRef.current.get(nextRemoval.batchId);
+      if (runtime) {
+        runtime.leavingCount = Math.max(0, runtime.leavingCount - 1);
+        runtime.removedCount += 1;
+        runtime.lastUpdatedAt = Date.now();
       }
-      return prev;
-    });
-  }, [notifySpaceAvailable, requestCompletionCheck]);
+
+      const nextBubbles = bubblesRef.current.filter((bubble) => bubble.id !== nextRemoval.id);
+      syncBubblesState(nextBubbles);
+      bubbleElsRef.current.delete(nextRemoval.id);
+
+      removalInProgressRef.current = false;
+      notifySpaceAvailable();
+      settleBatchIfReady(nextRemoval.batchId, 'bubble-removed');
+      processRemovalQueueImpl();
+      checkGlobalIdleState();
+      cleanupBatchIfTerminal(nextRemoval.batchId);
+    }, BUBBLE_LEAVING_ANIMATION_MS);
+  }, [checkGlobalIdleState, cleanupBatchIfTerminal, notifySpaceAvailable, requestGlobalIdleCheck, settleBatchIfReady, syncBubblesState]);
 
   /**
-   * 将气泡加入待消失队列
-   * 当气泡 TTL 到期时调用，不立即执行消失，而是等待队列处理
-   */
-  const scheduleRemoval = useCallback((id: number, renderIndex: number) => {
-    // 加入待消失队列
-    pendingRemovalQueueRef.current.push({ id, renderIndex });
-    
-    // 尝试处理队列
-    processRemovalQueue();
-  }, [processRemovalQueue]);
-
-  /**
-   * 异步气泡调度器
-   * 逐个按序渲染气泡，控制弹出间隔，并处理阻塞等待逻辑
-   * 当活跃气泡达到最大数量时，暂停处理队列，等待有气泡自然消亡后继续
+   * 异步气泡调度器。
+   * 做什么：按先后顺序逐个把队列项推进到屏幕上。
+   * 为什么这样做：需要同时控制最大可见数量、最小弹出间隔和位移动画。
+   * 输入输出：无。
+   * 边界条件：调度器是单实例串行运行，避免并发消费同一队列。
+   * 异常行为：异常时通过 finally 回收 processing 标记，避免队列永久卡死。
    */
   const processQueue = useCallback(async () => {
-    // 如果正在处理中，则直接返回，避免并发冲突
     if (isProcessingRef.current) {
       return;
     }
+
     isProcessingRef.current = true;
-    hasPendingWorkRef.current = true;
+    updateGlobalBubbleIdleFlag(false);
 
-    while (queueRef.current.length > 0) {
-      // 1. 检查当前活跃气泡数量（未处于 leaving 状态的）
-      const activeBubbles = bubblesRef.current.filter(b => !b.leaving);
-      
-      // 如果达到最大限制，则阻塞当前循环，等待有气泡被移除后唤醒
-      if (activeBubbles.length >= MAX_BUBBLES) {
-        await new Promise<void>(resolve => {
-          spaceAvailableResolversRef.current.push(resolve);
-        });
-        // 被唤醒后，重新进行 while 循环的条件检查，确保确实有空间
-        continue;
-      }
+    try {
+      while (queueRef.current.length > 0) {
+        const activeBubbles = bubblesRef.current.length;
+        if (activeBubbles >= MAX_BUBBLES) {
+          await new Promise<void>((resolve) => {
+            spaceAvailableResolversRef.current.push(resolve);
+          });
+          continue;
+        }
 
-      const item = queueRef.current.shift()!;
-      const { id, text, duration, renderIndex } = item;
+        const item = queueRef.current.shift();
+        if (!item) {
+          continue;
+        }
 
-      // 2. 记录旧位置 (用于 GSAP 平滑上移动画)
-      const prevPositions = new Map<number, number>();
-      bubbleElsRef.current.forEach((el, key) => {
-        try { prevPositions.set(key, el.getBoundingClientRect().top); } catch (e) { /* ignore */ }
-      });
+        const batch = ensureBatchRuntime(item.batchId);
+        batch.queuedCount = Math.max(0, batch.queuedCount - 1);
+        batch.visibleCount += 1;
+        batch.lastUpdatedAt = Date.now();
 
-      // 3. 添加新气泡（不再执行强制淘汰逻辑）
-      setBubbles(prev => {
-        const nextBubbles = [...prev, { id, text, leaving: false, renderIndex }];
-        bubblesRef.current = nextBubbles;
-        return nextBubbles;
-      });
-
-      // 4. 等待 DOM 更新后执行动画
-      requestAnimationFrame(() => {
+        const prevPositions = new Map<number, number>();
         bubbleElsRef.current.forEach((el, key) => {
-          if (prevPositions.has(key) && key !== id) {
-            const prevTop = prevPositions.get(key)!;
-            const currentTop = el.getBoundingClientRect().top;
-            const dy = prevTop - currentTop;
-            if (Math.abs(dy) > 0.5) {
-              gsap.fromTo(el, { y: dy }, { y: 0, duration: 0.3, ease: "power2.out" });
-            }
+          try {
+            prevPositions.set(key, el.getBoundingClientRect().top);
+          } catch {
+            // DOM 已卸载时忽略，避免打断主链路
           }
         });
-      });
 
-      // 5. 设置当前气泡的自然生命周期 (TTL)
-      // TTL 结束后将气泡加入待消失队列，而不是立即执行消失
-      setTimeout(() => {
-        scheduleRemoval(id, renderIndex);
-      }, duration);
+        syncBubblesState([
+          ...bubblesRef.current,
+          {
+            id: item.id,
+            batchId: item.batchId,
+            text: item.text,
+            leaving: false,
+            renderIndex: item.renderIndex,
+            stage: 'visible',
+          },
+        ]);
 
-      // 6. 强制等待一个最小弹出间隔，防止气泡一次性全部弹出
-      await new Promise(resolve => setTimeout(resolve, 800));
+        requestAnimationFrame(() => {
+          bubbleElsRef.current.forEach((el, key) => {
+            if (prevPositions.has(key) && key !== item.id) {
+              const prevTop = prevPositions.get(key)!;
+              const currentTop = el.getBoundingClientRect().top;
+              const dy = prevTop - currentTop;
+              if (Math.abs(dy) > 0.5) {
+                gsap.fromTo(el, { y: dy }, { y: 0, duration: 0.3, ease: 'power2.out' });
+              }
+            }
+          });
+        });
+
+        setTimeout(() => {
+          scheduleRemoval(item.id, item.batchId, item.renderIndex);
+          processRemovalQueue();
+        }, item.duration);
+
+        await new Promise((resolve) => setTimeout(resolve, MIN_BUBBLE_GAP_MS));
+      }
+    } finally {
+      isProcessingRef.current = false;
+      requestGlobalIdleCheck();
     }
-
-    isProcessingRef.current = false;
-    hasPendingWorkRef.current = false;
-    requestCompletionCheck();
-  }, [requestCompletionCheck, scheduleRemoval]);
+  }, [ensureBatchRuntime, processRemovalQueue, requestGlobalIdleCheck, scheduleRemoval, syncBubblesState, updateGlobalBubbleIdleFlag]);
 
   /**
-   * 显示气泡
-   * @param text 气泡文本内容
-   * @param duration 可选的自定义存活时间（毫秒）
+   * 显示气泡。
+   * 做什么：创建一个属于指定 batch 的气泡并推进队列。
+   * 为什么这样做：回答批次和气泡生命周期必须一一对应，近期记忆才能精确提交。
+   * 输入输出：输入文本、时长和批次 ID；无返回值。
+   * 边界条件：未提供 batchId 时会落入 legacy 批次，仅用于兼容旧链路，不参与近期记忆提交。
+   * 异常行为：空文本会被上层过滤，不在此重复兜底。
    */
-  const showBubble = useCallback((text: string, duration?: number) => {
+  const showBubble = useCallback((text: string, duration?: number, batchId?: string) => {
+    const normalizedBatchId = batchId?.trim() || LEGACY_BUBBLE_BATCH_ID;
     const id = bubbleIdCounter.current++;
     const renderIndex = renderIndexCounter.current++;
-    
-    // 新气泡任务开始时，重置完成标记并立刻更新全局空闲态。
-    completedRef.current = false;
-    updateBubbleIdleFlag(false);
-
-    // 动态 TTL 计算策略：
-    // 基础存活时间 2000ms，每个字符增加 250ms 的阅读时间。
-    // 确保文本越长，气泡展示的时间越久，严格成正比。
     const calcDuration = duration ?? Math.max(2000, text.length * 250);
-    
-    queueRef.current.push({ id, text, duration: calcDuration, renderIndex });
+
+    const batch = ensureBatchRuntime(normalizedBatchId);
+    batch.totalCreated += 1;
+    batch.queuedCount += 1;
+    batch.lastUpdatedAt = Date.now();
+
+    // 新气泡进入时，代表全局工作重新开始
+    allCompleteDispatchedRef.current = false;
+    updateGlobalBubbleIdleFlag(false);
+
+    queueRef.current.push({
+      id,
+      batchId: normalizedBatchId,
+      text,
+      duration: calcDuration,
+      renderIndex,
+    });
+
+    if (!batch.finishedSignalReceived) {
+      setBatchStage(batch, 'collecting', 'bubble-enqueued');
+    }
+
     processQueue();
-  }, [processQueue, updateBubbleIdleFlag]);
+  }, [ensureBatchRuntime, processQueue, setBatchStage, updateGlobalBubbleIdleFlag]);
+
+  useEffect(() => {
+    const handleShowBubble = (event: Event) => {
+      const customEvent = event as CustomEvent<ShowBubbleEventDetail>;
+      const { text, duration, batchId } = customEvent.detail ?? {};
+      if (!text || !text.trim()) {
+        return;
+      }
+      showBubble(text, duration, batchId);
+    };
+
+    window.addEventListener(BUBBLE_EVENT_NAME.SHOW, handleShowBubble);
+    return () => {
+      window.removeEventListener(BUBBLE_EVENT_NAME.SHOW, handleShowBubble);
+    };
+  }, [showBubble]);
 
   return { bubbles, showBubble, registerBubble };
 };
