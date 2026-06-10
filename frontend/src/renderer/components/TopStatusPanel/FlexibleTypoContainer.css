@@ -3,39 +3,129 @@
 .flexible-typo-container {
   position: relative;
   width: 100%;
-  max-width: 360px;
+  max-width: 240px; /* 收窄以适配状态面板宽度 */
   max-height: 48px;
-  overflow: hidden;
-  
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(0,0,0,1) 20%,
-    rgba(0,0,0,1) 80%,
-    transparent 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(0,0,0,1) 20%,
-    rgba(0,0,0,1) 80%,
-    transparent 100%
-  );
-
+  overflow: visible; /* 允许全息色散边缘轻微溢出 */
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  /* 移除柔和掩码，保证全息断层的切割锐利感 */
 }
 
 .flexible-text-block {
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   word-wrap: break-word;
   text-align: center;
-  /* Enhanced inner glow for text */
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4), 0 2px 4px rgba(0, 0, 0, 0.8);
   position: relative;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  
+  /* 全息通道色散分离：左青右洋红 */
+  text-shadow: 
+    -1px 0 1px rgba(0, 255, 204, 0.6), 
+    1px 0 1px rgba(255, 0, 128, 0.6), 
+    0 0 6px rgba(255, 255, 255, 0.4);
+}
+
+/* 全息断层与量子微扰特效 (Glitch Effect) */
+.flexible-text-block.shimmer {
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  color: rgba(255, 255, 255, 0.95);
+  animation: hologram-glitch 4s infinite linear;
+}
+
+/* 针对错误状态的红色断层抖动特效 */
+.flexible-text-block.error-glow {
+  color: #ff4d4f;
+  text-shadow: 
+    -1px 0 1px rgba(255, 0, 0, 0.8), 
+    1px 0 1px rgba(255, 255, 0, 0.8), 
+    0 0 12px rgba(255, 77, 79, 0.5);
+  animation: pulse-error-glitch 3s infinite linear;
+}
+
+/* 在极速模式下文字拉长模糊与高频振动 */
+.flexible-text-block.warp-text {
+  font-style: italic;
+  letter-spacing: 3px;
+  text-shadow: 
+    -2px 0 1px rgba(0, 255, 204, 0.8), 
+    2px 0 1px rgba(255, 0, 128, 0.8), 
+    0 0 15px rgba(255, 255, 255, 0.8);
+  animation: warp-vibrate 0.1s infinite linear;
+}
+
+@keyframes hologram-glitch {
+  0%, 93% {
+    transform: translate(0, 0) skewX(0deg);
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
+  }
+  94% {
+    transform: translate(-2px, 0) skewX(10deg);
+    clip-path: inset(10% 0 40% 0);
+    opacity: 0.8;
+    filter: hue-rotate(-20deg) drop-shadow(0 0 6px rgba(0,255,204,0.6));
+  }
+  95% {
+    transform: translate(2px, 0) skewX(-15deg);
+    clip-path: inset(40% 0 20% 0);
+    opacity: 0.9;
+    filter: hue-rotate(20deg) drop-shadow(0 0 6px rgba(255,0,128,0.6));
+  }
+  96% {
+    transform: translate(0, 0) skewX(0deg);
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
+  }
+  97% {
+    transform: translate(-1px, 0) skewX(5deg);
+    clip-path: inset(60% 0 10% 0);
+    opacity: 0.8;
+  }
+  98%, 100% {
+    transform: translate(0, 0) skewX(0deg);
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
+  }
+}
+
+@keyframes pulse-error-glitch {
+  0%, 85% {
+    transform: translate(0, 0);
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  86% {
+    transform: translate(-3px, 1px) skewX(15deg);
+    clip-path: inset(20% 0 30% 0);
+    opacity: 0.7;
+  }
+  88% {
+    transform: translate(3px, -1px) skewX(-10deg);
+    clip-path: inset(50% 0 10% 0);
+    opacity: 0.9;
+  }
+  90%, 100% {
+    transform: translate(0, 0);
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+@keyframes warp-vibrate {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-1px, 0); }
+  50% { transform: translate(1px, 0); }
+  75% { transform: translate(0, -1px); }
+  100% { transform: translate(0, 1px); }
 }

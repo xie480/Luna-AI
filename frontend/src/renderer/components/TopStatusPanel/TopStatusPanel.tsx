@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSystemStore } from '../../stores/systemStore';
 import { useVisualStatusQueue, VisualStateItem } from '../../stores/visualStatusQueueStore';
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
@@ -117,7 +118,33 @@ export const TopStatusPanel: React.FC = () => {
   }, [connectionStatus, enqueue]);
 
   return (
-    <div className="top-status-panel">
+    <div className={`top-status-panel theme-${currentVisualState?.colorTheme || 'blue'}`}>
+      {/*
+        主题环境光晕 — 在文字下方柔和的呼吸发光光晕
+        与轨道特效完美嵌套，使用独立形变周期
+      */}
+      <AnimatePresence mode="wait">
+        {currentVisualState?.text && (
+          <motion.div
+            key={`aura-${currentVisualState.colorTheme}`}
+            className="status-aura-glow"
+            initial={{ opacity: 0, scaleX: 0.8, scaleY: 0.5 }}
+            animate={{ 
+              opacity: [0.3, 0.8, 0.2, 0.9, 0.4], 
+              scaleX: [0.85, 1.05, 0.9, 1.1, 0.85], 
+              scaleY: [0.6, 1.0, 0.7, 0.9, 0.6] 
+            }}
+            exit={{ opacity: 0, scaleX: 0.8, scaleY: 0.5, transition: { duration: 0.3 } }}
+            transition={{
+              duration: 3.5,
+              times: [0, 0.15, 0.4, 0.75, 1],
+              ease: "circInOut",
+              repeat: Infinity,
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <OrbitalArcContainer
         currentVisualState={currentVisualState}
         queueLength={queue.length}

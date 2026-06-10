@@ -2,7 +2,7 @@
 
 .top-status-panel {
   position: absolute;
-  top: -40px;
+  top: -60px; /* 控制整体垂直高度，越小越靠上 */
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
@@ -12,6 +12,38 @@
   align-items: center;
   width: 400px; 
   height: 160px;
+  transition: filter 0.4s ease;
+}
+
+/* ===== 文字环境光晕 ===== */
+
+/* 文本背后的环境光晕呼吸特效 */
+.status-aura-glow {
+  position: absolute;
+  top: 92px; /* 精确对齐文字的物理中心，使其与外圈星轨的中心重合 */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 140px; /* 收紧光晕宽度，使其包裹在文字周围而不是散到轨道外 */
+  height: 20px; /* 降低高度以匹配文字的紧凑感 */
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: screen;
+  filter: blur(10px); /* 增加模糊度，使其更像环境光而非实体轮廓 */
+}
+
+/* 根据主题应用不同颜色的环境光晕 */
+.top-status-panel.theme-blue .status-aura-glow {
+  background: radial-gradient(ellipse, rgba(0, 162, 255, 0.4) 0%, transparent 60%);
+}
+.top-status-panel.theme-cyan .status-aura-glow {
+  background: radial-gradient(ellipse, rgba(0, 255, 204, 0.4) 0%, transparent 60%);
+}
+.top-status-panel.theme-purple .status-aura-glow {
+  background: radial-gradient(ellipse, rgba(160, 80, 255, 0.4) 0%, transparent 60%);
+}
+.top-status-panel.theme-red .status-aura-glow {
+  background: radial-gradient(ellipse, rgba(255, 77, 79, 0.45) 0%, transparent 60%);
 }
 
 .orbital-arc-container {
@@ -21,13 +53,17 @@
   justify-content: center;
 }
 
+/* ===== 文本容器层 — 全息断层对齐 ===== */
+
 .orbital-text-layer {
   position: absolute;
-  top: 96px; /* Just below the core star which sits at y=80 */
+  top: 88px; /* 调整位置使文字与内环星轨的中心水平对称 */
   left: 50%;
   transform: translateX(-50%);
-  width: 100%;
+  width: 240px; /* 限制宽度防止太长溢出 */
   display: flex;
   justify-content: center;
   z-index: 5;
+  overflow: visible;
+  /* 移除柔和呼吸浮动与扫掠特效，由 FlexibleTypoContainer 内部的 Glitch 动画接管 */
 }

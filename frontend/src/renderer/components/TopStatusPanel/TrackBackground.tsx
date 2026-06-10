@@ -1,3 +1,4 @@
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StarPhase } from './StarEntity';
 import './TrackBackground.css';

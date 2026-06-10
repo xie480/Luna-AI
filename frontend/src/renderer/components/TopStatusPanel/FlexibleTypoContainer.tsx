@@ -10,7 +10,17 @@ interface FlexibleTypoContainerProps {
 
 export const FlexibleTypoContainer: React.FC<FlexibleTypoContainerProps> = ({ currentText, phase }) => {
   const isWarp = phase === 'RUNNING_WARP';
+  const isError = phase === 'ERROR';
   
+  let textClassName = 'flexible-text-block';
+  if (isError) {
+    textClassName += ' error-glow';
+  } else if (isWarp) {
+    textClassName += ' warp-text';
+  } else if (phase === 'RUNNING_NORMAL' || phase === 'CONCURRENT_LLM') {
+    textClassName += ' shimmer';
+  }
+
   const textRollVariants = {
     initial: { 
       opacity: 0, 
@@ -42,7 +52,7 @@ export const FlexibleTypoContainer: React.FC<FlexibleTypoContainerProps> = ({ cu
         {currentText && (
           <motion.div
             key={currentText}
-            className="flexible-text-block"
+            className={textClassName}
             variants={textRollVariants}
             initial="initial"
             animate="enter"
