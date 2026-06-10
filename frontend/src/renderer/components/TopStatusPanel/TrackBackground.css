@@ -1,0 +1,40 @@
+/* src/renderer/components/TopStatusPanel/TrackBackground.css */
+.track-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.track-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.track-path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 2;
+  transition: stroke-dasharray 0.3s ease, opacity 0.5s ease;
+}
+
+.track-path.idle {
+  opacity: 0.05;
+}
+
+.track-path.running {
+  opacity: 0.3;
+}
+
+.track-path.error {
+  opacity: 0.6;
+  stroke: #FF3333;
+  stroke-dasharray: 4 4; /* 带有毛刺感的虚线 */
+}
