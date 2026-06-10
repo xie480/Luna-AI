@@ -16,25 +16,21 @@
   width: 100%;
   height: 100%;
   overflow: visible;
+  /* Add drop-shadow for the track's ambient glow */
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.15));
 }
 
 .track-path {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
-  transition: stroke-dasharray 0.3s ease, opacity 0.5s ease;
+  stroke-linecap: round;
+  transition: stroke 0.5s ease, opacity 0.8s ease;
 }
 
-.track-path.idle {
-  opacity: 0.05;
-}
-
-.track-path.running {
-  opacity: 0.3;
-}
-
-.track-path.error {
-  opacity: 0.6;
-  stroke: #FF3333;
-  stroke-dasharray: 4 4; /* 带有毛刺感的虚线 */
+.track-path-glow {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  filter: blur(6px);
+  transition: stroke 0.5s ease, opacity 0.8s ease;
 }

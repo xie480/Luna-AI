@@ -1,6 +1,8 @@
+/* src/renderer/components/TopStatusPanel/TopStatusPanel.css */
+
 .top-status-panel {
   position: absolute;
-  top: 20px;
+  top: -40px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
@@ -8,25 +10,22 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 400px; /* 轨道容器宽度 */
-  height: 80px; /* 轨道容器高度 */
+  width: 400px; 
+  height: 160px;
 }
 
 .orbital-arc-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
 }
 
-/* 文字层定位，使其位于弧线内侧或中心 */
 .orbital-text-layer {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 96px; /* Just below the core star which sits at y=80 */
+  left: 50%;
+  transform: translateX(-50%);
   width: 100%;
   display: flex;
   justify-content: center;

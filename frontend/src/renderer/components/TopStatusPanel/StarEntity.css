@@ -1,22 +1,23 @@
 /* src/renderer/components/TopStatusPanel/StarEntity.css */
 .star-entity-container {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 80px; /* position it correctly on the track, the track middle is y=80 */
+    left: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     z-index: 10;
 }
 
 .star-core {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background-color: #ffffff;
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
     position: relative;
     z-index: 2;
 }
@@ -32,4 +33,5 @@
     border: 2px solid rgba(255, 255, 255, 0.5);
     z-index: 1;
     pointer-events: none;
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
 }

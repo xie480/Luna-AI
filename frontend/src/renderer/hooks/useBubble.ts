@@ -666,7 +666,8 @@ export const useBubble = () => {
 
         setTimeout(() => {
           scheduleRemoval(item.id, item.batchId, item.renderIndex);
-          processRemovalQueue();
+          // 使用事件派发来解决 Hook 循环依赖，确保能够触发 processRemovalQueue
+          window.dispatchEvent(new CustomEvent('luna:internal:trigger-removal'));
         }, item.duration);
 
         await new Promise((resolve) => setTimeout(resolve, MIN_BUBBLE_GAP_MS));
@@ -675,7 +676,18 @@ export const useBubble = () => {
       isProcessingRef.current = false;
       requestGlobalIdleCheck();
     }
-  }, [ensureBatchRuntime, processRemovalQueue, requestGlobalIdleCheck, scheduleRemoval, syncBubblesState, updateGlobalBubbleIdleFlag]);
+  }, [ensureBatchRuntime, requestGlobalIdleCheck, scheduleRemoval, syncBubblesState, updateGlobalBubbleIdleFlag]);
+
+  // 挂载内部事件监听器，打通从 processQueue -> scheduleRemoval -> processRemovalQueue 的通路
+  useEffect(() => {
+    const handleTriggerRemoval = () => {
+      processRemovalQueue();
+    };
+    window.addEventListener('luna:internal:trigger-removal', handleTriggerRemoval as EventListener);
+    return () => {
+      window.removeEventListener('luna:internal:trigger-removal', handleTriggerRemoval as EventListener);
+    };
+  }, [processRemovalQueue]);
 
   /**
    * 显示气泡。
