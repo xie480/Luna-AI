@@ -8,6 +8,7 @@ export type StarPhase = 'IDLE' | 'RUNNING_NORMAL' | 'RUNNING_WARP' | 'CONCURRENT
 interface StarEntityProps {
   currentVisualState: VisualStateItem | null;
   queueLength: number;
+  overrideColorTheme?: string;
 }
 
 const themeColors = {
@@ -15,6 +16,7 @@ const themeColors = {
   purple: '#a855f7',
   red: '#ef4444',
   cyan: '#06b6d4',
+  gray: '#999999',
   default: '#ffffff'
 };
 
@@ -31,13 +33,13 @@ export const determinePhase = (state: VisualStateItem | null, queueLength: numbe
 };
 
 const starVariants = {
-  IDLE: {
+  IDLE: (customColor: string) => ({
     scale: 0.2,
-    opacity: 0.1,
-    backgroundColor: themeColors.default,
-    boxShadow: `0 0 0px ${themeColors.default}`,
+    opacity: 0.15,
+    backgroundColor: customColor,
+    boxShadow: `0 0 6px ${customColor}`,
     transition: { duration: 4, repeat: Infinity, repeatType: "mirror" as const, ease: "easeInOut" }
-  },
+  }),
   RUNNING_NORMAL: (customColor: string) => ({
     scale: 1,
     opacity: 0.9,
@@ -82,9 +84,10 @@ const rippleVariants = {
   })
 };
 
-export const StarEntity: React.FC<StarEntityProps> = ({ currentVisualState, queueLength }) => {
+export const StarEntity: React.FC<StarEntityProps> = ({ currentVisualState, queueLength, overrideColorTheme }) => {
   const phase = determinePhase(currentVisualState, queueLength);
-  const color = getColorTheme(currentVisualState?.colorTheme);
+  const effectiveColorTheme = currentVisualState?.colorTheme || overrideColorTheme;
+  const color = getColorTheme(effectiveColorTheme);
 
   const [rippleKey, setRippleKey] = useState(0);
 

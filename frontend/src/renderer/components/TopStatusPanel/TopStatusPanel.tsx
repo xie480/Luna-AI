@@ -1,103 +1,53 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSystemStore } from '../../stores/systemStore';
-import { useVisualStatusQueue, VisualStateItem } from '../../stores/visualStatusQueueStore';
-import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
-import { CHAT_WORKFLOW_NODE_TYPE, CHAT_NODE_STATUS } from '../../../shared/enum';
+import { useVisualStatusQueue } from '../../stores/visualStatusQueueStore';
 import { OrbitalArcContainer } from './OrbitalArcContainer';
 import './TopStatusPanel.css';
 
 /**
- * 依据全息空间美学，将后端节点映射为极具科技感的前端状态描述
+ * TopStatusPanel — 顶部状态信息面板。
+ *
+ * 做什么：渲染聊天工作流的状态通知（由后端 ChatStatusPublisher 通过 EVT_CHAT_STATUS 推送）。
+ *         状态文案集中由后端 _CHAT_STATUS_TEXTS 管理，前端仅根据 stage/state 渲染对应 display_text。
+ *         同时监听连接状态变化：
+ *           - connected → disconnected：显示断连错误提示（红）
+ *           - disconnected → connected：回到空闲态"深空潜伏"
+ *
+ * 空闲态"深空潜伏"视觉表现（详见 sse_chat_status_holographic_arc_impl.md §1.1）：
+ *   - 根据当前是否已连接，使用不同的透明度和呼吸频率。已连接时为极微弱蓝色呼吸，未连接且无错误时为静默。
+ *   - TrackBackground 轨道 opacity 降至 0.05，如同隐匿在暗物质中的星轨
+ *   - StarEntity 主星收缩为 scale: 0.2 的白矮星，以 4s 周期深长呼吸
+ *   - 文本容器完全折叠（无文字显示）
+ *
+ * 为什么这样做：状态文案必须由后端按 node 粒度精准推送，前端不应在前端硬编码或自行拼装状态文案。
+ * 边界条件：无活跃计划且连接正常时状态栏保持在"深空潜伏"空闲态。
  */
-const mapNodeToVisualState = (nodeType: string, status: string): Partial<VisualStateItem> | null => {
-  if (status === CHAT_NODE_STATUS.RUNNING || status === CHAT_NODE_STATUS.SUCCEEDED) {
-    switch (nodeType) {
-      case CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION:
-        return { stage: 'INPUT_RECONSTRUCTION', text: '正在重构意图模型...', colorTheme: 'purple' };
-      case CHAT_WORKFLOW_NODE_TYPE.SESSION_CONTEXT_LOAD:
-        return { stage: 'SESSION_CONTEXT_LOAD', text: '同步会话上下文...', colorTheme: 'blue' };
-      case CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_RAG:
-        return { stage: 'LONG_TERM_MEMORY_RAG', text: '下潜长期记忆层...', colorTheme: 'cyan' };
-      case CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_INJECTION:
-        return { stage: 'USER_PROFILE_INJECTION', text: '匹配用户潜意识画像...', colorTheme: 'purple' };
-      case CHAT_WORKFLOW_NODE_TYPE.KNOWLEDGE_RAG:
-        return { stage: 'KNOWLEDGE_RAG', text: '链接外部知识库矩阵...', colorTheme: 'blue' };
-      case CHAT_WORKFLOW_NODE_TYPE.CONTEXT_GOVERNANCE:
-        return { stage: 'CONTEXT_GOVERNANCE', text: '压缩高维冗余数据...', colorTheme: 'purple' };
-      case CHAT_WORKFLOW_NODE_TYPE.PROMPT_ASSEMBLY:
-        return { stage: 'PROMPT_ASSEMBLY', text: '正在装配思维流...', colorTheme: 'cyan' };
-      case CHAT_WORKFLOW_NODE_TYPE.MAIN_CHAT_LLM:
-        return { stage: 'MAIN_CHAT_LLM', text: '云端神经计算供能中...', colorTheme: 'cyan' };
-      case CHAT_WORKFLOW_NODE_TYPE.RESPONSE_PERSISTENCE:
-        return { stage: 'RESPONSE_PERSISTENCE', text: '持久化记忆锚点...', colorTheme: 'cyan' };
-      case CHAT_WORKFLOW_NODE_TYPE.LONG_TERM_MEMORY_COMPRESSION:
-        return { stage: 'LONG_TERM_MEMORY_COMPRESSION', text: '深层记忆快照压缩...', colorTheme: 'blue' };
-      case CHAT_WORKFLOW_NODE_TYPE.USER_PROFILE_EXTRACTION:
-        return { stage: 'USER_PROFILE_EXTRACTION', text: '提炼画像潜特征...', colorTheme: 'purple' };
-      case CHAT_WORKFLOW_NODE_TYPE.POSTPROCESS_COMMIT:
-        return { stage: 'POSTPROCESS_COMMIT', text: '同步后处理事务...', colorTheme: 'cyan' };
-      case CHAT_WORKFLOW_NODE_TYPE.FINALIZE:
-        return { stage: 'FINALIZE', text: '工作流坍缩完成...', colorTheme: 'cyan' };
-      default:
-        return { stage: nodeType, text: '解析信号参数...', colorTheme: 'blue' };
-    }
-  } else if (status === CHAT_NODE_STATUS.FAILED || status === CHAT_NODE_STATUS.DEGRADED) {
-    return { stage: nodeType, text: '警告：神经链路遭遇异常扰动', colorTheme: 'red', state: 'ERROR' };
-  }
-  return null;
-};
-
 export const TopStatusPanel: React.FC = () => {
   const connectionStatus = useSystemStore((state) => state.connectionStatus);
-  const enqueue = useVisualStatusQueue(state => state.enqueue);
   const { currentVisualState, queue } = useVisualStatusQueue();
-  const activePlan = useChatWorkflowStore(state => state.activePlan);
-  const nodesByInteractionId = useChatWorkflowStore(state => state.nodesByInteractionId);
+  
+  // 使用本地状态跟踪是否应显示未连接的空闲态，避免与断连报错冲突
+  const [idleTheme, setIdleTheme] = useState<'blue' | 'gray'>('gray');
 
+  // 记录上一次连接状态，用于判断是否发生了 "connected ↔ disconnected" 的跃迁
+  const prevConnectionRef = useRef<string>(connectionStatus);
+
+  // 监听连接状态跃迁
   useEffect(() => {
-    if (!activePlan) return;
+    const prev = prevConnectionRef.current;
+    prevConnectionRef.current = connectionStatus;
 
-    const interactionNodes = nodesByInteractionId[activePlan.interactionId];
-    if (!interactionNodes || interactionNodes.length === 0) {
-      enqueue({
-        id: `plan-started-${activePlan.interactionId}-${activePlan.startedAtMs}`,
-        stage: 'PLAN_STARTED',
-        state: 'RUNNING',
-        text: '建立深空连接...',
-        colorTheme: 'blue',
-      });
-      return;
+    if (connectionStatus === 'connected') {
+      setIdleTheme('blue'); // 已连接的空闲态为幽蓝
+    } else {
+      setIdleTheme('gray'); // 未连接的空闲态为灰暗
     }
 
-    const sortedNodes = [...interactionNodes].sort(
-      (a, b) => (b.updatedAtMs || 0) - (a.updatedAtMs || 0)
-    );
-    const latestNode = sortedNodes[0];
-
-    if (!latestNode) return;
-
-    const visualMapping = mapNodeToVisualState(latestNode.nodeType, latestNode.status);
-    if (!visualMapping || !visualMapping.text) return;
-
-    enqueue({
-      id: `${activePlan.interactionId}-${latestNode.nodeType}-${latestNode.status}-${latestNode.updatedAtMs}`,
-      stage: visualMapping.stage || latestNode.nodeType,
-      state: visualMapping.state || (
-        latestNode.status === CHAT_NODE_STATUS.SUCCEEDED
-          ? 'COMPLETED'
-          : 'RUNNING'
-      ),
-      text: visualMapping.text,
-      colorTheme: visualMapping.colorTheme as VisualStateItem['colorTheme'],
-      isTerminal:
-        latestNode.nodeType === CHAT_WORKFLOW_NODE_TYPE.MAIN_CHAT_LLM &&
-        latestNode.status === CHAT_NODE_STATUS.SUCCEEDED,
-    });
-  }, [activePlan, nodesByInteractionId, enqueue]);
-
-  useEffect(() => {
-    if (connectionStatus === 'disconnected') {
+    if (connectionStatus === 'disconnected' && prev === 'connected') {
+      // connected → disconnected 跃迁：显示断连错误提示
+      const { enqueue, clearToIdle } = useVisualStatusQueue.getState();
+      clearToIdle();
       enqueue({
         id: `sys-disconnected-${Date.now()}`,
         stage: 'SYSTEM',
@@ -105,20 +55,21 @@ export const TopStatusPanel: React.FC = () => {
         text: '空间站链接中断，尝试重连...',
         colorTheme: 'red',
       });
-    } else if (connectionStatus === 'connected') {
-      enqueue({
-        id: `sys-connected-${Date.now()}`,
-        stage: 'SYSTEM',
-        state: 'COMPLETED',
-        text: '量子网络已同步',
-        colorTheme: 'cyan',
-        isTerminal: true, 
-      });
+    } else if (connectionStatus === 'connected' && prev !== 'connected') {
+      // disconnected → connected 跃迁：进入"深空潜伏"空闲态
+      // currentVisualState = null 触发 StarEntity 的 IDLE variant 和 TrackBackground 的 0.05 opacity
+      useVisualStatusQueue.getState().clearToIdle();
     }
-  }, [connectionStatus, enqueue]);
+    // 初始挂载时 prev === 'disconnected' && connectionStatus === 'disconnected'，不触发任何操作
+  }, [connectionStatus]);
+
+  // 如果没有活跃状态，则使用空闲态的配置
+  const themeClass = currentVisualState?.colorTheme || idleTheme;
+  // 注入一个额外的 css 类来标识是否处于未连接的空闲态
+  const idleClass = (!currentVisualState && connectionStatus !== 'connected') ? 'idle-disconnected' : '';
 
   return (
-    <div className={`top-status-panel theme-${currentVisualState?.colorTheme || 'blue'}`}>
+    <div className={`top-status-panel theme-${themeClass} ${idleClass}`}>
       {/*
         主题环境光晕 — 在文字下方柔和的呼吸发光光晕
         与轨道特效完美嵌套，使用独立形变周期

@@ -179,7 +179,7 @@ export const COMPRESSION_TRIGGER_REASON = {
  * 做什么：定义后端真实落盘的压缩审计状态。
  * 为什么这样做：避免组件中直接书写 SUCCESS/FAILED/SKIPPED 字符串。
  * 输入输出：无。
- * 边界条件：前端“已降级/强制截断”属于派生展示态，不写入此常量。
+ * 边界条件：前端"已降级/强制截断"属于派生展示态，不写入此常量。
  * 异常行为：无。
  */
 export const COMPRESSION_STATUS = {
@@ -458,6 +458,9 @@ export const WS_MSG_TYPE = {
   RES_CALENDAR_METADATA: "RES_CALENDAR_METADATA",
   REQ_GET_CHAT_HISTORY: "REQ_GET_CHAT_HISTORY",
   RES_CHAT_HISTORY: "RES_CHAT_HISTORY",
+
+  // === Chat 状态通知事件（来自 ChatStatusPublisher） ===
+  EVT_CHAT_STATUS: "EVT_CHAT_STATUS",
 } as const;
 
 /**

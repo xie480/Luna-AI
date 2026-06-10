@@ -13,6 +13,7 @@ const themeColors = {
   purple: '#a855f7',
   red: '#ef4444',
   cyan: '#06b6d4',
+  gray: '#999999',
   default: '#ffffff'
 };
 
@@ -31,7 +32,7 @@ export const TrackBackground: React.FC<TrackBackgroundProps> = ({ phase, colorTh
   };
 
   const getOpacity = () => {
-    if (phase === 'IDLE') return 0.05;
+    if (phase === 'IDLE') return colorTheme === 'gray' ? 0.02 : 0.05;
     if (phase === 'ERROR') return 0.6;
     return 0.4;
   };

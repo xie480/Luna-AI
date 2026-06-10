@@ -52,13 +52,34 @@ export const FlexibleTypoContainer: React.FC<FlexibleTypoContainerProps> = ({ cu
         {currentText && (
           <motion.div
             key={currentText}
-            className={textClassName}
+            className="flexible-text-wrapper"
             variants={textRollVariants}
             initial="initial"
             animate="enter"
             exit="exit"
           >
-            {currentText}
+            <motion.div 
+              className={textClassName}
+              animate={!isError && !isWarp ? { scale: [1, 1.02, 1] } : {}}
+              transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+            >
+              {currentText}
+            </motion.div>
+            
+            {/* 全息扫光元素 (Holographic Sweep) */}
+            {!isError && !isWarp && (
+              <motion.div
+                className="holographic-sweep"
+                initial={{ left: '-50%' }}
+                animate={{ left: '150%' }}
+                transition={{
+                  repeat: Infinity,
+                  duration: 2.5,
+                  ease: "easeInOut",
+                  repeatDelay: 1.5
+                }}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

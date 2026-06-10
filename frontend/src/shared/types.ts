@@ -278,7 +278,7 @@ export interface ChatPlanLifecyclePayload {
 /**
  * 条件边评估载荷。
  * 做什么：描述条件节点是否进入及后端给出的原因。
- * 为什么这样做：前端必须展示“条件已评估 / 未进入原因”，而不是自行推导是否跳过。
+ * 为什么这样做：前端必须展示"条件已评估 / 未进入原因"，而不是自行推导是否跳过。
  * 输入输出：sourceNodeType 为源节点，targetNodeType 为被判断节点。
  * 边界条件：reason 始终由后端提供，前端只能展示不能自造业务判断。
  * 异常行为：无。
@@ -321,3 +321,25 @@ export interface ChatNodeStatusPayload {
  * 异常行为：无。
  */
 export interface ChatPostprocessPayload extends ChatPlanLifecyclePayload {}
+
+/**
+ * EVT_CHAT_STATUS 事件载荷。
+ * 做什么：承载后端通过 ChatStatusPublisher 推送的 Chat 状态通知载荷。
+ * 为什么这样做：前端状态栏根据后端推送的 stage、state 和 display_text
+ *             渲染拟人化文案，而非在前端硬编码。
+ * 边界条件：is_visible=false 时前端不应展示该状态（如跳过/静默通知）；
+ *           is_terminal=true 时前端应清理当前 message_id 的状态展示。
+ */
+export interface ChatStatusPayload {
+  schema_version: string;
+  session_id: string;
+  message_id: string;
+  stage: string;
+  state: string;
+  display_text: string;
+  is_visible: boolean;
+  is_terminal: boolean;
+  sequence: number;
+  timestamp_ms: number;
+  error: string;
+}
