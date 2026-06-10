@@ -46,12 +46,6 @@ _DEFAULT_TOOL_TIMEOUT: float = 30.0
 # 工具执行最大重试次数
 _MAX_TOOL_RETRIES: int = 2
 
-# 输出文本最大长度（字符）
-_MAX_OUTPUT_LENGTH: int = 4096
-
-# 截断标记后缀
-_TRUNCATED_SUFFIX: str = "\n\n[truncated]"
-
 
 # ============================================================
 # 核心执行函数
@@ -201,18 +195,6 @@ async def execute_tool(
             latency_ms=elapsed_ms,
             risk_level=risk_level.value,
         )
-
-    # ============================================================
-    # Phase 3: Post-process — 输出裁剪与审计字段填充
-    # ============================================================
-    if len(last_output_text) > _MAX_OUTPUT_LENGTH:
-        truncated = last_output_text[:_MAX_OUTPUT_LENGTH - len(_TRUNCATED_SUFFIX)] + _TRUNCATED_SUFFIX
-        logger.info(
-            f"MCP 工具输出过长已截断 trace_id={trace_id} "
-            f"tool_name={tool_name} original_length={len(last_output_text)} "
-            f"truncated_length={len(truncated)}"
-        )
-        last_output_text = truncated
 
     logger.info(
         f"MCP 工具执行成功 trace_id={trace_id} "

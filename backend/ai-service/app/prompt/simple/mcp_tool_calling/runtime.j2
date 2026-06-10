@@ -10,4 +10,13 @@
 4. 所有参数值必须与 Schema 中定义的类型一致。
 5. 在 parameter_explanation 中简要说明每个关键参数的提取依据。
 
-请以合法的 JSON 格式输出你的最终参数提取结果。
+必须严格输出以下 JSON 结构：
+
+```json
+{
+  "parameters": "调用当前工具所需的最终参数键值对，严格遵循当前工具的 parameters_schema",
+  "parameter_explanation": "参数提取过程的说明，解释每个参数值是如何从用户输入、上下文或前序结果中提取的",
+  "call_parameters_failed": "布尔值，标记为 true 表示当前工具的参数提取失败，上层应终止工具链",
+  "failure_reason": "参数提取失败的具体原因，call_parameters_failed=true 时必须填写"
+}
+```

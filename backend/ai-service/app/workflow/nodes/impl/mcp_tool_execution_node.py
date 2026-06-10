@@ -35,6 +35,7 @@ from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.constants import (
     CHAT_WORKFLOW_MCP_TOOL_DEGRADED_REASON,
     CHAT_WORKFLOW_MCP_TOOL_NO_TOOL_REASON,
+    ChatMCPAgentPhase,
     ChatWorkflowNodeType,
 )
 from app.workflow.context import ChatMCPToolState, ChatWorkflowState
@@ -115,7 +116,7 @@ class MCPToolExecutionNode(ChatWorkflowNode):
             # ============================================================
             # Agent 1：工具初筛 → 输出有序 ToolChain
             # ============================================================
-            state.mcp_tool_state.agent_phase = "screening"
+            state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.SCREENING.value
 
             chain_plan: ToolChainPlan = await MCPToolScreeningAgent().screen(
                 trace_id=state.runtime.trace_id,
@@ -136,7 +137,7 @@ class MCPToolExecutionNode(ChatWorkflowNode):
             # ============================================================
             # Agent 2 循环执行引擎：遍历工具链逐轮执行
             # ============================================================
-            state.mcp_tool_state.agent_phase = "calling_loop"
+            state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.CALLING_LOOP.value
 
             # 格式化近期对话片段供 Agent 2 使用
             memory_snippets = format_recent_history(state.session_state.recent_messages)
@@ -150,7 +151,7 @@ class MCPToolExecutionNode(ChatWorkflowNode):
 
             # 按工具链顺序逐轮遍历
             for step_index, step in enumerate(chain_plan.tool_chain):
-                state.mcp_tool_state.agent_phase = f"calling_{step_index}"
+                state.mcp_tool_state.agent_phase = f"{ChatMCPAgentPhase.CALLING.value}_{step_index}"
 
                 # ----- ① Agent 2：参数提取（第 2+ 轮注入前序结果）-----
                 calling_agent = MCPToolCallingAgent()
@@ -181,7 +182,7 @@ class MCPToolExecutionNode(ChatWorkflowNode):
                     break
 
                 # ----- ② 工具执行 -----
-                state.mcp_tool_state.agent_phase = f"execution_{step_index}"
+                state.mcp_tool_state.agent_phase = f"{ChatMCPAgentPhase.EXECUTION.value}_{step_index}"
                 exec_result = await execute_tool(
                     tool_name=step.tool_name,
                     parameters=calling_result.parameters,
@@ -224,12 +225,12 @@ class MCPToolExecutionNode(ChatWorkflowNode):
 
             # 工具链全部执行完成
             state.mcp_tool_state.tool_results = tool_results
-            state.mcp_tool_state.agent_phase = "chain_completed"
+            state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.CHAIN_COMPLETED.value
 
             # ============================================================
             # Agent 3：意图对齐（聚合全部工具结果）
             # ============================================================
-            state.mcp_tool_state.agent_phase = "alignment"
+            state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.ALIGNMENT.value
 
             # 将所有工具的原始输出聚合为一个文本
             aggregated_raw_output = "\n---\n".join(
@@ -263,7 +264,7 @@ class MCPToolExecutionNode(ChatWorkflowNode):
                 alignment_result.calibrated_output
             )
             state.mcp_tool_state.quality_issue = alignment_result.quality_issue
-            state.mcp_tool_state.agent_phase = "completed"
+            state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.COMPLETED.value
 
             # 发布完成状态
             await self._publish_chat_status(
@@ -345,7 +346,7 @@ class MCPToolExecutionNode(ChatWorkflowNode):
         """
         state.mcp_tool_state.degraded = True
         state.mcp_tool_state.degraded_reason = reason
-        state.mcp_tool_state.agent_phase = "degraded"
+        state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.DEGRADED.value
 
         # 发布 SKIPPED 状态（不可见，不阻塞前端）
         # 注意：此处不 await，因为 ChatWorkflowNode.run_with_observation

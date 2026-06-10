@@ -114,6 +114,25 @@ CHAT_WORKFLOW_CONTEXT_WINDOW_DEGRADED: Final[str] = "degraded"
 CHAT_WORKFLOW_EMPTY_PROFILE_REASON: Final[str] = "用户画像为空"
 CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON: Final[str] = "未触发长期记忆检索"
 CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON: Final[str] = "未触发知识库检索"
+# --- Phase 12 新增：MCP Agent 执行阶段枚举 ---
+
+class ChatMCPAgentPhase(str, Enum):
+    """MCP Agent 执行阶段枚举。
+
+    做什么：标识 MCPToolExecutionNode 中三 Agent 协作的当前执行阶段。
+    为什么这样做：使用枚举替代硬编码的字符串常量，避免拼写错误和散落。
+    """
+    IDLE = "idle"
+    SCREENING = "screening"
+    CALLING_LOOP = "calling_loop"
+    CALLING = "calling"        # 后跟索引：calling_[index]
+    EXECUTION = "execution"    # 后跟索引：execution_[index]
+    CHAIN_COMPLETED = "chain_completed"
+    ALIGNMENT = "alignment"
+    COMPLETED = "completed"
+    DEGRADED = "degraded"
+
+
 CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON: Final[str] = "输入重构失败并降级为规则路由"
 
 # --- Phase 12 新增：MCP 工具常量 ---

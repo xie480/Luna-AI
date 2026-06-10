@@ -262,6 +262,37 @@ class UserProfileItemVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class MCPToolRegistration(Base):
+    """
+    对应 PostgreSQL 中的 mcp_tool_registrations 表（MCP 工具注册持久化）。
+
+    做什么：将 MCP 工具的元数据持久化到 PostgreSQL，支持工具注册的版本管理、
+            启用/禁用状态控制和跨进程共享。MCPToolRegistry 在初始化时从此表加载
+            所有已注册工具，并实时同步注册状态。
+    为什么这样做：Phase 12 设计要求工具注册必须落库 PG，确保进程重启后注册信息不丢失，
+                并支持运行时动态注册和热加载。
+    边界条件：
+        - name 唯一索引，禁止重复注册。
+        - enabled=False 的工具不会被混合检索召回和执行。
+        - parameters_schema 以 JSONB 存储，必须符合 JSON Schema 规范。
+    """
+    __tablename__ = "mcp_tool_registrations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    parameters_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    risk_level: Mapped[str] = mapped_column(String(10), nullable=False, default="L0")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    category: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    use_case_examples: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    core_purpose: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    final_deliverable: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class UserProfileConflict(Base):
     """
     对应 PostgreSQL 中的 user_profile_conflicts 表（用户画像冲突表）。

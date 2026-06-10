@@ -70,8 +70,10 @@ class MCPToolCallingAgent:
 
         做什么：1. 从注册中心获取工具的完整 Schema。
                 2. 组装三槽位 Prompt（system + memory + runtime）。
-                3. 第 2+ 轮将前序结果追加到 System Prompt 末尾。
+                3. 前序结果通过 Memory Prompt 的 PREVIOUS_TOOL_RESULT 变量注入。
                 4. 调用 LLM 的 generate_structured() 输出 ToolCallingResult。
+        为什么这样做：前序结果是上下文的一部分，应通过 memory 槽位（即 context）注入，
+                    而不是追加到 system 槽位。system 槽位保持纯粹的指令性内容。
         参数:
             trace_id: 全链路追踪 ID。
             tool_name: 当前要调用的工具名称。
@@ -104,19 +106,14 @@ class MCPToolCallingAgent:
                 failure_reason=f"工具 '{tool_name}' 不存在或未注册",
             )
 
-        # 组装 System Prompt
+        # 组装 System Prompt（纯指令性内容，不含前序结果）
         system_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_TOOL_CALLING, {}
         )
 
-        # 第 2+ 轮：前序结果追加到 System Prompt 末尾
-        if previous_tool_result:
-            system_prompt += (
-                f"\n\n<strong>【前序工具执行结果】</strong>\n"
-                f"Previous tool result: {previous_tool_result}"
-            )
-
-        # 组装 Memory Prompt（注入完整 Schema）
+        # 组装 Memory Prompt（注入完整 Schema + 前序结果）
+        # 前序结果通过 PREVIOUS_TOOL_RESULT 变量注入，直接由 memory.j2 模板渲染。
+        # 第 1 轮 previous_tool_result 为空字符串，memory.j2 中的条件判断不会渲染。
         memory_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_TOOL_CALLING,
             {

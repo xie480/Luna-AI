@@ -22,4 +22,13 @@
    - 如果数据缺失、过时、或用户问题未被充分回答，quality_issue=true。
    - 示例：工具只返回了时间但没有用户需要的时区信息 → quality_issue=true。
 
-5. 输出严格遵循 Pydantic Schema 定义的 JSON 格式。
+必须严格输出以下 JSON 结构：
+
+```json
+{
+  "calibrated_output": "经过校准、打磨与逻辑重组后的最终输出文本，必须基于工具返回数据，禁止编造",
+  "quality_issue": "布尔值，标记为 true 表示结果存在质量问题",
+  "quality_description": "质量问题的具体描述，如果 quality_issue=false，则说明校准过程中做了哪些优化",
+  "data_source": "数据来源说明，如调用的工具名称及其返回数据的简要范围"
+}
+```

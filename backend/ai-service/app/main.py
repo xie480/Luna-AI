@@ -589,11 +589,9 @@ async def lifespan(app: FastAPI):
                     
         rollover_task = asyncio.create_task(_rollover_loop())
 
-    # 4. Phase 12: 注册内置 MCP 工具
-    # 做什么：在应用启动时注册所有内置 L0 级低危 MCP 工具到注册中心。
-    #         当前仅注册时间工具作为验证链路，后续扩展按同样模式添加。
-    # 为什么这样做：工具注册必须在任何工作流执行之前完成，确保 Agent 1
-    #             混合检索和 Agent 2 Schema 查询可用。
+    # 4. Phase 12: 注册内置 MCP 工具并加载 PG 持久化注册
+    # 做什么：注册内置 L0 级低危 MCP 工具，然后从 PG 加载已有工具注册记录。
+    #         PG 作为工具注册的 SSOT，确保重启后注册信息不丢失。
     try:
         from app.mcp.registry import MCPToolRegistry
         from app.mcp.types import MCPToolSchema, ToolRiskLevel
@@ -601,8 +599,10 @@ async def lifespan(app: FastAPI):
             TIME_TOOL_PARAMETERS_SCHEMA,
             handle_get_current_time,
         )
+        from app.repository.mcp_tool_pg import MCPToolPGRepo
 
         mcp_registry = MCPToolRegistry()
+
         # 注册时间工具（L0 级低危，包含增强的检索元数据）
         mcp_registry.register(
             name="get_current_time",
@@ -619,9 +619,23 @@ async def lifespan(app: FastAPI):
             ),
             handler=handle_get_current_time,
         )
-        logger.info("MCP 内置工具注册完成 count=1")
+        logger.info("MCP 内置工具注册完成")
+
+        # 从 PG 加载已注册的工具（如果在 PG 中有额外的动态注册工具）
+        if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:
+            from sqlalchemy.ext.asyncio import AsyncSession
+            async with pg_client.session_factory() as session:
+                mcp_pg_repo = MCPToolPGRepo(session)
+                pg_tools = await mcp_pg_repo.load_all()
+            await mcp_registry.load_from_pg(pg_tools)
+
+            # 将内存中所有工具持久化到 PG（内置工具写入 PG）
+            # 注意：persist_to_pg 需要在同一个 session 中执行
+            await mcp_registry.persist_to_pg(mcp_pg_repo)
+            logger.info("MCP 工具 PG 持久化同步完成")
+
     except Exception as exc:
-        logger.warning(f"MCP 内置工具注册失败: {exc}")
+        logger.warning(f"MCP 工具注册失败: {exc}")
 
     # 标记服务已完全就绪
     app.state.is_ready = True

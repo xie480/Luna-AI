@@ -15,6 +15,7 @@ from app.workflow.constants import (
     CHAT_WORKFLOW_DEFAULT_TIMEZONE,
     CHAT_WORKFLOW_DEFAULT_USER_ID,
     ChatMode,
+    ChatMCPAgentPhase,
     ChatNodeStatus,
     ChatPlanPreset,
     ChatWorkflowNodeType,
@@ -96,9 +97,6 @@ class ChatRouteState(BaseModel):
     emotion_state: dict[str, Any] = Field(default_factory=dict)
 
     # --- Phase 12 新增：MCP 工具调用路由 ---
-    # 做什么：输入重构节点判定是否需要进入 MCP 工具执行节点。
-    #         should_enter_mcp_tool 被输入重构节点设置为 True/False，
-    #         mcp_judgment_json 保存 LLM 输出的 JSON 判定结果供 Agent 1 使用。
     should_enter_mcp_tool: bool = Field(
         default=False,
         description="输入重构节点判定是否需要进入 MCP 工具执行节点。"
@@ -213,10 +211,9 @@ class ChatMCPToolState(BaseModel):
 
     # Agent 阶段标识
     agent_phase: str = Field(
-        default="idle",
-        description="当前 Agent 执行阶段：idle / screening / calling_loop / "
-                    "calling_[index] / execution_[index] / chain_completed / "
-                    "alignment / completed / degraded",
+        default=ChatMCPAgentPhase.IDLE.value,
+        description="当前 Agent 执行阶段，使用 ChatMCPAgentPhase 枚举值。"
+                    "calling_[index] 和 execution_[index] 为动态拼接值。",
     )
 
     # Agent 1：工具链计划
