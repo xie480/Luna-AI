@@ -88,5 +88,11 @@
     "arousal": "情绪唤醒度（V-A 模型），范围 0.0（极度平静）到 1.0（极度激动）",
     "emotion_trigger": "触发该情绪的具体原因或事件描述",
     "esm_transition_hint": "给 Go 层情绪状态机的跃迁暗示，如 REQUIRE_COMFORT"
+  },
+
+  "mcp_tool_judgment": {
+    "need_tool": "布尔值，是否需要调用工具。true 表示需要，false 表示无需。当 primary_intent=TOOL_INVOCATION 或用户明确要求查询实时信息时设为 true",
+    "reason": "字符串，判定原因说明，例如：'用户查询当前时间，需要调用时间工具'。用于审计与调试",
+    "keywords": ["字符串数组，用于 Tool RAG 检索的关键词。1~5 个为佳，例如：['文件目录搜索', '联网搜索', '文档解析]"]
   }
 }

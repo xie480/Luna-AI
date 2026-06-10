@@ -66,6 +66,7 @@ class MCPToolScreeningAgent:
         mcp_judgment: dict[str, Any],
         prompt_manager: Any,
         inference_service: Any | None = None,
+        mcp_pg_repo: Any | None = None,
     ) -> ToolChainPlan:
         """
         执行工具初筛，输出有序工具链。
@@ -95,11 +96,11 @@ class MCPToolScreeningAgent:
         else:
             query = str(keywords)
 
-        # 混合检索候选工具
+        # 混合检索候选工具（优先使用 PG FTS，不可用时降级为内存 BM25）
         candidates = await registry.hybrid_search_tools(
             query=query,
             top_k=self.top_k,
-            inference_service=inference_service,
+            mcp_pg_repo=mcp_pg_repo,
         )
 
         # 无候选工具时直接标记不匹配

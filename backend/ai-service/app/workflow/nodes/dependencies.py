@@ -9,6 +9,7 @@ from app.prompt.manager import Manager as PromptManager
 from app.rag.retrieval import RagRetrievalOrchestrator
 from app.repository.chat_history_pg import ChatHistoryPGRepo
 from app.repository.chat_history_redis import ChatHistoryRedisRepo
+from app.repository.mcp_tool_pg import MCPToolPGRepo
 from app.user_profile.service import UserProfileService
 from app.workflow.events import ChatWorkflowEventPublisher
 
@@ -29,6 +30,8 @@ class WorkflowDependencies:
         chat_status_publisher: ChatStatusPublisher | None = None,
         # --- Phase 12 新增：MCP 工具注册中心 ---
         mcp_tool_registry: MCPToolRegistry | None = None,
+        # --- Phase 12 新增：MCP 工具 PG 仓库（用于 BM25 检索） ---
+        mcp_pg_repo: MCPToolPGRepo | None = None,
     ):
         """保存节点运行依赖，依赖由 FastAPI lifespan 注入。"""
         self.redis_repo = redis_repo
@@ -41,3 +44,5 @@ class WorkflowDependencies:
         self.chat_status_publisher = chat_status_publisher or ChatStatusPublisher()
         # --- Phase 12 新增：MCP 工具注册中心默认实例 ---
         self.mcp_tool_registry = mcp_tool_registry or MCPToolRegistry()
+        # --- Phase 12 新增：MCP 工具 PG 仓库（Agent 1 BM25 检索用） ---
+        self.mcp_pg_repo = mcp_pg_repo

@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import func
 
@@ -76,6 +76,77 @@ class MCPToolPGRepo:
             return tools
         except Exception as exc:
             logger.warning(f"MCP 工具 PG 加载失败: {exc}")
+            return []
+
+    async def search_by_text(self, query_text: str, top_k: int) -> list[dict[str, Any]]:
+        """
+        使用 PostgreSQL FTS 检索候选工具（BM25 风格）。
+
+        做什么：对 mcp_tool_registrations 表的 name、core_purpose、tags 字段
+                执行 PostgreSQL 内建全文检索（to_tsvector / plainto_tsquery / ts_rank），
+                按 BM25 风格相关性得分 ts_rank 降序返回 Top-K 结果。
+        为什么这样做：与知识库 RAG 和长期记忆 RAG 使用相同的 PG FTS 机制，
+                    确保检索行为一致且可索引优化。
+        参数:
+            query_text: 用户查询文本。
+            top_k: 返回的最大结果数。
+        返回:
+            list[dict]: 候选工具列表，每项包含所有元数据字段和 _rank 得分。
+                        仓库不可用或查询失败时返回空列表。
+        """
+        if not self._session or not query_text:
+            return []
+
+        try:
+            # 构建搜索字段：将 name、core_purpose 和 tags 拼接为可搜索文本
+            # 使用 COALESCE 处理 NULL 值，tags 从 JSON 数组转为逗号分隔字符串
+            sql = text("""
+                SELECT
+                    id, name, description, parameters_schema,
+                    risk_level, enabled, tags, category,
+                    use_case_examples, core_purpose, final_deliverable,
+                    created_at, updated_at,
+                    ts_rank(
+                        to_tsvector('simple',
+                            COALESCE(name, '') || ' ' ||
+                            COALESCE(core_purpose, '') || ' ' ||
+                            COALESCE(array_to_string(tags::text[], ' '), '')
+                        ),
+                        plainto_tsquery('simple', :query)
+                    ) AS rank
+                FROM mcp_tool_registrations
+                WHERE enabled = true
+                  AND to_tsvector('simple',
+                      COALESCE(name, '') || ' ' ||
+                      COALESCE(core_purpose, '') || ' ' ||
+                      COALESCE(array_to_string(tags::text[], ' '), '')
+                  ) @@ plainto_tsquery('simple', :query)
+                ORDER BY rank DESC
+                LIMIT :top_k
+            """)
+            result = await self._session.execute(
+                sql, {"query": query_text, "top_k": top_k}
+            )
+            rows = result.all()
+            tools: list[dict[str, Any]] = []
+            for row in rows:
+                tools.append({
+                    "name": row.name,
+                    "core_purpose": row.core_purpose or "",
+                    "final_deliverable": row.final_deliverable or "",
+                    "description": row.description or "",
+                    "risk_level": row.risk_level or "L0",
+                    "category": row.category or "",
+                    "tags": row.tags or [],
+                    "_rank": round(float(row.rank), 4) if row.rank else 0.0,
+                })
+            logger.info(
+                f"MCP 工具 PG FTS 检索完成 query=\"{query_text[:50]}\" "
+                f"hits={len(tools)} top_k={top_k}"
+            )
+            return tools
+        except Exception as exc:
+            logger.warning(f"MCP 工具 PG FTS 检索失败: {exc}")
             return []
 
     async def save(

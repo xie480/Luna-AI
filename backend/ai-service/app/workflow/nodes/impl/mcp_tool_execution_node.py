@@ -118,11 +118,15 @@ class MCPToolExecutionNode(ChatWorkflowNode):
             # ============================================================
             state.mcp_tool_state.agent_phase = ChatMCPAgentPhase.SCREENING.value
 
+            # 获取 MCP PG 仓库引用（如果依赖容器中可用）
+            mcp_pg_repo = getattr(self.dependencies, 'mcp_pg_repo', None)
+
             chain_plan: ToolChainPlan = await MCPToolScreeningAgent().screen(
                 trace_id=state.runtime.trace_id,
                 user_input=state.input_payload.raw_user_message,
                 mcp_judgment=state.route_state.mcp_judgment_json or {},
                 prompt_manager=prompt_manager,
+                mcp_pg_repo=mcp_pg_repo,
             )
             # 将 Agent 1 的结果写入状态（序列化为 JSON）
             state.mcp_tool_state.screening_result = chain_plan.model_dump(mode="json")
