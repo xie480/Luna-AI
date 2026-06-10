@@ -21,7 +21,7 @@ interface VisualStatusQueueState {
    * 消费后端 EVT_CHAT_STATUS 事件。
    * 做什么：接收后端 ChatStatusPublisher 推送的状态通知，映射为前端 VisualStateItem 并入队。
    * 为什么这样做：状态文案由后端统一管理（_CHAT_STATUS_TEXTS），前端仅负责渲染。
-   * 边界条件：is_visible=false 时不入队；is_terminal=true 表示该阶段生命周期结束。
+   * 边界条件：is_visible=false 时通常不入队；但如果 is_terminal=true 说明是清理指令，必须放行入队。
    */
   onChatStatus: (payload: ChatStatusPayload) => void;
   /**
@@ -78,8 +78,11 @@ export const useVisualStatusQueue = create<VisualStatusQueueState>((set, get) =>
   },
 
   onChatStatus: (payload) => {
-    // is_visible=false 时不展示（如跳过/静默通知）
-    if (!payload.is_visible) {
+    // is_visible=false 时通常不展示（如跳过/静默通知）
+    // 但如果携带了 is_terminal=true，说明是后端 FinalizeNode 发出的清理指令，
+    // 必须放行入队，否则状态栏永远不会回到空闲态。
+    // finalize 节点: is_visible=false, is_terminal=true, display_text=""
+    if (!payload.is_visible && !payload.is_terminal) {
       return;
     }
 
