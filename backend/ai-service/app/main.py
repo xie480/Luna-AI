@@ -589,6 +589,40 @@ async def lifespan(app: FastAPI):
                     
         rollover_task = asyncio.create_task(_rollover_loop())
 
+    # 4. Phase 12: 注册内置 MCP 工具
+    # 做什么：在应用启动时注册所有内置 L0 级低危 MCP 工具到注册中心。
+    #         当前仅注册时间工具作为验证链路，后续扩展按同样模式添加。
+    # 为什么这样做：工具注册必须在任何工作流执行之前完成，确保 Agent 1
+    #             混合检索和 Agent 2 Schema 查询可用。
+    try:
+        from app.mcp.registry import MCPToolRegistry
+        from app.mcp.types import MCPToolSchema, ToolRiskLevel
+        from app.mcp.tools.time_tool import (
+            TIME_TOOL_PARAMETERS_SCHEMA,
+            handle_get_current_time,
+        )
+
+        mcp_registry = MCPToolRegistry()
+        # 注册时间工具（L0 级低危，包含增强的检索元数据）
+        mcp_registry.register(
+            name="get_current_time",
+            schema=MCPToolSchema(
+                name="get_current_time",
+                description="获取当前系统时间，可指定返回格式和时区。",
+                core_purpose="查询当前日期和时间",
+                final_deliverable="格式化的日期时间字符串",
+                tags=["utility", "time", "日期", "时间"],
+                category="utility",
+                use_case_examples=["现在几点", "今天几号", "目前时间"],
+                parameters_schema=TIME_TOOL_PARAMETERS_SCHEMA,
+                risk_level=ToolRiskLevel.L0,
+            ),
+            handler=handle_get_current_time,
+        )
+        logger.info("MCP 内置工具注册完成 count=1")
+    except Exception as exc:
+        logger.warning(f"MCP 内置工具注册失败: {exc}")
+
     # 标记服务已完全就绪
     app.state.is_ready = True
     logger.info("Luna AI Service 所有核心资源初始化完成，服务已就绪")

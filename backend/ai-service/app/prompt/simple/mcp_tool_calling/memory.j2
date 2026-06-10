@@ -1,0 +1,31 @@
+<strong>【工具调用上下文】</strong>
+
+选定工具名称：{{ TOOL_NAME }}
+
+工具描述：{{ TOOL_DESCRIPTION }}
+
+工具参数 Schema（parameters_schema）：
+```json
+{{ TOOL_PARAMETERS_SCHEMA }}
+```
+
+<strong>【用户输入】</strong>
+{{ USER_INPUT }}
+
+<strong>【对话上下文】</strong>
+{{ MEMORY_SNIPPETS }}
+
+<strong>【核心摘要】</strong>
+{{ CORE_SUMMARY }}
+
+<strong>【关键事实】</strong>
+{{ KEY_FACTS }}
+
+{% if PREVIOUS_TOOL_RESULT %}
+<strong>【前序工具执行结果】</strong>
+Previous tool result: {{ PREVIOUS_TOOL_RESULT }}
+{% endif %}
+
+请严格依据以上 Schema 定义，在用户输入和上下文中提取每个参数的值。
+{% if PREVIOUS_TOOL_RESULT %}特别注意：前序工具的执行结果中可能包含当前工具所需的参数，
+请优先利用这些数据。{% endif %}

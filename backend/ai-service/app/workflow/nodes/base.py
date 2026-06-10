@@ -248,6 +248,9 @@ class ChatWorkflowNode:
             return state.profile_state.degraded
         if self.node_type == ChatWorkflowNodeType.KNOWLEDGE_RAG:
             return state.knowledge_state.degraded
+        # --- Phase 12 新增：MCP 工具执行节点降级检测 ---
+        if self.node_type == ChatWorkflowNodeType.MCP_TOOL_EXECUTION:
+            return state.mcp_tool_state.degraded
         return False
 
     def _degraded_reason(self, state: ChatWorkflowState) -> str:
@@ -258,6 +261,9 @@ class ChatWorkflowNode:
             return state.profile_state.degraded_reason
         if self.node_type == ChatWorkflowNodeType.KNOWLEDGE_RAG:
             return state.knowledge_state.degraded_reason
+        # --- Phase 12 新增：MCP 工具执行节点降级原因 ---
+        if self.node_type == ChatWorkflowNodeType.MCP_TOOL_EXECUTION:
+            return state.mcp_tool_state.degraded_reason
         return ""
 
 

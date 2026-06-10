@@ -37,6 +37,8 @@ class ChatWorkflowNodeType(str, Enum):
     MAIN_CHAT_LLM = "main_chat_llm"
     RESPONSE_PERSISTENCE = "response_persistence"
     FINALIZE = "finalize"
+    # --- Phase 12 新增：MCP 工具执行节点 ---
+    MCP_TOOL_EXECUTION = "mcp_tool_execution"
 
 
 class ChatNodeStatus(str, Enum):
@@ -57,6 +59,9 @@ class ChatConditionalRoute(str, Enum):
     BYPASS_LONG_TERM_MEMORY_RAG = "bypass_long_term_memory_rag"
     ENTER_KNOWLEDGE_RAG = "enter_knowledge_rag"
     BYPASS_KNOWLEDGE_RAG = "bypass_knowledge_rag"
+    # --- Phase 12 新增：MCP 工具路由 ---
+    ENTER_MCP_TOOL = "enter_mcp_tool"
+    BYPASS_MCP_TOOL = "bypass_mcp_tool"
 
 
 class ChatWorkflowEventType(str, Enum):
@@ -94,6 +99,9 @@ class ChatWorkflowGraphNodeName(str, Enum):
     MAIN_CHAT_LLM = "main_chat_llm"
     RESPONSE_PERSISTENCE = "response_persistence"
     FINALIZE = "finalize"
+    # --- Phase 12 新增：MCP 工具相关节点 ---
+    MCP_TOOL_EXECUTION = "mcp_tool_execution"
+    MCP_TOOL_BYPASS = "mcp_tool_bypass"
 
 
 CHAT_WORKFLOW_CHECKPOINT_TABLE: Final[str] = "langgraph_chat_checkpoints"
@@ -107,6 +115,16 @@ CHAT_WORKFLOW_EMPTY_PROFILE_REASON: Final[str] = "用户画像为空"
 CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON: Final[str] = "未触发长期记忆检索"
 CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON: Final[str] = "未触发知识库检索"
 CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON: Final[str] = "输入重构失败并降级为规则路由"
+
+# --- Phase 12 新增：MCP 工具常量 ---
+# 做什么：MCP 工具执行节点的降级原因和跳过原因文本常量。
+#         禁止在业务代码中硬编码这些字符串。
+CHAT_WORKFLOW_NO_MCP_TOOL_ROUTE_REASON: Final[str] = "未触发 MCP 工具调用"
+CHAT_WORKFLOW_MCP_TOOL_DEGRADED_REASON: Final[str] = "MCP 工具执行降级"
+CHAT_WORKFLOW_MCP_TOOL_NO_TOOL_REASON: Final[str] = "MCP Agent 判定无需调用工具"
+
+# Phase 12 新增：MCP 工具输出变量名，用于下游 Prompt 装配时引用。
+PROMPT_VARIABLE_MCP_TOOL_OUTPUT: Final[str] = "MCP_TOOL_OUTPUT"
 
 PROMPT_VARIABLE_CURRENT_TIME: Final[str] = "CURRENT_TIME"
 PROMPT_VARIABLE_CURRENT_MESSAGE: Final[str] = "CURRENT_MESSAGE"

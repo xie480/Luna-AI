@@ -36,6 +36,17 @@ class PromptCategory(str, Enum):
     USER_PROFILE_EXTRACT = "user_profile_extract"
     USER_PROFILE_SUMMARIZE = "user_profile_summarize"
 
+    # --- Phase 12 新增：MCP 三 Agent Prompt 分类 ---
+    # 做什么：为 MCP 工具链中的三个 Agent 分别提供独立的 Prompt 模板分类。
+    #         Agent 1（初筛）、Agent 2（参数提取）、Agent 3（意图对齐）
+    #         各有独立的 system/memory/runtime 三槽位模板。
+    # 为什么这样做：三 Agent 的 Prompt 模板内容差异较大（Agent 1 不含 Schema，
+    #             Agent 2 含完整 Schema，Agent 3 聚焦结果校准），
+    #             分开存储便于独立迭代和版本管理。
+    MCP_TOOL_SCREENING = "mcp_tool_screening"
+    MCP_TOOL_CALLING = "mcp_tool_calling"
+    MCP_INTENT_ALIGNMENT = "mcp_intent_alignment"
+
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。
 # 做什么：约束已纳入 Prompt 管理面板的业务 Prompt 只以 PG 版本为准。

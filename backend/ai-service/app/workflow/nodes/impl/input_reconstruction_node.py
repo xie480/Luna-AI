@@ -142,6 +142,23 @@ class InputReconstructionNode(ChatWorkflowNode):
 
             state.route_state.emotion_state = result.emotion_state.model_dump(mode="json")
 
+            # --- Phase 12：MCP 工具调用判定 ---
+            # 做什么：从输入重构结果中提取 MCP 工具调用判定。
+            #         如果 result.mcp_tool_judgment 非空且 need_tool=True，则标记需要进入 MCP 节点，
+            #         同时将 mcp_judgment JSON 存入路由状态以供下游使用。
+            # 为什么这样做：工具调用判定作为输入重构的结构化输出，由 LLM 在一轮调用中完成，
+            #             避免额外增加模型调用次数。
+            has_tool_judgment = (
+                result.mcp_tool_judgment is not None
+                and result.mcp_tool_judgment.need_tool
+            )
+            state.route_state.should_enter_mcp_tool = has_tool_judgment
+            state.route_state.mcp_judgment_json = (
+                result.mcp_tool_judgment.model_dump(mode="json")
+                if result.mcp_tool_judgment
+                else None
+            )
+
             # 发布 COMPLETED 状态
             await self._publish_chat_status(
                 state=state,
@@ -190,6 +207,21 @@ class InputReconstructionNode(ChatWorkflowNode):
             "arousal": 0.0,
             "emotion_trigger": reason,
         }
+
+        # Phase 12: MCP 工具调用降级关键字检测
+        # 做什么：当 LLM 结构化输出解析失败时，通过规则关键字检测判断是否触发 MCP 节点。
+        mcp_keywords = ("时间", "几点", "日期", "天气", "温度", "查询", "搜索")
+        state.route_state.should_enter_mcp_tool = any(
+            keyword in raw for keyword in mcp_keywords
+        )
+        if state.route_state.should_enter_mcp_tool:
+            state.route_state.mcp_judgment_json = {
+                "need_tool": True,
+                "reason": f"降级规则触发：输入中包含 MCP 关键字",
+                "keywords": [raw],
+            }
+        else:
+            state.route_state.mcp_judgment_json = None
 
     async def _publish_chat_status(
         self,

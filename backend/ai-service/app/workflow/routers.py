@@ -19,6 +19,7 @@ from app.utils.snowflake import generate_string_id
 from app.workflow.constants import (
     CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
     CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
+    CHAT_WORKFLOW_NO_MCP_TOOL_ROUTE_REASON,
     ChatConditionalRoute,
     ChatNodeStatus,
     ChatWorkflowEventType,
@@ -131,6 +132,73 @@ class ChatWorkflowRouter:
             session_id=state.runtime.session_id,
             message_id=state.generation_state.assistant_message_id,
             stage=ChatStatusStage.KNOWLEDGE_RAG,
+            state=ChatStatusState.SKIPPED,
+            display_text="",
+            is_visible=False,
+            is_terminal=True,
+        )
+
+        return state.as_graph_state()
+
+    # ---- Phase 12 新增：MCP 工具调用条件路由 ----
+
+    async def route_mcp_tool(self, graph_state: dict[str, Any]) -> str:
+        """
+        评估是否进入 MCP Tool 执行节点。
+
+        做什么：根据输入重构节点输出的 mcp_judgment.need_tool 判断是否进入 MCP 节点。
+        为什么这样做：MCP 节点与长期记忆 RAG、知识库 RAG 处于同等的条件分支地位。
+        参数:
+            graph_state: LangGraph 传递的字典状态。
+        返回:
+            str: MCP_TOOL_EXECUTION 或 MCP_TOOL_BYPASS 的 LangGraph 节点名称。
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        entered = state.route_state.should_enter_mcp_tool
+        reason = (
+            f"输入重构判定需要工具调用: "
+            f"{state.route_state.mcp_judgment_json.get('reason', '') if state.route_state.mcp_judgment_json else ''}"
+            if entered
+            else CHAT_WORKFLOW_NO_MCP_TOOL_ROUTE_REASON
+        )
+        await self._publish_condition(
+            state=state,
+            source_node_type=ChatWorkflowNodeType.INPUT_RECONSTRUCTION,
+            target_node_type=ChatWorkflowNodeType.MCP_TOOL_EXECUTION,
+            condition_entered=entered,
+            route_name=(
+                ChatConditionalRoute.ENTER_MCP_TOOL
+                if entered
+                else ChatConditionalRoute.BYPASS_MCP_TOOL
+            ),
+            reason=reason,
+        )
+        return (
+            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value
+            if entered
+            else ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value
+        )
+
+    async def bypass_mcp_tool(self, graph_state: dict[str, Any]) -> dict[str, Any]:
+        """
+        MCP 工具条件未进入时写入显式观测记录、推送 SKIPPED 状态并汇合。
+
+        做什么：当输入重构判定不需要工具调用时，记录观测并跳过 MCP 节点。
+        为什么这样做：与 bypass_long_term_memory / bypass_knowledge_rag 模式一致，
+                     保持条件绕过节点的统一行为。
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        _append_not_entered_observation(
+            state, ChatWorkflowNodeType.MCP_TOOL_EXECUTION,
+            CHAT_WORKFLOW_NO_MCP_TOOL_ROUTE_REASON,
+        )
+
+        # 发布 EVT_CHAT_STATUS：MCP 工具阶段被跳过（SKIPPED，不可见）
+        await self.chat_status_publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=ChatStatusStage.MCP_TOOL_EXECUTION,
             state=ChatStatusState.SKIPPED,
             display_text="",
             is_visible=False,

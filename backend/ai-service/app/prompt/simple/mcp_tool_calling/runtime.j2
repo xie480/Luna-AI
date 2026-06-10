@@ -1,0 +1,13 @@
+<strong>【参数提取指令】</strong>
+
+1. 仔细阅读工具的 parameters_schema，逐字段对照用户输入。
+2. 对于每个参数：
+   a. 优先从用户输入的明确表述中提取。
+   b. 如果用户输入中指代不明，结合 MEMORY_SNIPPETS 中的上下文记忆推断。
+   c. {% if PREVIOUS_TOOL_RESULT %}如果仍不明确，检查 PREVIOUS_TOOL_RESULT 中是否包含所需数据。{% endif %}
+   d. 如果仍无法确定，对于可选参数留空，对于必填参数标记失败。
+3. 枚举类型参数必须在 enum 列表中取值，禁止编造。
+4. 所有参数值必须与 Schema 中定义的类型一致。
+5. 在 parameter_explanation 中简要说明每个关键参数的提取依据。
+
+请以合法的 JSON 格式输出你的最终参数提取结果。

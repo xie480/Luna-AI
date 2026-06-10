@@ -14,6 +14,8 @@ from app.workflow.nodes.impl.prompt_assembly_node import PromptAssemblyNode
 from app.workflow.nodes.impl.response_persistence_node import ResponsePersistenceNode
 from app.workflow.nodes.impl.session_context_load_node import SessionContextLoadNode
 from app.workflow.nodes.impl.user_profile_injection_node import UserProfileInjectionNode
+# --- Phase 12 新增：MCP 工作流节点导入 ---
+from app.workflow.nodes.impl.mcp_tool_execution_node import MCPToolExecutionNode
 from app.workflow.routers import ChatWorkflowRouter
 
 
@@ -27,6 +29,10 @@ class ChatWorkflowNodeRegistry:
         )
         self.nodes = {
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value: InputReconstructionNode(dependencies),
+            # --- Phase 12 新增：MCP 工具相关节点 ---
+            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value: MCPToolExecutionNode(dependencies),
+            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value: self.router.bypass_mcp_tool,
+            # -----------------------------------------
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value: SessionContextLoadNode(dependencies),
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value: LongTermMemoryNode(dependencies),
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value: self.router.bypass_long_term_memory,

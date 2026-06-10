@@ -1,0 +1,22 @@
+以下是当前会话的上下文摘要，以及系统从工具池中检索到的候选工具列表：
+
+【候选工具列表】（仅含工具名称、核心用途与交付物描述，不含参数 Schema）
+{% for tool in CANDIDATE_TOOLS %}
+  - 工具名称：「{{ tool.name }}」
+    核心用途：{{ tool.core_purpose }}
+    最终交付物：{{ tool.final_deliverable }}
+    风险等级：{{ tool.risk_level }}
+{% else %}
+  （无可用的候选工具）
+{% endfor %}
+
+【用户输入】
+{{ USER_INPUT }}
+
+【输入重构判定】
+是否需工具：{{ MCP_NEED_TOOL }}
+判定原因：{{ MCP_REASON }}
+检索关键词：{{ MCP_KEYWORDS }}
+
+请基于以上信息，规划需要调用的工具及其执行顺序。
+如果候选工具列表为空或没有匹配项，请将 no_suitable_tool 设为 true。

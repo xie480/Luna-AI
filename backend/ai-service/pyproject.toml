@@ -20,6 +20,9 @@ dependencies = [
     "langgraph>=0.2.0",
     "langchain-core>=0.2.0",
     "chardet>=5.2.0",
+    # --- Phase 12 新增：MCP 工具模块依赖 ---
+    "jsonschema>=4.20.0",
+    "pytz>=2024.1",
 ]
 
 [project.optional-dependencies]

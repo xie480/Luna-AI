@@ -1,6 +1,9 @@
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel, Field
+
+from app.mcp.types import MCPToolJudgment
 
 
 class PrimaryIntent(str, Enum):
@@ -92,3 +95,13 @@ class InputReconstructionOutput(BaseModel):
     intent_routing: IntentRouting
     retrieval_routing: RetrievalRouting
     emotion_state: EmotionState
+
+    # --- Phase 12 新增：MCP 工具调用判定 ---
+    # 做什么：MCP 工具调用判定结果。当 primary_intent==TOOL_INVOCATION 或
+    #         dag_route_hint==AGENTIC_WORKFLOW 且上下文明显需要工具时非空。
+    # 为什么这样做：将工具判定的逻辑嵌入输入重构流程中，不额外增加模型调用次数。
+    mcp_tool_judgment: Optional[MCPToolJudgment] = Field(
+        default=None,
+        description="MCP 工具调用判定结果，由 LLM 在输入重构阶段以结构化输出方式生成。"
+                    "包含 need_tool、reason、keywords 三个字段。",
+    )

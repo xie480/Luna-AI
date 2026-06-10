@@ -32,13 +32,14 @@ class ChatGraphFactory:
         它设置了一系列节点和它们之间的边，形成一个有向无环图 (DAG)，
         用于管理聊天工作流的状态转换和执行逻辑。
 
-        工作流流程概述：
-        1. 输入重构 -> 会话上下文加载
-        2. 会话上下文加载 -> 长期记忆 RAG 或绕过（条件分支）
-        3. 长期记忆 RAG/绕过 -> 用户资料注入
-        4. 用户资料注入 -> 知识 RAG 或绕过（条件分支）
-        5. 知识 RAG/绕过 -> 上下文治理 -> 提示组装 -> 主聊天 LLM
-        6. 主聊天 LLM -> 响应持久化 -> 最终化 -> 结束
+        工作流流程概述（Phase 12 新增 MCP 工具分支）：
+        1. 输入重构 -> MCP 工具执行或绕过（条件分支，Phase 12 新增）
+        2. MCP 执行/绕过 -> 会话上下文加载
+        3. 会话上下文加载 -> 长期记忆 RAG 或绕过（条件分支）
+        4. 长期记忆 RAG/绕过 -> 用户资料注入
+        5. 用户资料注入 -> 知识 RAG 或绕过（条件分支）
+        6. 知识 RAG/绕过 -> 上下文治理 -> 提示组装 -> 主聊天 LLM
+        7. 主聊天 LLM -> 响应持久化 -> 最终化 -> 结束
 
         Returns:
             CompiledGraph: 编译后的 LangGraph 图对象，可用于执行聊天工作流
@@ -47,6 +48,10 @@ class ChatGraphFactory:
         # 定义工作流中使用的所有活动节点
         active_nodes = [
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION,
+            # --- Phase 12 新增 MCP Tool 节点 ---
+            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION,
+            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS,
+            # ---------------------------------
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS,
@@ -65,11 +70,29 @@ class ChatGraphFactory:
 
         # 设置入口点
         graph.set_entry_point(ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value)
-        # 添加从输入重构到会话上下文加载的边
-        graph.add_edge(
+
+        # Phase 12：输入重构之后先路由 MCP 工具，其余 DAG 结构保持不变
+        graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
+            self.registry.router.route_mcp_tool,
+            {
+                ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value:
+                    ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
+                ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value:
+                    ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
+            },
+        )
+
+        # MCP 执行/绕过汇合到会话上下文加载
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
         )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+        )
+
         # 添加从会话上下文加载到长期记忆的条件边（RAG 或绕过）
         graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,

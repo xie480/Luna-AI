@@ -95,6 +95,21 @@ class ChatRouteState(BaseModel):
     knowledge_route: RagRetrievalRoute = RagRetrievalRoute.HYBRID
     emotion_state: dict[str, Any] = Field(default_factory=dict)
 
+    # --- Phase 12 新增：MCP 工具调用路由 ---
+    # 做什么：输入重构节点判定是否需要进入 MCP 工具执行节点。
+    #         should_enter_mcp_tool 被输入重构节点设置为 True/False，
+    #         mcp_judgment_json 保存 LLM 输出的 JSON 判定结果供 Agent 1 使用。
+    should_enter_mcp_tool: bool = Field(
+        default=False,
+        description="输入重构节点判定是否需要进入 MCP 工具执行节点。"
+                    "True 表示需要工具调用，False 表示无需。",
+    )
+    mcp_judgment_json: dict[str, Any] | None = Field(
+        default=None,
+        description="输入重构节点输出的 MCP 工具调用 JSON 判定结果，"
+                    "包含 need_tool(bool)、reason(str)、keywords(list[str])。",
+    )
+
 
 class ChatMemoryState(BaseModel):
     """长期记忆状态。"""
@@ -183,6 +198,75 @@ class ChatErrorState(BaseModel):
     recoverable: bool = False
 
 
+class ChatMCPToolState(BaseModel):
+    """MCP 工具执行状态（工具链循环执行版）。
+
+    做什么：承载 MCP 工具执行节点的工具链循环执行全流程状态，
+            包含 Agent 1 的工具链计划、Agent 2 的多轮参数提取记录、
+            多轮工具执行结果、Agent 3 的聚合对齐结果。
+    为什么这样做：工具链循环执行涉及多轮中间状态，需要保留每一轮的
+                参数提取结果和执行结果以供审计。
+    """
+    # 条件路由
+    entered_by_condition: bool = False
+    condition_reason: str = ""
+
+    # Agent 阶段标识
+    agent_phase: str = Field(
+        default="idle",
+        description="当前 Agent 执行阶段：idle / screening / calling_loop / "
+                    "calling_[index] / execution_[index] / chain_completed / "
+                    "alignment / completed / degraded",
+    )
+
+    # Agent 1：工具链计划
+    screening_result: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Agent 1 输出的 ToolChainPlan，包含有序工具链列表。",
+    )
+
+    # Agent 2：多轮参数提取结果累积
+    calling_results: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Agent 2 多轮 Tool Calling 结果的累积数组。索引与 tool_chain 顺序一致。",
+    )
+
+    # 工具链执行结果累积
+    tool_results: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="工具链中每轮工具执行的累积结果数组。每项包含 tool_name、"
+                    "execution_id、output_text、latency_ms。",
+    )
+
+    # 最后一次工具执行结果（兼容下游对单次结果的读取）
+    executed_tool_name: str = ""
+    execution_id: str = ""
+    output_text: str = ""
+    error_message: str = ""
+    latency_ms: int = 0
+    retry_count: int = 0
+    risk_level: str = "L0"
+
+    # 工具链终止信息
+    chain_aborted: bool = False
+    chain_error: str = ""
+
+    # Agent 3：意图对齐结果
+    alignment_result: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Agent 3 意图对齐的结构化输出。",
+    )
+    calibrated_output: str = Field(
+        default="",
+        description="Agent 3 校准后的最终输出文本。",
+    )
+    quality_issue: bool = False
+
+    # 降级标记
+    degraded: bool = False
+    degraded_reason: str = ""
+
+
 class ChatWorkflowState(BaseModel):
     """Workflow 根状态。"""
 
@@ -194,6 +278,10 @@ class ChatWorkflowState(BaseModel):
     memory_state: ChatMemoryState = Field(default_factory=ChatMemoryState)
     profile_state: ChatUserProfileState = Field(default_factory=ChatUserProfileState)
     knowledge_state: ChatKnowledgeRagState = Field(default_factory=ChatKnowledgeRagState)
+    mcp_tool_state: ChatMCPToolState = Field(
+        default_factory=ChatMCPToolState,
+        description="Phase 12 MCP 工具执行状态，包含三 Agent 协作和各轮工具链结果。",
+    )
     prompt_state: ChatPromptState = Field(default_factory=ChatPromptState)
     generation_state: ChatGenerationState
     observability: ChatObservabilityState = Field(default_factory=ChatObservabilityState)

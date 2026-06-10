@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.api.chat_status import ChatStatusPublisher
+from app.mcp.registry import MCPToolRegistry
 from app.memory.manager import Manager as MemoryManager
 from app.prompt.manager import Manager as PromptManager
 from app.rag.retrieval import RagRetrievalOrchestrator
@@ -26,6 +27,8 @@ class WorkflowDependencies:
         user_profile_service: UserProfileService | None,
         event_publisher: ChatWorkflowEventPublisher | None,
         chat_status_publisher: ChatStatusPublisher | None = None,
+        # --- Phase 12 新增：MCP 工具注册中心 ---
+        mcp_tool_registry: MCPToolRegistry | None = None,
     ):
         """保存节点运行依赖，依赖由 FastAPI lifespan 注入。"""
         self.redis_repo = redis_repo
@@ -36,3 +39,5 @@ class WorkflowDependencies:
         self.user_profile_service = user_profile_service
         self.event_publisher = event_publisher
         self.chat_status_publisher = chat_status_publisher or ChatStatusPublisher()
+        # --- Phase 12 新增：MCP 工具注册中心默认实例 ---
+        self.mcp_tool_registry = mcp_tool_registry or MCPToolRegistry()

@@ -1,0 +1,14 @@
+【执行指令】
+
+请根据候选工具列表和用户输入，执行以下步骤：
+
+1. 分析用户输入，拆解需要多少个步骤才能完整满足用户需求。
+2. 逐一评估每个候选工具的 core_purpose 和 final_deliverable：
+   - 如果单个工具即可满足所有需求 → tool_chain 仅含一个步骤。
+   - 如果需要多个工具按顺序协作 → 按执行顺序排列在 tool_chain 中。
+     * 例：需要先查城市代码再查天气 → tool_chain=[CityCodeTool, WeatherTool]
+3. 对于 tool_chain 中的每一步，在 purpose 中说明该步骤期望获得什么数据。
+4. 如果没有任何工具匹配，将 no_suitable_tool 设为 true，tool_chain 设为空数组。
+5. 注意：工具链中的执行顺序必须保证前一个工具的输出是后一个工具的输入依赖。
+
+请以合法的 JSON 格式（遵循 Pydantic Schema）输出你的最终决策。
