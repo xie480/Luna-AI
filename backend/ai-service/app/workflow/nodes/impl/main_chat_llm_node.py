@@ -82,14 +82,21 @@ class MainChatLlmNode(ChatWorkflowNode):
                         state.generation_state.ttft_ms = int((time.time() - started) * 1000)
                         first_chunk = False
 
-                        # 首个正文 chunk 到达时清理所有前置阶段状态
+                        # 首个正文 chunk 到达时发布 LLM_STREAMING 运行态
+                        # 为什么 is_visible=True, is_terminal=False：
+                        #   之前使用 is_visible=False + is_terminal=True 作为"清理前置状态"的手段，
+                        #   但这会导致前端的 visualStatusQueueStore 在 _popNext 中遇到 isTerminal &&
+                        #   !text 时立即清空队列，使状态栏在 LLM 流式生成期间错误地跳回空闲态。
+                        #   现在改为带有文案的可见状态（is_visible=True, is_terminal=False），
+                        #   确保在整个流式生成期间前端持续保持在"神经连结供能"激活态，
+                        #   直到后续的 COMPLETED / ERROR 或 FinalizeNode 的最终 terminal 到来才退出。
                         await self._publish_chat_status(
                             state=state,
                             stage=ChatStatusStage.LLM_STREAMING,
                             status=ChatStatusState.RUNNING,
-                            display_text="",
-                            is_visible=False,
-                            is_terminal=True,
+                            display_text=get_chat_status_text(ChatStatusStage.LLM_STREAMING, ChatStatusState.RUNNING),
+                            is_visible=True,
+                            is_terminal=False,
                         )
 
                     for msg_type, content in parser.feed(chunk_data.get("chunk", "")):
@@ -124,13 +131,13 @@ class MainChatLlmNode(ChatWorkflowNode):
                 attempt += 1
                 state.generation_state.error = str(exc)
                 if attempt >= max_retries:
-                    # 全部重试失败，发布 ERROR 状态
+                    # 全部重试失败，发布可见的 ERROR 状态
                     await self._publish_chat_status(
                         state=state,
                         stage=ChatStatusStage.LLM_STREAMING,
                         status=ChatStatusState.ERROR,
-                        display_text="",
-                        is_visible=False,
+                        display_text=get_chat_status_text(ChatStatusStage.LLM_STREAMING, ChatStatusState.ERROR),
+                        is_visible=True,
                         is_terminal=True,
                         error=str(exc),
                     )

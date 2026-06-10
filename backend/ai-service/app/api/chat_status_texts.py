@@ -190,9 +190,27 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
 
     # ================================================================
     # 8. LLM 流式生成 (MainChatLlmNode)
-    #    RUNNING + is_visible=False + is_terminal=True 用于清理前置状态，
-    #    因此 display_text 固定为空字符串，不在本表中定义 
+    #    文案方向：数据流正向本地输出的科技感，与 §1.1 "神经连结供能" 主题对应
+    #    注意：首个 chunk 到达时的状态推送 is_visible=True, is_terminal=False，
+    #    确保整个流式生成期间状态栏持续保持在激活态，不会提前被清理。
     #    ================================================================
+    (ChatStatusStage.LLM_STREAMING, ChatStatusState.RUNNING): [
+        "神经连结供能中...",
+        "正在具象化思维流...",
+        "数据链路已建立，正在同步...",
+        "正在构建回复链路...",
+        "输出数据流已建立...",
+    ],
+    (ChatStatusStage.LLM_STREAMING, ChatStatusState.COMPLETED): [
+        "回复已就绪，正在呈递...",
+        "流式传输完成~",
+        "数据同步完毕！",
+    ],
+    (ChatStatusStage.LLM_STREAMING, ChatStatusState.ERROR): [
+        "神经连结断开，正在尝试恢复...",
+        "数据流中断了...",
+        "信号丢失……Luna正在重连...",
+    ],
 
     # ================================================================
     # 9. 回复持久化 (ResponsePersistenceNode)

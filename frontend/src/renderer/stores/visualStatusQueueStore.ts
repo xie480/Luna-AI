@@ -28,6 +28,10 @@ interface VisualStatusQueueState {
    * 清空当前状态并回到空闲态。
    */
   clearToIdle: () => void;
+  /**
+   * 是否处于纯空闲态（无队列、无活跃状态、无连接问题）。
+   */
+  readonly isIdle: boolean;
 }
 
 /** 后端 ChatStatusStage 到前端 colorTheme 的映射表。 */
@@ -68,6 +72,10 @@ export const useVisualStatusQueue = create<VisualStatusQueueState>((set, get) =>
   queue: [],
   currentVisualState: null,
   isProcessing: false,
+
+  get isIdle(): boolean {
+    return !get().currentVisualState && get().queue.length === 0 && !get().isProcessing;
+  },
 
   onChatStatus: (payload) => {
     // is_visible=false 时不展示（如跳过/静默通知）
@@ -118,11 +126,14 @@ export const useVisualStatusQueue = create<VisualStatusQueueState>((set, get) =>
     
     // 队列已空时的处理
     if (queue.length === 0) {
-      if (currentVisualState?.isTerminal) {
-        // 当前显示的是一个 terminal 状态，且没有后续任务，彻底清空回到空闲态
+      // 仅当当前状态是纯清理指令（terminal + 无文案）时才彻底清空
+      // 为什么：中间节点的 COMPLETED 状态（如 "Luna想起来了~"）也会带 isTerminal=true，
+      //       但带有文案，应保留显示而不是清空，等待下游节点的新状态入队。
+      if (currentVisualState?.isTerminal && !currentVisualState.text) {
+        // 当前显示的是一个纯清理 terminal（来自 FinalizeNode），彻底清空回到空闲态
         get().clearToIdle();
       } else {
-        // 当前状态不是 terminal，可能后续还有更新，保留显示，标记非处理态
+        // 当前状态不是纯清理 terminal，保留显示，标记非处理态
         set({ isProcessing: false });
       }
       return;

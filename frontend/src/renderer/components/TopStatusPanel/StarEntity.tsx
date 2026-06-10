@@ -24,10 +24,26 @@ const getColorTheme = (colorTheme?: string) => {
   return themeColors[colorTheme as keyof typeof themeColors] || themeColors.default;
 };
 
+/**
+ * 将后端 stage 名称映射到对应的 StarPhase。
+ * 做什么：根据当前显示的 VisualStateItem 和队列长度，决定主星的动画阶段。
+ * 为什么这样做：
+ *   - "llm_streaming" 阶段对应 §1.1 的"并发输出态 (Concurrent LLM)"，
+ *     主星应呈现高频脉冲的"神经连结供能"视觉主题（高饱和青绿色 #00FFCC）。
+ *   - 之前误写了 "MAIN_CHAT_LLM" 作为匹配，这个字符串永远不会被后端推送，
+ *     导致 LLM 流式生成期间主星一直停留在 RUNNING_NORMAL 而非激活态。
+ * 边界条件：
+ *   - state 为 null → IDLE
+ *   - state.state === 'ERROR' → ERROR
+ *   - stage 为 llm_streaming → CONCURRENT_LLM
+ *   - queueLength >= 3 → RUNNING_WARP（拥塞加速态）
+ *   - 其他 → RUNNING_NORMAL
+ */
 export const determinePhase = (state: VisualStateItem | null, queueLength: number): StarPhase => {
   if (!state) return 'IDLE';
   if (state.state === 'ERROR') return 'ERROR';
-  if (state.stage === 'MAIN_CHAT_LLM' || state.stage === 'CONCURRENT_LLM') return 'CONCURRENT_LLM';
+  // 匹配后端 ChatStatusStage.LLM_STREAMING = "llm_streaming"
+  if (state.stage === 'llm_streaming') return 'CONCURRENT_LLM';
   if (queueLength >= 3) return 'RUNNING_WARP';
   return 'RUNNING_NORMAL';
 };

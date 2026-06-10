@@ -15,7 +15,18 @@
   transition: filter 0.4s ease;
 }
 
-/* 未连接的空闲态，大幅降低亮度和色彩 */
+/* 已连接的空闲态 — "深空潜伏"（§1.1 第一段）：
+   - 轨道 opacity 降至 0.05，如同隐匿在暗物质中的星轨
+   - 主星收缩为 scale: 0.2 的白矮星，以 4s 周期深长呼吸
+   - 文本容器完全折叠
+   此处不额外降低亮度，因为 StarEntity 和 TrackBackground
+   已经在 IDLE phase 中处理了各自的低透明度逻辑。 */
+.top-status-panel.idle-connected {
+  /* 仅做 CSS 级别的降级兜底，视觉主体由 Framer Motion 控制 */
+  filter: brightness(0.6);
+}
+
+/* 未连接时的整体降级效果 */
 .top-status-panel.idle-disconnected {
   filter: grayscale(1) opacity(0.3);
 }
