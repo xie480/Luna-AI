@@ -24,68 +24,231 @@ const getColorTheme = (colorTheme?: string) => {
   return themeColors[colorTheme as keyof typeof themeColors] || themeColors.default;
 };
 
-/**
- * 将后端 stage 名称映射到对应的 StarPhase。
- * 做什么：根据当前显示的 VisualStateItem 和队列长度，决定主星的动画阶段。
- * 为什么这样做：
- *   - "llm_streaming" 阶段对应 §1.1 的"并发输出态 (Concurrent LLM)"，
- *     主星应呈现高频脉冲的"神经连结供能"视觉主题（高饱和青绿色 #00FFCC）。
- *   - 之前误写了 "MAIN_CHAT_LLM" 作为匹配，这个字符串永远不会被后端推送，
- *     导致 LLM 流式生成期间主星一直停留在 RUNNING_NORMAL 而非激活态。
- * 边界条件：
- *   - state 为 null → IDLE
- *   - state.state === 'ERROR' → ERROR
- *   - stage 为 llm_streaming → CONCURRENT_LLM
- *   - queueLength >= 3 → RUNNING_WARP（拥塞加速态）
- *   - 其他 → RUNNING_NORMAL
- */
 export const determinePhase = (state: VisualStateItem | null, queueLength: number): StarPhase => {
   if (!state) return 'IDLE';
   if (state.state === 'ERROR') return 'ERROR';
-  // 匹配后端 ChatStatusStage.LLM_STREAMING = "llm_streaming"
   if (state.stage === 'llm_streaming') return 'CONCURRENT_LLM';
   if (queueLength >= 3) return 'RUNNING_WARP';
   return 'RUNNING_NORMAL';
 };
 
-const starVariants = {
-  IDLE: (customColor: string) => ({
-    scale: 0.2,
-    opacity: 0.15,
-    backgroundColor: customColor,
-    boxShadow: `0 0 6px ${customColor}`,
-    transition: { duration: 4, repeat: Infinity, repeatType: "mirror" as const, ease: "easeInOut" }
-  }),
-  RUNNING_NORMAL: (customColor: string) => ({
-    scale: 1,
-    opacity: 0.9,
-    backgroundColor: customColor,
-    boxShadow: `0 0 16px ${customColor}, 0 0 32px ${customColor}80`,
-    transition: { type: 'spring', damping: 15, stiffness: 120 }
-  }),
-  RUNNING_WARP: (customColor: string) => ({
-    scaleX: 2.5,
-    scaleY: 0.6,
-    opacity: 1,
-    backgroundColor: customColor,
-    boxShadow: `0 0 24px ${customColor}, 0 0 48px ${customColor}`,
-    filter: 'blur(2px)',
-    transition: { duration: 0.2, ease: "linear" }
-  }),
+// 1. 父容器动画：处理 IDLE 的刚体共动漂浮，以及 ERROR 的抽搐震动
+const containerVariants = {
+  IDLE: {
+    rotateX: [0, 360],
+    rotateY: [0, 360],
+    rotateZ: 0,
+    x: 0,
+    transition: { duration: 25, repeat: Infinity, ease: "linear" }
+  },
+  RUNNING_NORMAL: {
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    x: 0,
+    transition: { type: "spring", stiffness: 40, damping: 20 }
+  },
+  RUNNING_WARP: {
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    x: 0,
+    transition: { type: "spring", stiffness: 40, damping: 20 }
+  },
   CONCURRENT_LLM: {
-    scale: [1, 1.2, 1],
-    opacity: 1,
-    backgroundColor: themeColors.cyan,
-    boxShadow: `0 0 20px ${themeColors.cyan}, 0 0 40px ${themeColors.cyan}80`,
-    transition: { duration: 0.6, repeat: Infinity, ease: "easeInOut" }
+    rotateX: [-10, 10, -10],
+    rotateY: [-10, 10, -10],
+    rotateZ: [-5, 5, -5],
+    x: 0,
+    transition: { duration: 0.15, repeat: Infinity, ease: "linear" }
   },
   ERROR: {
-    scale: [1, 1.3, 0.8, 1.2, 1],
-    x: [0, -6, 6, -3, 3, 0],
-    opacity: [1, 0.8, 1, 0.5, 1],
-    backgroundColor: themeColors.red,
-    boxShadow: `0 0 24px ${themeColors.red}, 0 0 0px ${themeColors.red}`,
-    transition: { duration: 0.3, repeat: Infinity, ease: "linear" }
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    x: [0, -3, 3, -1, 1, 0], // 横向错位故障闪烁
+    transition: { duration: 0.2, repeat: Infinity, ease: "linear" }
+  }
+};
+
+// 2. 外环动画：主控 Z 轴旋转
+const outerVariants = {
+  IDLE: () => ({
+    rotateX: 45,
+    rotateY: 30,
+    rotateZ: 0,
+    color: '#2C3E50',
+    opacity: 0.4,
+    filter: 'drop-shadow(0 0 0px transparent)',
+    transition: { type: 'spring', damping: 20, stiffness: 40, color: { duration: 1.5 }, opacity: { duration: 1.5 } }
+  }),
+  RUNNING_NORMAL: (color: string) => ({
+    rotateX: 45,
+    rotateY: 0,
+    rotateZ: [0, 360],
+    color: color,
+    opacity: 0.8,
+    filter: `drop-shadow(0 0 3px ${color})`,
+    transition: { 
+      rotateZ: { duration: 4, repeat: Infinity, ease: "linear" },
+      rotateX: { type: 'spring', damping: 20, stiffness: 40 },
+      rotateY: { type: 'spring', damping: 20, stiffness: 40 },
+      color: { duration: 0.6 },
+      opacity: { duration: 0.6 }
+    }
+  }),
+  RUNNING_WARP: (color: string) => ({
+    rotateX: 45,
+    rotateY: 0,
+    rotateZ: [0, 360],
+    color: color,
+    opacity: 0.9,
+    filter: `drop-shadow(0 0 5px ${color})`,
+    transition: { 
+      rotateZ: { duration: 1.5, repeat: Infinity, ease: "linear" },
+      rotateX: { type: 'spring', damping: 20, stiffness: 40 },
+      rotateY: { type: 'spring', damping: 20, stiffness: 40 }
+    }
+  }),
+  CONCURRENT_LLM: {
+    rotateX: [0, 360],
+    rotateY: [0, 360],
+    rotateZ: [0, 720],
+    color: themeColors.cyan,
+    opacity: 1,
+    filter: `drop-shadow(0 0 6px ${themeColors.cyan})`,
+    transition: {
+      rotateX: { duration: 1.2, repeat: Infinity, ease: "linear" },
+      rotateY: { duration: 1.5, repeat: Infinity, ease: "linear" },
+      rotateZ: { duration: 0.8, repeat: Infinity, ease: "linear" }
+    }
+  },
+  ERROR: {
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    color: themeColors.red,
+    opacity: 1,
+    filter: `drop-shadow(0 0 4px ${themeColors.red})`,
+    transition: { duration: 0.1 } // 瞬间坍缩为 2D
+  }
+};
+
+// 3. 中环动画：主控 Y 轴旋转
+const middleVariants = {
+  IDLE: () => ({
+    rotateX: -30,
+    rotateY: 45,
+    rotateZ: 0,
+    color: '#2C3E50',
+    opacity: 0.4,
+    filter: 'drop-shadow(0 0 0px transparent)',
+    transition: { type: 'spring', damping: 20, stiffness: 40 }
+  }),
+  RUNNING_NORMAL: (color: string) => ({
+    rotateX: 0,
+    rotateY: [0, -360],
+    rotateZ: 0,
+    color: color,
+    opacity: 0.8,
+    filter: `drop-shadow(0 0 3px ${color})`,
+    transition: { 
+      rotateY: { duration: 3, repeat: Infinity, ease: "linear" },
+      rotateX: { type: 'spring', damping: 20, stiffness: 40 },
+      rotateZ: { type: 'spring', damping: 20, stiffness: 40 }
+    }
+  }),
+  RUNNING_WARP: (color: string) => ({
+    rotateX: 0,
+    rotateY: [0, -360],
+    rotateZ: 0,
+    color: color,
+    opacity: 0.9,
+    filter: `drop-shadow(0 0 5px ${color})`,
+    transition: { 
+      rotateY: { duration: 1.2, repeat: Infinity, ease: "linear" }
+    }
+  }),
+  CONCURRENT_LLM: {
+    rotateX: [0, 360],
+    rotateY: [0, -720],
+    rotateZ: [0, -360],
+    color: themeColors.cyan,
+    opacity: 1,
+    filter: `drop-shadow(0 0 6px ${themeColors.cyan})`,
+    transition: {
+      rotateX: { duration: 1.4, repeat: Infinity, ease: "linear" },
+      rotateY: { duration: 0.9, repeat: Infinity, ease: "linear" },
+      rotateZ: { duration: 1.2, repeat: Infinity, ease: "linear" }
+    }
+  },
+  ERROR: {
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    color: themeColors.red,
+    opacity: 1,
+    filter: `drop-shadow(0 0 4px ${themeColors.red})`,
+    transition: { duration: 0.1 }
+  }
+};
+
+// 4. 内环动画：主控 X 轴翻滚与辅助能量色
+const innerVariants = {
+  IDLE: () => ({
+    rotateX: 60,
+    rotateY: -30,
+    rotateZ: 0,
+    color: '#2C3E50',
+    opacity: 0.4,
+    filter: 'drop-shadow(0 0 0px transparent)',
+    transition: { type: 'spring', damping: 20, stiffness: 40 }
+  }),
+  RUNNING_NORMAL: () => ({
+    rotateX: [0, 360],
+    rotateY: 0,
+    rotateZ: 0,
+    color: themeColors.purple, // 内环在运行时呈现电光紫的辅助色
+    opacity: 0.9,
+    filter: `drop-shadow(0 0 3px ${themeColors.purple})`,
+    transition: { 
+      rotateX: { duration: 2, repeat: Infinity, ease: "linear" },
+      rotateY: { type: 'spring', damping: 20, stiffness: 40 },
+      rotateZ: { type: 'spring', damping: 20, stiffness: 40 }
+    }
+  }),
+  RUNNING_WARP: () => ({
+    rotateX: [0, 360],
+    rotateY: 0,
+    rotateZ: 0,
+    color: themeColors.purple,
+    opacity: 1,
+    filter: `drop-shadow(0 0 5px ${themeColors.purple})`,
+    transition: { 
+      rotateX: { duration: 0.8, repeat: Infinity, ease: "linear" }
+    }
+  }),
+  CONCURRENT_LLM: {
+    rotateX: [0, -720],
+    rotateY: [0, 360],
+    rotateZ: [0, 180],
+    color: '#00FA9A', // 极光青/薄荷绿
+    opacity: 1,
+    filter: `drop-shadow(0 0 6px #00FA9A)`,
+    transition: {
+      rotateX: { duration: 0.8, repeat: Infinity, ease: "linear" },
+      rotateY: { duration: 1.1, repeat: Infinity, ease: "linear" },
+      rotateZ: { duration: 1.3, repeat: Infinity, ease: "linear" }
+    }
+  },
+  ERROR: {
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    color: themeColors.red,
+    opacity: 1,
+    filter: `drop-shadow(0 0 4px ${themeColors.red})`,
+    transition: { duration: 0.1 }
   }
 };
 
@@ -100,6 +263,26 @@ const rippleVariants = {
   })
 };
 
+// 动态构建带有缺口（Gap）的 SVG 细环
+const RingSvg: React.FC<{ size: number, dasharray: string }> = ({ size, dasharray }) => {
+  const strokeWidth = 1.5;
+  const radius = (size - strokeWidth) / 2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="armillary-svg">
+      <circle 
+        cx={size / 2} 
+        cy={size / 2} 
+        r={radius} 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth={strokeWidth} 
+        strokeDasharray={dasharray} 
+        strokeLinecap="round" 
+      />
+    </svg>
+  );
+};
+
 export const StarEntity: React.FC<StarEntityProps> = ({ currentVisualState, queueLength, overrideColorTheme }) => {
   const phase = determinePhase(currentVisualState, queueLength);
   const effectiveColorTheme = currentVisualState?.colorTheme || overrideColorTheme;
@@ -107,6 +290,7 @@ export const StarEntity: React.FC<StarEntityProps> = ({ currentVisualState, queu
 
   const [rippleKey, setRippleKey] = useState(0);
 
+  // 监听状态跃迁以触发 Ripple 涟漪
   useEffect(() => {
     if (currentVisualState) {
       setRippleKey(prev => prev + 1);
@@ -115,6 +299,7 @@ export const StarEntity: React.FC<StarEntityProps> = ({ currentVisualState, queu
 
   return (
     <div className="star-entity-container">
+      {/* 背景涟漪：在节点流转时触发 */}
       <AnimatePresence mode="wait">
         {currentVisualState && phase !== 'ERROR' && phase !== 'IDLE' && (
           <motion.div
@@ -128,13 +313,23 @@ export const StarEntity: React.FC<StarEntityProps> = ({ currentVisualState, queu
         )}
       </AnimatePresence>
 
+      {/* 核心 3D 全息星轨仪 (Holographic Orbital Rings) */}
       <motion.div
-        className="star-core"
-        variants={starVariants as Variants}
+        className="holographic-armillary"
+        variants={containerVariants as Variants}
         initial="IDLE"
         animate={phase}
-        custom={color}
-      />
+      >
+        <motion.div className="armillary-ring outer" variants={outerVariants as Variants} initial="IDLE" animate={phase} custom={color}>
+          <RingSvg size={16} dasharray="10 5.16" />
+        </motion.div>
+        <motion.div className="armillary-ring middle" variants={middleVariants as Variants} initial="IDLE" animate={phase} custom={color}>
+          <RingSvg size={12} dasharray="10 6.5" />
+        </motion.div>
+        <motion.div className="armillary-ring inner" variants={innerVariants as Variants} initial="IDLE" animate={phase} custom={color}>
+          <RingSvg size={8} dasharray="14 6.4" />
+        </motion.div>
+      </motion.div>
     </div>
   );
 };

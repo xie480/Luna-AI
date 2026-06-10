@@ -10,17 +10,40 @@
     width: 32px;
     height: 32px;
     z-index: 10;
+    /* Added perspective for 3D Holographic effect */
+    perspective: 50px;
+    transform-style: preserve-3d;
 }
 
-.star-core {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background-color: #ffffff;
-    box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+.holographic-armillary {
+    width: 16px;
+    height: 16px;
     position: relative;
+    transform-style: preserve-3d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     z-index: 2;
 }
+
+.armillary-ring {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform-style: preserve-3d;
+    will-change: transform, color, filter;
+}
+
+.armillary-svg {
+    position: absolute;
+    overflow: visible;
+}
+
+/* Base dimensions for concentric 3D rings */
+.armillary-ring.outer { width: 16px; height: 16px; }
+.armillary-ring.middle { width: 12px; height: 12px; }
+.armillary-ring.inner { width: 8px; height: 8px; }
 
 .star-ripple {
     position: absolute;
