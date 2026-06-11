@@ -1,0 +1,169 @@
+/**
+ * MCP 工具组件样式。
+ */
+ 
+/* ========== 状态指示器 ========== */
+
+.mcp-tool-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  margin: 4px 0;
+  border-radius: 6px;
+  background: var(--color-bg-secondary, #f5f5f5);
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
+  animation: fadeIn 0.2s ease-in;
+}
+
+.mcp-tool-status-indicator .spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border, #ddd);
+  border-top-color: var(--color-primary, #007aff);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.mcp-tool-status-indicator .check-icon {
+  color: var(--color-success, #34c759);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.mcp-tool-status-indicator .warning-icon {
+  color: var(--color-warning, #ff9500);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.mcp-tool-status-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.mcp-tool-status-meta .latency-badge {
+  font-size: 11px;
+  color: var(--color-text-tertiary, #999);
+  background: var(--color-bg-tertiary, #e8e8e8);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.mcp-tool-status-meta .retry-badge {
+  font-size: 11px;
+  color: var(--color-warning, #ff9500);
+  background: var(--color-bg-warning, #fff3e0);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ========== 结果气泡 ========== */
+
+.mcp-tool-result-bubble {
+  margin: 8px 0;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--color-bg-tertiary, #f0f0f0);
+  border: 1px solid var(--color-border, #e0e0e0);
+  overflow: hidden;
+}
+
+.mcp-tool-result-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--color-bg-secondary, #f8f8f8);
+  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.mcp-tool-result-header .tool-icon {
+  font-size: 14px;
+}
+
+.mcp-tool-result-header .tool-name {
+  font-weight: 600;
+  color: var(--color-text-primary, #333);
+}
+
+.mcp-tool-result-header .tool-result-label {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-tertiary, #999);
+}
+
+.mcp-tool-result-body {
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.mcp-tool-result-body .mcp-tool-output {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-primary, #333);
+}
+
+/* ========== 错误气泡 ========== */
+
+.mcp-tool-error-bubble {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-bg-error, #fff5f5);
+  border: 1px solid var(--color-border-error, #ffcccc);
+}
+
+.mcp-tool-error-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-error, #cc0000);
+}
+
+.mcp-tool-error-body {
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.mcp-tool-error-body .error-message {
+  margin: 0 0 4px 0;
+}
+
+.mcp-tool-error-body .error-tool-name {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-tertiary, #999);
+}
+
+/* ========== 动画关键帧 ========== */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

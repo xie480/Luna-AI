@@ -15,6 +15,9 @@ import { PromptPanel } from '../PromptPanel/PromptPanel';
 import { MemoryPanel } from '../MemoryPanel/MemoryPanel';
 import { KnowledgeBasePanel } from '../KnowledgeBase/KnowledgeBasePanel';
 import { UserProfilePanel } from '../UserProfile/UserProfilePanel';
+import { MCPMarketPage } from '../MCPMarket/MCPMarketPage';
+import { MCPMarketDetailPage } from '../MCPMarket/MCPMarketDetailPage';
+import { MCPInstalledListPage } from '../MCPMarket/MCPInstalledListPage';
 import './Modal.css';
 
 /** 最小窗口尺寸 */
@@ -34,6 +37,9 @@ const PANEL_TITLES: Record<ModalPanelType, string> = {
   settings: '设置',
   logs: '日志',
   clothing: '服装配置',
+  mcpMarket: 'MCP 市场',
+  mcpMarketDetail: 'MCP 详情',
+  mcpInstalled: '已接入 MCP',
 };
 
 /**
@@ -346,6 +352,27 @@ export const Modal: React.FC = () => {
           {activeModalPanel === 'clothing' && (
             <div className="panel clothing-panel">
               <ClothingPanel />
+            </div>
+          )}
+
+          {/* Phase 12: MCP 市场面板 */}
+          {activeModalPanel === 'mcpMarket' && (
+            <div className="panel mcp-market-panel">
+              <MCPMarketPage />
+            </div>
+          )}
+
+          {/* Phase 12: MCP 市场详情面板 */}
+          {activeModalPanel === 'mcpMarketDetail' && (
+            <div className="panel mcp-market-detail-panel">
+              <MCPMarketDetailPage />
+            </div>
+          )}
+
+          {/* Phase 12: 已接入 MCP 面板 */}
+          {activeModalPanel === 'mcpInstalled' && (
+            <div className="panel mcp-installed-panel">
+              <MCPInstalledListPage />
             </div>
           )}
         </div>

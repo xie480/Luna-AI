@@ -16,6 +16,7 @@ import {
   ChatNodeStatusPayload,
   ChatPlanLifecyclePayload,
   ChatPostprocessPayload,
+  ChatStatusPayload,
   ChatStreamPayload,
   ChatWorkflowEventEnvelope,
   ChatWorkflowNodeType,
@@ -408,6 +409,12 @@ class SSEManager {
         }));
         if (event && event.payload.nodeType && event.payload.status) {
           workflowStore.onNodeStatus(event);
+          // Phase 12: MCP 节点完成事件同时转发给 MCP 处理器
+          if (event.payload.nodeType === ('mcp_tool_execution' as ChatWorkflowNodeType)) {
+            import('./mcpSseHandlers').then(({ handleMCPNodeCompletedEvent }) => {
+              handleMCPNodeCompletedEvent(event!.payload);
+            });
+          }
         }
         break;
       }
@@ -423,6 +430,15 @@ class SSEManager {
         }));
         if (event && event.payload.sourceNodeType && event.payload.targetNodeType && event.payload.routeName) {
           workflowStore.onConditionEvaluated(event);
+          // Phase 12: MCP 条件评估事件同时转发给 MCP 处理器
+          if (
+            event.payload.routeName === 'enter_mcp_tool' ||
+            event.payload.routeName === 'bypass_mcp_tool'
+          ) {
+            import('./mcpSseHandlers').then(({ handleMCPConditionEvaluatedEvent }) => {
+              handleMCPConditionEvaluatedEvent(event!.payload);
+            });
+          }
         }
         break;
       }
@@ -478,6 +494,12 @@ class SSEManager {
         import('../stores/visualStatusQueueStore').then(({ useVisualStatusQueue }) => {
           useVisualStatusQueue.getState().onChatStatus(statusPayload);
         });
+        // Phase 12: MCP 工具执行阶段事件同时转发给 MCP 处理器
+        if (statusPayload.stage === 'mcp_tool_execution') {
+          import('./mcpSseHandlers').then(({ handleMCPToolStatusEvent }) => {
+            handleMCPToolStatusEvent(statusPayload as ChatStatusPayload);
+          });
+        }
         break;
       }
 

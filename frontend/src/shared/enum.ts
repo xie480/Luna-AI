@@ -299,6 +299,8 @@ export const CHAT_WORKFLOW_NODE_TYPE = {
   POSTPROCESS_COMMIT: 'postprocess_commit',
   ERROR_RECOVERY: 'error_recovery',
   FINALIZE: 'finalize',
+  /** Phase 12 新增：MCP 工具执行节点。 */
+  MCP_TOOL_EXECUTION: 'mcp_tool_execution',
 } as const;
 
 /**
@@ -359,6 +361,7 @@ export const CHAT_WORKFLOW_NODE_LABEL: Record<
   [CHAT_WORKFLOW_NODE_TYPE.POSTPROCESS_COMMIT]: '后处理提交',
   [CHAT_WORKFLOW_NODE_TYPE.ERROR_RECOVERY]: '错误恢复',
   [CHAT_WORKFLOW_NODE_TYPE.FINALIZE]: '流程收尾',
+  [CHAT_WORKFLOW_NODE_TYPE.MCP_TOOL_EXECUTION]: 'MCP 工具调用',
 };
 
 /** Chat 节点状态中文标签。 */
@@ -497,3 +500,91 @@ export interface ResponseModel<T = any> {
   data: T;
   trace_id: string;
 }
+
+/**
+ * MCP 市场分类常量。
+ * 做什么：定义 MCP 市场支持的分类枚举。
+ */
+export const MCP_MARKET_CATEGORY = {
+  ALL: 'all',
+  DEVELOPER_TOOLS: 'developer_tools',
+  DATA_ACCESS: 'data_access',
+  COMMUNICATION: 'communication',
+  PRODUCTIVITY: 'productivity',
+  AI_AND_ML: 'ai_and_ml',
+  SYSTEM: 'system',
+  UTILITY: 'utility',
+  UNCATEGORIZED: 'uncategorized',
+} as const;
+
+/**
+ * MCP 市场分类中文标签。
+ */
+export const MCP_MARKET_CATEGORY_LABEL: Record<string, string> = {
+  [MCP_MARKET_CATEGORY.ALL]: '全部分类',
+  [MCP_MARKET_CATEGORY.DEVELOPER_TOOLS]: '开发者工具',
+  [MCP_MARKET_CATEGORY.DATA_ACCESS]: '数据访问',
+  [MCP_MARKET_CATEGORY.COMMUNICATION]: '通信与通知',
+  [MCP_MARKET_CATEGORY.PRODUCTIVITY]: '效率工具',
+  [MCP_MARKET_CATEGORY.AI_AND_ML]: 'AI 与机器学习',
+  [MCP_MARKET_CATEGORY.SYSTEM]: '系统工具',
+  [MCP_MARKET_CATEGORY.UTILITY]: '通用工具',
+  [MCP_MARKET_CATEGORY.UNCATEGORIZED]: '未分类',
+};
+
+/**
+ * MCP 健康状态常量。
+ */
+export const MCP_HEALTH_STATUS = {
+  ONLINE: 'online',
+  OFFLINE: 'offline',
+  UNKNOWN: 'unknown',
+  BUILTIN: 'builtin',
+} as const;
+
+/**
+ * MCP 健康状态中文标签。
+ */
+export const MCP_HEALTH_STATUS_LABEL: Record<string, string> = {
+  [MCP_HEALTH_STATUS.ONLINE]: '在线',
+  [MCP_HEALTH_STATUS.OFFLINE]: '离线',
+  [MCP_HEALTH_STATUS.UNKNOWN]: '未知',
+  [MCP_HEALTH_STATUS.BUILTIN]: '内置',
+};
+
+/**
+ * MCP 工具来源常量。
+ * 做什么：定义 MCP 工具的来源类型。
+ */
+export const MCP_TOOL_SOURCE = {
+  LOCAL: 'local',
+  REMOTE: 'remote',
+} as const;
+
+/**
+ * MCP 工具来源中文标签。
+ */
+export const MCP_TOOL_SOURCE_LABEL: Record<string, string> = {
+  [MCP_TOOL_SOURCE.LOCAL]: '系统内置',
+  [MCP_TOOL_SOURCE.REMOTE]: '远程接入',
+};
+
+/**
+ * MCP 鉴权类型常量。
+ */
+export const MCP_AUTH_TYPE = {
+  NONE: 'none',
+  BEARER: 'bearer',
+  API_KEY: 'api_key',
+  BASIC: 'basic',
+} as const;
+
+/**
+ * MCP 鉴权类型中文标签。
+ */
+export const MCP_AUTH_TYPE_LABEL: Record<string, string> = {
+  [MCP_AUTH_TYPE.NONE]: '无需鉴权',
+  [MCP_AUTH_TYPE.BEARER]: 'Bearer Token',
+  [MCP_AUTH_TYPE.API_KEY]: 'API Key',
+  [MCP_AUTH_TYPE.BASIC]: '用户名密码',
+};

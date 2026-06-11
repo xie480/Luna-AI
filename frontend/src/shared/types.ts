@@ -343,3 +343,47 @@ export interface ChatStatusPayload {
   timestamp_ms: number;
   error: string;
 }
+
+/**
+ * MCP 工具执行状态前端投影。
+ *
+ * 做什么：承载后端通过 EVT_CHAT_STATUS 和 EVT_CHAT_NODE_COMPLETED 推送的
+ *         MCP 工具执行状态。前端仅做展示，不做任何业务判断。
+ * 为什么这样做：前端是后端的纯状态镜像，所有决策和执行都在 Python 侧完成。
+ * 输入输出：状态由后端推送，前端消费并渲染。
+ * 边界条件：所有字段都可能为空或 undefined，前端渲染时必须做空值保护。
+ */
+export interface MCPToolStatusProjection {
+  /** 是否进入了 MCP 工具执行节点。 */
+  enteredByCondition: boolean;
+  /** 节点进入原因或跳过原因。 */
+  conditionReason: string;
+  /** 工具执行决策结果（LLM 原始输出镜像）。 */
+  decision?: {
+    shouldCallTool: boolean;
+    toolName: string;
+    parameters: Record<string, unknown>;
+    reasoning: string;
+    requiresUserApproval: boolean;
+  };
+  /** Agent 推理过程文本。 */
+  agentReasoning?: string;
+  /** 实际执行的工具名称。 */
+  executedToolName?: string;
+  /** 执行 ID（雪花算法）。 */
+  executionId?: string;
+  /** 工具执行输出文本。 */
+  outputText?: string;
+  /** 错误消息。 */
+  errorMessage?: string;
+  /** 执行耗时（毫秒）。 */
+  latencyMs?: number;
+  /** 重试次数。 */
+  retryCount?: number;
+  /** 工具风险等级。 */
+  riskLevel?: string;
+  /** 是否降级。 */
+  degraded?: boolean;
+  /** 降级原因。 */
+  degradedReason?: string;
+}
