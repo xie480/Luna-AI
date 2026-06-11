@@ -134,6 +134,21 @@ class MarketDiscoveryScheduler:
 
         logger.info(f"原始采集结果: {len(raw_items)} 条")
 
+        # 日志：打印前3条原始数据的 name/description/repository_url，确认采集层数据完整
+        raw_sample = raw_items[:3]
+        for i, r_item in enumerate(raw_sample):
+            logger.info(
+                f"原始数据[{i}]: "
+                f"name={r_item.name} "
+                f"desc_len={len(r_item.description)} "
+                f"repo_url={r_item.repository_url} "
+                f"endpoint_url={r_item.endpoint_url} "
+                f"author={r_item.author} "
+                f"license={r_item.license} "
+                f"tags={r_item.tags} "
+                f"raw_data keys={list(r_item.raw_data.keys()) if r_item.raw_data else 'empty'}"
+            )
+
         # Step 2: 标准化与去重
         normalized_items = await self._normalizer.normalize(raw_items)
         if not normalized_items:
@@ -141,6 +156,22 @@ class MarketDiscoveryScheduler:
             return
 
         logger.info(f"标准化去重后: {len(normalized_items)} 条")
+
+        # 日志：打印前3条标准化后的数据，确认字段映射正确
+        norm_sample = normalized_items[:3]
+        for i, n_item in enumerate(norm_sample):
+            logger.info(
+                f"标准化数据[{i}]: "
+                f"name={n_item.name} "
+                f"display_name={n_item.display_name} "
+                f"desc_len={len(n_item.description)} "
+                f"repo_url={n_item.repository_url} "
+                f"endpoint_url={n_item.endpoint_url} "
+                f"author={n_item.author} "
+                f"license={n_item.license} "
+                f"tags={n_item.tags} "
+                f"category={n_item.category}"
+            )
 
         # Step 3: 持久化到 PostgreSQL
         async with self._pg_client.session_factory() as session:
@@ -161,7 +192,10 @@ class MarketDiscoveryScheduler:
             await self._log_discovery(session, "full_discovery", len(normalized_items), inserted_count, updated_count)
             await session.commit()
 
-        logger.info(f"MCP 市场持久化完成: 新增 {inserted_count} 条, 更新 {updated_count} 条")
+        logger.info(
+            f"MCP 市场持久化完成: 新增 {inserted_count} 条, 更新 {updated_count} 条, "
+            f"共处理 {len(normalized_items)} 条"
+        )
 
     async def _upsert_marketplace(self, session: AsyncSession, item: NormalizedItem) -> bool:
         """将标准化条目 upsert 到 mcp_marketplace 表。
@@ -198,6 +232,12 @@ class MarketDiscoveryScheduler:
             existing = result.scalar_one_or_none()
 
         now = datetime.now(timezone.utc)
+
+        # 注意：官方 Registry 仅返回 Server 目录信息，不包含工具能力（tools/list）、
+        # 健康详情（health_detail）和安全标记（security_flags）。
+        # 这些字段需要通过连接每个 Server 的 remotes URL 动态获取
+        # （MCP Protocol tools/list 等 RPC 调用），采集阶段不填充。
+        # 参见：https://modelcontextprotocol.io/registry/about
 
         if existing:
             # 更新已有记录（保留 install_count 等动态字段不被覆盖）

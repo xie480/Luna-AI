@@ -410,6 +410,27 @@
 
 /* ========== 详情页 ========== */
 
+/* 返回列表按钮：左上角，悬浮在 banner 上方 */
+.detail-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  margin-bottom: 12px;
+  background: transparent;
+  border: 1px solid var(--color-border, #ddd);
+  border-radius: 6px;
+  color: var(--color-text-secondary, #555);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.detail-back-btn:hover {
+  background: var(--color-bg-tertiary, #eee);
+  color: var(--color-text-primary, #222);
+  border-color: var(--color-accent, #4f8cff);
+}
+
 .detail-banner {
   display: flex;
   align-items: center;
@@ -613,6 +634,39 @@
   font-size: 12px;
   overflow-x: auto;
   max-height: 300px;
+}
+
+/* 空工具列表占位 */
+
+.detail-empty-tools {
+  text-align: center;
+  padding: 40px 20px;
+  border: 1px dashed var(--color-border, #ddd);
+  border-radius: 8px;
+  background: var(--color-bg-secondary, #fafafa);
+}
+
+.detail-empty-tools .empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.detail-empty-tools .empty-text {
+  font-size: 14px;
+  color: var(--color-text-secondary, #666);
+  margin: 0 0 6px 0;
+}
+
+.detail-empty-tools .empty-hint {
+  font-size: 12px;
+  color: var(--color-text-tertiary, #999);
+  margin: 0;
+}
+
+.tool-count-hint {
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
+  margin-bottom: 8px;
 }
 
 /* 信任与安全 */

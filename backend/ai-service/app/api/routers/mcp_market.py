@@ -9,7 +9,9 @@ MCP 市场 API 路由。
     - 传参错误时返回 HTTP 422 详细描述。
 """
 
+import traceback
 from typing import Any
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select, func, text, or_
@@ -101,6 +103,82 @@ async def _row_to_dict(row: Any) -> dict[str, Any]:
     return d
 
 
+async def _probe_remote_tools(endpoint_url: str, timeout: float = 10.0) -> list[dict[str, Any]]:
+    """通过 MCP Protocol 连接到远程 Server，调用 tools/list 获取工具列表。
+
+    做什么：向远程 MCP Server 发送 JSON-RPC 2.0 请求 `{"method": "tools/list"}`，
+            解析返回的工具定义列表。无论 HTTP 状态码如何，都尝试解析响应 body。
+    为什么这样做：官方 Registry 不提供工具级能力数据，必须动态探测。
+                 很多 Server 返回非 2xx 状态码（如 406/415），但 body 中
+                 仍可能包含有效的 JSON-RPC 响应。因此不依赖 HTTP 状态码。
+    边界条件：
+        - 连接超时/失败时返回空列表，不抛出异常。
+        - 部分 Server 可能不暴露 tools/list（如纯 Resource Server），
+          也返回空列表。
+    """
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            payload = {
+                "jsonrpc": "2.0",
+                "method": "tools/list",
+                "id": "1",
+            }
+            response = await client.post(
+                endpoint_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+
+            # 日志：打印原始 HTTP 响应状态码和 body，不论状态码如何都尝试解析
+            # 注意：不能使用 raise_for_status()，因为很多 MCP Server 返回 406/415
+            # 但 body 中仍包含有效的 JSON-RPC 错误或响应。
+            response_text = response.text
+            logger.info(
+                f"远端 tools/list HTTP 响应 "
+                f"endpoint={endpoint_url} "
+                f"status_code={response.status_code} "
+                f"body长度={len(response_text)}\n"
+                f"原始响应 body（前 3000 字符）:\n{response_text[:3000]}"
+            )
+
+            data = response.json()
+
+            # JSON-RPC 响应格式: {"jsonrpc":"2.0","result":{"tools":[...]},"id":"1"}
+            if "error" in data:
+                logger.debug(
+                    f"远端 tools/list 返回错误 "
+                    f"endpoint={endpoint_url} "
+                    f"error={json.dumps(data['error'], ensure_ascii=False, default=str)}"
+                )
+                return []
+
+            result = data.get("result", {})
+            if not isinstance(result, dict):
+                return []
+
+            tools = result.get("tools", [])
+            if not isinstance(tools, list):
+                return []
+
+            logger.info(
+                f"远端 tools/list 探测成功 endpoint={endpoint_url} tool_count={len(tools)}"
+            )
+            return tools
+
+    except httpx.TimeoutException:
+        logger.debug(f"远端 tools/list 超时 endpoint={endpoint_url}")
+        return []
+    except httpx.RequestError as e:
+        logger.debug(f"远端 tools/list 请求失败 endpoint={endpoint_url} error={type(e).__name__}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.debug(f"远端 tools/list JSON 解析失败 endpoint={endpoint_url} error={e}")
+        return []
+    except Exception as e:
+        logger.debug(f"远端 tools/list 未知错误 endpoint={endpoint_url} error={type(e).__name__}: {e}")
+        return []
+
+
 @router.get("/api/v1/mcp/market/list", response_model=MarketplaceListResponse)
 async def list_marketplace(
     request: Request,
@@ -185,10 +263,13 @@ async def marketplace_detail(
 ):
     """市场条目详情。
 
-    做什么：返回单个 MCP 市场条目的完整元数据，包括工具能力清单、健康详情
-            和用户当前的接入状态。
+    做什么：返回单个 MCP 市场条目的完整元数据，并在首次查看时自动连接
+            远程 Server 探测工具能力清单（tools/list），结果缓存到 DB。
     为什么这样做：前端在安装前需要展示完整的 Server 详情和工具列表。
-    边界条件：条目不存在时返回 HTTP 404。
+    边界条件：
+        - 条目不存在时返回 HTTP 404。
+        - 远程探测超时/失败时不阻塞返回，tools 以空列表展示。
+        - 已缓存的工具列表不会重复探测（除非 capabilities 为空）。
     """
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
@@ -204,6 +285,12 @@ async def marketplace_detail(
 
             item = await _row_to_dict(row)
 
+            # 日志：打印完整的数据库查询结果（所有字段），用于诊断字段丢失问题
+            logger.info(
+                f"MCP 市场详情 DB 原始数据 trace_id={trace_id} id={marketplace_id}\n"
+                f"DB 行全部字段:\n{json.dumps(item, ensure_ascii=False, default=str, indent=2)}"
+            )
+
             # 查询用户是否已接入此条目
             instances_result = await session.execute(
                 select(MCPRemoteInstance).where(
@@ -216,6 +303,75 @@ async def marketplace_detail(
             item["is_installed"] = installed_instance is not None
             item["installed_instance_id"] = installed_instance.id if installed_instance else ""
 
+            # === 动态探测工具能力 ===
+            # 策略：如果 capabilities 为空（首次查看），连接远程 Server 探测；
+            # 如果已有缓存，直接使用。允许前端通过 query 参数强制刷新。
+            endpoint_url = item.get("endpoint_url", "")
+            capabilities = item.get("capabilities") or {}
+
+            # 检查是否需要新探测：capabilities 为空 或 前端请求 force_refresh
+            force_refresh = request.query_params.get("force_refresh", "false").lower() == "true"
+            need_probe = force_refresh or not capabilities.get("tools")
+
+            raw_tools: list[dict[str, Any]] = []
+            if need_probe and endpoint_url:
+                logger.info(
+                    f"开始动态探测工具能力 trace_id={trace_id} "
+                    f"endpoint_url={endpoint_url}"
+                )
+                raw_tools = await _probe_remote_tools(endpoint_url)
+
+                # 探测成功后写回 DB 缓存（包含 tools + resources + prompts）
+                if raw_tools:
+                    capabilities["tools"] = raw_tools
+                    capabilities["tool_count"] = len(raw_tools)
+                    row.capabilities = capabilities
+                    row.tool_count = len(raw_tools)
+                    row.updated_at = func.now()
+                    await session.commit()
+                    logger.info(
+                        f"工具能力缓存写入完成 trace_id={trace_id} "
+                        f"id={marketplace_id} tool_count={len(raw_tools)}"
+                    )
+            else:
+                # 使用已有缓存
+                raw_tools = capabilities.get("tools", [])
+                if not need_probe and not endpoint_url:
+                    logger.debug(f"无 endpoint_url，跳过工具探测 trace_id={trace_id} id={marketplace_id}")
+                elif not need_probe:
+                    logger.debug(
+                        f"使用已缓存工具能力 trace_id={trace_id} "
+                        f"id={marketplace_id} tool_count={len(raw_tools)}"
+                    )
+
+            # 规范化工具字段
+            normalized_tools = []
+            for t in raw_tools:
+                normalized_tools.append({
+                    "name": t.get("name", ""),
+                    "description": t.get("description", ""),
+                    "parameters_schema": t.get("inputSchema", t.get("parameters_schema", {})),
+                    "capability_tags": t.get("capability_tags", t.get("tags", [])),
+                })
+            item["tools"] = normalized_tools
+            # 移除原始 capabilities 字段（前端不需要）
+            item.pop("capabilities", None)
+
+            # 前端通过可选链兜底所有字段，这里确保最小安全类型
+            if not isinstance(item.get("security_flags"), list):
+                item["security_flags"] = []
+            if not isinstance(item.get("github_stars"), (int, float)):
+                item["github_stars"] = 0
+            if not isinstance(item.get("trust_score"), (int, float)):
+                item["trust_score"] = 0.0
+            if not item.get("health_detail"):
+                item["health_detail"] = {"latency_ms": 0, "protocol": "unknown", "auth_required": False}
+
+            logger.info(
+                f"MCP 市场详情查询完成 trace_id={trace_id} id={marketplace_id} "
+                f"tools_count={len(item['tools'])}"
+            )
+
             return {
                 "code": 0,
                 "msg": "success",
@@ -225,7 +381,11 @@ async def marketplace_detail(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"MCP 市场详情查询失败 trace_id={trace_id} id={marketplace_id} error={e}")
+        logger.error(
+            f"MCP 市场详情查询失败 trace_id={trace_id} id={marketplace_id}\n"
+            f"异常类型={type(e).__name__} 异常信息={e!s}\n"
+            f"完整堆栈:\n{traceback.format_exc()}"
+        )
         raise HTTPException(status_code=500, detail=f"查询失败: {e!s}")
 
 
@@ -416,9 +576,8 @@ async def uninstall_remote_mcp(instance_id: str, request: Request):
         # 由于目前注册工具没有直接关联 instance_id，我们使用 endpoint_url 匹配
         endpoint_url = instance.endpoint_url
         unregistered_count = 0
+        tool_names_to_remove = []
         # 从远程工具池中按 endpoint_url 匹配注销
-        # 注意: registry 内部是 dict，无法直接按 endpoint_url 遍历
-        # 使用 list_tools 获取所有工具名
         if hasattr(registry, '_remote_tools'):
             tool_names_to_remove = [
                 name for name, rt in registry._remote_tools.items()

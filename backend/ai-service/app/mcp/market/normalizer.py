@@ -32,8 +32,13 @@ class MarketNormalizer:
 
     def _map_to_normalized(self, item: RawDiscoveryItem) -> NormalizedItem:
         """映射原始数据到标准化结构"""
-        # 简单归一化名称：转小写，去除非字母数字
-        clean_name = re.sub(r'[^a-z0-9]', '', item.name.lower())
+        # 标准化名称：转小写，只替换空白和特殊控制字符为连字符
+        # 保留点号、斜杠、横线等有语义的字符。
+        # 例如 "io.github.modelcontextprotocol/filesystem" 应保持不变，
+        # 不能清洗为 "iogithubmodelcontextprotocolfilesystem"。
+        clean_name = re.sub(r'[^\w./@-]', '_', item.name.lower().strip())
+        # 连续下划线/连字符合并为一个
+        clean_name = re.sub(r'[_\s]+', '_', clean_name).strip('_')
         if not clean_name:
             clean_name = item.name.lower().replace(' ', '-')
             
