@@ -3,7 +3,7 @@
  * 负责：窗口创建、系统托盘、系统能力桥接
  * 注意：主进程禁止直接访问本地 DB、Redis、Python 服务
  */
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -85,6 +85,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle('restart-app', () => {
     app.relaunch();
     app.exit(0);
+  });
+
+  ipcMain.handle('open-external', async (_, url: string) => {
+    // 在外部浏览器中打开链接，用于"查看源代码"等功能
+    if (url && typeof url === 'string') {
+      await shell.openExternal(url);
+    }
   });
 
   ipcMain.handle('get-model-config-files', async () => {

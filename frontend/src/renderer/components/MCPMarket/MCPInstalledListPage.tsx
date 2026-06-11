@@ -1,5 +1,5 @@
 /**
- * 已接入远程 MCP 管理页面（模态窗口版）。
+ * 已接入远程 MCP 管理页面。
  *
  * 做什么：列出用户已经接入的所有远程 MCP 实例，支持启用/禁用、
  *         触发健康检查和卸载操作。
@@ -8,15 +8,23 @@
  *   - 列表为空时提示用户前往市场接入。
  *   - 健康状态变更时自动刷新。
  *   - 卸载操作需要二次确认。
+ *   - onNavigateToMarket 由 MCPPanel 传入，用于内部导航。
  */
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useMCPMarketStore } from '../../stores/mcpMarketStore';
-import { useSystemStore } from '../../stores/systemStore';
 import { MCP_HEALTH_STATUS_LABEL } from '../../../shared/enum';
 import './MCPMarket.css';
 
-export const MCPInstalledListPage: React.FC = () => {
-  const openModal = useSystemStore((s) => s.openModal);
+/** MCPInstalledListPage 属性 */
+interface MCPInstalledListPageProps {
+  /** 导航到市场 Tab 的回调（由 MCPPanel 传入） */
+  onNavigateToMarket?: () => void;
+}
+
+export const MCPInstalledListPage: React.FC<MCPInstalledListPageProps> = ({ onNavigateToMarket }) => {
+  const goToMarket = useCallback(() => {
+    onNavigateToMarket?.();
+  }, [onNavigateToMarket]);
   const {
     installedInstances,
     isInstancesLoading,
@@ -74,7 +82,7 @@ export const MCPInstalledListPage: React.FC = () => {
           <p>前往 MCP 市场浏览并接入远程工具</p>
           <button
             className="btn-go-market"
-            onClick={() => openModal('mcpMarket')}
+            onClick={goToMarket}
           >
             前往市场
           </button>
@@ -92,7 +100,7 @@ export const MCPInstalledListPage: React.FC = () => {
         </span>
         <button
           className="btn-browse-market"
-          onClick={() => openModal('mcpMarket')}
+          onClick={goToMarket}
         >
           浏览市场
         </button>
@@ -134,14 +142,14 @@ export const MCPInstalledListPage: React.FC = () => {
 
                 {/* 工具名称列表 */}
                 <div className="instance-tools">
-                  {instance.tool_names.slice(0, 5).map((name) => (
+                  {(instance.tool_names ?? []).slice(0, 5).map((name) => (
                     <span key={name} className="tool-name-badge">
                       {name}
                     </span>
                   ))}
-                  {instance.tool_names.length > 5 && (
+                  {(instance.tool_names ?? []).length > 5 && (
                     <span className="tool-name-more">
-                      +{instance.tool_names.length - 5}
+                      +{(instance.tool_names ?? []).length - 5}
                     </span>
                   )}
                 </div>

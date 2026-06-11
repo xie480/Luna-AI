@@ -13,6 +13,8 @@ interface ElectronAPI {
   writeEnvFile: (content: string) => Promise<boolean>;
   /** 重启应用 */
   restartApp: () => Promise<void>;
+  /** 在外部浏览器中打开 URL */
+  openExternal: (url: string) => Promise<void>;
 }
 
 interface Window {

@@ -30,6 +30,9 @@ const electronAPI = {
 
   /** 重启应用 */
   restartApp: (): Promise<void> => ipcRenderer.invoke('restart-app'),
+
+  /** 在外部浏览器中打开 URL */
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
 };
 
 // 通过 contextBridge 安全地暴露 API 给渲染进程

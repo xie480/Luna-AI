@@ -149,6 +149,15 @@ async def _probe_remote_tools(endpoint_url: str, timeout: float = 10.0) -> list[
                 )
                 init_resp_text = init_resp.text
 
+                # ===== 提前处理认证错误 =====
+                # 如果 Server 返回 401/403，说明需要认证才能访问，跳过后续全部探测
+                if init_resp.status_code in (401, 403):
+                    logger.info(
+                        f"远端 MCP 需要认证，跳过工具探测 "
+                        f"endpoint={endpoint_url} status_code={init_resp.status_code}"
+                    )
+                    return []
+
                 # ===== 从响应头中提取 mcp-session-id（优先于 body 解析） =====
                 # 注意：必须先提取 sessionId，再尝试解析 body。
                 # 因为某些 Server 使用 SSE 传输（Content-Type: text/event-stream），
@@ -890,3 +899,192 @@ async def trending_marketplace(
     except Exception as e:
         logger.error(f"查询热门 MCP 失败 trace_id={trace_id} error={e}")
         raise HTTPException(status_code=500, detail=f"查询失败: {e!s}")
+
+
+class ToggleInstanceRequest(BaseModel):
+    """切换实例启用/禁用请求体。"""
+    active: bool = True
+
+
+@router.post("/api/v1/mcp/market/instance/{instance_id}/toggle")
+async def toggle_instance_active(
+    instance_id: str,
+    body: ToggleInstanceRequest,
+    request: Request,
+):
+    """切换已接入 MCP 实例的启用/禁用状态。
+
+    做什么：设置 mcp_remote_instances 的 is_active 字段为 true 或 false。
+            禁用的实例在工具调度时会被跳过。
+    为什么这样做：用户在不卸载的前提下临时停用某个远程 MCP。
+    边界条件：实例不存在时返回 404。
+    """
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    pg_client = await _get_pg_client(request)
+
+    try:
+        async with pg_client.session_factory() as session:
+            result = await session.execute(
+                select(MCPRemoteInstance).where(
+                    MCPRemoteInstance.id == instance_id,
+                    MCPRemoteInstance.user_id == "local_default_user",
+                )
+            )
+            instance = result.scalar_one_or_none()
+            if not instance:
+                raise HTTPException(status_code=404, detail="实例不存在")
+
+            instance.is_active = body.active
+            instance.updated_at = func.now()
+            await session.commit()
+
+            logger.info(
+                f"MCP 实例启用状态切换完成 trace_id={trace_id} "
+                f"instance_id={instance_id} is_active={body.active}"
+            )
+
+            return {
+                "code": 0,
+                "msg": "success",
+                "data": {"instance_id": instance_id, "is_active": body.active},
+                "trace_id": trace_id,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"MCP 实例状态切换失败 trace_id={trace_id} error={e}")
+        raise HTTPException(status_code=500, detail=f"操作失败: {e!s}")
+
+
+@router.post("/api/v1/mcp/market/instance/{instance_id}/check")
+async def health_check_instance(
+    instance_id: str,
+    request: Request,
+):
+    """手动触发已接入 MCP 实例的健康检查。
+
+    做什么：连接远程 Endpoint 执行健康检查，更新实例的 health_status、
+            last_health_check 和 avg_latency_ms 字段。
+    为什么这样做：用户想知道某个远程 MCP 当前是否可用。
+    边界条件：实例不存在时返回 404；远程不可达时标记 health_status=offline 不抛异常。
+    """
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    pg_client = await _get_pg_client(request)
+
+    try:
+        async with pg_client.session_factory() as session:
+            result = await session.execute(
+                select(MCPRemoteInstance).where(
+                    MCPRemoteInstance.id == instance_id,
+                    MCPRemoteInstance.user_id == "local_default_user",
+                )
+            )
+            instance = result.scalar_one_or_none()
+            if not instance:
+                raise HTTPException(status_code=404, detail="实例不存在")
+
+            # 执行健康检查
+            check_result = await HealthChecker.check_endpoint(instance.endpoint_url)
+
+            # 更新实例健康状态
+            instance.health_status = check_result["health_status"]
+            instance.avg_latency_ms = check_result["latency_ms"]
+            instance.last_health_check = func.now()
+            instance.updated_at = func.now()
+            await session.commit()
+
+            logger.info(
+                f"MCP 实例健康检查完成 trace_id={trace_id} "
+                f"instance_id={instance_id} "
+                f"health_status={check_result['health_status']} "
+                f"latency={check_result['latency_ms']}ms"
+            )
+
+            return {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "instance_id": instance_id,
+                    "health_status": check_result["health_status"],
+                    "latency_ms": check_result["latency_ms"],
+                    "protocol": check_result["protocol"],
+                },
+                "trace_id": trace_id,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"MCP 实例健康检查失败 trace_id={trace_id} error={e}")
+        raise HTTPException(status_code=500, detail=f"健康检查失败: {e!s}")
+
+
+class UpdateInstanceRequest(BaseModel):
+    """更新实例配置请求体。"""
+    display_name: str | None = None
+    auth_config: AuthConfig | None = None
+    timeout_ms: int | None = None
+    max_retries: int | None = None
+
+
+@router.post("/api/v1/mcp/market/instance/{instance_id}")
+async def update_instance(
+    instance_id: str,
+    body: UpdateInstanceRequest,
+    request: Request,
+):
+    """更新已接入 MCP 实例的配置。
+
+    做什么：更新 mcp_remote_instances 的 display_name、auth_config、
+            timeout_ms、max_retries 等配置字段。
+    为什么这样做：用户可以修改接入时的配置（如显示名称、超时时间等）。
+    边界条件：实例不存在时返回 404；只更新传入的非空字段。
+    """
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    pg_client = await _get_pg_client(request)
+
+    try:
+        async with pg_client.session_factory() as session:
+            result = await session.execute(
+                select(MCPRemoteInstance).where(
+                    MCPRemoteInstance.id == instance_id,
+                    MCPRemoteInstance.user_id == "local_default_user",
+                )
+            )
+            instance = result.scalar_one_or_none()
+            if not instance:
+                raise HTTPException(status_code=404, detail="实例不存在")
+
+            # 只更新传入的非空字段
+            if body.display_name is not None:
+                instance.display_name = body.display_name
+            if body.timeout_ms is not None:
+                instance.timeout_ms = body.timeout_ms
+            if body.max_retries is not None:
+                instance.max_retries = body.max_retries
+            if body.auth_config is not None:
+                auth_crypto = MCPAuthCrypto()
+                auth_config_dict = body.auth_config.model_dump()
+                auth_encrypted, auth_salt = auth_crypto.encrypt(auth_config_dict)
+                instance.auth_config_enc = auth_encrypted
+                instance.auth_config_salt = auth_salt
+                instance.auth_type = body.auth_config.type
+
+            instance.updated_at = func.now()
+            await session.commit()
+
+            logger.info(
+                f"MCP 实例配置更新完成 trace_id={trace_id} "
+                f"instance_id={instance_id}"
+            )
+
+            return {
+                "code": 0,
+                "msg": "success",
+                "data": {"instance_id": instance_id},
+                "trace_id": trace_id,
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"MCP 实例配置更新失败 trace_id={trace_id} error={e}")
+        raise HTTPException(status_code=500, detail=f"更新失败: {e!s}")

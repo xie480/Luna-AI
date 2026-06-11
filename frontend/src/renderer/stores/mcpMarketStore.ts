@@ -30,8 +30,6 @@ interface MCPMarketState {
   marketTotal: number;
   /** 当前浏览页码。 */
   marketPage: number;
-  /** 当前筛选分类。 */
-  marketCategory: string | null;
   /** 当前搜索关键词。 */
   marketSearchQuery: string;
   /** 是否正在加载市场列表。 */
@@ -63,7 +61,7 @@ interface MCPMarketState {
 
   // === Actions ===
   /** 获取市场列表（分页）。 */
-  fetchMarketList: (page?: number, category?: string) => Promise<void>;
+  fetchMarketList: (page?: number) => Promise<void>;
   /** 搜索市场。 */
   searchMarket: (query: string) => Promise<void>;
   /** 获取市场条目详情。 */
@@ -89,7 +87,6 @@ const initialMarketState: Partial<MCPMarketState> = {
   marketItems: [],
   marketTotal: 0,
   marketPage: 1,
-  marketCategory: null,
   marketSearchQuery: '',
   isMarketLoading: false,
   currentDetail: null,
@@ -108,12 +105,11 @@ const initialMarketState: Partial<MCPMarketState> = {
 export const useMCPMarketStore = create<MCPMarketState>((set, get) => ({
   ...initialMarketState as MCPMarketState,
 
-  fetchMarketList: async (page = 1, category?: string) => {
+  fetchMarketList: async (page = 1) => {
     set({ isMarketLoading: true, marketPage: page, marketError: null });
     try {
       const result = await mcpMarketService.listMarketplace({
         page,
-        category: category === 'all' ? undefined : category,
         sort_by: 'trust_score',
       });
       set({

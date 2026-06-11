@@ -1,32 +1,31 @@
 /**
  * MCP 市场卡片组件。
  *
- * 做什么：在网格中展示单个 MCP Server 的摘要信息，包含名称、描述、
- *         健康状态、信誉评分、工具数量等。
+ * 做什么：在网格中展示单个 MCP Server 的摘要信息，包含名称、描述和标签。
  * 为什么这样做：卡片式展示让用户快速浏览和筛选。
  * 边界条件：is_installed=true 时显示"已接入"标记而非"接入"按钮。
+ *          onNavigateToDetail 回调由 MCPPanel 传入，用于内部导航。
  */
 import React from 'react';
 import { useMCPMarketStore } from '../../stores/mcpMarketStore';
-import { useSystemStore } from '../../stores/systemStore';
 import type { MCPMarketItem } from '../../types/mcpMarket';
-import { MCP_HEALTH_STATUS_LABEL } from '../../../shared/enum';
 import './MCPMarket.css';
 
 interface MCPMarketCardProps {
   item: MCPMarketItem;
+  /** 导航到详情页的回调（由 MCPPanel 传入） */
+  onNavigateToDetail?: () => void;
 }
 
-export const MCPMarketCard: React.FC<MCPMarketCardProps> = ({ item }) => {
+export const MCPMarketCard: React.FC<MCPMarketCardProps> = ({ item, onNavigateToDetail }) => {
   const fetchMarketDetail = useMCPMarketStore((s) => s.fetchMarketDetail);
-  const openModal = useSystemStore((s) => s.openModal);
 
-  /** 点击卡片时加载详情并打开详情模态窗口。 */
+  /** 点击卡片时加载详情并通知父组件切换到详情视图。 */
   const handleCardClick = async () => {
     // 异步加载详情到 Store
     await fetchMarketDetail(item.id);
-    // 打开详情模态窗口
-    openModal('mcpMarketDetail');
+    // 通知 MCPPanel 切换到详情视图（不再依赖全局 openModal）
+    onNavigateToDetail?.();
   };
 
   return (
@@ -71,25 +70,6 @@ export const MCPMarketCard: React.FC<MCPMarketCardProps> = ({ item }) => {
         )}
       </div>
 
-      {/* 元数据：健康状态、工具数量、评分 */}
-      <div className="card-meta">
-        <div className="meta-item health-status">
-          <span
-            className={`status-dot ${item.health_status}`}
-            title={MCP_HEALTH_STATUS_LABEL[item.health_status] || item.health_status}
-          />
-          {MCP_HEALTH_STATUS_LABEL[item.health_status] || item.health_status}
-        </div>
-        <div className="meta-item">
-          <span className="meta-icon">🛠️</span>
-          {item.tool_count} 个工具
-        </div>
-        <div className="meta-item trust-score">
-          <span className="meta-icon">⭐</span>
-          {(item.trust_score * 100).toFixed(0)} 分
-        </div>
-      </div>
-
       {/* 卡片底部：接入状态 */}
       <div className="card-footer">
         {item.is_installed ? (
@@ -97,7 +77,6 @@ export const MCPMarketCard: React.FC<MCPMarketCardProps> = ({ item }) => {
         ) : (
           <span className="install-hint">点击查看详情</span>
         )}
-        <span className="install-count">已接入 {item.install_count} 次</span>
       </div>
     </div>
   );

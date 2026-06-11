@@ -1,0 +1,63 @@
+/**
+ * MCP 模块统一面板样式。
+ * 采用左-右双栏布局：左侧导航 Tab → 右侧内容区。
+ * 风格与 SettingsPanel 保持一致。
+ */
+.mcp-panel-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-color, #1e1e1e);
+  color: var(--text-color, #e0e0e0);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* ========== 左侧导航栏 ========== */
+.mcp-panel-sidebar {
+  width: 200px;
+  background-color: var(--sidebar-bg, #252526);
+  border-right: 1px solid var(--border-color, #333);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 0;
+  flex-shrink: 0;
+}
+
+.mcp-nav-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+  border-left: 3px solid transparent;
+}
+
+.mcp-nav-item:hover {
+  background-color: var(--hover-bg, #2a2d2e);
+}
+
+.mcp-nav-item.active {
+  background-color: var(--active-bg, #37373d);
+  border-left-color: var(--primary-color, #007acc);
+}
+
+.mcp-nav-icon {
+  margin-right: 12px;
+  font-size: 1.2em;
+  display: flex;
+  align-items: center;
+}
+
+.mcp-nav-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* ========== 右侧内容区 ========== */
+.mcp-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}
