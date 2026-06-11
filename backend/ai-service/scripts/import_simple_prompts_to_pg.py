@@ -1,9 +1,9 @@
 """
-Luna AI simple Prompt 入库脚本。
+Luna AI MCP Prompt 入库脚本。
 
-做什么：将 app/prompt/simple/evidence_evaluator、user_profile_extract、user_profile_summarize
+做什么：将 app/prompt/simple/mcp_intent_alignment、mcp_tool_calling、mcp_tool_screening
 三个目录下的 system、memory、runtime 三槽位 Prompt 写入 PostgreSQL。
-为什么这样做：Prompt 模板需要进入 prompt_templates / prompt_versions 表，便于前端 Prompt 面板管理、版本发布与回滚。
+为什么这样做：MCP 相关 Prompt 需要进入 prompt_templates / prompt_versions 表，便于前端 Prompt 面板管理、版本发布与回滚。
 输入输出：读取本地 .j2 模板文件，向 PostgreSQL 写入模板元数据与已发布版本；脚本无业务返回值。
 边界条件：
     - 缺失任一槽位文件会直接抛错，避免只入库部分 Prompt 造成运行期行为不一致。
@@ -40,11 +40,11 @@ from app.utils.snowflake import generate_string_id
 # simple Prompt 根目录固定在 app/prompt/simple，禁止从运行目录拼接，避免 Windows / PowerShell 下路径漂移。
 SIMPLE_PROMPT_ROOT = AI_SERVICE_ROOT / "app" / "prompt" / "simple"
 
-# 三个需要入库的 Prompt 分类。category 写入数据库后由 PromptManager 按分类加载三槽位模板。
+# 三个需要入库的 MCP Prompt 分类。
 TARGET_CATEGORIES: tuple[str, ...] = (
-    "evidence_evaluator",
-    "user_profile_extract",
-    "user_profile_summarize",
+    "mcp_intent_alignment",
+    "mcp_tool_calling",
+    "mcp_tool_screening",
 )
 
 # Prompt 三槽位按固定顺序处理，便于日志排查与数据库记录一致。
@@ -64,16 +64,7 @@ VERSION_STATUS_DEPRECATED = "deprecated"
 
 @dataclass(frozen=True)
 class PromptSeed:
-    """
-    单个 Prompt 槽位的入库描述。
-
-    做什么：承载一个 category + slot 对应的模板名称、文件路径、正文与变量列表。
-    为什么这样做：将文件扫描和数据库写入解耦，便于先完整校验后再开启事务写库。
-    输入输出：由 build_prompt_seed 创建，供 upsert_prompt_seed 写入 PostgreSQL。
-    边界条件：content 允许为空字符串，但文件必须真实存在；variables 保持文件中出现顺序去重。
-    异常行为：该数据类本身不抛异常，异常由构建或写入阶段处理。
-    """
-
+    """单个 Prompt 槽位的入库描述"""
     name: str
     category: str
     slot_position: str
@@ -83,15 +74,7 @@ class PromptSeed:
 
 
 def extract_variables(content: str) -> list[str]:
-    """
-    从 Prompt 正文提取 Jinja 变量名。
-
-    做什么：扫描 {{VARIABLE}} 或 {{ VARIABLE }} 格式的占位符并按首次出现顺序去重。
-    为什么这样做：prompt_versions.variables 是前端编辑与审计提示词变量的依据，不能依赖人工硬编码。
-    输入输出：输入模板正文字符串，输出变量名列表。
-    边界条件：只识别字母或下划线开头的简单变量名；复杂表达式不会被误写入变量清单。
-    异常行为：正则扫描不会抛业务异常。
-    """
+    """从 Prompt 正文提取 Jinja 变量名"""
     variables: list[str] = []
     seen: set[str] = set()
     for match in VARIABLE_PATTERN.finditer(content):
@@ -104,15 +87,7 @@ def extract_variables(content: str) -> list[str]:
 
 
 def build_prompt_seed(category: str, slot: SlotPosition) -> PromptSeed:
-    """
-    构建单个槽位的 PromptSeed。
-
-    做什么：根据 category 和 slot 定位 .j2 文件，读取 UTF-8 内容并提取变量。
-    为什么这样做：所有源代码与 Prompt 文件强制 UTF-8，提前读取可在事务前发现文件问题。
-    输入输出：输入业务分类和槽位枚举，输出 PromptSeed。
-    边界条件：文件路径固定为 app/prompt/simple/{category}/{slot}.j2。
-    异常行为：文件不存在或读取失败时抛出 RuntimeError，调用方会终止本次入库。
-    """
+    """构建单个槽位的 PromptSeed"""
     file_path = SIMPLE_PROMPT_ROOT / category / f"{slot.value}.j2"
     if not file_path.exists():
         raise RuntimeError(f"Prompt 文件不存在 category={category} slot={slot.value} path={file_path}")
@@ -133,15 +108,7 @@ def build_prompt_seed(category: str, slot: SlotPosition) -> PromptSeed:
 
 
 def build_all_prompt_seeds(categories: Sequence[str]) -> list[PromptSeed]:
-    """
-    构建全部待入库 PromptSeed。
-
-    做什么：按分类与三槽位组合读取全部目标 Prompt 文件。
-    为什么这样做：先完整校验 9 个文件，再进入数据库事务，避免半成功入库。
-    输入输出：输入分类列表，输出 PromptSeed 列表。
-    边界条件：categories 为空时返回空列表；本脚本默认传入三个固定分类。
-    异常行为：任一文件缺失或读取失败都会向上抛出 RuntimeError。
-    """
+    """构建全部待入库 PromptSeed"""
     seeds: list[PromptSeed] = []
     for category in categories:
         for slot in TARGET_SLOTS:
@@ -150,15 +117,7 @@ def build_all_prompt_seeds(categories: Sequence[str]) -> list[PromptSeed]:
 
 
 async def get_active_version(session: AsyncSession, template: PromptTemplate) -> PromptVersion | None:
-    """
-    获取模板当前激活版本。
-
-    做什么：优先根据 active_version_id 查询版本记录。
-    为什么这样做：PromptTemplate 只保存当前版本 ID，内容差异判断必须读取 PromptVersion。
-    输入输出：输入数据库会话和模板对象，输出当前版本或 None。
-    边界条件：active_version_id 为空时返回 None。
-    异常行为：数据库查询失败会由 SQLAlchemy 抛出，外层事务统一回滚。
-    """
+    """获取模板当前激活版本"""
     if not template.active_version_id:
         return None
     result = await session.execute(select(PromptVersion).where(PromptVersion.id == template.active_version_id))
@@ -166,15 +125,7 @@ async def get_active_version(session: AsyncSession, template: PromptTemplate) ->
 
 
 async def archive_published_versions(session: AsyncSession, template_id: str) -> None:
-    """
-    归档同一模板下旧的已发布版本。
-
-    做什么：将同一 template_id 下 status=published 的历史版本改为 deprecated。
-    为什么这样做：系统约定每个 PromptTemplate 只能有一个 active published 版本，避免加载时语义混乱。
-    输入输出：输入数据库会话和模板 ID，无返回值。
-    边界条件：没有已发布版本时不做修改。
-    异常行为：数据库查询或写入失败由外层事务回滚。
-    """
+    """归档同一模板下旧的已发布版本"""
     result = await session.execute(
         select(PromptVersion).where(
             PromptVersion.template_id == template_id,
@@ -187,15 +138,7 @@ async def archive_published_versions(session: AsyncSession, template_id: str) ->
 
 
 async def next_version_num(session: AsyncSession, template_id: str) -> int:
-    """
-    计算下一个版本号。
-
-    做什么：读取同一模板所有版本号，返回最大版本号加一。
-    为什么这样做：Prompt 需要 append-only 版本历史，不能覆盖旧版本。
-    输入输出：输入数据库会话和模板 ID，输出下一个整数版本号。
-    边界条件：没有历史版本时返回 1。
-    异常行为：数据库查询失败由外层事务回滚。
-    """
+    """计算下一个版本号"""
     result = await session.execute(select(PromptVersion.version_num).where(PromptVersion.template_id == template_id))
     version_nums = [value for value in result.scalars().all() if value is not None]
     if not version_nums:
@@ -204,15 +147,7 @@ async def next_version_num(session: AsyncSession, template_id: str) -> int:
 
 
 async def create_published_version(session: AsyncSession, template: PromptTemplate, seed: PromptSeed) -> PromptVersion:
-    """
-    为模板创建新的已发布版本。
-
-    做什么：生成雪花 ID，写入 PromptVersion，并更新模板 active_version_id。
-    为什么这样做：所有业务 ID 必须使用项目雪花算法；版本发布必须显式绑定到模板。
-    输入输出：输入数据库会话、模板对象和 PromptSeed，输出新版本对象。
-    边界条件：content 可为空；variables 使用提取到的变量列表。
-    异常行为：flush 失败时交由外层事务回滚。
-    """
+    """为模板创建新的已发布版本"""
     await archive_published_versions(session, template.id)
     version = PromptVersion(
         id=generate_string_id(),
@@ -231,15 +166,7 @@ async def create_published_version(session: AsyncSession, template: PromptTempla
 
 
 async def upsert_prompt_seed(session: AsyncSession, seed: PromptSeed, dry_run: bool) -> str:
-    """
-    幂等写入单个 PromptSeed。
-
-    做什么：按模板 name 查找，不存在则创建模板与版本；存在且内容不同则追加新版本。
-    为什么这样做：脚本需要可重复执行，同时保留 Prompt 历史版本用于回滚。
-    输入输出：输入数据库会话、PromptSeed 与 dry_run 标记，输出中文操作结果。
-    边界条件：模板存在但 category/slot 与目标不一致时会被纠正；内容一致时跳过版本创建。
-    异常行为：数据库异常向上抛出，由主事务统一 rollback。
-    """
+    """幂等写入单个 PromptSeed"""
     result = await session.execute(select(PromptTemplate).where(PromptTemplate.name == seed.name))
     template = result.scalars().first()
 
@@ -304,17 +231,9 @@ async def upsert_prompt_seed(session: AsyncSession, seed: PromptSeed, dry_run: b
 
 
 async def import_prompts(dry_run: bool) -> None:
-    """
-    执行 simple Prompt 入库流程。
-
-    做什么：读取目标 Prompt 文件，打开 PostgreSQL 事务，逐条幂等写入模板和版本。
-    为什么这样做：以一个事务提交 9 个槽位，确保 evidence/user_profile 相关 Prompt 同步生效。
-    输入输出：输入 dry_run 标记，无返回值。
-    边界条件：dry_run=True 时只校验文件和数据库现状，不提交任何修改。
-    异常行为：任意写入失败都会 rollback，并关闭 PostgreSQL 连接。
-    """
+    """执行 MCP Prompt 入库流程"""
     seeds = build_all_prompt_seeds(TARGET_CATEGORIES)
-    logger.info(f"开始导入 simple Prompt 到 PostgreSQL dry_run={dry_run} total={len(seeds)}")
+    logger.info(f"开始导入 MCP Prompt 到 PostgreSQL dry_run={dry_run} total={len(seeds)}")
 
     pg_client = PostgresClient(settings.postgres_conn_str)
     try:
@@ -329,10 +248,10 @@ async def import_prompts(dry_run: bool) -> None:
 
                 if dry_run:
                     await session.rollback()
-                    logger.info("simple Prompt 入库预演完成，未提交数据库修改")
+                    logger.info("MCP Prompt 入库预演完成，未提交数据库修改")
                 else:
                     await session.commit()
-                    logger.info("simple Prompt 入库完成，数据库事务已提交")
+                    logger.info("MCP Prompt 入库完成，数据库事务已提交")
             except Exception:
                 await session.rollback()
                 raise
@@ -341,16 +260,7 @@ async def import_prompts(dry_run: bool) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    """
-    解析命令行参数。
-
-    做什么：提供 --dry-run 预演模式。
-    为什么这样做：入库脚本涉及 Prompt 版本变更，预演模式便于先检查文件与连接状态。
-    输入输出：读取命令行参数，输出 argparse.Namespace。
-    边界条件：未传参数时默认真实写库。
-    异常行为：非法参数由 argparse 输出错误并退出。
-    """
-    parser = argparse.ArgumentParser(description="将指定 simple Prompt 三槽位模板导入 PostgreSQL")
+    parser = argparse.ArgumentParser(description="将指定 MCP Prompt 三槽位模板导入 PostgreSQL")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -360,20 +270,11 @@ def parse_args() -> argparse.Namespace:
 
 
 async def main() -> None:
-    """
-    脚本异步入口。
-
-    做什么：解析参数并执行 Prompt 入库。
-    为什么这样做：PostgreSQL 客户端使用 SQLAlchemy async engine，必须在 asyncio 生命周期内运行。
-    输入输出：无业务输入输出。
-    边界条件：脚本结束前会关闭数据库连接。
-    异常行为：异常记录中文日志后继续抛出，确保终端返回非零退出码。
-    """
     args = parse_args()
     try:
         await import_prompts(dry_run=args.dry_run)
     except Exception as exc:
-        logger.error(f"simple Prompt 入库失败 error={exc}")
+        logger.error(f"MCP Prompt 入库失败 error={exc}")
         raise
 
 

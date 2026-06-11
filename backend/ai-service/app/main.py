@@ -95,7 +95,7 @@ class ModelManager:
         self._ttl = ttl_seconds
         self._last_accessed = 0
         self._lock = threading.Lock()
-        
+
         # 启动后台守护线程，用于定期清理超时未使用的内存模型
         self._cleanup_thread = threading.Thread(target=self._auto_unload, daemon=True)
         self._cleanup_thread.start()
@@ -135,10 +135,10 @@ def load_embedding_model() -> object | None:
             from optimum.onnxruntime import ORTModelForFeatureExtraction
             from transformers import AutoTokenizer, pipeline
             import onnxruntime as ort
-            
+
             sess_options = ort.SessionOptions()
             sess_options.intra_op_num_threads = safe_threads
-            
+
             logger.info(f"检测到 ONNX 模型目录，准备加载量化版 Embedding 模型: {onnx_path}")
             tokenizer = AutoTokenizer.from_pretrained(onnx_path, local_files_only=True)
             model = ORTModelForFeatureExtraction.from_pretrained(
@@ -193,10 +193,10 @@ def load_rerank_model() -> object | None:
             from optimum.onnxruntime import ORTModelForSequenceClassification
             from transformers import AutoTokenizer, pipeline
             import onnxruntime as ort
-            
+
             sess_options = ort.SessionOptions()
             sess_options.intra_op_num_threads = safe_threads
-            
+
             logger.info(f"检测到 ONNX 模型目录，准备加载量化版 Rerank 模型: {onnx_path}")
             tokenizer = AutoTokenizer.from_pretrained(onnx_path, local_files_only=True)
             model = ORTModelForSequenceClassification.from_pretrained(
@@ -206,7 +206,7 @@ def load_rerank_model() -> object | None:
             )
             pipe = pipeline("text-classification", model=model, tokenizer=tokenizer)
             logger.info("ONNX Rerank 模型加载完成")
-            
+
             class ONNXRerankWrapper:
                 def __init__(self, pipe):
                     self.pipe = pipe
@@ -215,9 +215,6 @@ def load_rerank_model() -> object | None:
                     import numpy as np
                     texts = [{"text": p[0], "text_pair": p[1]} for p in pairs]
                     results = self.pipe(texts)
-                    # pipeline 返回 {"label": ..., "score": ...}，如果是单个特征提取可能是其他形式
-                    # 对于 bge-reranker 这种 cross-encoder，通常预测 logits
-                    # 由于不同的底层结构，提取 score 即可
                     scores = [r["score"] for r in results]
                     return np.array(scores)
             return ONNXRerankWrapper(pipe)
@@ -282,15 +279,15 @@ async def lifespan(app: FastAPI):
     pg_client = None
     try:
         pg_client = PostgresClient(settings.postgres_conn_str)
-        
+
         # 自动迁移数据库表结构 (自动检查并同步缺失的字段/表)
         from sqlalchemy import inspect
-        
+
         def _sync_schema(sync_conn):
             inspector = inspect(sync_conn)
             # 获取当前数据库中已存在的表
             existing_tables = inspector.get_table_names()
-            
+
             # 使用 Base.metadata.create_all 只能创建新表，不能修改现有表。
             # 为了新增字段，需要对比模型和现有表的列。
             Base.metadata.create_all(sync_conn)
@@ -315,7 +312,7 @@ async def lifespan(app: FastAPI):
                                 sync_conn.execute(from_sqlalchemy_text(alter_stmt))
                             except Exception as alter_err:
                                 logger.warning(f"添加列失败: {alter_err}")
-                                
+
                             # 如果列有索引，添加索引
                             if column.index:
                                 index_name = f"ix_{table_name}_{column.name}"
@@ -325,9 +322,9 @@ async def lifespan(app: FastAPI):
                                     sync_conn.execute(from_sqlalchemy_text(index_stmt))
                                 except Exception as idx_err:
                                     logger.warning(f"创建索引失败: {idx_err}")
-        
+
         from sqlalchemy import text as from_sqlalchemy_text
-        
+
         async with pg_client.engine.begin() as conn:
             await conn.run_sync(_sync_schema)
             await conn.execute(from_sqlalchemy_text(
@@ -351,13 +348,13 @@ async def lifespan(app: FastAPI):
                 "ON langgraph_chat_checkpoints (thread_id, checkpoint_ns, created_at)"
             ))
         logger.info("自动同步数据库表结构（含字段增量）与 Chat Workflow checkpoint 表成功")
-        
+
         # 初始化 Telemetry Worker
         init_worker(pg_client)
         worker = get_worker()
         if worker:
             await worker.start()
-            
+
     except Exception as e:
         logger.warning(f"PostgreSQL 连接失败，将使用降级模式运行 error={e}")
 
@@ -376,7 +373,7 @@ async def lifespan(app: FastAPI):
     redis_repo = None
     if redis_client:
         redis_repo = ChatHistoryRedisRepo(redis_client)
-        
+
     pg_repo = None
     error_log_repo = None
     if pg_client:
@@ -387,7 +384,7 @@ async def lifespan(app: FastAPI):
     ltm_pg_repo = None
     if pg_client:
         ltm_pg_repo = LongTermMemoryPGRepo(pg_client)
-        
+
     qdrant_client = None
     ltm_qdrant_repo = None
     if settings.qdrant_address:
@@ -432,7 +429,7 @@ async def lifespan(app: FastAPI):
         # 注册知识库文档废弃 GC 事件处理器
         from app.config.event_bus import EventType
         from app.config.event_bus import RagDocumentDeprecatedEvent
-        
+
         async def on_document_deprecated(event: RagDocumentDeprecatedEvent) -> None:
              logger.info(f"收到文档废弃事件，启动后台 GC 任务 doc_id={event.doc_id}")
              try:
@@ -443,14 +440,14 @@ async def lifespan(app: FastAPI):
                  logger.info(f"后台文档 GC 任务完成，成功回收旧文档空间 doc_id={event.doc_id}")
              except Exception as exc:
                  logger.error(f"后台文档 GC 任务异常 doc_id={event.doc_id} error={exc}")
-                 
+
         await event_bus.subscribe(EventType.RAG_DOCUMENT_DEPRECATED, on_document_deprecated)
 
     # 8.5 初始化全局配置容器
     if pg_client:
         preset_repo = ConfigPresetPGRepo(pg_client)
         app.state.config_preset_repo = preset_repo
-        
+
         from app.router.model_router import ModelRouter
         model_router = ModelRouter(preset_repo)
         app.state.model_router = model_router
@@ -461,14 +458,14 @@ async def lifespan(app: FastAPI):
                 from app.config.settings import global_config_container
                 from app.api.routers.api_config_preset import _decrypt_model_config
                 import json
-                
+
                 def _get_json_str(cfg):
                     return json.dumps(cfg) if isinstance(cfg, dict) else cfg
 
                 large_cfg = _decrypt_model_config(_get_json_str(active_preset.large_model_config), crypto_svc)
                 medium_cfg = _decrypt_model_config(_get_json_str(active_preset.medium_model_config), crypto_svc)
                 small_cfg = _decrypt_model_config(_get_json_str(active_preset.small_model_config), crypto_svc)
-                
+
                 await global_config_container.update_preset_config(large_cfg, medium_cfg, small_cfg)
                 logger.info(f"已加载激活的 API 配置预设: {active_preset.name}")
             else:
@@ -591,7 +588,7 @@ async def lifespan(app: FastAPI):
                     current_session_id = new_session_id
                 except Exception as e:
                     logger.error(f"会话流转检测失败 error={e}")
-                    
+
         rollover_task = asyncio.create_task(_rollover_loop())
 
     # 4. Phase 12: 注册内置 MCP 工具并加载 PG 持久化注册
@@ -642,10 +639,26 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning(f"MCP 工具注册失败: {exc}")
 
+    # 16. 启动 MCP 市场定时采集调度器
+    # 做什么：每天一次从远程 Registry 采集 MCP Server 列表并持久化到 PG。
+    # 为什么这样做：采集逻辑存在但从未被调用，需通过调度器接入运行生命周期。
+    mcp_discovery_scheduler = None
+    if pg_client:
+        try:
+            from app.mcp.market.scheduler import MarketDiscoveryScheduler
+            mcp_discovery_scheduler = MarketDiscoveryScheduler(pg_client)
+            await mcp_discovery_scheduler.start()
+            app.state.mcp_discovery_scheduler = mcp_discovery_scheduler
+            logger.info("MCP 市场定时采集调度器初始化完成（每天执行一次）")
+        except Exception as e:
+            logger.warning(f"MCP 市场定时采集调度器初始化失败 error={e}")
+    else:
+        logger.warning("PG 客户端不可用，MCP 市场定时采集调度器跳过启动")
+
     # 标记服务已完全就绪
     app.state.is_ready = True
     logger.info("Luna AI Service 所有核心资源初始化完成，服务已就绪")
-    
+
     # 尝试通过 SSE 广播就绪事件（如果有早期连接的客户端）
     try:
         from app.api.sse import sse_manager
@@ -662,25 +675,33 @@ async def lifespan(app: FastAPI):
     # Shutdown: 优雅关闭
     app.state.is_ready = False
     logger.info("正在关闭服务器...")
-    
+
     if rollover_task:
         rollover_task.cancel()
-        
+
+    # 停止 MCP 市场定时采集调度器
+    if getattr(app.state, "mcp_discovery_scheduler", None):
+        try:
+            await app.state.mcp_discovery_scheduler.stop()
+            logger.info("MCP 市场定时采集调度器已停止")
+        except Exception as e:
+            logger.warning(f"MCP 市场定时采集调度器停止异常 error={e}")
+
     await stop_metrics_collector()
-    
+
     worker = get_worker()
     if worker:
         await worker.stop()
-        
+
     if getattr(app.state, "rag_ingestion_service", None):
         await app.state.rag_ingestion_service.shutdown()
 
     if pg_client:
         await pg_client.close()
-        
+
     if redis_client:
         await redis_client.close()
-        
+
     logger.info("服务器已退出")
 
 
@@ -744,7 +765,7 @@ app.add_middleware(
 #         导致的 AttributeError），FastAPI 默认异常处理器不会附加 CORS 头，
 #         导致前端收到 "No 'Access-Control-Allow-Origin' header" 的 CORS 错误。
 # 为什么这样做：前端开发时通过 localhost:5173 访问，必须确保所有响应
-#              （包括错误响应）都包含正确的 CORS 头。
+#               （包括错误响应）都包含正确的 CORS 头。
 # ============================================================
 from starlette.responses import JSONResponse as StarletteJSONResponse
 from starlette.requests import Request as StarletteRequest
@@ -786,3 +807,5 @@ from app.api.health import router as health_router
 app.include_router(health_router)
 
 
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=settings.ai_service_port, reload=False)
