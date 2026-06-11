@@ -108,8 +108,9 @@ class MCPRemoteGateway:
             )
 
     def _record_latency(self, endpoint_url: str, tool_name: str, latency: int) -> None:
-        # TODO: 集成指标收集
-        pass
+        """记录调用延迟。"""
+        # 使用统一可观测性体系（这里简单通过 logger 审计记录）
+        logger.info(f"[Gateway] 远程 MCP 调用 tool={tool_name} latency={latency}ms endpoint={endpoint_url}")
 
     async def execute_remote_tool(
         self,

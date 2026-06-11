@@ -32,14 +32,14 @@ class HealthChecker:
                 resp = None
                 try:
                     resp = await client.options(endpoint_url)
-                except Exception:
-                    pass
+                except Exception as opt_err:
+                    logger.debug(f"OPTIONS 探测失败 {endpoint_url}: {opt_err!s}")
                 
                 if not resp or resp.status_code >= 500:
                     try:
                         resp = await client.get(endpoint_url)
-                    except Exception:
-                        pass
+                    except Exception as get_err:
+                        logger.debug(f"GET 探测失败 {endpoint_url}: {get_err!s}")
                 
                 if resp and resp.status_code < 500:
                     health_status = "online"

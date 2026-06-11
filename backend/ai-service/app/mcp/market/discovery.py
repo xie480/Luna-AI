@@ -17,16 +17,69 @@ from app.mcp.market.collectors.base import BaseCollector
 
 
 class OfficialRegistryCollector(BaseCollector):
-    """官方 MCP Registry 采集器"""
+    """官方 MCP Registry 采集器。
+    
+    做什么：从已知的官方/社区 MCP Registry 列表通过 HTTP 请求采集。
+    目前支持的来源：modelcontextprotocol.io 等已知端点。
+    为什么这样做：作为采集引擎的默认实现，为后续扩展 GitHub/Glama 等
+                采集器提供基线逻辑。
+    """
+    
+    # 已知的公开 MCP Registry 端点
+    REGISTRY_ENDPOINTS = [
+        "https://registry.modelcontextprotocol.io/v0.1/servers"
+    ]
     
     @property
     def source_name(self) -> str:
         return "official_registry"
         
     async def collect(self) -> list[RawDiscoveryItem]:
-        # TODO: 接入真实的官方 Registry API
-        # 这里仅作占位实现
-        return []
+        """执行单次采集：从所有已知的 Registry Endpoint 获取数据。"""
+        items: list[RawDiscoveryItem] = []
+        
+        for endpoint in self.REGISTRY_ENDPOINTS:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.get(
+                        endpoint,
+                        headers={"Accept": "application/json", "User-Agent": "LunaAI/1.0"},
+                    )
+                    response.raise_for_status()
+                    
+                    data = response.json()
+                    # 尝试解析 Registry 返回的列表数据（字段名兼容不同格式）
+                    server_list = data if isinstance(data, list) else data.get("servers", data.get("data", []))
+                    
+                    for entry in server_list:
+                        if not isinstance(entry, dict):
+                            continue
+                        item = RawDiscoveryItem(
+                            source=self.source_name,
+                            source_id=str(entry.get("id", "")),
+                            name=entry.get("name", entry.get("display_name", "")),
+                            description=entry.get("description", ""),
+                            author=entry.get("author", entry.get("publisher", "")),
+                            repository_url=entry.get("repository_url", entry.get("git_url", "")),
+                            homepage_url=entry.get("homepage_url", entry.get("homepage", "")),
+                            endpoint_url=entry.get("endpoint_url", entry.get("endpoint", "")),
+                            license=entry.get("license", ""),
+                            tags=entry.get("tags", entry.get("keywords", [])),
+                            raw_data=entry,
+                        )
+                        if item.name:  # 只接收有名称的条目
+                            items.append(item)
+                            
+                logger.info(f"从 {endpoint} 采集完成，获取 {len(items)} 条 MCP Server 数据")
+                
+            except httpx.HTTPStatusError as e:
+                logger.warning(f"从 {endpoint} 采集失败，HTTP 状态码异常: {e.response.status_code}")
+            except httpx.RequestError as e:
+                logger.warning(f"从 {endpoint} 采集失败，请求异常: {e!s}")
+            except Exception as e:
+                logger.warning(f"从 {endpoint} 采集失败，解析异常: {e!s}")
+                
+        return items
 
 
 class DiscoveryEngine:

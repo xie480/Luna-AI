@@ -37,18 +37,10 @@ class MarketNormalizer:
         if not clean_name:
             clean_name = item.name.lower().replace(' ', '-')
             
-        # 提取分类标签
-        category = "uncategorized"
         tags = set(item.tags)
         
-        # 基于内容进行简单的分类推断
-        lower_desc = item.description.lower()
-        if "github" in lower_desc or "git" in lower_desc or "code" in lower_desc:
-            category = "developer_tools"
-        elif "database" in lower_desc or "sql" in lower_desc or "postgres" in lower_desc:
-            category = "data_access"
-        elif "system" in lower_desc or "file" in lower_desc or "os" in lower_desc:
-            category = "system"
+        # 依赖于原数据或收集器中提供的分类，而不是按内容模糊猜测
+        category = item.raw_data.get("category", "uncategorized") if item.raw_data else "uncategorized"
             
         return NormalizedItem(
             name=clean_name,

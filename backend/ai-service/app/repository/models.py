@@ -41,6 +41,22 @@ class MemoryStatus(str, Enum):
     DELETED = "DELETED"
 
 
+class HealthStatus(str, Enum):
+    """MCP 健康状态枚举"""
+    ONLINE = "online"
+    OFFLINE = "offline"
+    UNKNOWN = "unknown"
+    DEGRADED = "degraded"
+
+
+class AuthType(str, Enum):
+    """MCP 鉴权类型枚举"""
+    NONE = "none"
+    BEARER = "bearer"
+    API_KEY = "api_key"
+    BASIC = "basic"
+
+
 class InteractionModel(Base):
     """
     对应 PostgreSQL 中的 interactions 表（问答聚合）

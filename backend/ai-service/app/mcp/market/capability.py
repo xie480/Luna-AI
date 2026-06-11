@@ -66,8 +66,8 @@ class CapabilityAnalyzer:
             source="remote",
             endpoint_url=endpoint_url,
             tags=list(tags),
-            core_purpose=description[:80].rstrip("。.、") or name,  # 截断描述前 80 字符
-            final_deliverable=description[:80],
+            core_purpose=description or name,
+            final_deliverable=description,
             category=server_category,
             risk_level=ToolRiskLevel.L0,
             enabled=True,
