@@ -126,7 +126,10 @@ async def _probe_remote_tools(endpoint_url: str, timeout: float = 10.0) -> list[
             response = await client.post(
                 endpoint_url,
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                },
             )
 
             # 日志：打印原始 HTTP 响应状态码和 body，不论状态码如何都尝试解析
