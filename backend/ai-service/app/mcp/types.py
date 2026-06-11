@@ -105,6 +105,26 @@ class MCPToolSchema(BaseModel):
         description="工具调用最终交付物描述，用于 Agent 1 决策判断。"
                     "描述工具调用后返回给用户的数据格式和内容。",
     )
+    source: str = Field(
+        default="local",
+        description="工具来源：local（代码注册）/ remote（市场接入）。"
+                    "local 工具不可通过 API 注册或注销。",
+    )
+    endpoint_url: str = Field(
+        default="",
+        description="远程 MCP 的 Endpoint URL。仅 source=remote 时有效，"
+                    "local 工具此字段为空。",
+    )
+    remote_instance_id: str = Field(
+        default="",
+        description="关联的远程实例 ID（关联 mcp_remote_instances.id）。"
+                    "仅 source=remote 时有效。",
+    )
+    auth_type: str = Field(
+        default="none",
+        description="鉴权类型：none / bearer / api_key / basic。"
+                    "仅 source=remote 时有效。",
+    )
 
 
 # ============================================================

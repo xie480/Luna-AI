@@ -289,8 +289,91 @@ class MCPToolRegistration(Base):
     use_case_examples: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
     core_purpose: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     final_deliverable: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
+    endpoint_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    remote_instance_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MCPMarketplace(Base):
+    """
+    对应 PostgreSQL 中的 mcp_marketplace 表（MCP 市场收录的 Server 主表）。
+    """
+    __tablename__ = "mcp_marketplace"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    author: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    repository_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    homepage_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    endpoint_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    license: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(64), nullable=False, default="uncategorized", index=True)
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    logo_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="community")
+    original_data: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    capabilities: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    tool_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    health_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown", index=True)
+    health_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    health_detail: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    trust_score: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0.00, index=True)
+    github_stars: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_commit_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    security_flags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    install_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    avg_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MCPRemoteInstance(Base):
+    """
+    对应 PostgreSQL 中的 mcp_remote_instances 表（用户已接入的远程 MCP 实例）。
+    """
+    __tablename__ = "mcp_remote_instances"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    marketplace_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, default="local_default_user", index=True)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    endpoint_url: Mapped[str] = mapped_column(String(1024), nullable=False)
+    auth_type: Mapped[str] = mapped_column(String(32), nullable=False, default="none")
+    auth_config_enc: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    auth_config_salt: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    proxy_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=30000)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    health_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    last_health_check: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    total_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failed_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    avg_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MCPMarketplaceDiscoveryLog(Base):
+    """
+    对应 PostgreSQL 中的 mcp_marketplace_discovery_log 表（数据采集审计日志）。
+    """
+    __tablename__ = "mcp_marketplace_discovery_log"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    item_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    item_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
 class UserProfileConflict(Base):

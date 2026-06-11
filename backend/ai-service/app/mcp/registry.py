@@ -41,16 +41,24 @@ class RegisteredTool:
 
 
 class MCPToolRegistry:
-    """MCP 工具注册中心（单例）。"""
+    """MCP 工具注册中心（单例）— 支持二分类隔离。"""
 
     _instance: MCPToolRegistry | None = None
-    _tools: dict[str, RegisteredTool] = {}
+    _local_tools: dict[str, RegisteredTool] = {}   # source=local
+    _remote_tools: dict[str, RegisteredTool] = {}  # source=remote
 
     def __new__(cls) -> MCPToolRegistry:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._tools = {}
+            cls._local_tools = {}
+            cls._remote_tools = {}
         return cls._instance
+
+    def _create_remote_handler(self, endpoint_url: str) -> Callable:
+        from app.mcp.gateway import get_gateway
+        async def remote_handler(*args, **kwargs):
+            return await get_gateway().execute_remote_tool(endpoint_url=endpoint_url, *args, **kwargs)
+        return remote_handler
 
     # ---- PG 持久化 ----
 
@@ -59,8 +67,12 @@ class MCPToolRegistry:
         loaded_count = 0
         for tool_dict in pg_tools:
             name = tool_dict.get("name", "")
-            if not name or name in self._tools:
+            source = tool_dict.get("source", "local")
+            target_pool = self._local_tools if source == "local" else self._remote_tools
+            
+            if not name or name in target_pool:
                 continue
+                
             schema = MCPToolSchema(
                 name=name,
                 description=tool_dict.get("description", ""),
@@ -72,16 +84,24 @@ class MCPToolRegistry:
                 use_case_examples=tool_dict.get("use_case_examples", []),
                 core_purpose=tool_dict.get("core_purpose", ""),
                 final_deliverable=tool_dict.get("final_deliverable", ""),
+                source=source,
+                endpoint_url=tool_dict.get("endpoint_url", ""),
+                remote_instance_id=tool_dict.get("remote_instance_id", ""),
             )
+            
+            handler = None
+            if source == "remote":
+                handler = self._create_remote_handler(schema.endpoint_url)
+            
             # PG 加载的工具 handler 为空，注册后仅可检索不可执行
-            self._tools[name] = RegisteredTool(schema=schema, handler=None)
+            target_pool[name] = RegisteredTool(schema=schema, handler=handler)
             loaded_count += 1
         logger.info(f"MCP 工具 PG 加载完成 count={loaded_count}")
 
     async def persist_to_pg(self, pg_repo: Any) -> None:
         """将内存中所有工具持久化到 PG。"""
         saved_count = 0
-        for name, tool in self._tools.items():
+        for name, tool in self._local_tools.items():
             schema = tool.schema
             success = await pg_repo.save(
                 name=name,
@@ -94,12 +114,49 @@ class MCPToolRegistry:
                 use_case_examples=schema.use_case_examples,
                 core_purpose=schema.core_purpose,
                 final_deliverable=schema.final_deliverable,
+                source=schema.source,
+                endpoint_url=schema.endpoint_url,
+                remote_instance_id=schema.remote_instance_id,
             )
             if success:
                 saved_count += 1
+                
+        for name, tool in self._remote_tools.items():
+            schema = tool.schema
+            success = await pg_repo.save(
+                name=name,
+                description=schema.description,
+                parameters_schema=schema.parameters_schema,
+                risk_level=schema.risk_level.value,
+                enabled=schema.enabled,
+                tags=schema.tags,
+                category=schema.category,
+                use_case_examples=schema.use_case_examples,
+                core_purpose=schema.core_purpose,
+                final_deliverable=schema.final_deliverable,
+                source=schema.source,
+                endpoint_url=schema.endpoint_url,
+                remote_instance_id=schema.remote_instance_id,
+            )
+            if success:
+                saved_count += 1
+                
         logger.info(f"MCP 工具 PG 持久化完成 count={saved_count}")
 
     # ---- 注册/注销 ----
+
+    def _validate_and_register(
+        self,
+        name: str,
+        schema: MCPToolSchema,
+        handler: Callable | None,
+        pool: str,
+    ) -> None:
+        """统一校验和注册逻辑。"""
+        if name in self._local_tools or name in self._remote_tools:
+            raise ValueError(f"MCP 工具名称 '{name}' 已注册")
+        target = self._local_tools if pool == "local" else self._remote_tools
+        target[name] = RegisteredTool(schema=schema, handler=handler)
 
     def register(
         self,
@@ -107,51 +164,87 @@ class MCPToolRegistry:
         schema: MCPToolSchema,
         handler: Callable[..., Any] | None = None,
     ) -> None:
-        """注册一个 MCP 工具。"""
-        if name in self._tools:
-            raise ValueError(f"MCP 工具名称 '{name}' 已注册，不可重复注册")
+        """注册一个 MCP 工具 (为了向后兼容，默认注册为 local)。"""
         if schema.name != name:
             raise ValueError(f"工具名称不一致: name='{name}' != schema.name='{schema.name}'")
-        self._tools[name] = RegisteredTool(schema=schema, handler=handler)
-        logger.info(f"MCP 工具注册完成 name={name} risk_level={schema.risk_level.value} category={schema.category}")
+        self.register_local(name, schema, handler)
+        
+    def register_local(
+        self,
+        name: str,
+        schema: MCPToolSchema,
+        handler: Callable[..., Any],
+    ) -> None:
+        """
+        注册本地 MCP 工具（仅供代码调用，不可通过 API 注册）。
+        """
+        if handler is None:
+            raise ValueError("本地 MCP 工具必须绑定 handler")
+        schema.source = "local"
+        self._validate_and_register(name, schema, handler, pool="local")
+        logger.info(f"MCP 本地工具注册完成 name={name} risk_level={schema.risk_level.value}")
+
+    def register_remote(
+        self,
+        name: str,
+        schema: MCPToolSchema,
+        endpoint_url: str,
+    ) -> None:
+        """
+        注册远程 MCP 工具（仅通过 MCP 市场 API 调用）。
+        """
+        schema.source = "remote"
+        schema.endpoint_url = endpoint_url
+        handler = self._create_remote_handler(endpoint_url)
+        self._validate_and_register(name, schema, handler, pool="remote")
+        logger.info(f"MCP 远程工具注册完成 name={name} endpoint={endpoint_url}")
 
     def unregister(self, name: str) -> None:
         """注销一个 MCP 工具。"""
-        if name not in self._tools:
+        if name in self._local_tools:
+            del self._local_tools[name]
+        elif name in self._remote_tools:
+            del self._remote_tools[name]
+        else:
             raise KeyError(f"MCP 工具 '{name}' 未注册，无法注销")
-        del self._tools[name]
         logger.info(f"MCP 工具注销完成 name={name}")
 
     # ---- 查询 ----
 
     def get_tool(self, name: str) -> RegisteredTool | None:
-        """获取已注册的工具对象。"""
-        tool = self._tools.get(name)
-        if tool is None or not tool.schema.enabled:
-            return None
-        return tool
+        """统一查询（先查本地再查远程）。"""
+        tool = self._local_tools.get(name)
+        if tool and tool.schema.enabled:
+            return tool
+        tool = self._remote_tools.get(name)
+        if tool and tool.schema.enabled:
+            return tool
+        return None
 
     def list_tools(self, include_disabled: bool = False) -> list[dict[str, Any]]:
-        """列出所有已注册工具的基本信息（不含 handler）。"""
-        result: list[dict[str, Any]] = []
-        for name, tool in self._tools.items():
-            if not include_disabled and not tool.schema.enabled:
-                continue
-            result.append({
-                "name": name,
-                "description": tool.schema.description,
-                "risk_level": tool.schema.risk_level.value,
-                "category": tool.schema.category,
-                "tags": tool.schema.tags,
-                "enabled": tool.schema.enabled,
-                "has_handler": tool.handler is not None,
-            })
+        """列出所有工具（含 source 字段供前端区分展示）。"""
+        result = []
+        for pool_name, pool in [("local", self._local_tools), ("remote", self._remote_tools)]:
+            for name, tool in pool.items():
+                if not include_disabled and not tool.schema.enabled:
+                    continue
+                result.append({
+                    "name": name,
+                    "description": tool.schema.description,
+                    "risk_level": tool.schema.risk_level.value,
+                    "category": tool.schema.category,
+                    "tags": tool.schema.tags,
+                    "enabled": tool.schema.enabled,
+                    "has_handler": tool.handler is not None,
+                    "source": tool.schema.source,
+                    "endpoint_url": tool.schema.endpoint_url,
+                })
         return result
 
     def get_tool_full_schema(self, name: str) -> dict[str, Any] | None:
         """获取指定工具的完整 Schema（含 parameters_schema）。"""
-        tool = self._tools.get(name)
-        if tool is None or not tool.schema.enabled:
+        tool = self.get_tool(name)
+        if tool is None:
             return None
         return {
             "name": tool.schema.name,
@@ -199,7 +292,7 @@ class MCPToolRegistry:
         """
         import re
 
-        all_tools = list(self._tools.values())
+        all_tools = list(self._local_tools.values()) + list(self._remote_tools.values())
         query_lower = query.lower()
         query_terms = set(re.findall(r'[\w\u4e00-\u9fff]+', query_lower))
 

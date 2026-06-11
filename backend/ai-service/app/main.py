@@ -45,6 +45,7 @@ from app.api.routers.user_profile import router as user_profile_router
 from app.api.http_api import router as http_router
 from app.api.sse import router as sse_router
 from app.api.memory_api import router as memory_router
+from app.mcp.market.api import router as mcp_market_router
 from app.config.crypto import CryptoService
 from app.config.event_bus import event_bus
 from app.config.settings import settings
@@ -294,7 +295,11 @@ async def lifespan(app: FastAPI):
             # 为了新增字段，需要对比模型和现有表的列。
             Base.metadata.create_all(sync_conn)
             TelemetryBase.metadata.create_all(sync_conn)
-            
+
+            # --- Phase 12 MCP Marketplace Tables Initialization ---
+            # mcp_marketplace, mcp_remote_instances, mcp_marketplace_discovery_log
+            # Base.metadata.create_all(sync_conn) will automatically create these new tables
+
             for table_name, table in Base.metadata.tables.items():
                 if table_name in existing_tables:
                     existing_columns = {col['name'] for col in inspector.get_columns(table_name)}
@@ -774,6 +779,7 @@ app.include_router(http_router)
 app.include_router(sse_router)
 app.include_router(memory_router)
 app.include_router(user_profile_router)
+app.include_router(mcp_market_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router
