@@ -106,35 +106,147 @@ async def _row_to_dict(row: Any) -> dict[str, Any]:
 async def _probe_remote_tools(endpoint_url: str, timeout: float = 10.0) -> list[dict[str, Any]]:
     """通过 MCP Protocol 连接到远程 Server，调用 tools/list 获取工具列表。
 
-    做什么：向远程 MCP Server 发送 JSON-RPC 2.0 请求 `{"method": "tools/list"}`，
-            解析返回的工具定义列表。无论 HTTP 状态码如何，都尝试解析响应 body。
-    为什么这样做：官方 Registry 不提供工具级能力数据，必须动态探测。
-                 很多 Server 返回非 2xx 状态码（如 406/415），但 body 中
-                 仍可能包含有效的 JSON-RPC 响应。因此不依赖 HTTP 状态码。
+    做什么：先发送 initialize 请求建立 MCP Streamable HTTP 会话（如果 Server 支持），
+            获取 sessionId 后调用 tools/list 获取工具列表。
+            这种两阶段握手兼容有状态（Streamable HTTP）和无状态两种传输模式。
+    为什么这样做：部分 MCP Server（如 borealhost.ai）要求客户端先初始化会话，
+                 否则 tools/list 返回 "Missing session ID" 错误。
+                 两阶段握手确保兼容所有 MCP 传输协议变体。
     边界条件：
+        - initialize 失败（Server 不支持）时降级为直接调用 tools/list。
         - 连接超时/失败时返回空列表，不抛出异常。
         - 部分 Server 可能不暴露 tools/list（如纯 Resource Server），
           也返回空列表。
     """
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            payload = {
+            # ===== 阶段一：initialize 握手（建立会话） =====
+            # Streamable HTTP 协议要求先发送 initialize 请求，
+            # Server 返回的 result 中可能包含 sessionId。
+            # 参考：https://spec.modelcontextprotocol.io/specification/basic/transports/streamable-http
+            session_id: str | None = None
+            init_payload = {
+                "jsonrpc": "2.0",
+                "id": "init-1",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "LunaAI",
+                        "version": "1.0.0",
+                    },
+                },
+            }
+            try:
+                init_resp = await client.post(
+                    endpoint_url,
+                    json=init_payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                )
+                init_resp_text = init_resp.text
+
+                # ===== 从响应头中提取 mcp-session-id（优先于 body 解析） =====
+                # 注意：必须先提取 sessionId，再尝试解析 body。
+                # 因为某些 Server 使用 SSE 传输（Content-Type: text/event-stream），
+                # body 不是 JSON 格式，json() 会抛异常。
+                session_id = None
+                for hk, hv in init_resp.headers.items():
+                    if hk.lower() == "mcp-session-id":
+                        session_id = hv
+                        break
+
+                logger.info(
+                    f"远端 MCP initialize 响应 "
+                    f"endpoint={endpoint_url} "
+                    f"status_code={init_resp.status_code} "
+                    f"mcp-session-id={'有' if session_id else '无'} "
+                    f"content_type={init_resp.headers.get('content-type', '')} "
+                    f"body（前500字符）={init_resp_text[:500]}"
+                )
+
+                # ===== 解析 initialize 响应 body =====
+                # Server 可能返回两种格式：
+                # 1. 纯 JSON：{"jsonrpc":"2.0","result":{...}}
+                # 2. SSE 格式：event: message\ndata: {"jsonrpc":"2.0","id":"init-1","result":{...}}
+                init_data: dict | None = None
+                if init_resp.status_code < 500 and init_resp_text:
+                    # 尝试 SSE 格式解析：提取 data: 行中的 JSON
+                    if init_resp_text.startswith("event:") or init_resp_text.startswith("data:"):
+                        for line in init_resp_text.split("\n"):
+                            line = line.strip()
+                            if line.startswith("data: ") or line == "data:":
+                                data_json = line[5:].strip()
+                                if data_json:
+                                    try:
+                                        init_data = json.loads(data_json)
+                                        break
+                                    except json.JSONDecodeError:
+                                        continue
+                    # 如果不是 SSE 格式，尝试直接 JSON 解析
+                    if init_data is None:
+                        try:
+                            init_data = json.loads(init_resp_text)
+                        except json.JSONDecodeError:
+                            pass
+
+                # ===== 从 result 中提取会话信息 =====
+                if init_data and isinstance(init_data, dict) and "error" not in init_data:
+                    init_result = init_data.get("result", {})
+                    if isinstance(init_result, dict):
+                        # 检查 body 中的 _meta.sessionId（某些 Server 放在 body 而非 header）
+                        init_meta = init_result.get("_meta", {})
+                        if isinstance(init_meta, dict) and not session_id:
+                            session_id = init_meta.get("sessionId", None)
+
+                    logger.info(
+                        f"远端 MCP initialize 完成 endpoint={endpoint_url} "
+                        f"session_id={'有' if session_id else '无（无状态模式）'} "
+                        f"server_info={init_result.get('serverInfo', {})}"
+                    )
+                else:
+                    err_detail = init_data.get("error", "解析失败") if init_data else "body非JSON格式"
+                    logger.debug(
+                        f"远端 MCP initialize 异常响应 "
+                        f"endpoint={endpoint_url} detail={err_detail}"
+                    )
+
+            except Exception as init_err:
+                logger.debug(
+                    f"远端 MCP initialize 失败（降级为无状态）"
+                    f"endpoint={endpoint_url} error={type(init_err).__name__}: {init_err!s}"
+                )
+
+            # ===== 阶段二：调用 tools/list =====
+            # 如果初始化拿到了 sessionId，后续请求必须携带
+            payload: dict[str, Any] = {
                 "jsonrpc": "2.0",
                 "method": "tools/list",
                 "id": "1",
             }
+            if session_id:
+                payload["params"] = {
+                    "_meta": {"sessionId": session_id},
+                }
+
+            # 构建请求头，如果有 sessionId 也放在 header 中（Server 二选一）
+            headers: dict[str, str] = {
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            }
+            if session_id:
+                headers["Mcp-Session-Id"] = session_id
+
             response = await client.post(
                 endpoint_url,
                 json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
-                },
+                headers=headers,
             )
 
             # 日志：打印原始 HTTP 响应状态码和 body，不论状态码如何都尝试解析
-            # 注意：不能使用 raise_for_status()，因为很多 MCP Server 返回 406/415
-            # 但 body 中仍包含有效的 JSON-RPC 错误或响应。
             response_text = response.text
             logger.info(
                 f"远端 tools/list HTTP 响应 "
@@ -144,18 +256,45 @@ async def _probe_remote_tools(endpoint_url: str, timeout: float = 10.0) -> list[
                 f"原始响应 body（前 3000 字符）:\n{response_text[:3000]}"
             )
 
-            data = response.json()
+            # ===== 解析 tools/list 响应 body =====
+            # 兼容两种传输格式：
+            # 1. 纯 JSON：{"jsonrpc":"2.0","result":{"tools":[...]},"id":"1"}
+            # 2. SSE 格式：event: message\ndata: {"jsonrpc":"2.0","result":{"tools":[...]}}
+            tools_data: dict | None = None
+            if response_text:
+                # 尝试 SSE 格式解析
+                if response_text.startswith("event:") or response_text.startswith("data:"):
+                    for line in response_text.split("\n"):
+                        line = line.strip()
+                        if line.startswith("data: ") or line == "data:":
+                            data_json = line[5:].strip()
+                            if data_json:
+                                try:
+                                    tools_data = json.loads(data_json)
+                                    break
+                                except json.JSONDecodeError:
+                                    continue
+                # 如果不是 SSE 格式，尝试直接 JSON 解析
+                if tools_data is None:
+                    try:
+                        tools_data = json.loads(response_text)
+                    except json.JSONDecodeError:
+                        pass
+
+            if tools_data is None:
+                logger.debug(f"远端 tools/list 响应解析失败 endpoint={endpoint_url}")
+                return []
 
             # JSON-RPC 响应格式: {"jsonrpc":"2.0","result":{"tools":[...]},"id":"1"}
-            if "error" in data:
+            if "error" in tools_data:
                 logger.debug(
                     f"远端 tools/list 返回错误 "
                     f"endpoint={endpoint_url} "
-                    f"error={json.dumps(data['error'], ensure_ascii=False, default=str)}"
+                    f"error={json.dumps(tools_data['error'], ensure_ascii=False, default=str)}"
                 )
                 return []
 
-            result = data.get("result", {})
+            result = tools_data.get("result", {})
             if not isinstance(result, dict):
                 return []
 

@@ -88,6 +88,9 @@ export interface MCPMarketDetail {
   is_installed: boolean;
   installed_instance_id?: string;
 
+  /** 默认 Endpoint URL（从市场元数据中自动填充）。 */
+  endpoint_url: string;
+
   /** 接入指导。 */
   install_instruction?: {
     auth_type: string;

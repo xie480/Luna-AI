@@ -67,8 +67,7 @@ class MCPToolSchema(BaseModel):
         description="工具唯一名称，用于在注册中心和路由中标识此工具。必须唯一。",
     )
     description: str = Field(
-        ..., max_length=2048,
-        description="工具功能描述，说明工具的用途和使用场景。用于 Agent 2 的参数提取上下文和语义检索。",
+        ..., description="工具功能描述，说明工具的用途和使用场景。用于 Agent 2 的参数提取上下文和语义检索。",
     )
     parameters_schema: dict[str, Any] = Field(
         default_factory=dict,
@@ -96,12 +95,12 @@ class MCPToolSchema(BaseModel):
         description="典型使用场景示例，用于语义检索匹配。例如：['现在几点', '今天几号', '目前时间']。",
     )
     core_purpose: str = Field(
-        default="", max_length=512,
+        default="",
         description="一句话核心用途，用于 Agent 1 Memory Prompt 轻量注入。"
                     "需要简洁概括工具能做什么。",
     )
     final_deliverable: str = Field(
-        default="", max_length=512,
+        default="",
         description="工具调用最终交付物描述，用于 Agent 1 决策判断。"
                     "描述工具调用后返回给用户的数据格式和内容。",
     )

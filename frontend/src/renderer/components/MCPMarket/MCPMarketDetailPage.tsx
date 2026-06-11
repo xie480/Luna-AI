@@ -201,13 +201,7 @@ export const MCPMarketDetailPage: React.FC = () => {
         <InstallRemoteMCPDialog
           marketplaceId={currentDetail.id}
           displayName={currentDetail.display_name}
-          defaultEndpoint={
-            currentDetail.install_instruction?.auth_type
-              ? undefined
-              : currentDetail.health_detail?.protocol === 'sse'
-                ? 'wss://...'
-                : 'https://...'
-          }
+          defaultEndpoint={currentDetail.endpoint_url || undefined}
           authType={currentDetail.install_instruction?.auth_type || 'none'}
           authHint={currentDetail.install_instruction?.auth_hint}
           onClose={() => setShowInstallDialog(false)}

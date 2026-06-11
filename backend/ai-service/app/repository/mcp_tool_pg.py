@@ -71,6 +71,9 @@ class MCPToolPGRepo:
                     "use_case_examples": row.use_case_examples or [],
                     "core_purpose": row.core_purpose or "",
                     "final_deliverable": row.final_deliverable or "",
+                    "source": row.source or "local",
+                    "endpoint_url": row.endpoint_url or "",
+                    "remote_instance_id": row.remote_instance_id or "",
                 })
             logger.info(f"MCP 工具 PG 加载完成 count={len(tools)}")
             return tools
@@ -161,6 +164,9 @@ class MCPToolPGRepo:
         use_case_examples: list[str],
         core_purpose: str,
         final_deliverable: str,
+        source: str = "local",
+        endpoint_url: str = "",
+        remote_instance_id: str = "",
     ) -> bool:
         """
         保存工具注册信息到 PG（插入或更新）。
@@ -191,6 +197,9 @@ class MCPToolPGRepo:
                 existing.use_case_examples = use_case_examples
                 existing.core_purpose = core_purpose
                 existing.final_deliverable = final_deliverable
+                existing.source = source
+                existing.endpoint_url = endpoint_url
+                existing.remote_instance_id = remote_instance_id
                 existing.updated_at = datetime.now(timezone.utc)
             else:
                 # 插入新记录
@@ -206,6 +215,9 @@ class MCPToolPGRepo:
                     use_case_examples=use_case_examples,
                     core_purpose=core_purpose,
                     final_deliverable=final_deliverable,
+                    source=source,
+                    endpoint_url=endpoint_url,
+                    remote_instance_id=remote_instance_id,
                 )
                 self._session.add(new_tool)
 
