@@ -310,8 +310,6 @@ class ChatStatusStage(str, Enum):
     LLM_STREAMING = "llm_streaming"
     RESPONSE_PERSISTENCE = "response_persistence"
     FINALIZE = "finalize"
-    # --- Phase 12 新增：MCP 工具执行阶段 ---
-    MCP_TOOL_EXECUTION = "mcp_tool_execution"
     # --- Phase 12（v3.0）新增：Skill 执行阶段 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
     # --- Phase 12（v3.0）新增：MCP Skill 子阶段（用于 display_text 细化） ---

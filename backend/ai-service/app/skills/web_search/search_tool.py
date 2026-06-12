@@ -103,6 +103,17 @@ SEARXNG_SEARCH_PARAMETERS_SCHEMA: dict[str, Any] = {
             "description": "返回的最大结果数量，可选。默认：10，最大：50。",
             "default": 10,
         },
+        "time_range": {
+            "type": "string",
+            "enum": [
+                "",
+                "day",
+                "month",
+                "year",
+            ],
+            "default": "",
+            "description": "时间范围过滤"
+        }
     },
     "required": ["query"],
 }
@@ -148,9 +159,15 @@ async def handle_searxng_search(
     config_mgr = ToolConfigManager()
     tool_config = config_mgr.get_config(TOOL_NAME)
     base_url: str = tool_config.get(CONFIG_KEY_BASE_URL, "")
-    timeout: float = float(
-        tool_config.get(CONFIG_KEY_TIMEOUT, _SEARXNG_DEFAULT_TIMEOUT)
-    )
+    try:
+        timeout = float(
+            tool_config.get(
+                CONFIG_KEY_TIMEOUT,
+                _SEARXNG_DEFAULT_TIMEOUT,
+            )
+        )
+    except (TypeError, ValueError):
+        timeout = _SEARXNG_DEFAULT_TIMEOUT
 
     if not base_url:
         logger.warning(
@@ -170,16 +187,35 @@ async def handle_searxng_search(
     # ============================================================
     # 提取参数
     # ============================================================
-    query: str = parameters.get("query", "").strip()
+    query = str(
+        parameters.get("query", "")
+    ).strip()
     if not query:
         return "【搜索参数错误】搜索查询词（query）不能为空。"
 
     categories: str = parameters.get("categories", "general")
     engines: str = parameters.get("engines", "")
     language: str = parameters.get("language", "zh-CN")
-    pageno: int = parameters.get("pageno", 1)
-    safesearch: int = parameters.get("safesearch", 1)
-    max_results: int = parameters.get("max_results", 10)
+    pageno = _safe_int(
+        parameters.get("pageno"),
+        default=1,
+        minimum=1,
+        maximum=50,
+    )
+
+    safesearch = _safe_int(
+        parameters.get("safesearch"),
+        default=1,
+        minimum=0,
+        maximum=2,
+    )
+
+    max_results = _safe_int(
+        parameters.get("max_results"),
+        default=10,
+        minimum=1,
+        maximum=50,
+    )
 
     # 参数校验
     if max_results < 1:
@@ -372,3 +408,22 @@ async def handle_searxng_search(
     )
 
     return output_text
+
+def _safe_int(
+    value: Any,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        result = default
+
+    if minimum is not None:
+        result = max(minimum, result)
+
+    if maximum is not None:
+        result = min(maximum, result)
+
+    return result
