@@ -37,8 +37,6 @@ class ChatWorkflowNodeType(str, Enum):
     MAIN_CHAT_LLM = "main_chat_llm"
     RESPONSE_PERSISTENCE = "response_persistence"
     FINALIZE = "finalize"
-    # --- Phase 12 新增：MCP 工具执行节点 ---
-    MCP_TOOL_EXECUTION = "mcp_tool_execution"
     # --- Phase 12（v3.0）新增：MCP Skill 执行节点 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
     # --- Phase 12（v3.0）新增：MCP 前置判断节点 ---
@@ -63,9 +61,6 @@ class ChatConditionalRoute(str, Enum):
     BYPASS_LONG_TERM_MEMORY_RAG = "bypass_long_term_memory_rag"
     ENTER_KNOWLEDGE_RAG = "enter_knowledge_rag"
     BYPASS_KNOWLEDGE_RAG = "bypass_knowledge_rag"
-    # --- Phase 12 新增：MCP 工具路由 ---
-    ENTER_MCP_TOOL = "enter_mcp_tool"
-    BYPASS_MCP_TOOL = "bypass_mcp_tool"
     # --- Phase 12（v3.0）新增：Skill 路由 ---
     ENTER_MCP_SKILL = "enter_mcp_skill"
     BYPASS_MCP_SKILL = "bypass_mcp_skill"
@@ -111,9 +106,6 @@ class ChatWorkflowGraphNodeName(str, Enum):
     MAIN_CHAT_LLM = "main_chat_llm"
     RESPONSE_PERSISTENCE = "response_persistence"
     FINALIZE = "finalize"
-    # --- Phase 12 新增：MCP 工具相关节点 ---
-    MCP_TOOL_EXECUTION = "mcp_tool_execution"
-    MCP_TOOL_BYPASS = "mcp_tool_bypass"
     # --- Phase 12（v3.0）新增：Skill 节点 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
     MCP_SKILL_BYPASS = "mcp_skill_bypass"
@@ -132,40 +124,19 @@ CHAT_WORKFLOW_CONTEXT_WINDOW_DEGRADED: Final[str] = "degraded"
 CHAT_WORKFLOW_EMPTY_PROFILE_REASON: Final[str] = "用户画像为空"
 CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON: Final[str] = "未触发长期记忆检索"
 CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON: Final[str] = "未触发知识库检索"
-CHAT_WORKFLOW_NO_MCP_ROUTE_REASON: Final[str] = "未触发MCP工具调用"
-# --- Phase 12 新增：MCP Agent 执行阶段枚举 ---
 
 class ChatMCPAgentPhase(str, Enum):
     """MCP Agent 执行阶段枚举。
 
-    做什么：标识 MCPToolExecutionNode 中三 Agent 协作的当前执行阶段。
+    做什么：标识 MCPSkillExecutionNode 中三 Agent 协作的当前执行阶段。
     为什么这样做：使用枚举替代硬编码的字符串常量，避免拼写错误和散落。
     """
     IDLE = "idle"
-    SCREENING = "screening"
-    CALLING_LOOP = "calling_loop"
-    CALLING = "calling"        # 后跟索引：calling_[index]
-    EXECUTION = "execution"    # 后跟索引：execution_[index]
-    CHAIN_COMPLETED = "chain_completed"
-    ALIGNMENT = "alignment"
-    COMPLETED = "completed"
-    DEGRADED = "degraded"
-    # --- Phase 12（v3.0）新增：Skill 专属阶段 ---
     SKILL_SCREENING = "skill_screening"
     SKILL_LOADING = "skill_loading"
     SKILL_EXECUTION = "skill_execution"
     SKILL_FALLBACK = "skill_fallback"
     SKILL_FINAL_FAIL = "skill_final_fail"
-
-
-CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON: Final[str] = "输入重构失败并降级为规则路由"
-
-# --- Phase 12 新增：MCP 工具常量 ---
-# 做什么：MCP 工具执行节点的降级原因和跳过原因文本常量。
-#         禁止在业务代码中硬编码这些字符串。
-CHAT_WORKFLOW_NO_MCP_TOOL_ROUTE_REASON: Final[str] = "未触发 MCP 工具调用"
-CHAT_WORKFLOW_MCP_TOOL_DEGRADED_REASON: Final[str] = "MCP 工具执行降级"
-CHAT_WORKFLOW_MCP_TOOL_NO_TOOL_REASON: Final[str] = "MCP Agent 判定无需调用工具"
 
 # Phase 12（v3.0）新增：Skill 常量
 CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON: Final[str] = "未触发 MCP Skill 调用"
@@ -198,6 +169,3 @@ CHAT_STREAM_EMPTY_RESPONSE_ERROR: Final[str] = "Assistant returned empty content
 CHAT_WORKFLOW_REDIS_WRITE_OK: Final[str] = "redis_write_ok"
 CHAT_WORKFLOW_REDIS_WRITE_SKIPPED: Final[str] = "redis_write_skipped"
 CHAT_WORKFLOW_REDIS_WRITE_FAILED: Final[str] = "redis_write_failed"
-CHAT_WORKFLOW_PG_WRITE_OK: Final[str] = "pg_write_ok"
-CHAT_WORKFLOW_PG_WRITE_SKIPPED: Final[str] = "pg_write_skipped"
-CHAT_WORKFLOW_PG_WRITE_FAILED: Final[str] = "pg_write_failed"

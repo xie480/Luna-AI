@@ -5,8 +5,6 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.mcp.types import MCPToolJudgment
-
 
 class PrimaryIntent(str, Enum):
     MODIFY_PLAN = "MODIFY_PLAN"             # 修改计划
@@ -90,35 +88,6 @@ class EmotionState(BaseModel):
     emotion_trigger: str = Field(..., description="触发情绪的原因")
     esm_transition_hint: str = Field(..., description="ESM状态机跃迁暗示，如 REQUIRE_COMFORT")
 
-class InputReconstructionOutput(BaseModel):
-    trace_id: str = Field(..., description="全链路追踪ID，必须与入参保持一致")
-    original_input: str = Field(..., description="用户原始输入")
-    reconstruction: Reconstruction
-    intent_routing: IntentRouting
-    retrieval_routing: RetrievalRouting
-    emotion_state: EmotionState
-
-    # --- Phase 12 新增：MCP 工具调用判定 ---
-    # 做什么：MCP 工具调用判定结果。当 primary_intent==TOOL_INVOCATION 或
-    #         dag_route_hint==AGENTIC_WORKFLOW 且上下文明显需要工具时非空。
-    # 为什么这样做：将工具判定的逻辑嵌入输入重构流程中，不额外增加模型调用次数。
-    mcp_tool_judgment: Optional[MCPToolJudgment] = Field(
-        default=None,
-        description="MCP 工具调用判定结果，由 LLM 在输入重构阶段以结构化输出方式生成。"
-                    "包含 need_tool、reason、keywords 三个字段。",
-    )
-
-    # --- Phase 12（v3.0）新增：MCP Skill 判定 ---
-    # 做什么：MCP Skill 判定结果，取代原有的 mcp_tool_judgment 字段。
-    #         当 primary_intent 涉及需要技能执行的任务时非空。
-    skill_judgment: Optional[SkillJudgment] = Field(
-        default=None,
-        description="MCP Skill 判定结果，由 LLM 在输入重构阶段以结构化输出方式生成。"
-                    "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
-                    "取代原有的 mcp_tool_judgment 字段。",
-    )
-
-
 class SkillJudgment(BaseModel):
     """输入重构节点输出的 Skill 判定结果。
 
@@ -138,4 +107,22 @@ class SkillJudgment(BaseModel):
     )
     keywords: list[str] = Field(
         ..., description="用于 Skill 检索的关键词数组。Agent 1 将以此检索候选 Skill。",
+    )
+
+class InputReconstructionOutput(BaseModel):
+    trace_id: str = Field(..., description="全链路追踪ID，必须与入参保持一致")
+    original_input: str = Field(..., description="用户原始输入")
+    reconstruction: Reconstruction
+    intent_routing: IntentRouting
+    retrieval_routing: RetrievalRouting
+    emotion_state: EmotionState
+
+    # --- Phase 12（v3.0）新增：MCP Skill 判定 ---
+    # 做什么：MCP Skill 判定结果，取代原有的 mcp_tool_judgment 字段。
+    #         当 primary_intent 涉及需要技能执行的任务时非空。
+    skill_judgment: Optional[SkillJudgment] = Field(
+        default=None,
+        description="MCP Skill 判定结果，由 LLM 在输入重构阶段以结构化输出方式生成。"
+                    "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
+                    "取代原有的 mcp_tool_judgment 字段。",
     )

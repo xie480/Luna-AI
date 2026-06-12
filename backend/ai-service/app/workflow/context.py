@@ -1,80 +1,58 @@
-"""Phase 8.5 workflow 状态模型。"""
+"""Luna AI Chat Workflow 状态类型定义。
+
+做什么：定义 LangGraph 节点间传递的完整状态类型 ChatWorkflowState 及其子模型。
+为什么这样做：所有 LangGraph 节点共享同一个类型化状态，确保字段安全。
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-from app.rag.types import RagEvidence
-from app.repository.chat_history_redis import Interaction
-from app.types.constants import RagRetrievalRoute
-from app.workflow.constants import (
-    CHAT_WORKFLOW_CONTEXT_WINDOW_READY,
-    CHAT_WORKFLOW_DEFAULT_LOCALE,
-    CHAT_WORKFLOW_DEFAULT_TIMEZONE,
-    CHAT_WORKFLOW_DEFAULT_USER_ID,
-    ChatMode,
-    ChatMCPAgentPhase,
-    ChatNodeStatus,
-    ChatPlanPreset,
-    ChatWorkflowNodeType,
-    ChatWorkflowSchemaVersion,
-)
+from app.mcp.skill_types import FallbackState, FinalFailState
+from app.mcp.types import MCPToolResult
+from app.rag.types import RagEvidence, RagRetrievalRoute
+from app.types.constants import KnowledgeCitation
+from app.workflow.graph_factory import WorkflowGraphState
 
 
-class KnowledgeCitation(BaseModel):
-    """知识引用视图。"""
-
-    citation_id: int | str = ""
-    document_id: str = ""
-    document_name: str = ""
-    chunk_id: str = ""
-    metadata: dict[str, Any] = Field(default_factory=dict)
+# ===========================================================================
+# 子状态模型
+# ===========================================================================
 
 
-class ChatRuntimeContext(BaseModel):
-    """运行态上下文。"""
+class ChatRuntimeState(BaseModel):
+    """运行时状态（工作流级别）。"""
 
-    trace_id: str = Field(min_length=1, max_length=64)
-    interaction_id: str = Field(min_length=1, max_length=64)
-    session_id: str = Field(min_length=1, max_length=64)
-    user_id: str = Field(default=CHAT_WORKFLOW_DEFAULT_USER_ID, min_length=1, max_length=64)
-    chat_mode: ChatMode = ChatMode.DAILY_CHAT
-    plan_preset_id: ChatPlanPreset = ChatPlanPreset.DAILY_CHAT_DEFAULT
-    current_node_type: ChatWorkflowNodeType | None = None
-    started_at_ms: int = Field(ge=0)
-    deadline_at_ms: int | None = Field(default=None, ge=0)
+    trace_id: str = ""
+    session_id: str = ""
+    interaction_id: str = ""
+    plan_preset_id: str = ""
+    start_ms: int = Field(default=0, ge=0)
+    locale: str = "zh-CN"
+    user_id: str = "local_default_user"
     retry_count: int = Field(default=0, ge=0)
 
 
 class ChatInputPayload(BaseModel):
-    """本轮输入载荷。"""
+    """输入载荷。"""
 
-    raw_user_message: str = Field(min_length=1, max_length=20000)
-    frontend_message_id: str = Field(min_length=1, max_length=64)
-    client_timestamp_ms: int = Field(ge=0)
-    locale: str = Field(default=CHAT_WORKFLOW_DEFAULT_LOCALE, min_length=1, max_length=32)
-    timezone: str = Field(default=CHAT_WORKFLOW_DEFAULT_TIMEZONE, min_length=1, max_length=64)
-
-    @field_validator("raw_user_message")
-    @classmethod
-    def validate_raw_user_message(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("用户消息不能为空")
-        return cleaned
+    raw_user_message: str = ""
+    mention_luna: bool = True
+    attachment_meta_list: list[dict[str, Any]] = Field(default_factory=list)
+    extra_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ChatSessionState(BaseModel):
-    """会话窗口状态。"""
+    """会话层面状态（含摘要与关键事实）。"""
 
-    recent_messages: list[Interaction] = Field(default_factory=list)
     short_summary: str = ""
+    long_summary: str = ""
     key_facts: list[str] = Field(default_factory=list)
     token_budget_total: int = Field(default=0, ge=0)
     token_budget_used: int = Field(default=0, ge=0)
-    context_window_status: str = CHAT_WORKFLOW_CONTEXT_WINDOW_READY
+    context_window_status: str = "ready"
     memory_snippets: str = ""
     rag_evidence_text: str = Field(
         default="",
@@ -120,18 +98,6 @@ class ChatRouteState(BaseModel):
                     "当 should_enter_skill=False 时此字段为空字符串。",
     )
 
-    # --- Phase 12 保留（兼容旧路径）：MCP 工具调用路由 ---
-    should_enter_mcp_tool: bool = Field(
-        default=False,
-        description="输入重构节点判定是否需要进入 MCP 工具执行节点。"
-                    "True 表示需要工具调用，False 表示无需。",
-    )
-    mcp_judgment_json: dict[str, Any] | None = Field(
-        default=None,
-        description="输入重构节点输出的 MCP 工具调用 JSON 判定结果，"
-                    "包含 need_tool(bool)、reason(str)、keywords(list[str])。",
-    )
-
 
 class ChatMemoryState(BaseModel):
     """长期记忆状态。"""
@@ -173,51 +139,22 @@ class ChatPromptState(BaseModel):
 
 
 class ChatGenerationState(BaseModel):
-    """主模型生成状态。"""
+    """生成结果状态。"""
 
-    assistant_message_id: str = Field(min_length=1, max_length=64)
-    model_name: str = ""
-    provider_name: str = ""
-    stream_started_at_ms: int | None = Field(default=None, ge=0)
-    ttft_ms: int | None = Field(default=None, ge=0)
     full_text: str = ""
     thought_text: str = ""
     emotion: str = ""
-    finish_reason: str = ""
     citations: list[KnowledgeCitation] = Field(default_factory=list)
+    assistant_message_id: str = ""
     error: str = ""
-
-
-class ChatNodeObservation(BaseModel):
-    """节点观测记录。"""
-
-    node_type: ChatWorkflowNodeType
-    status: ChatNodeStatus
-    started_at_ms: int = Field(ge=0)
-    ended_at_ms: int | None = Field(default=None, ge=0)
-    latency_ms: int | None = Field(default=None, ge=0)
-    retry_count: int = Field(default=0, ge=0)
-    condition_entered: bool | None = None
-    condition_reason: str = ""
-    degraded_reason: str = ""
-    error_code: str = ""
+    finish_reason: str = ""
 
 
 class ChatObservabilityState(BaseModel):
-    """可观测状态。"""
+    """可观测性状态。"""
 
-    node_observations: list[ChatNodeObservation] = Field(default_factory=list)
+    node_observations: list[dict[str, Any]] = Field(default_factory=list)
     emitted_event_ids: list[str] = Field(default_factory=list)
-
-
-class ChatErrorState(BaseModel):
-    """主链路错误状态。"""
-
-    node_type: ChatWorkflowNodeType
-    error_code: str
-    message: str
-    retryable: bool = False
-    recoverable: bool = False
 
 
 class ChatMCPToolState(BaseModel):
@@ -225,89 +162,105 @@ class ChatMCPToolState(BaseModel):
     为什么这样做：MCP Tool 和 Skill 共用 mcp_tool_state 字段，
                  避免新增字段导致其他依赖该字段的节点（如 base.py 的降级检测）大范围修改。
     """
-    # 条件路由
+
     entered_by_condition: bool = False
     condition_reason: str = ""
 
     # Agent 阶段标识（兼容 Tool 和 Skill 两个阶段枚举）
     agent_phase: str = Field(
-        default=ChatMCPAgentPhase.IDLE.value,
-        description="当前 Agent 执行阶段。",
+        default="idle",
+        description="Agent 执行阶段标识。Tool 模式使用 ChatMCPAgentPhase 枚举值，"
+                    "Skill 模式使用 SkillAgentPhase 枚举值。",
     )
 
-    # Agent 1 结果
+    # --- Agent 1 结果 ---
     screening_result: dict[str, Any] = Field(
         default_factory=dict,
         description="Agent 1 输出的筛选结果。Tool 模式为 ToolChainPlan，Skill 模式为 SkillChainPlan。",
     )
 
-    # Agent 2：多轮参数提取结果累积
+    # --- Agent 2 结果（Tool 旧路径） ---
     calling_results: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="Agent 2 多轮 Tool Calling 结果的累积数组。",
+        description="Agent 2 每轮参数提取结果数组，仅旧 Tool 路径使用。",
     )
 
-    # 执行计划（Skill 模式）
-    execution_plan: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Skill 模式的执行计划。Tool 模式为空。",
-    )
-
-    # 资源加载结果（Skill 模式）
-    resource_results: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="Skill 模式的资源加载结果。",
-    )
-
-    # 工具执行结果累积
-    tool_results: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description="每轮工具执行的累积结果数组。",
-    )
-
-    # 最后一次工具执行结果（兼容下游对单次结果的读取）
-    executed_tool_name: str = ""
-    execution_id: str = ""
-    output_text: str = ""
-    error_message: str = ""
-    latency_ms: int = 0
-    retry_count: int = 0
-    risk_level: str = "L0"
-
-    # 工具链终止信息
-    chain_aborted: bool = False
-    chain_error: str = ""
-
-    # Agent 3：意图对齐结果
+    # --- Agent 3 结果（Tool 旧路径） ---
     alignment_result: dict[str, Any] = Field(
         default_factory=dict,
-        description="Agent 3 意图对齐的结构化输出。",
+        description="Agent 3 意图对齐结果，仅旧 Tool 路径使用。",
     )
     calibrated_output: str = Field(
         default="",
-        description="Agent 3 校准后的最终输出文本。",
+        description="Agent 3 校准后的输出文本，仅旧 Tool 路径使用。",
     )
-    quality_issue: bool = False
+    quality_issue: bool = Field(
+        default=False,
+        description="Agent 3 质量标记，仅旧 Tool 路径使用。",
+    )
 
-    # 最终失败信息（Skill 模式）
+    # --- 工具链执行状态（Tool 旧路径） ---
+    tool_results: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="工具链每轮执行结果累积数组。Tool 和 Skill 均写入此字段。",
+    )
+    chain_aborted: bool = Field(
+        default=False,
+        description="工具链是否因错误终止，仅旧 Tool 路径使用。",
+    )
+    chain_error: str = Field(
+        default="",
+        description="工具链终止时的错误信息，仅旧 Tool 路径使用。",
+    )
+
+    # 最后一次工具执行结果
+    executed_tool_name: str = ""
+    execution_id: str = ""
+    output_text: str = ""
+    latency_ms: int = 0
+
+    # --- Skill 路径独有 ---
+    execution_plan: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Agent 2 输出的执行计划。仅 Skill 路径使用，包含 state 字典和执行顺序。",
+    )
+    resource_results: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Agent 2 资源加载阶段的结果数组。仅 Skill 路径使用。",
+    )
     final_fail_state: dict[str, Any] = Field(
         default_factory=dict,
-        description="Skill 模式的最终失败状态。",
+        description="最终失败状态。仅 Skill 路径退回机制触发最终失败时写入。",
+    )
+    fallback_state: dict[str, Any] = Field(
+        default_factory=dict,
+        description="退回状态。仅 Skill 路径执行退回时写入，记录退回轮次和上下文。",
     )
 
-    # 降级标记
-    degraded: bool = False
-    degraded_reason: str = ""
+    # --- 降级状态 ---
+    degraded: bool = Field(
+        default=False,
+        description="MCP 工具/Skill 执行是否降级。True 表示降级跳过。",
+    )
+    degraded_reason: str = Field(
+        default="",
+        description="MCP 工具/Skill 执行降级原因。",
+    )
+
+
+# ===========================================================================
+# 顶层工作流状态
+# ===========================================================================
 
 
 class ChatWorkflowState(BaseModel):
-    """Workflow 根状态。"""
+    """Chat Workflow 完整状态。"""
 
-    schema_version: ChatWorkflowSchemaVersion = ChatWorkflowSchemaVersion.CHAT_WORKFLOW_V1
-    runtime: ChatRuntimeContext
-    input_payload: ChatInputPayload
-    session_state: ChatSessionState = Field(default_factory=ChatSessionState)
+    schema_version: str = "chat.workflow.v1"
+    input_payload: ChatInputPayload = Field(default_factory=ChatInputPayload)
+    runtime: ChatRuntimeState = Field(default_factory=ChatRuntimeState)
     route_state: ChatRouteState = Field(default_factory=ChatRouteState)
+    session_state: ChatSessionState = Field(default_factory=ChatSessionState)
     memory_state: ChatMemoryState = Field(default_factory=ChatMemoryState)
     profile_state: ChatUserProfileState = Field(default_factory=ChatUserProfileState)
     knowledge_state: ChatKnowledgeRagState = Field(default_factory=ChatKnowledgeRagState)
@@ -316,17 +269,16 @@ class ChatWorkflowState(BaseModel):
         description="MCP 工具/Skill 执行状态。",
     )
     prompt_state: ChatPromptState = Field(default_factory=ChatPromptState)
-    generation_state: ChatGenerationState
+    generation_state: ChatGenerationState = Field(default_factory=ChatGenerationState)
     observability: ChatObservabilityState = Field(default_factory=ChatObservabilityState)
-    error_state: ChatErrorState | None = None
-
-    def as_graph_state(self) -> dict[str, Any]:
-        return {"state": self.model_dump(mode="json")}
 
     @classmethod
-    def from_graph_state(cls, value: dict[str, Any] | ChatWorkflowState) -> ChatWorkflowState:
-        if isinstance(value, ChatWorkflowState):
-            return value
-        if "state" in value and isinstance(value["state"], dict):
-            return cls.model_validate(value["state"])
-        return cls.model_validate(value)
+    def from_graph_state(cls, state: dict[str, Any]) -> ChatWorkflowState:
+        """从 LangGraph 字典状态反序列化为类型化状态。"""
+        if isinstance(state, cls):
+            return state
+        return cls(**{k: v for k, v in state.items() if k in cls.model_fields})
+
+    def as_graph_state(self) -> dict[str, Any]:
+        """序列化为 LangGraph 字典状态。"""
+        return self.model_dump(mode="json")

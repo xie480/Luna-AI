@@ -36,17 +36,6 @@ class PromptCategory(str, Enum):
     USER_PROFILE_EXTRACT = "user_profile_extract"
     USER_PROFILE_SUMMARIZE = "user_profile_summarize"
 
-    # --- Phase 12 新增：MCP 三 Agent Prompt 分类 ---
-    # 做什么：为 MCP 工具链中的三个 Agent 分别提供独立的 Prompt 模板分类。
-    #         Agent 1（初筛）、Agent 2（参数提取）、Agent 3（意图对齐）
-    #         各有独立的 system/memory/runtime 三槽位模板。
-    # 为什么这样做：三 Agent 的 Prompt 模板内容差异较大（Agent 1 不含 Schema，
-    #             Agent 2 含完整 Schema，Agent 3 聚焦结果校准），
-    #             分开存储便于独立迭代和版本管理。
-    MCP_TOOL_SCREENING = "mcp_tool_screening"
-    MCP_TOOL_CALLING = "mcp_tool_calling"
-    MCP_INTENT_ALIGNMENT = "mcp_intent_alignment"
-
     # --- Phase 12（v3.0）新增：Skill 三阶段 Prompt 分类 ---
     # 做什么：为 Skill 三阶段 Agent 分别提供独立的 Prompt 模板分类。
     #         Agent 1（初筛）、Agent 2（加载）、Agent 3（执行·含退回）。
@@ -101,27 +90,25 @@ def _normalize_variable_value(value: Any) -> str:
         return value
     try:
         return json.dumps(value, ensure_ascii=False)
-    except TypeError:
+    except Exception:
         return str(value)
 
 
 def render_template(template: str, variables: Dict[str, Any]) -> str:
     """
-    简单渲染 {{ KEY }} 占位符为对应变量的值。
+    渲染 Prompt 模板。
 
-    做什么：支持 {{ KEY }} 与 {{KEY}} 两种占位符格式。
-    为什么这样做：现有 simple Prompt 文件两种写法并存，统一在 Python 控制面完成渲染。
-    输入输出：输入模板正文和变量字典，输出渲染后的 Prompt 字符串。
-    边界条件：不存在的变量不会被替换；非字符串变量会转为 JSON 或字符串。
-    异常行为：本函数不主动抛业务异常。
+    做什么：将模板中的变量占位符 {{VAR_NAME}} 替换为运行时变量值。
+    为什么这样做：简单的字符串替换，不引入 Jinja2 以避免依赖膨胀。
+    输入输出：输入模板字符串和变量字典，输出渲染后的字符串。
+    边界条件：未定义的变量占位符被替换为空字符串；空值按 _normalize_variable_value 处理。
     """
     result = template
     for key, value in variables.items():
-        normalized_value = _normalize_variable_value(value)
-        # 替换带空格的格式 {{ KEY }}
-        placeholder_with_space = f"{{{{ {key} }}}}"
-        result = result.replace(placeholder_with_space, normalized_value)
-        # 替换不带空格的格式 {{KEY}}
-        placeholder_without_space = f"{{{{{key}}}}}"
-        result = result.replace(placeholder_without_space, normalized_value)
+        placeholder = "{{" + key + "}}"
+        if placeholder in result:
+            result = result.replace(placeholder, _normalize_variable_value(value))
+    # 清理残余未替换占位符
+    import re
+    result = re.sub(r"\{\{[A-Za-z_][A-Za-z0-9_]*\}\}", "", result)
     return result

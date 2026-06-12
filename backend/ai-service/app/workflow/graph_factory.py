@@ -1,20 +1,13 @@
-"""Phase 8.5 LangGraph Chat Plan 工厂。"""
+"""Phase 8.5 Chat Workflow LangGraph 图工厂。"""
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
-
-from langgraph.graph import END, StateGraph
+from langgraph.graph import StateGraph
 
 from app.workflow.constants import ChatWorkflowGraphNodeName
+from app.workflow.context import WorkflowGraphState
 from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.registry import ChatWorkflowNodeRegistry
-
-
-class WorkflowGraphState(TypedDict):
-    """LangGraph 外层状态通道。"""
-
-    state: dict[str, Any]
 
 
 class ChatGraphFactory:
@@ -66,9 +59,6 @@ class ChatGraphFactory:
             ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS,
             ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION,
             ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS,
-            # --- 保留旧 Tool 路径兼容 ---
-            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION,
-            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS,
             # -------------------------------------------------
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE,
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
@@ -160,26 +150,6 @@ class ChatGraphFactory:
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
         )
 
-        # 保留旧 Tool 路径兼容（通过 Intent 旁路也可路由到 Tool）
-        graph.add_conditional_edges(
-            ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS.value,
-            self.registry.router.route_mcp_tool,
-            {
-                ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value:
-                    ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
-                ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value:
-                    ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
-            },
-        )
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
-            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
-        )
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
-            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
-        )
-
         # 添加从上下文治理到提示组装的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
@@ -200,6 +170,14 @@ class ChatGraphFactory:
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
             ChatWorkflowGraphNodeName.FINALIZE.value,
         )
-        # 添加从最终化到 END 的边
-        graph.add_edge(ChatWorkflowGraphNodeName.FINALIZE.value, END)
-        return graph.compile()
+
+        compiled = graph.compile()
+        logger.info(
+            "daily_chat 主图构建完成 | active_nodes=%d | entry_point=%s",
+            len(active_nodes),
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
+        )
+        return compiled
+
+
+from app.logger import logger
