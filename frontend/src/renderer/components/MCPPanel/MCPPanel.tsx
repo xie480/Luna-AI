@@ -20,10 +20,11 @@ import React, { useState, useCallback } from 'react';
 import { MCPMarketPage } from '../MCPMarket/MCPMarketPage';
 import { MCPMarketDetailPage } from '../MCPMarket/MCPMarketDetailPage';
 import { MCPInstalledListPage } from '../MCPMarket/MCPInstalledListPage';
+import { LocalServerPanel } from './LocalServerPanel';
 import './MCPPanel.css';
 
 /** MCP 面板内部 Tab 类型 */
-type MCPTab = 'market' | 'installed';
+type MCPTab = 'market' | 'installed' | 'local';
 
 export const MCPPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MCPTab>('market');
@@ -34,7 +35,7 @@ export const MCPPanel: React.FC = () => {
    * 内部导航回调：供子组件调用以在 MCP 面板内切换视图。
    * 替代原来直接调用 useSystemStore.getState().openModal(panelType) 的方式。
    */
-  const handleNavigate = useCallback((target: 'market' | 'installed' | 'detail') => {
+  const handleNavigate = useCallback((target: 'market' | 'installed' | 'detail' | 'local') => {
     if (target === 'detail') {
       setShowDetail(true);
     } else {
@@ -68,6 +69,8 @@ export const MCPPanel: React.FC = () => {
             onNavigateToMarket={() => handleNavigate('market')}
           />
         );
+      case 'local':
+        return <LocalServerPanel />;
       default:
         return null;
     }
@@ -107,6 +110,23 @@ export const MCPPanel: React.FC = () => {
             </svg>
           </span>
           <span className="mcp-nav-text">已接入</span>
+        </div>
+        <div
+          className={`mcp-nav-item ${activeTab === 'local' ? 'active' : ''}`}
+          onClick={() => {
+            setShowDetail(false);
+            setActiveTab('local');
+          }}
+        >
+          <span className="mcp-nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+          </span>
+          <span className="mcp-nav-text">本地服务器</span>
         </div>
       </div>
 

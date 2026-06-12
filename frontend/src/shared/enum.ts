@@ -570,6 +570,29 @@ export const MCP_TOOL_SOURCE_LABEL: Record<string, string> = {
 };
 
 /**
+ * MCP 服务器来源常量。
+ * 做什么：区分 MCP 服务器的来源类型。
+ * 为什么这样做：面板展示需要区分"本地注册"和"远程接入"。
+ */
+export const MCP_SERVER_SOURCE = {
+  LOCAL: 'local',
+  REMOTE: 'remote',
+  MARKET: 'market',
+} as const;
+
+export type MCPServerSource = typeof MCP_SERVER_SOURCE[keyof typeof MCP_SERVER_SOURCE];
+
+/**
+ * MCP 本地服务器注册模式常量。
+ */
+export const MCP_LOCAL_REGISTER_MODE = {
+  MANUAL: 'manual',
+  JSON_IMPORT: 'json_import',
+} as const;
+
+export type MCPLocalRegisterMode = typeof MCP_LOCAL_REGISTER_MODE[keyof typeof MCP_LOCAL_REGISTER_MODE];
+
+/**
  * MCP 鉴权类型常量。
  */
 export const MCP_AUTH_TYPE = {

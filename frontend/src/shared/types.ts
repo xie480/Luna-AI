@@ -353,6 +353,84 @@ export interface ChatStatusPayload {
  * 输入输出：状态由后端推送，前端消费并渲染。
  * 边界条件：所有字段都可能为空或 undefined，前端渲染时必须做空值保护。
  */
+// ============================================================
+// MCP 本地服务器类型定义
+// ============================================================
+
+/**
+ * 本地 MCP 服务器配置（前端用）。
+ *
+ * 做什么：定义前端 MCP 面板中本地服务器配置的完整数据结构。
+ * 为什么这样做：与后端 API 请求体结构对齐，确保类型安全。
+ * 输入输出：用户填写配置 → 提交到后端 API。
+ * 边界条件：name 和 command 为必填；args 和 env 可为空。
+ * 异常行为：无。
+ */
+export interface LocalServerConfig {
+  /** 服务器唯一名称。 */
+  name: string;
+  /** 启动命令。 */
+  command: string;
+  /** 命令参数。 */
+  args: string[];
+  /** 环境变量键值对。 */
+  env: Record<string, string>;
+  /** 服务器描述。 */
+  description?: string;
+  /** 是否启用。 */
+  enabled?: boolean;
+}
+
+/**
+ * 已注册的本地 MCP 服务器（从后端获取）。
+ *
+ * 做什么：定义后端返回的已注册本地服务器信息。
+ * 为什么这样做：列表展示需要显示注册状态、工具数量等信息。
+ * 输入输出：来自 GET /api/v1/mcp/local/servers 的响应。
+ * 边界条件：tool_count 可能为 0（如果注册后工具均被禁用）。
+ */
+export interface LocalServerInfo {
+  /** 服务器注册 ID。 */
+  id: string;
+  /** 服务器名称。 */
+  name: string;
+  /** 启动命令。 */
+  command: string;
+  /** 命令参数。 */
+  args: string[];
+  /** 环境变量（后端返回时对敏感值加密）。 */
+  env: Record<string, string>;
+  /** 服务器描述。 */
+  description: string;
+  /** 是否启用。 */
+  enabled: boolean;
+  /** 该服务器下已注册的工具数量。 */
+  tool_count: number;
+  /** 创建时间（ISO 8601）。 */
+  created_at: string;
+  /** 更新时间（ISO 8601）。 */
+  updated_at: string;
+}
+
+/**
+ * 批量导入结果。
+ *
+ * 做什么：定义批量导入操作的后端响应结构。
+ */
+export interface BatchImportResult {
+  /** 成功注册数。 */
+  success_count: number;
+  /** 失败数。 */
+  failed_count: number;
+  /** 失败详情。 */
+  failures: Array<{
+    /** 失败的服务器名称。 */
+    name: string;
+    /** 失败原因。 */
+    error: string;
+  }>;
+}
+
 export interface MCPToolStatusProjection {
   /** 是否进入了 MCP 工具执行节点。 */
   enteredByCondition: boolean;

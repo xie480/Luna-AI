@@ -1,63 +1,467 @@
-/**
- * MCP 模块统一面板样式。
- * 采用左-右双栏布局：左侧导航 Tab → 右侧内容区。
- * 风格与 SettingsPanel 保持一致。
- */
 .mcp-panel-container {
+  /* 现有面板容器样式 */
   display: flex;
-  width: 100%;
   height: 100%;
-  background-color: var(--bg-color, #1e1e1e);
-  color: var(--text-color, #e0e0e0);
-  border-radius: 8px;
-  overflow: hidden;
 }
 
-/* ========== 左侧导航栏 ========== */
-.mcp-panel-sidebar {
-  width: 200px;
-  background-color: var(--sidebar-bg, #252526);
-  border-right: 1px solid var(--border-color, #333);
+/* 本地服务器面板容器 */
+.local-server-panel {
+  padding: 16px;
+  height: 100%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 16px 0;
-  flex-shrink: 0;
 }
 
-.mcp-nav-item {
+/* 注册模式切换按钮组 */
+.local-server-panel__mode-switch {
   display: flex;
-  align-items: center;
-  padding: 12px 24px;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mode-btn {
+  padding: 8px 16px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #fff;
   cursor: pointer;
-  transition: background-color 0.2s ease;
-  user-select: none;
-  border-left: 3px solid transparent;
+  font-size: 14px;
 }
 
-.mcp-nav-item:hover {
-  background-color: var(--hover-bg, #2a2d2e);
+.mode-btn--active {
+  background: #155eef;
+  color: #fff;
+  border-color: #155eef;
 }
 
-.mcp-nav-item.active {
-  background-color: var(--active-bg, #37373d);
-  border-left-color: var(--primary-color, #007acc);
+/* 手动填写表格行 */
+.manual-register-form {
+  display: flex;
+  flex-direction: column;
 }
 
-.mcp-nav-icon {
-  margin-right: 12px;
-  font-size: 1.2em;
+.manual-register-form__header {
+  display: grid;
+  grid-template-columns: 2fr 2fr 3fr 3fr 50px;
+  gap: 8px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #667085;
+}
+
+.manual-register-form__row {
+  display: grid;
+  grid-template-columns: 2fr 2fr 3fr 3fr 50px;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.manual-register-form__row input[type="text"] {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.input-error {
+  border-color: #e03e3e !important;
+}
+
+.row-errors {
+  grid-column: 1 / -1;
+  color: #e03e3e;
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-remove-row {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d0d5dd;
+  background: transparent;
+  color: #667085;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btn-remove-row:hover {
+  background: #f9fafb;
+}
+
+.btn-remove-row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.manual-register-form__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn-add-row,
+.btn-reset {
+  padding: 6px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-submit {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #155eef;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.submit-error {
+  color: #e03e3e;
+  margin-top: 12px;
+}
+
+.submit-success {
+  color: #22c55e;
+  margin-top: 12px;
+}
+
+/* 参数输入组件 */
+.args-input-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  padding: 4px;
+  min-height: 34px;
+}
+
+.arg-tag {
+  display: inline-flex;
+  align-items: center;
+  background: #f2f4f7;
+  border: 1px solid #e4e7ec;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.arg-tag-remove {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  margin-left: 4px;
+  padding: 0;
+  color: #667085;
+  line-height: 1;
+}
+
+.arg-input-field {
+  border: none !important;
+  outline: none;
+  flex: 1;
+  min-width: 60px;
+  padding: 2px 4px !important;
+  background: transparent;
+}
+
+/* 环境变量输入组件 */
+.env-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.env-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.env-key-input,
+.env-value-input {
+  flex: 1;
+  width: 100%;
+}
+
+.env-separator {
+  color: #667085;
+}
+
+.env-remove-btn {
+  background: transparent;
+  border: none;
+  color: #667085;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.btn-add-env {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: #155eef;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 0;
+  margin-top: 2px;
+}
+
+/* JSON 导入面板 */
+.json-import-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.json-import-panel__file-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.json-import-panel__file-upload button {
+  padding: 8px 16px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
   display: flex;
   align-items: center;
 }
 
-.mcp-nav-text {
+.hint-text {
+  color: #667085;
+  font-size: 12px;
+}
+
+.json-import-panel__editor textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.parse-error {
+  color: #e03e3e;
+  font-size: 14px;
+}
+
+.json-import-panel__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-parse {
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #155eef;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-parse:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.import-preview-list {
+  border: 1px solid #eaecf0;
+  border-radius: 6px;
+  padding: 16px;
+  background: #f9fafb;
+}
+
+.import-preview__warnings {
+  color: #b45309;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.import-preview__warning-item {
+  margin-top: 4px;
+  margin-left: 8px;
+}
+
+.import-preview__valid-count {
+  color: #15803d;
   font-size: 14px;
   font-weight: 500;
 }
 
-/* ========== 右侧内容区 ========== */
-.mcp-panel-content {
-  flex: 1;
-  overflow-y: auto;
-  min-width: 0;
+.btn-confirm-import {
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #155eef;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-confirm-import:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-back {
+  padding: 8px 16px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.import-result {
+  border: 1px solid #eaecf0;
+  border-radius: 6px;
+  padding: 16px;
+  background: #f9fafb;
+}
+
+.import-result__success {
+  color: #15803d;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.import-result__failed {
+  color: #b45309;
+  font-size: 14px;
+}
+
+.import-result__details {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eaecf0;
+  font-size: 13px;
+  color: #667085;
+}
+
+/* 已注册服务器列表 */
+.local-server-panel__list-section {
+  margin-top: 32px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #101828;
+}
+
+.local-server-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid #eaecf0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+
+.server-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.server-status {
+  display: flex;
+  align-items: center;
+}
+
+.status-enabled {
+  color: #22c55e;
+}
+
+.status-disabled {
+  color: #a0a0a0;
+}
+
+.server-name {
+  font-weight: 500;
+  color: #101828;
+}
+
+.server-command {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #667085;
+  background: #f2f4f7;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.server-tool-count {
+  font-size: 13px;
+  color: #667085;
+}
+
+.server-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-edit,
+.btn-delete {
+  padding: 6px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-delete {
+  color: #b42318;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #fef3f2;
+  border-color: #fda29b;
+}
+
+.btn-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.local-server-list__empty {
+  padding: 32px;
+  text-align: center;
+  color: #667085;
+  background: #f9fafb;
+  border: 1px dashed #d0d5dd;
+  border-radius: 6px;
 }
