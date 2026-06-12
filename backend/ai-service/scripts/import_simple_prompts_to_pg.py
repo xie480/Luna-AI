@@ -45,11 +45,12 @@ TARGET_CATEGORIES: tuple[str, ...] = (
     "mcp_intent_alignment",
     "mcp_tool_calling",
     "mcp_tool_screening",
-    # Phase 12 新增：Skill 三阶段 Agent Prompt
+    # Phase 12（v3.0）：Skill 三阶段 Agent Prompt
     "mcp_skill_screening",
     "mcp_skill_loading",
     "mcp_skill_execution",
-    "mcp_skill_fallback",
+    # Phase 12（v3.0）：MCP 前置判断 Prompt
+    "mcp_intent_judge",
     # Phase 12 新增：子 Agent Prompt
     "mcp_resource_extraction",
     "mcp_skill_fallback_extraction",

@@ -11,7 +11,7 @@ v3.0 变更：
     - 注入变量从 raw_user_message 改为 mcp_intent（MCP 前置节点提炼的意图文本）
     - execution_plan 的 state 结构变为单工具单资源（tool/resource 为字符串非数组）
     - 移除 execution_order，states 字典 key 顺序即执行顺序
-    - 主循环各阶段细化 display_text，前端可查看更详细的状态
+    - 主循环各阶段细化 display_text（集中管理，使用 get_chat_status_text 获取）
     - 步长超限触发退回重试而非直接失败
 边界条件：
     - prompt_manager 不可用时直接降级跳过。
@@ -34,7 +34,11 @@ from app.agent.mcp_skill_finalizer import (
 from app.agent.mcp_skill_loading import MCPSkillLoadingAgent
 from app.agent.mcp_skill_screening import MCPSkillScreeningAgent
 from app.api.chat_status import ChatStatusPublisher
-from app.api.chat_status_texts import get_chat_status_text
+from app.api.chat_status_texts import (
+    format_execution_start,
+    format_step_progress,
+    get_chat_status_text,
+)
 from app.logger import logger
 from app.mcp.executor import execute_tool
 from app.mcp.skill_registry import SkillRegistry
@@ -94,12 +98,15 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
         # ============================================================
         # 发布 RUNNING 状态（初筛阶段）
+        # 使用集中管理的 display_text
         # ============================================================
         await self._publish_chat_status(
             state=state,
-            stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+            stage=ChatStatusStage.MCP_SKILL_SCREENING,
             status=ChatStatusState.RUNNING,
-            display_text="让Luna找找哪个技能最合适……",
+            display_text=get_chat_status_text(
+                ChatStatusStage.MCP_SKILL_SCREENING, ChatStatusState.RUNNING
+            ),
         )
 
         # ============================================================
@@ -148,12 +155,13 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 # ============================================================
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_LOADING.value
 
-                # 更新 display_text 为加载阶段
                 await self._publish_chat_status(
                     state=state,
-                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    stage=ChatStatusStage.MCP_SKILL_LOADING,
                     status=ChatStatusState.RUNNING,
-                    display_text="让Luna展开技能详情看看……",
+                    display_text=get_chat_status_text(
+                        ChatStatusStage.MCP_SKILL_LOADING, ChatStatusState.RUNNING
+                    ),
                 )
 
                 execution_plan: ExecutionPlan = await MCPSkillLoadingAgent().load(
@@ -215,12 +223,13 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 # ============================================================
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_RESOURCE_LOADING.value
 
-                # 更新 display_text 为资源加载阶段
                 await self._publish_chat_status(
                     state=state,
-                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    stage=ChatStatusStage.MCP_SKILL_RESOURCE_LOADING,
                     status=ChatStatusState.RUNNING,
-                    display_text="Luna在读文件资料……",
+                    display_text=get_chat_status_text(
+                        ChatStatusStage.MCP_SKILL_RESOURCE_LOADING, ChatStatusState.RUNNING
+                    ),
                 )
 
                 # Step 3.1：并行加载所有 state 中的 Resources
@@ -276,13 +285,13 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 # Step 3.2：按 state 字典顺序执行每个 state 中的 Tool
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_EXECUTION.value
 
-                # 更新 display_text 为执行阶段
+                # 使用集中管理的执行开始文案
                 total_states = len(execution_plan.states)
                 await self._publish_chat_status(
                     state=state,
-                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    stage=ChatStatusStage.MCP_SKILL_TOOL_EXECUTING,
                     status=ChatStatusState.RUNNING,
-                    display_text=f"Luna开始干活了……共 {total_states} 步",
+                    display_text=format_execution_start(total_states),
                 )
 
                 tool_results: list[dict[str, Any]] = []
@@ -299,12 +308,16 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     if not state_val.tool:
                         continue
 
-                    # 更新 display_text 显示当前执行进度
+                    # 使用集中管理的步骤进度文案
                     await self._publish_chat_status(
                         state=state,
-                        stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                        stage=ChatStatusStage.MCP_SKILL_TOOL_EXECUTING,
                         status=ChatStatusState.RUNNING,
-                        display_text=f"Luna正在执行第 {idx + 1}/{total_states} 步：{state_val.goal or state_val.tool}",
+                        display_text=format_step_progress(
+                            current_step=idx + 1,
+                            total_steps=total_states,
+                            step_goal=state_val.goal,
+                        ),
                     )
 
                     # Agent 3 判断是否可以继续 + 提取参数
@@ -380,9 +393,11 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
                 await self._publish_chat_status(
                     state=state,
-                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    stage=ChatStatusStage.MCP_SKILL_FALLBACK,
                     status=ChatStatusState.RUNNING,
-                    display_text="唔……Luna换个思路试试",
+                    display_text=get_chat_status_text(
+                        ChatStatusStage.MCP_SKILL_FALLBACK, ChatStatusState.RUNNING
+                    ),
                 )
 
                 # 提取执行快照（v3.0 格式：tool/resource 为字符串）

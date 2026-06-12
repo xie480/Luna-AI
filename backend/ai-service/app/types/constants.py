@@ -314,6 +314,12 @@ class ChatStatusStage(str, Enum):
     MCP_TOOL_EXECUTION = "mcp_tool_execution"
     # --- Phase 12（v3.0）新增：Skill 执行阶段 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
+    # --- Phase 12（v3.0）新增：MCP Skill 子阶段（用于 display_text 细化） ---
+    MCP_SKILL_SCREENING = "mcp_skill_screening"
+    MCP_SKILL_LOADING = "mcp_skill_loading"
+    MCP_SKILL_RESOURCE_LOADING = "mcp_skill_resource_loading"
+    MCP_SKILL_TOOL_EXECUTING = "mcp_skill_tool_executing"
+    MCP_SKILL_FALLBACK = "mcp_skill_fallback"
     # --- Phase 12（v3.0）新增：MCP 前置判断阶段 ---
     MCP_INTENT_JUDGE = "mcp_intent_judge"
 

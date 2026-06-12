@@ -307,7 +307,95 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "咦……技能没反应……Luna直接回你吧",
         "呼……技能没搞定，不过Luna还在！",
     ],
+
+    # ================================================================
+    # 14. MCP Skill 子阶段 — 初筛 (MCP_SKILL_SCREENING)
+    #     文案方向：从技能库里挑最合适的
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_SCREENING, ChatStatusState.RUNNING): [
+        "让Luna找找哪个技能最合适……",
+        "嗯……Luna翻翻技能库~",
+        "让Luna挑挑看哪个技能最好使……",
+        "唔……Luna看看有什么技能可用~",
+        "让Luna选个最顺手的技能……",
+    ],
+
+    # ================================================================
+    # 15. MCP Skill 子阶段 — 加载 (MCP_SKILL_LOADING)
+    #     文案方向：展开技能详情，规划执行步骤
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_LOADING, ChatStatusState.RUNNING): [
+        "让Luna展开技能详情看看……",
+        "嗯……Luna看看这个技能怎么用~",
+        "让Luna翻翻技能的使用说明……",
+        "唔……Luna看看这个技能有哪些工具……",
+        "让Luna研究一下技能的具体用法~",
+    ],
+
+    # ================================================================
+    # 16. MCP Skill 子阶段 — 资源加载 (MCP_SKILL_RESOURCE_LOADING)
+    #     文案方向：翻阅文件资料
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_RESOURCE_LOADING, ChatStatusState.RUNNING): [
+        "Luna在读文件资料……",
+        "让Luna翻翻相关的文件……",
+        "嗯……Luna看看这些文件里有什么~",
+        "Luna正在读取资料……稍等一下",
+        "让Luna从文件里找找你需要的信息……",
+    ],
+
+    # ================================================================
+    # 17. MCP Skill 子阶段 — 工具执行 (MCP_SKILL_TOOL_EXECUTING)
+    #     文案方向：正在操作工具
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_TOOL_EXECUTING, ChatStatusState.RUNNING): [
+        "Luna开始干活了……共 {{ TOTAL_STEPS }} 步",
+        "Luna动动手开始操作~",
+        "让Luna操作一下……",
+        "嗯……Luna正在搞这个~",
+        "Luna开始执行了……",
+    ],
+
+    # ================================================================
+    # 18. MCP Skill 子阶段 — 退回 (MCP_SKILL_FALLBACK)
+    #     文案方向：换思路重试
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_FALLBACK, ChatStatusState.RUNNING): [
+        "唔……Luna换个思路试试",
+        "嗯……这条路好像不对，Luna换一个~",
+        "让Luna换个方式试试……",
+        "等等……Luna觉得有更好的办法~",
+        "不行不行，Luna换个思路！",
+    ],
+
+    # ================================================================
+    # 19. MCP Skill 子阶段 — 执行进度 (复用 MCP_SKILL_TOOL_EXECUTING + CURRENT_STEP/STEP_GOAL)
+    #     文案方向：显示具体步骤名称
+    #     ================================================================
 }
+
+# ================================================================
+# 运行时拼接文案辅助函数
+# ================================================================
+
+def format_step_progress(current_step: int, total_steps: int, step_goal: str = "") -> str:
+    """生成步骤执行进度文案。
+
+    做什么：拼接当前执行步骤的进度文本。
+    参数:
+        current_step: 当前执行的步骤序号（从 1 开始）。
+        total_steps: 总步骤数。
+        step_goal: 当前步骤的执行目标。
+    返回:
+        str: 如 "Luna正在执行第 2/5 步：搜索项目文档"
+    """
+    goal_suffix = f"：{step_goal}" if step_goal else ""
+    return f"Luna正在执行第 {current_step}/{total_steps} 步{goal_suffix}"
+
+
+def format_execution_start(total_steps: int) -> str:
+    """生成执行开始时的文案。"""
+    return f"Luna开始干活了……共 {total_steps} 步"
 
 
 def get_chat_status_text(stage: ChatStatusStage, state: ChatStatusState) -> str:
