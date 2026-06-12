@@ -48,6 +48,7 @@ from app.api.memory_api import router as memory_router
 from app.api.routers.mcp_local import router as mcp_local_router
 from app.api.routers.mcp_market import router as mcp_market_router
 from app.api.routers.mcp_skill import router as mcp_skill_router
+from app.api.routers.tool_config import router as tool_config_router
 from app.config.crypto import CryptoService
 from app.config.event_bus import event_bus
 from app.config.settings import settings
@@ -599,29 +600,37 @@ async def lifespan(app: FastAPI):
     try:
         from app.mcp.registry import MCPToolRegistry
         from app.mcp.types import MCPToolSchema, ToolRiskLevel
-        from app.mcp.tools.time_tool import (
-            TIME_TOOL_PARAMETERS_SCHEMA,
-            handle_get_current_time,
+        from app.skills.web_search.search_tool import (
+            SEARXNG_SEARCH_PARAMETERS_SCHEMA,
+            handle_searxng_search,
         )
         from app.repository.mcp_tool_pg import MCPToolPGRepo
 
         mcp_registry = MCPToolRegistry()
 
-        # 注册时间工具（L0 级低危，包含增强的检索元数据）
+        # 注册 SearXNG 网络搜索工具（L0 级低危只读工具，通过环境变量配置 SearXNG 地址）
         mcp_registry.register(
-            name="get_current_time",
+            name="web_search",
             schema=MCPToolSchema(
-                name="get_current_time",
-                description="获取当前系统时间，可指定返回格式和时区。",
-                core_purpose="查询当前日期和时间",
-                final_deliverable="格式化的日期时间字符串",
-                tags=["utility", "time", "日期", "时间"],
+                name="web_search",
+                description="通过 SearXNG 元搜索引擎执行网络搜索，获取最新互联网信息。"
+                            "支持分类筛选、引擎选择、语言过滤和分页。",
+                core_purpose="搜索互联网获取最新信息",
+                final_deliverable="格式化的搜索结果列表，包含标题、摘要、来源 URL 和引擎信息，"
+                                 "以及知识卡片和相关搜索建议",
+                tags=["search", "web", "internet", "搜索", "互联网", "网络", "信息检索"],
                 category="utility",
-                use_case_examples=["现在几点", "今天几号", "目前时间"],
-                parameters_schema=TIME_TOOL_PARAMETERS_SCHEMA,
+                use_case_examples=[
+                    "帮我搜索一下最近的科技新闻",
+                    "查一下今天的天气",
+                    "搜索 Python 异步编程教程",
+                    "最近有什么关于 AI 的新闻",
+                    "查找 2024 年诺贝尔奖获得者",
+                ],
+                parameters_schema=SEARXNG_SEARCH_PARAMETERS_SCHEMA,
                 risk_level=ToolRiskLevel.L0,
             ),
-            handler=handle_get_current_time,
+            handler=handle_searxng_search,
         )
         logger.info("MCP 内置工具注册完成")
 
@@ -637,6 +646,25 @@ async def lifespan(app: FastAPI):
             # 注意：persist_to_pg 需要在同一个 session 中执行
             await mcp_registry.persist_to_pg(mcp_pg_repo)
             logger.info("MCP 工具 PG 持久化同步完成")
+
+        # 初始化 ToolConfigManager：从 PG 加载工具配置到内存缓存
+        # 做什么：加载 tool_configs 表的所有 ACTIVE 配置到内存。
+        # 为什么这样做：工具在运行时通过 ToolConfigManager 读取配置，
+        #              而不是直接读取 .env 环境变量。
+        try:
+            from app.config.tool_config_manager import ToolConfigManager
+            from app.repository.tool_config_pg import ToolConfigPGRepo
+
+            async with pg_client.session_factory() as session:
+                tool_cfg_repo = ToolConfigPGRepo(session)
+                all_configs = await tool_cfg_repo.load_all()
+
+            config_mgr = ToolConfigManager()
+            config_mgr.load_from_pg(all_configs)
+            app.state.tool_config_manager = config_mgr
+            logger.info("MCP 工具配置管理器初始化完成")
+        except Exception as exc:
+            logger.warning(f"MCP 工具配置管理器初始化失败: {exc}")
 
     except Exception as exc:
         logger.warning(f"MCP 工具注册失败: {exc}")
@@ -805,6 +833,7 @@ app.include_router(user_profile_router)
 app.include_router(mcp_market_router)
 app.include_router(mcp_local_router)
 app.include_router(mcp_skill_router)
+app.include_router(tool_config_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router

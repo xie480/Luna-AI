@@ -23,6 +23,8 @@ dependencies = [
     # --- Phase 12 新增：MCP 工具模块依赖 ---
     "jsonschema>=4.20.0",
     "pytz>=2024.1",
+    # --- Phase 12 新增：Web Search Skill 依赖 ---
+    "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]

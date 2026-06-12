@@ -41,6 +41,12 @@ class MemoryStatus(str, Enum):
     DELETED = "DELETED"
 
 
+class ToolConfigStatus(str, Enum):
+    """工具配置状态枚举。"""
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
 class HealthStatus(str, Enum):
     """MCP 健康状态枚举"""
     ONLINE = "online"
@@ -554,6 +560,45 @@ class MCPServerRegistration(Base):
     """健康状态：unknown / online / offline / error。"""
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
     """扩展元数据（版本号、作者信息等）。"""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class ToolConfig(Base):
+    """
+    对应 PostgreSQL 中的 tool_configs 表（MCP 工具独立配置表）。
+
+    做什么：存储 MCP 工具的自定义配置参数（键值对），每个工具有一组独立的配置。
+            例如 web_search 工具的 SearXNG URL 和超时设置存储在此表。
+            工具在运行时通过 ToolConfigManager 读取此表中的配置。
+    为什么这样做：工具配置不应与系统环境变量（.env）耦合，而是让用户通过前端
+                Skill 面板中每个工具条目旁的"配置"按钮，在模态框中独立设置。
+    边界条件：
+        - tool_name 唯一，一个工具一条配置记录。
+        - config_data 以 JSONB 存储，存储该工具的所有配置键值对。
+        - status 标记配置是否启用（ACTIVE / INACTIVE）。
+        - 配置变更后必须调用 ToolConfigManager.reload() 使内存缓存生效。
+    """
+    __tablename__ = "tool_configs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tool_name: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False, index=True,
+        comment="工具名称。与 MCPToolRegistry 中的工具名称一一对应。",
+    )
+    config_data: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}",
+        comment="工具配置键值对。不同工具有不同的配置字段，"
+                "由工具自身的配置 Schema 定义。",
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="ACTIVE",
+        comment="配置状态：ACTIVE（启用）/ INACTIVE（禁用）。",
+    )
+    description: Mapped[str] = mapped_column(
+        Text, nullable=False, default="",
+        comment="配置说明或备注。",
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
