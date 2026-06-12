@@ -47,6 +47,7 @@ from app.api.sse import router as sse_router
 from app.api.memory_api import router as memory_router
 from app.api.routers.mcp_local import router as mcp_local_router
 from app.api.routers.mcp_market import router as mcp_market_router
+from app.api.routers.mcp_skill import router as mcp_skill_router
 from app.config.crypto import CryptoService
 from app.config.event_bus import event_bus
 from app.config.settings import settings
@@ -803,6 +804,7 @@ app.include_router(memory_router)
 app.include_router(user_profile_router)
 app.include_router(mcp_market_router)
 app.include_router(mcp_local_router)
+app.include_router(mcp_skill_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router

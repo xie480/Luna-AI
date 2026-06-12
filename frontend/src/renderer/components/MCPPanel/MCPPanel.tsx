@@ -21,10 +21,11 @@ import { MCPMarketPage } from '../MCPMarket/MCPMarketPage';
 import { MCPMarketDetailPage } from '../MCPMarket/MCPMarketDetailPage';
 import { MCPInstalledListPage } from '../MCPMarket/MCPInstalledListPage';
 import { LocalServerPanel } from './LocalServerPanel';
+import { SkillPanel } from '../MCPSkillPanel/SkillPanel';
 import './MCPPanel.css';
 
 /** MCP 面板内部 Tab 类型 */
-type MCPTab = 'market' | 'installed' | 'local';
+type MCPTab = 'market' | 'installed' | 'local' | 'skills';
 
 export const MCPPanel: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MCPTab>('market');
@@ -35,7 +36,7 @@ export const MCPPanel: React.FC = () => {
    * 内部导航回调：供子组件调用以在 MCP 面板内切换视图。
    * 替代原来直接调用 useSystemStore.getState().openModal(panelType) 的方式。
    */
-  const handleNavigate = useCallback((target: 'market' | 'installed' | 'detail' | 'local') => {
+  const handleNavigate = useCallback((target: 'market' | 'installed' | 'detail' | 'local' | 'skills') => {
     if (target === 'detail') {
       setShowDetail(true);
     } else {
@@ -71,6 +72,8 @@ export const MCPPanel: React.FC = () => {
         );
       case 'local':
         return <LocalServerPanel />;
+      case 'skills':
+        return <SkillPanel />;
       default:
         return null;
     }
@@ -127,6 +130,20 @@ export const MCPPanel: React.FC = () => {
             </svg>
           </span>
           <span className="mcp-nav-text">本地服务器</span>
+        </div>
+        <div
+          className={`mcp-nav-item ${activeTab === 'skills' ? 'active' : ''}`}
+          onClick={() => {
+            setShowDetail(false);
+            setActiveTab('skills');
+          }}
+        >
+          <span className="mcp-nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+            </svg>
+          </span>
+          <span className="mcp-nav-text">技能</span>
         </div>
       </div>
 

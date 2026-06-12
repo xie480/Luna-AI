@@ -471,3 +471,34 @@ export interface MCPToolStatusProjection {
   /** 降级原因。 */
   degradedReason?: string;
 }
+
+// ============================================================
+// MCP Skill 类型定义
+// ============================================================
+
+/**
+ * MCP Skill 完整信息。
+ *
+ * 做什么：定义前端展示的 MCP Skill 完整数据结构。
+ * 为什么这样做：与后端 API 响应结构对齐，确保类型安全。
+ * 输入输出：来自 GET /api/v1/mcp/skills 的响应映射。
+ * 边界条件：所有字段都可能为空或 undefined，前端渲染时必须做空值保护。
+ */
+export interface SkillInfo {
+  /** Skill ID（雪花算法）。 */
+  id: string;
+  /** Skill 唯一名称。 */
+  name: string;
+  /** Skill 功能描述。 */
+  description: string;
+  /** Skill 版本号。 */
+  version: string;
+  /** 是否启用。 */
+  enabled: boolean;
+  /** 扩展元数据。 */
+  metadata: Record<string, unknown>;
+  /** 创建时间（ISO 8601）。 */
+  createdAt: string;
+  /** 更新时间（ISO 8601）。 */
+  updatedAt: string;
+}
