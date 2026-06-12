@@ -240,6 +240,13 @@ class ChatMCPToolState(BaseModel):
         description="退回状态。仅 Skill 路径执行退回时写入，记录退回轮次和上下文。",
     )
 
+    execution_summary: str = Field(
+        default="",
+        description="Skill 执行结果摘要。由 MCP Skill 执行节点在完成后调用 LLM 压缩生成，"
+                    "作为 SKILL_EXECUTION_SUMMARY 变量注入到 chat/memory.j2 模板中。"
+                    "内容包含本次调用的 Skill 列表、每个 Skill 执行的操作与最终执行结果。",
+    )
+
     # --- 降级状态 ---
     degraded: bool = Field(
         default=False,

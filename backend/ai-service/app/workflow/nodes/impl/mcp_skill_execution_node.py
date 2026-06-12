@@ -1,5 +1,5 @@
 """
-MCP Skill 执行节点 — Skill 三阶段 Agent 核心工作流节点（v3.0）。
+MCP Skill 执行节点 — Skill 三阶段 Agent 核心工作流节点（v3.1）。
 
 做什么：作为 LangGraph 的节点适配器，串联三阶段 Agent 流程：
         Agent 1（Skill 初筛）→ Agent 2（Skill 加载·生成执行计划）
@@ -13,16 +13,28 @@ v3.0 变更：
     - 移除 execution_order，states 字典 key 顺序即执行顺序
     - 主循环各阶段细化 display_text（集中管理，使用 get_chat_status_text 获取）
     - 步长超限触发退回重试而非直接失败
+v3.1 变更：
+    - 新增 all_round_data 累积器：每轮 Agent 3 执行后只累积原始数据
+      （execution_plan/tool_results/resource_results），不做逐轮压缩。
+    - 新增 _compress_and_summarize_results 方法：在完成所有轮次后，统一接收
+      all_round_data 做单次 LLM 压缩。LLM 跨轮次聚合相同技能的输出，输出
+      结构化 JSON（skill_name/result_summary/key_facts），代码解析后格式化为自然文本。
+    - 成功退出路径：发布 MCP_SKILL_SUMMARY 阶段（集中管理 display_text），
+      调用压缩后结果写入 state.mcp_tool_state.execution_summary。
+    - 最终失败路径：同样对所有累积的 all_round_data 做单次压缩，
+      以 **[技能执行失败]** 前缀标记后注入状态。
 边界条件：
     - prompt_manager 不可用时直接降级跳过。
     - 无候选 Skill 或 no_suitable_skill=True 时降级跳过。
     - 退回次数超过上限时触发最终失败。
     - 所有异常由本节点捕获并降级，不阻断主工作流。
+    - 摘要压缩异常时降级为机械截断兜底文本，不阻断主工作流。
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from app.agent.mcp_resource_sub_agent import MCPResourceSubAgent
@@ -39,6 +51,7 @@ from app.api.chat_status_texts import (
     format_step_progress,
     get_chat_status_text,
 )
+from app.prompt.types import render_template
 from app.logger import logger
 from app.mcp.executor import execute_tool
 from app.mcp.skill_registry import SkillRegistry
@@ -50,6 +63,7 @@ from app.mcp.skill_types import (
     SkillAgentPhase,
     SkillChainPlan,
 )
+from app.llm.client import CompressionLLMClient
 from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.constants import (
     CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON,
@@ -90,6 +104,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         fallback_count = 0
         step_count = 0
         all_tool_results: list[dict[str, Any]] = []
+        all_round_data: list[dict[str, Any]] = []  # v3.1：累积所有轮次的原始执行数据
         last_fallback_state: FallbackState | None = None
 
         prompt_manager = self.dependencies.prompt_manager
@@ -215,7 +230,10 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         execution_plan=execution_plan.model_dump(mode="json"),
                     )
                     if final_fail:
-                        return self._handle_final_fail(state, final_fail)
+                        return await self._handle_final_fail(
+                            state, final_fail,
+                            all_round_data=all_round_data,
+                        )
                     continue  # 退回至 Agent 1
 
                 # ============================================================
@@ -365,6 +383,17 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 state.mcp_tool_state.tool_results = all_tool_results
 
                 # ============================================================
+                # (v3.1) 累积本轮原始执行数据（不做压缩），留待出口统一压缩
+                # ============================================================
+                all_round_data.append({
+                    "round_index": len(all_round_data) + 1,
+                    "execution_plan": execution_plan.model_dump(mode="json"),
+                    "tool_results": tool_results,
+                    "resource_results": [r.model_dump(mode="json") for r in resource_results],
+                })
+                # ============================================================
+
+                # ============================================================
                 # 检查是否需要退回
                 # ============================================================
                 need_fallback = self._evaluate_need_fallback(
@@ -376,12 +405,34 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     # 执行成功，退出循环
                     state.mcp_tool_state.agent_phase = SkillAgentPhase.COMPLETED.value
 
+                    # ============================================================
+                    # (v3.1) 后置处理：统一对所有轮次的原始数据进行 LLM 压缩降噪
+                    # 使用集中管理的 display_text（MCP_SKILL_SUMMARY 阶段）
+                    # ============================================================
+                    if all_round_data:
+                        await self._publish_chat_status(
+                            state=state,
+                            stage=ChatStatusStage.MCP_SKILL_SUMMARY,
+                            status=ChatStatusState.RUNNING,
+                            display_text=get_chat_status_text(
+                                ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.RUNNING
+                            ),
+                        )
+
+                        # 单次 LLM 调用：所有轮次数据一起压缩
+                        summary = await self._compress_and_summarize_results(
+                            trace_id=state.runtime.trace_id,
+                            all_round_data=all_round_data,
+                        )
+                        state.mcp_tool_state.execution_summary = summary
+                    # ============================================================
+
                     await self._publish_chat_status(
                         state=state,
-                        stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                        stage=ChatStatusStage.MCP_SKILL_SUMMARY,
                         status=ChatStatusState.COMPLETED,
                         display_text=get_chat_status_text(
-                            ChatStatusStage.MCP_SKILL_EXECUTION, ChatStatusState.COMPLETED
+                            ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.COMPLETED
                         ),
                         is_terminal=True,
                     )
@@ -420,7 +471,10 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     execution_plan=execution_plan.model_dump(mode="json"),
                 )
                 if final_fail:
-                    return self._handle_final_fail(state, final_fail)
+                    return await self._handle_final_fail(
+                        state, final_fail,
+                        all_round_data=all_round_data,
+                    )
 
                 # 继续循环（退回至 Agent 1）
 
@@ -498,20 +552,42 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
         return True
 
-    def _handle_final_fail(
+    async def _handle_final_fail(
         self,
         state: ChatWorkflowState,
         final_fail: FinalFailState,
+        all_round_data: list[dict[str, Any]] | None = None,
     ) -> ChatWorkflowState:
         """处理最终失败：跳过至主 Chat LLM。
 
         做什么：将最终失败信息注入状态，发布 SKIPPED 事件，
                 让下游主 Chat LLM 节点根据失败理由向用户说明。
+                v3.1 新增：对全部轮次的原始执行数据进行统一 LLM 压缩后注入状态。
+        参数:
+            all_round_data: 全部轮次的原始执行数据累积列表。
         """
         state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_FINAL_FAIL.value
         state.mcp_tool_state.degraded = True
         state.mcp_tool_state.degraded_reason = final_fail.failure_reason
         state.mcp_tool_state.final_fail_state = final_fail.model_dump(mode="json")
+
+        # --- (v3.1) 新增：统一压缩所有轮次的原始执行数据 ---
+        if all_round_data:
+            try:
+                summary = await self._compress_and_summarize_results(
+                    trace_id=state.runtime.trace_id,
+                    all_round_data=all_round_data,
+                )
+                state.mcp_tool_state.execution_summary = (
+                    f"**[技能执行失败]**\n{final_fail.failure_reason}\n\n"
+                    f"**已完成的执行结果:**\n{summary}"
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"MCP Skill 失败摘要生成失败，继续降级跳过 "
+                    f"trace_id={state.runtime.trace_id} error={exc!s}"
+                )
+        # --- 结束新增 ---
 
         # 发布 SKIPPED 状态
         try:
@@ -533,6 +609,177 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
             pass
 
         return state
+
+    async def _compress_and_summarize_results(
+        self,
+        trace_id: str,
+        all_round_data: list[dict[str, Any]],
+    ) -> str:
+        """调用专用摘要小模型对全部轮次的原始执行数据进行统一的结构化压缩与降噪总结。
+
+        做什么：在 Skill 全部轮次执行完成后，收集 all_round_data（包含各轮的
+                execution_plan、tool_results、resource_results），通过三槽位 Prompt
+                模板渲染后调用 CompressionLLMClient 进行一次统一的压缩摘要。
+                LLM 必须输出固定格式的纯 JSON 数组（每个元素包含 skill_name、
+                result_summary、key_facts），本方法解析 JSON 后格式化为自然文本，
+                最终注入到 chat/memory.j2 模板中供主 Chat LLM 使用。
+        为什么这样做：将多轮执行结果统一压缩一次，避免逐轮压缩的多次 LLM 调用，
+                    同时跨轮次聚合相同技能可以消除冗余，进一步降低 Token 量。
+        参数:
+            trace_id: 全链路追踪 ID。
+            all_round_data: 全部轮次的原始执行数据列表。每轮包含 round_index、
+                            execution_plan、tool_results、resource_results。
+        返回:
+            str: 解析 JSON 后格式化的自然文本摘要。发生异常时返回机械截断的兜底文本。
+        边界条件:
+            - all_round_data 为空时跳过 LLM 调用，返回空字符串。
+            - LLM 返回非 JSON 内容时尝试提取，仍失败则返回兜底文本。
+            - LLM 调用异常时降级为纯文本截断，不阻断主工作流。
+        异常行为:
+            - CompressionLLMClient 内部异常由本方法捕获并降级。
+            - JSON 解析失败降级为 str() 输出。
+        """
+        # 边界条件：没有执行数据时无需压缩
+        if not all_round_data:
+            return ""
+
+        try:
+            # 1. 构建多轮分组文本（供 runtime.j2 的 ALL_ROUND_EXECUTION_RESULTS 插槽使用）
+            round_parts: list[str] = []
+            for round_item in all_round_data:
+                round_index = round_item.get("round_index", 1)
+                exec_plan = round_item.get("execution_plan", {})
+                tool_results = round_item.get("tool_results", [])
+                resource_results = round_item.get("resource_results", [])
+
+                # 截断防止 Token 撑爆摘要模型
+                safe_plan = json.dumps(exec_plan, ensure_ascii=False, indent=2)[:4000]
+                safe_tools = json.dumps(tool_results, ensure_ascii=False, indent=2)[:8000]
+                safe_resources = json.dumps(resource_results, ensure_ascii=False, indent=2)[:4000]
+
+                round_parts.append(
+                    f"===== ROUND {round_index} =====\n"
+                    f"执行计划:\n{safe_plan}\n\n"
+                    f"工具输出:\n{safe_tools}\n\n"
+                    f"资源读取:\n{safe_resources}"
+                )
+
+            all_round_text = "\n\n".join(round_parts)
+
+            # 2. 使用三槽位 Prompt 模板渲染 system + memory + runtime 提示词
+            #    从 prompt/simple/skill_execution_summary/ 逐槽位读取
+            #    - system.j2：系统指令与 JSON 输出约束
+            #    - memory.j2：数据载荷（ALL_ROUND_EXECUTION_RESULTS 插槽）
+            #    - runtime.j2：执行指令
+            import os as _os
+            _prompt_dir = _os.path.join(
+                _os.path.dirname(__file__),
+                "..", "..", "..", "..", "..", "prompt", "simple",
+                "skill_execution_summary",
+            )
+            _prompt_dir = _os.path.normpath(_prompt_dir)
+            _system_path = _os.path.join(_prompt_dir, "system.j2")
+            _memory_path = _os.path.join(_prompt_dir, "memory.j2")
+            _runtime_path = _os.path.join(_prompt_dir, "runtime.j2")
+            if _os.path.exists(_system_path):
+                with open(_system_path, encoding="utf-8") as _f:
+                    system_prompt = _f.read()
+            else:
+                system_prompt = "你是一个严格遵循指令的数据压缩与结构化分析助手。"
+            if _os.path.exists(_memory_path):
+                with open(_memory_path, encoding="utf-8") as _f:
+                    memory_template = _f.read()
+            else:
+                memory_template = (
+                    "【数据载荷——全部轮次的执行数据，用 ROUND 分隔】\n"
+                    "{{ALL_ROUND_EXECUTION_RESULTS}}"
+                )
+            if _os.path.exists(_runtime_path):
+                with open(_runtime_path, encoding="utf-8") as _f:
+                    runtime_template = _f.read()
+            else:
+                runtime_template = (
+                    "请跨轮次综合分析，去除冗余结果，合并相同技能的多次执行输出。\n"
+                    "严格按照 system 指令中的 JSON 格式输出，不要包含任何额外说明文字。"
+                )
+
+            memory_content = render_template(
+                memory_template,
+                {"ALL_ROUND_EXECUTION_RESULTS": all_round_text},
+            )
+            runtime_content = runtime_template.strip()
+            # 将 memory（数据载荷）与 runtime（执行指令）合并为 user message
+            user_content = "\n\n".join(filter(None, [memory_content, runtime_content]))
+
+            # 3. 组装 system + user 消息并调用小模型
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ]
+
+            compression_client = CompressionLLMClient()
+            raw_output = await compression_client.summarize_once(
+                messages=messages,
+                timeout=15.0,
+            )
+            raw_output = raw_output.strip()
+
+            # 4. 解析 LLM 输出的 JSON
+            if not raw_output:
+                return ""
+            cleaned = raw_output
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+            parsed_list = json.loads(cleaned)
+            if not isinstance(parsed_list, list):
+                raise ValueError(f"LLM 输出不是 JSON 数组: {type(parsed_list).__name__}")
+
+            # 5. 将 JSON 数组格式化为自然文本
+            formatted_lines: list[str] = []
+            for idx, item in enumerate(parsed_list, 1):
+                skill_name = item.get("skill_name", f"技能 {idx}")
+                result_summary = item.get("result_summary", "")
+                key_facts = item.get("key_facts", [])
+
+                if not skill_name and not result_summary and not key_facts:
+                    continue
+
+                formatted_lines.append(f"【{skill_name}】{result_summary}")
+                for fact in key_facts:
+                    if fact:
+                        formatted_lines.append(f"  • {fact}")
+
+            if formatted_lines:
+                return "\n".join(formatted_lines)
+            return cleaned
+
+        except (json.JSONDecodeError, ValueError) as parse_exc:
+            logger.warning(
+                f"MCP Skill 摘要 JSON 解析失败，使用原始输出截断 "
+                f"trace_id={trace_id} error={parse_exc!s}"
+            )
+            if raw_output and len(raw_output) > 10:
+                return raw_output[:500]
+            total_rounds = len(all_round_data)
+            return f"本次共执行 {total_rounds} 轮技能调用（{sum(len(r.get('tool_results', [])) for r in all_round_data)} 次工具操作）。"
+
+        except Exception as exc:
+            logger.warning(
+                f"MCP Skill 执行结果摘要压缩异常，已降级为机械截断 "
+                f"trace_id={trace_id} error={exc!s}"
+            )
+            total_rounds = len(all_round_data)
+            total_tools = sum(len(r.get("tool_results", [])) for r in all_round_data)
+            return (
+                f"本次共执行 {total_rounds} 轮、{total_tools} 次工具操作。"
+                f"原始截断输出参考: {str(all_round_data)[-600:]}"
+            )
 
     def _degrade_and_skip(
         self, state: ChatWorkflowState, reason: str

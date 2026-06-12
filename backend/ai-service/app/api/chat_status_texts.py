@@ -372,6 +372,25 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     # 19. MCP Skill 子阶段 — 执行进度 (复用 MCP_SKILL_TOOL_EXECUTING + CURRENT_STEP/STEP_GOAL)
     #     文案方向：显示具体步骤名称
     #     ================================================================
+
+    # ================================================================
+    # 20. MCP Skill 执行结果摘要 (MCP_SKILL_SUMMARY)
+    #     文案方向：Luna 在整理和汇总执行结果时的自然过渡
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.RUNNING): [
+        "让Luna把结果理一理……",
+        "唔……Luna整理一下拿到的数据~",
+        "让Luna捋一捋刚得到的结果……",
+        "嗯……Luna在汇总执行结果~",
+        "等一下，Luna整理一下信息……",
+    ],
+    (ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.COMPLETED): [
+        "好啦，Luna整理好了！",
+        "嗯嗯，Luna都梳理清楚了~",
+        "搞定！Luna整理完了~",
+        "好啦好啦，Luna总结完了！",
+        "行，Luna搞明白了~",
+    ],
 }
 
 # ================================================================

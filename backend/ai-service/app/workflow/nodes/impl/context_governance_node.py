@@ -23,6 +23,7 @@ from app.workflow.constants import (
     PROMPT_VARIABLE_KEY_FACTS,
     PROMPT_VARIABLE_LONG_TERM_MEMORY,
     PROMPT_VARIABLE_MEMORY_SNIPPETS,
+    PROMPT_VARIABLE_SKILL_EXECUTION_SUMMARY,
     PROMPT_VARIABLE_USER_PROFILE,
     ChatWorkflowNodeType,
 )
@@ -64,6 +65,7 @@ class ContextGovernanceNode(ChatWorkflowNode):
             PROMPT_VARIABLE_LONG_TERM_MEMORY: state.memory_state.prompt_memory_text,
             PROMPT_VARIABLE_EXTERNAL_KNOWLEDGE: state.knowledge_state.prompt_knowledge_text,
             PROMPT_VARIABLE_USER_PROFILE: state.profile_state.prompt_profile_text,
+            PROMPT_VARIABLE_SKILL_EXECUTION_SUMMARY: state.mcp_tool_state.execution_summary,
             PROMPT_VARIABLE_EMOTION_PRIMARY: str(emotion_state.get("primary_emotion", "")),
             PROMPT_VARIABLE_EMOTION_INTENSITY: f"{float(emotion_state.get('intensity', 0.0)):.2f}",
             PROMPT_VARIABLE_EMOTION_VALENCE: f"{float(emotion_state.get('valence', 0.0)):.2f}",

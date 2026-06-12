@@ -320,6 +320,8 @@ class ChatStatusStage(str, Enum):
     MCP_SKILL_FALLBACK = "mcp_skill_fallback"
     # --- Phase 12（v3.0）新增：MCP 前置判断阶段 ---
     MCP_INTENT_JUDGE = "mcp_intent_judge"
+    # --- Phase 13（v3.1）新增：MCP Skill 执行结果摘要阶段 ---
+    MCP_SKILL_SUMMARY = "mcp_skill_summary"
 
 
 class ChatStatusState(str, Enum):
