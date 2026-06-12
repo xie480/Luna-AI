@@ -31,20 +31,20 @@ from typing import Any
 
 import jsonschema
 
+# ============================================================
+# 常量定义
+# ============================================================
+from app.config.settings import settings
 from app.logger import logger
 from app.mcp.registry import MCPToolRegistry
 from app.mcp.types import MCPToolResult, ToolRiskLevel
 from app.utils.snowflake import generate_string_id
 
-# ============================================================
-# 常量定义
-# ============================================================
+# 默认工具执行超时时间（秒，从 .env 配置读取）
+_DEFAULT_TOOL_TIMEOUT: float = settings.mcp_tool_timeout
 
-# 默认工具执行超时时间（秒）
-_DEFAULT_TOOL_TIMEOUT: float = 30.0
-
-# 工具执行最大重试次数
-_MAX_TOOL_RETRIES: int = 2
+# 工具执行最大重试次数（从 .env 配置读取）
+_MAX_TOOL_RETRIES: int = settings.mcp_tool_max_retries
 
 
 # ============================================================
@@ -76,7 +76,6 @@ async def execute_tool(
     返回:
         MCPToolResult: 工具执行结果，包含成功标志、输出文本、错误信息、耗时和审计 ID。
     """
-    from app.utils.snowflake import generate_string_id
 
     registry = MCPToolRegistry()
     registered = registry.get_tool(tool_name)

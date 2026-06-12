@@ -1,0 +1,40 @@
+以下是当前可用的技能列表：
+
+【候选技能列表】（仅含技能名称和描述，不含具体工具和资源）
+{% for skill in CANDIDATE_SKILLS %}
+  - 技能名称：「{{ skill.name }}」
+    技能描述：{{ skill.description }}
+    版本：{{ skill.version }}
+{% else %}
+  （无可用技能）
+{% endfor %}
+
+【用户输入】
+{{ USER_INPUT }}
+
+【输入重构判定】
+是否需要技能：{{ SKILL_NEED_TOOL }}
+判定原因：{{ SKILL_REASON }}
+检索关键词：{{ SKILL_KEYWORDS }}
+
+{% if FALLBACK_CONTEXT %}
+【退回执行快照】（第 {{ FALLBACK_COUNT }} 次退回）
+以下是上次执行计划的完整快照，包含各步骤的执行状态和结果：
+{% for key, state in FALLBACK_CONTEXT.items() %}
+#### {{ key }}
+- 技能：{{ state.skill }}
+- 资源：{{ state.resource | default('无') }}
+- 工具：{{ state.tools | default('无') }}
+- 状态：{{ state.status }}
+- 结果：{{ state.result }}
+{% endfor %}
+
+【退回分析指南】
+1. 分析以上执行快照中的失败步骤和原因。
+2. 避免选择上次已尝试但仍无法满足需求的技能。
+3. 优先选择能力范围更匹配缺失需求的技能。
+4. 如果所有候选技能都已被尝试过且失败，将 no_suitable_skill 设为 true。
+{% endif %}
+
+请基于以上信息，从候选技能中选出最适合用户需求的技能。
+记住：你只能选择「候选技能列表」中的技能，不能虚构。

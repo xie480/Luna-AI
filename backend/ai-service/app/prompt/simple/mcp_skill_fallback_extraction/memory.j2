@@ -1,0 +1,43 @@
+### 原执行计划全貌
+{% if EXECUTION_PLAN %}
+{% for key, state in EXECUTION_PLAN.items() %}
+#### {{ key }}
+- 技能：{{ state.skill }}
+- 资源：{{ state.resource | default('无') }}
+- 工具：{{ state.tools | default('无') }}
+{% endfor %}
+{% else %}
+（无执行计划信息）
+{% endif %}
+
+### 工具执行结果
+{% if TOOL_RESULTS %}
+{% for r in TOOL_RESULTS %}
+[工具 {{ r.tool_name }}]
+- 成功：{{ r.success }}
+- 输出：{{ r.output_text }}
+{% if r.error_message %}
+- 错误：{{ r.error_message }}
+{% endif %}
+{% endfor %}
+{% else %}
+无已执行工具结果
+{% endif %}
+
+### 资源加载结果
+{% if RESOURCE_RESULTS %}
+{% for rr in RESOURCE_RESULTS %}
+[资源 {{ rr.resource_name }}]
+- 成功：{{ rr.success }}
+{% if rr.success %}
+- 提取信息：{{ rr.extracted_info }}
+{% endif %}
+{% if rr.error_message %}
+- 错误：{{ rr.error_message }}
+{% endif %}
+{% endfor %}
+{% else %}
+无已加载资源
+{% endif %}
+
+请基于以上信息，将每个执行步骤的状态和结果整合为完整的执行快照。

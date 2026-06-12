@@ -47,6 +47,20 @@ class PromptCategory(str, Enum):
     MCP_TOOL_CALLING = "mcp_tool_calling"
     MCP_INTENT_ALIGNMENT = "mcp_intent_alignment"
 
+    # --- Phase 12（v3.0）新增：Skill 三阶段 Prompt 分类 ---
+    # 做什么：为 Skill 三阶段 Agent 分别提供独立的 Prompt 模板分类。
+    #         Agent 1（初筛）、Agent 2（加载）、Agent 3（执行·含退回）。
+    # 为什么这样做：Skill 阶段的 Prompt 与原有 Tool 阶段的 Prompt 内容差异较大，
+    #             分开存储便于独立迭代和版本管理。
+    MCP_SKILL_SCREENING = "mcp_skill_screening"
+    MCP_SKILL_LOADING = "mcp_skill_loading"
+    MCP_SKILL_EXECUTION = "mcp_skill_execution"
+    MCP_SKILL_FALLBACK = "mcp_skill_fallback"
+
+    # --- Phase 12 新增：资源提取子 Agent Prompt 分类 ---
+    MCP_RESOURCE_EXTRACTION = "mcp_resource_extraction"
+    MCP_SKILL_FALLBACK_EXTRACTION = "mcp_skill_fallback_extraction"
+
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。
 # 做什么：约束已纳入 Prompt 管理面板的业务 Prompt 只以 PG 版本为准。

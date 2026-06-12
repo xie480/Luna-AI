@@ -312,6 +312,8 @@ class ChatStatusStage(str, Enum):
     FINALIZE = "finalize"
     # --- Phase 12 新增：MCP 工具执行阶段 ---
     MCP_TOOL_EXECUTION = "mcp_tool_execution"
+    # --- Phase 12（v3.0）新增：Skill 执行阶段 ---
+    MCP_SKILL_EXECUTION = "mcp_skill_execution"
 
 
 class ChatStatusState(str, Enum):

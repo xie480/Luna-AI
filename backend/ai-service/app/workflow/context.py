@@ -108,6 +108,19 @@ class ChatRouteState(BaseModel):
                     "包含 need_tool(bool)、reason(str)、keywords(list[str])。",
     )
 
+    # --- Phase 12（v3.0）：MCP Skill 调用路由（取代原有的 should_enter_mcp_tool）---
+    should_enter_skill: bool = Field(
+        default=False,
+        description="输入重构节点判定是否需要进入 MCP Skill 执行节点。"
+                    "True 表示需要使用技能，False 表示无需。",
+    )
+    skill_judgment_json: dict[str, Any] | None = Field(
+        default=None,
+        description="输入重构节点输出的 MCP Skill 调用 JSON 判定结果，"
+                    "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
+                    "当触发退回机制时，还会包含 fallback_context 字段。",
+    )
+
 
 class ChatMemoryState(BaseModel):
     """长期记忆状态。"""

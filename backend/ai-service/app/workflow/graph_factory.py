@@ -52,6 +52,10 @@ class ChatGraphFactory:
             ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION,
             ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS,
             # ---------------------------------
+            # --- Phase 12（v3.0）新增 MCP Skill 节点 ---
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION,
+            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS,
+            # -----------------------------------------
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS,
@@ -71,9 +75,21 @@ class ChatGraphFactory:
         # 设置入口点
         graph.set_entry_point(ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value)
 
-        # Phase 12：输入重构之后先路由 MCP 工具，其余 DAG 结构保持不变
+        # Phase 12（v3.0）：输入重构之后先路由 Skill，再路由 MCP 工具（兼容旧路径）
         graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
+            self.registry.router.route_mcp_skill,
+            {
+                ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value:
+                    ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
+                ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value:
+                    ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value,
+            },
+        )
+
+        # Skill 执行/绕过汇合到 MCP Tool 条件路由（兼容旧路径）
+        graph.add_conditional_edges(
+            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value,
             self.registry.router.route_mcp_tool,
             {
                 ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value:
@@ -81,6 +97,11 @@ class ChatGraphFactory:
                 ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value:
                     ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
             },
+        )
+
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
         )
 
         # MCP 执行/绕过汇合到会话上下文加载

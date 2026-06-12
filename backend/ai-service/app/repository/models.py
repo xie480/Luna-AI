@@ -308,6 +308,15 @@ class MCPToolRegistration(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
     endpoint_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
     remote_instance_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    # --- Phase 12 新增：关联技能 ID。当工具属于某个 Skill 时非空；独立工具时为空。 ---
+    skill_id: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("skills.id", ondelete="SET NULL"),
+        nullable=True,
+        default=None,
+        index=True,
+        comment="关联的技能 ID。当工具属于某个 Skill 时非空；独立工具时为空。",
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -372,6 +381,136 @@ class MCPRemoteInstance(Base):
     total_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     avg_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Skill(Base):
+    """
+    对应 PostgreSQL 中的 skills 表（技能主表）。
+
+    做什么：存储技能的元数据定义。Skill 是 MCP 能力的顶层抽象，
+            一个 Skill 包含一组 Tool、Resource 和 Prompt，
+            系统通过三阶段 Agent 流水线执行 Skill。
+    为什么这样做：将工具、资源、提示词统一组织为 Skill，
+                实现"能力指针"的抽象层。Agent 1 在初筛阶段
+                仅操作 Skill 级别的元数据，不展开具体工具。
+    输入输出：
+        - id: 雪花算法生成的唯一标识。
+        - name: 技能唯一名称。
+        - description: 技能功能描述。
+        - metadata: JSONB 存储的元数据。
+        - version: 技能版本号。
+        - enabled: 是否启用。
+    边界条件：
+        - name 唯一索引，禁止重复创建。
+        - enabled=False 的技能不会被 Agent 1 召回。
+        - metadata 支持存储版本信息、作者信息等扩展字段。
+    """
+    __tablename__ = "skills"
+    __table_args__ = (
+        Index("idx_skills_enabled", "enabled"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    version: Mapped[str] = mapped_column(String(32), nullable=False, default="1.0.0")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Prompt(Base):
+    """
+    对应 PostgreSQL 中的 prompts 表（提示模板表，关联 skill）。
+
+    做什么：存储与 Skill 关联的提示模板内容。每个 Skill 可以定义
+            多个阶段的 Prompt（screening/loading/execution），
+            每个阶段包含 system/memory/runtime 三个槽位。
+    为什么这样做：将 Prompt 管理与 Skill 绑定，而不是分散在
+                业务代码中。支持版本管理和阶段化注入。
+    输入输出：
+        - id: 雪花算法生成的唯一标识。
+        - skill_id: 关联的技能 ID。
+        - phase: 阶段标识（screening/loading/execution）。
+        - system_prompt/memory_prompt/runtime_prompt: 三槽位模板。
+        - variables: 模板变量定义。
+        - version_num: 版本号，支持版本回溯。
+        - status: draft/published/archived。
+    边界条件：
+        - skill_id + phase + version_num 联合唯一索引。
+        - status 默认 draft，published 状态不可直接修改。
+    """
+    __tablename__ = "prompts"
+    __table_args__ = (
+        Index("idx_prompts_skill_phase", "skill_id", "phase"),
+        Index("idx_prompts_skill_phase_version", "skill_id", "phase", "version_num", unique=True),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    skill_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    phase: Mapped[str] = mapped_column(
+        String(32), nullable=False,
+        comment="阶段标识：screening（初筛）/ loading（加载）/ execution（执行）",
+    )
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    memory_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    runtime_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    variables: Mapped[list | dict] = mapped_column(
+        JSONB, nullable=False, server_default="[]",
+        comment="模板变量定义，格式：[{name: str, description: str, required: bool}]",
+    )
+    version_num: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Resource(Base):
+    """
+    对应 PostgreSQL 中的 resources 表（资源表，关联 skill）。
+
+    做什么：存储与 Skill 关联的可加载资源定义。资源可以是本地文件、
+            API 接口、数据库查询等。执行阶段由子 Agent 按需加载。
+    为什么这样做：将资源管理与 Skill 绑定，支持文件读写方式的
+                资源加载，并行的子 Agent 提取关键信息。
+    输入输出：
+        - id: 雪花算法生成的唯一标识。
+        - skill_id: 关联的技能 ID。
+        - name: 资源名称。
+        - resource_type: 资源类型（file/api/database）。
+        - uri: 资源 URI（文件路径/API URL/查询语句）。
+        - description: 资源描述。
+        - mime_type: MIME 类型（text/plain, application/json 等）。
+        - metadata: JSONB 存储的扩展元数据。
+        - auto_load: 加载 Skill 时是否自动加载此资源。
+    边界条件：
+        - resource_type 仅支持 file/api/database/embedded。
+        - file 类型的资源在执行阶段通过文件读写方式加载。
+        - auto_load=true 的资源在 Agent 2 阶段自动注入。
+    """
+    __tablename__ = "resources"
+    __table_args__ = (
+        Index("idx_resources_skill_id", "skill_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    skill_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    resource_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="file",
+        comment="资源类型：file（本地文件）/ api（API 接口）/ database（数据库查询）/ embedded（内嵌）",
+    )
+    uri: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    auto_load: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

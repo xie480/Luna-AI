@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from enum import Enum
 from typing import Optional
 
@@ -104,4 +106,36 @@ class InputReconstructionOutput(BaseModel):
         default=None,
         description="MCP 工具调用判定结果，由 LLM 在输入重构阶段以结构化输出方式生成。"
                     "包含 need_tool、reason、keywords 三个字段。",
+    )
+
+    # --- Phase 12（v3.0）新增：MCP Skill 判定 ---
+    # 做什么：MCP Skill 判定结果，取代原有的 mcp_tool_judgment 字段。
+    #         当 primary_intent 涉及需要技能执行的任务时非空。
+    skill_judgment: Optional[SkillJudgment] = Field(
+        default=None,
+        description="MCP Skill 判定结果，由 LLM 在输入重构阶段以结构化输出方式生成。"
+                    "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
+                    "取代原有的 mcp_tool_judgment 字段。",
+    )
+
+
+class SkillJudgment(BaseModel):
+    """输入重构节点输出的 Skill 判定结果。
+
+    做什么：在输入重构节点中，LLM 以结构化输出方式判定是否需要使用 Skill，
+            并输出用于 Skill 检索的关键词。
+    为什么这样做：将原有的"工具判定"升级为"技能判定"，Agent 1 后续
+                基于此判定结果从 Skill 池中匹配最合适的 Skill。
+    边界条件：
+        - need_skill=False 时，reason 必须给出明确原因。
+        - keywords 至少包含一个关键词，建议 1~5 个。
+    """
+    need_skill: bool = Field(
+        ..., description="是否需要使用 Skill（技能）。true 表示需要，false 表示无需。"
+    )
+    reason: str = Field(
+        ..., description="具体原因说明，解释为什么判定需要或不需要使用 Skill。"
+    )
+    keywords: list[str] = Field(
+        ..., description="用于 Skill 检索的关键词数组。Agent 1 将以此检索候选 Skill。",
     )

@@ -40,11 +40,19 @@ from app.utils.snowflake import generate_string_id
 # simple Prompt 根目录固定在 app/prompt/simple，禁止从运行目录拼接，避免 Windows / PowerShell 下路径漂移。
 SIMPLE_PROMPT_ROOT = AI_SERVICE_ROOT / "app" / "prompt" / "simple"
 
-# 三个需要入库的 MCP Prompt 分类。
+# 需要入库的 MCP Prompt 分类。
 TARGET_CATEGORIES: tuple[str, ...] = (
     "mcp_intent_alignment",
     "mcp_tool_calling",
     "mcp_tool_screening",
+    # Phase 12 新增：Skill 三阶段 Agent Prompt
+    "mcp_skill_screening",
+    "mcp_skill_loading",
+    "mcp_skill_execution",
+    "mcp_skill_fallback",
+    # Phase 12 新增：子 Agent Prompt
+    "mcp_resource_extraction",
+    "mcp_skill_fallback_extraction",
 )
 
 # Prompt 三槽位按固定顺序处理，便于日志排查与数据库记录一致。

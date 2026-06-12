@@ -20,6 +20,7 @@ from app.workflow.constants import (
     CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
     CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
     CHAT_WORKFLOW_NO_MCP_TOOL_ROUTE_REASON,
+    CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON,
     ChatConditionalRoute,
     ChatNodeStatus,
     ChatWorkflowEventType,
@@ -199,6 +200,71 @@ class ChatWorkflowRouter:
             session_id=state.runtime.session_id,
             message_id=state.generation_state.assistant_message_id,
             stage=ChatStatusStage.MCP_TOOL_EXECUTION,
+            state=ChatStatusState.SKIPPED,
+            display_text="",
+            is_visible=False,
+            is_terminal=True,
+        )
+
+        return state.as_graph_state()
+
+    # ---- Phase 12（v3.0）新增：MCP Skill 条件路由 ----
+
+    async def route_mcp_skill(self, graph_state: dict[str, Any]) -> str:
+        """
+        评估是否进入 MCP Skill 执行节点。
+
+        做什么：根据输入重构节点输出的 skill_judgment.need_skill 判断是否进入 Skill 节点。
+        为什么这样做：Skill 节点与 MCP Tool 节点处于同等的条件分支地位。
+        参数:
+            graph_state: LangGraph 传递的字典状态。
+        返回:
+            str: MCP_SKILL_EXECUTION 或 MCP_SKILL_BYPASS 的 LangGraph 节点名称。
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        entered = state.route_state.should_enter_skill
+        reason = (
+            f"输入重构判定需要技能调用: "
+            f"{state.route_state.skill_judgment_json.get('reason', '') if state.route_state.skill_judgment_json else ''}"
+            if entered
+            else CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON
+        )
+        await self._publish_condition(
+            state=state,
+            source_node_type=ChatWorkflowNodeType.INPUT_RECONSTRUCTION,
+            target_node_type=ChatWorkflowNodeType.MCP_SKILL_EXECUTION,
+            condition_entered=entered,
+            route_name=(
+                ChatConditionalRoute.ENTER_MCP_SKILL
+                if entered
+                else ChatConditionalRoute.BYPASS_MCP_SKILL
+            ),
+            reason=reason,
+        )
+        return (
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value
+            if entered
+            else ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value
+        )
+
+    async def bypass_mcp_skill(self, graph_state: dict[str, Any]) -> dict[str, Any]:
+        """
+        MCP Skill 条件未进入时写入显式观测记录、推送 SKIPPED 状态并汇合。
+
+        做什么：当输入重构判定不需要技能调用时，记录观测并跳过 Skill 节点。
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        _append_not_entered_observation(
+            state, ChatWorkflowNodeType.MCP_SKILL_EXECUTION,
+            CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON,
+        )
+
+        # 发布 EVT_CHAT_STATUS：MCP Skill 阶段被跳过（SKIPPED，不可见）
+        await self.chat_status_publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=ChatStatusStage.MCP_SKILL_EXECUTION,
             state=ChatStatusState.SKIPPED,
             display_text="",
             is_visible=False,

@@ -1,0 +1,41 @@
+### 当前执行步骤
+
+**步骤名称**：{{ STEP_NAME }}
+
+**调用目的**：{{ STEP_PURPOSE }}
+
+**所需资源**：{{ REQUIRED_RESOURCES }}
+
+**依赖的前序工具**：{{ DEPENDS_ON_TOOLS }}
+
+---
+
+### 已加载的资源上下文
+{% if RESOURCE_CONTEXT %}
+{% for res_name, res_content in RESOURCE_CONTEXT.items() %}
+[资源 {{ res_name }}]
+{{ res_content }}
+
+{% endfor %}
+{% else %}
+（无可用资源上下文）
+{% endif %}
+
+### 前序工具执行结果
+{% if PREVIOUS_TOOL_RESULTS %}
+{% for prev in PREVIOUS_TOOL_RESULTS %}
+[前序工具 {{ prev.tool_name }}]
+成功：{{ prev.success }}
+输出：{{ prev.output_text }}
+{% if prev.error_message %}
+错误：{{ prev.error_message }}
+{% endif %}
+{% endfor %}
+{% else %}
+（无前序工具结果）
+{% endif %}
+
+### 用户输入
+{{ USER_INPUT }}
+
+请根据以上上下文信息，判断是否可以继续执行当前步骤，如果可以则提取该工具的调用参数。
