@@ -4,7 +4,8 @@
 #### {{ key }}
 - 技能：{{ state.skill }}
 - 资源：{{ state.resource | default('无') }}
-- 工具：{{ state.tools | default('无') }}
+- 工具：{{ state.tool | default('无') }}
+- 目标：{{ state.goal | default('无') }}
 {% endfor %}
 {% else %}
 （无执行计划信息）
@@ -41,3 +42,4 @@
 {% endif %}
 
 请基于以上信息，将每个执行步骤的状态和结果整合为完整的执行快照。
+注意：每个 state 应包含 skill、resource（字符串）、tool（字符串）、goal（字符串）、status、result 字段。

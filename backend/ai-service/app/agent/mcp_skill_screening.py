@@ -1,12 +1,12 @@
 """
 MCP Skill 初筛 Agent（Agent 1）。
 
-做什么：接收输入重构节点的 Skill 判定结果，获取候选 Skill 元数据，
-        由 LLM 依据轻量元数据（不含 Tool/Resource）输出 SkillChainPlan。
-        此时 Skill 处于未展开状态，仅作为能力指针存在。
+做什么：接收 MCP 前置判断节点的结果，获取候选 Skill 元数据，
+         由 LLM 依据轻量元数据（不含 Tool/Resource）输出 SkillChainPlan。
+         此时 Skill 处于未展开状态，仅作为能力指针存在。
 为什么这样做：将原有的"工具初筛"升级为"技能初筛"。Skill 作为能力
-            指针，Agent 1 在初筛阶段不加载具体工具和资源，
-            大幅节省 Token 消耗。
+             指针，Agent 1 在初筛阶段不加载具体工具和资源，
+             大幅节省 Token 消耗。
 边界条件：
     - 候选 Skill 列表为空时直接标记 no_suitable_skill=True，不调用 LLM。
     - LLM 输出的 skill_id 不在候选列表中时降级为 no_suitable_skill=True。
@@ -41,7 +41,7 @@ class MCPSkillScreeningAgent:
     async def screen(
         self,
         trace_id: str,
-        user_input: str,
+        mcp_intent: str,
         skill_judgment: dict[str, Any],
         prompt_manager: Any,
     ) -> SkillChainPlan:
@@ -49,15 +49,15 @@ class MCPSkillScreeningAgent:
 
         参数:
             trace_id: 全链路追踪 ID。
-            user_input: 用户原始输入。
-            skill_judgment: 输入重构节点的 Skill 判定 JSON，
-                            包含 need_skill、reason、keywords 字段。
+            mcp_intent: 重构后的 MCP 意图文本（用于替代原始用户输入注入 Prompt）。
+            skill_judgment: MCP 前置判断节点的判定 JSON，
+                             包含 need_skill、reason、keywords 字段。
             prompt_manager: Prompt Manager 实例。
         返回:
             SkillChainPlan: Skill 初筛结果。
         """
         registry = SkillRegistry()
-        keywords = skill_judgment.get("keywords", [user_input])
+        keywords = skill_judgment.get("keywords", [mcp_intent])
         if not isinstance(keywords, list):
             keywords = [str(keywords)]
 
@@ -86,7 +86,7 @@ class MCPSkillScreeningAgent:
             PromptCategory.MCP_SKILL_SCREENING,
             {
                 "CANDIDATE_SKILLS": candidates,
-                "USER_INPUT": user_input,
+                "MCP_INTENT": mcp_intent,
                 "SKILL_NEED_TOOL": skill_judgment.get("need_skill", False),
                 "SKILL_REASON": skill_judgment.get("reason", ""),
                 "SKILL_KEYWORDS": ", ".join(keywords),
@@ -105,11 +105,23 @@ class MCPSkillScreeningAgent:
         # 带重试的 LLM 调用
         for attempt in range(self.max_retries + 1):
             try:
+                # 记录完整 prompt 日志
+                logger.info(
+                    f"[MCP Skill Screening] 完整 Prompt trace_id={trace_id} "
+                    f"attempt={attempt} full_prompt={full_prompt}"
+                )
+
                 response = await llm_client.generate_structured(
                     model=self.model_name,
                     messages=[{"role": "system", "content": full_prompt}],
                     response_format=SkillChainPlan,
                     timeout=30.0,
+                )
+
+                # 记录 LLM 完整输出
+                logger.info(
+                    f"[MCP Skill Screening] LLM 完整输出 trace_id={trace_id} "
+                    f"attempt={attempt} output={response.model_dump(mode='json')}"
                 )
 
                 # 校验所有 skill_id 是否在候选列表中

@@ -7,9 +7,14 @@
 【聚合可用资源列表】（按来源技能分组，已去重）
 {{ AGGREGATED_RESOURCES }}
 
-【用户输入】
-{{ USER_INPUT }}
+【MCP 意图】
+{{ MCP_INTENT }}
 
 请基于以上来自多个技能的聚合信息，以「state」维度组织执行计划。
-每个 state 关联一个技能及其对应的资源和工具，按执行顺序规划。
-你可以选择来自不同技能的工具进行组合。
+每个 state 代表一个执行步骤，每个步骤使用一个工具（tool），可选关联一个资源（resource）。
+每个步骤必须有明确的 goal（执行目标），说明该步骤的意义和预期产出。
+
+注意：
+- 一个 state 只能有一个 tool 和一个 resource（字符串，非数组）
+- state_key 的字典顺序即为执行顺序（state1 < state2 < state3 ...）
+- 最大步长限制为 {{ MAX_STEPS }} 步，请确保 state 数量不超过此限制

@@ -262,6 +262,51 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "咦……工具没跑通……Luna想想别的办法",
         "呼……工具调用失败了，Luna直接回你~",
     ],
+
+    # ================================================================
+    # 12. MCP 前置判断 (MCPIntentJudge)
+    #     文案方向：Luna 在判断是否需要使用能力
+    #     ================================================================
+    (ChatStatusStage.MCP_INTENT_JUDGE, ChatStatusState.RUNNING): [
+        "让Luna想想该用什么能力帮你……",
+        "嗯……让Luna判断一下要不要动工具~",
+        "Luna看看这情况需不需要召唤能力……",
+        "等等……让Luna决定一下要不要动手~",
+        "唔……Luna想想该不该上工具呢~",
+    ],
+    (ChatStatusStage.MCP_INTENT_JUDGE, ChatStatusState.COMPLETED): [
+        "Luna想好了！让Luna来操作~",
+        "行，Luna决定好了！",
+        "嗯嗯，Luna知道该怎么搞了~",
+        "好啦，Luna心里有数了！",
+        "决定了！看Luna的~",
+    ],
+
+    # ================================================================
+    # 13. MCP Skill 执行 (MCPSkillExecutionNode)
+    #     文案方向：区分初筛->加载->执行三阶段的渐进感
+    #     ================================================================
+    (ChatStatusStage.MCP_SKILL_EXECUTION, ChatStatusState.RUNNING): [
+        "让Luna找找哪个技能最合适……",
+        "嗯……Luna翻翻技能库~",
+        "让Luna挑挑看哪个技能最好使……",
+        "唔……Luna看看有什么技能可用~",
+        "让Luna选个最顺手的技能……",
+    ],
+    (ChatStatusStage.MCP_SKILL_EXECUTION, ChatStatusState.COMPLETED): [
+        "好啦，Luna的技能搞定了！",
+        "搞定~技能调用完毕！",
+        "好啦好啦，Luna完事了！",
+        "嗯嗯，Luna的技能用完了~",
+        "行啦，Luna搞定了~",
+    ],
+    (ChatStatusStage.MCP_SKILL_EXECUTION, ChatStatusState.ERROR): [
+        "唔……技能出了点岔子，不过Luna想想别的办法",
+        "哎……技能没跑通……Luna换个方式",
+        "技能调用失败了……没关系Luna能处理",
+        "咦……技能没反应……Luna直接回你吧",
+        "呼……技能没搞定，不过Luna还在！",
+    ],
 }
 
 

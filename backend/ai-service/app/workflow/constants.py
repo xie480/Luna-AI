@@ -41,6 +41,8 @@ class ChatWorkflowNodeType(str, Enum):
     MCP_TOOL_EXECUTION = "mcp_tool_execution"
     # --- Phase 12（v3.0）新增：MCP Skill 执行节点 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
+    # --- Phase 12（v3.0）新增：MCP 前置判断节点 ---
+    MCP_INTENT_JUDGE = "mcp_intent_judge"
 
 
 class ChatNodeStatus(str, Enum):
@@ -67,6 +69,11 @@ class ChatConditionalRoute(str, Enum):
     # --- Phase 12（v3.0）新增：Skill 路由 ---
     ENTER_MCP_SKILL = "enter_mcp_skill"
     BYPASS_MCP_SKILL = "bypass_mcp_skill"
+    # --- Phase 12（v3.0）新增：MCP 前置判断路由 ---
+    ENTER_MCP_SKILL_FROM_JUDGE = "enter_mcp_skill_from_judge"
+    BYPASS_MCP_SKILL_FROM_JUDGE = "bypass_mcp_skill_from_judge"
+    ENTER_MCP_INTENT_JUDGE = "enter_mcp_intent_judge"
+    BYPASS_MCP_INTENT_JUDGE = "bypass_mcp_intent_judge"
 
 
 class ChatWorkflowEventType(str, Enum):
@@ -110,6 +117,9 @@ class ChatWorkflowGraphNodeName(str, Enum):
     # --- Phase 12（v3.0）新增：Skill 节点 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
     MCP_SKILL_BYPASS = "mcp_skill_bypass"
+    # --- Phase 12（v3.0）新增：MCP 前置判断节点 ---
+    MCP_INTENT_JUDGE = "mcp_intent_judge"
+    MCP_INTENT_BYPASS = "mcp_intent_bypass"
 
 
 CHAT_WORKFLOW_CHECKPOINT_TABLE: Final[str] = "langgraph_chat_checkpoints"

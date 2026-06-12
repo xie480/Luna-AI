@@ -142,39 +142,8 @@ class InputReconstructionNode(ChatWorkflowNode):
 
             state.route_state.emotion_state = result.emotion_state.model_dump(mode="json")
 
-            # --- Phase 12：MCP 工具调用判定 ---
-            # 做什么：从输入重构结果中提取 MCP 工具调用判定。
-            #         如果 result.mcp_tool_judgment 非空且 need_tool=True，则标记需要进入 MCP 节点，
-            #         同时将 mcp_judgment JSON 存入路由状态以供下游使用。
-            # 为什么这样做：工具调用判定作为输入重构的结构化输出，由 LLM 在一轮调用中完成，
-            #             避免额外增加模型调用次数。
-            has_tool_judgment = (
-                result.mcp_tool_judgment is not None
-                and result.mcp_tool_judgment.need_tool
-            )
-            state.route_state.should_enter_mcp_tool = has_tool_judgment
-            state.route_state.mcp_judgment_json = (
-                result.mcp_tool_judgment.model_dump(mode="json")
-                if result.mcp_tool_judgment
-                else None
-            )
-
-            # --- Phase 12（v3.0）：MCP Skill 调用判定（取代原有工具判定）---
-            # 做什么：从输入重构结果中提取 MCP Skill 判定。
-            #         如果 result.skill_judgment 非空且 need_skill=True，则标记需要进入 Skill 节点，
-            #         同时将 skill_judgment JSON 存入路由状态以供下游 Agent 1 使用。
-            # 为什么这样做：Skill 判定是工具判定的升级版，系统不再直接判定"是否使用工具"，
-            #             而是判定"是否使用技能"，具体使用什么工具由 Skill 展开后决定。
-            has_skill_judgment = (
-                result.skill_judgment is not None
-                and result.skill_judgment.need_skill
-            )
-            state.route_state.should_enter_skill = has_skill_judgment
-            state.route_state.skill_judgment_json = (
-                result.skill_judgment.model_dump(mode="json")
-                if result.skill_judgment
-                else None
-            )
+            # v3.0 变更：MCP 判断已从输入重构节点剥离，延迟到 MCP_INTENT_JUDGE 节点处理。
+            # 因此此处不再读取 mcp_tool_judgment 和 skill_judgment 字段。
 
             # 发布 COMPLETED 状态
             await self._publish_chat_status(
@@ -225,34 +194,8 @@ class InputReconstructionNode(ChatWorkflowNode):
             "emotion_trigger": reason,
         }
 
-        # Phase 12: MCP 工具调用降级关键字检测
-        mcp_keywords = ("时间", "几点", "日期", "天气", "温度", "查询", "搜索")
-        state.route_state.should_enter_mcp_tool = any(
-            keyword in raw for keyword in mcp_keywords
-        )
-        if state.route_state.should_enter_mcp_tool:
-            state.route_state.mcp_judgment_json = {
-                "need_tool": True,
-                "reason": f"降级规则触发：输入中包含 MCP 关键字",
-                "keywords": [raw],
-            }
-        else:
-            state.route_state.mcp_judgment_json = None
-
-        # Phase 12（v3.0）: Skill 调用降级关键字检测
-        skill_keywords = ("查询", "搜索", "分析", "计算", "处理", "生成", "翻译")
-        state.route_state.should_enter_skill = any(
-            keyword in raw for keyword in skill_keywords
-        )
-        if state.route_state.should_enter_skill:
-            state.route_state.skill_judgment_json = {
-                "need_skill": True,
-                "reason": f"降级规则触发：输入中包含 Skill 关键字",
-                "keywords": [raw],
-            }
-        else:
-            state.route_state.skill_judgment_json = None
-
+        # v3.0 变更：MCP 判断已从输入重构节点剥离，延迟到 MCP_INTENT_JUDGE 节点处理。
+        # 因此此处不再设置 should_enter_mcp_tool / should_enter_skill 相关字段。
     async def _publish_chat_status(
         self,
         state: ChatWorkflowState,

@@ -32,14 +32,21 @@ class ChatGraphFactory:
         它设置了一系列节点和它们之间的边，形成一个有向无环图 (DAG)，
         用于管理聊天工作流的状态转换和执行逻辑。
 
-        工作流流程概述（Phase 12 新增 MCP 工具分支）：
-        1. 输入重构 -> MCP 工具执行或绕过（条件分支，Phase 12 新增）
-        2. MCP 执行/绕过 -> 会话上下文加载
-        3. 会话上下文加载 -> 长期记忆 RAG 或绕过（条件分支）
-        4. 长期记忆 RAG/绕过 -> 用户资料注入
-        5. 用户资料注入 -> 知识 RAG 或绕过（条件分支）
-        6. 知识 RAG/绕过 -> 上下文治理 -> 提示组装 -> 主聊天 LLM
-        7. 主聊天 LLM -> 响应持久化 -> 最终化 -> 结束
+        工作流流程概述（v3.0 重构）：
+        1. 输入重构 -> 会话上下文加载
+        2. 会话上下文加载 -> 长期记忆 RAG 或绕过（条件分支）
+        3. 长期记忆 RAG/绕过 -> 用户资料注入
+        4. 用户资料注入 -> 知识 RAG 或绕过（条件分支）
+        5. 知识 RAG/绕过 -> MCP 意图判断或绕过（条件分支，v3.0 延迟判断）
+        6. MCP 意图判断 -> MCP Skill 执行或绕过（条件分支，v3.0 基于意图结果）
+        7. MCP Skill 执行/绕过 -> 上下文治理
+        8. 上下文治理 -> 提示组装 -> 主聊天 LLM
+        9. 主聊天 LLM -> 响应持久化 -> 最终化 -> 结束
+
+        v3.0 变更要点：
+        - 输入重构不再输出 MCP 判断，MCP 意图判断延迟到知识 RAG 之后
+        - 新增 MCP_INTENT_JUDGE 节点，在知识 RAG 后基于更多上下文做判断
+        - MCP 前置节点判断后路由到 Skill 执行或绕过
 
         Returns:
             CompiledGraph: 编译后的 LangGraph 图对象，可用于执行聊天工作流
@@ -48,20 +55,21 @@ class ChatGraphFactory:
         # 定义工作流中使用的所有活动节点
         active_nodes = [
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION,
-            # --- Phase 12 新增 MCP Tool 节点 ---
-            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION,
-            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS,
-            # ---------------------------------
-            # --- Phase 12（v3.0）新增 MCP Skill 节点 ---
-            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION,
-            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS,
-            # -----------------------------------------
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS,
             ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION,
             ChatWorkflowGraphNodeName.KNOWLEDGE_RAG,
             ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS,
+            # --- Phase 12（v3.0）新增：MCP 意图判断与 Skill 执行节点 ---
+            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE,
+            ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS,
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION,
+            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS,
+            # --- 保留旧 Tool 路径兼容 ---
+            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION,
+            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS,
+            # -------------------------------------------------
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE,
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM,
@@ -75,42 +83,9 @@ class ChatGraphFactory:
         # 设置入口点
         graph.set_entry_point(ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value)
 
-        # Phase 12（v3.0）：输入重构之后先路由 Skill，再路由 MCP 工具（兼容旧路径）
-        graph.add_conditional_edges(
+        # 输入重构 -> 会话上下文加载
+        graph.add_edge(
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
-            self.registry.router.route_mcp_skill,
-            {
-                ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value:
-                    ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
-                ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value:
-                    ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value,
-            },
-        )
-
-        # Skill 执行/绕过汇合到 MCP Tool 条件路由（兼容旧路径）
-        graph.add_conditional_edges(
-            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value,
-            self.registry.router.route_mcp_tool,
-            {
-                ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value:
-                    ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
-                ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value:
-                    ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
-            },
-        )
-
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
-        )
-
-        # MCP 执行/绕过汇合到会话上下文加载
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
-        )
-        graph.add_edge(
-            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
         )
 
@@ -146,16 +121,65 @@ class ChatGraphFactory:
                     ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value,
             },
         )
-        # 添加从知识 RAG 到上下文治理的边
+
+        # v3.0：知识 RAG/绕过 -> MCP 意图判断（条件路由）
         graph.add_edge(
             ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value,
-            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE.value,
         )
-        # 添加从知识 RAG 绕过到上下文治理的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value,
+            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE.value,
+        )
+
+        # MCP 意图判断 -> MCP Skill 执行或绕过（条件路由）
+        graph.add_conditional_edges(
+            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE.value,
+            self.registry.router.route_mcp_skill_from_judge,
+            {
+                ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value:
+                    ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
+                ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value:
+                    ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value,
+            },
+        )
+
+        # MCP Intent 绕过 -> 直接到上下文治理
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS.value,
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
         )
+
+        # MCP Skill 执行/绕过汇合到上下文治理
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+
+        # 保留旧 Tool 路径兼容（通过 Intent 旁路也可路由到 Tool）
+        graph.add_conditional_edges(
+            ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS.value,
+            self.registry.router.route_mcp_tool,
+            {
+                ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value:
+                    ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
+                ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value:
+                    ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
+            },
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_TOOL_EXECUTION.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MCP_TOOL_BYPASS.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+
         # 添加从上下文治理到提示组装的边
         graph.add_edge(
             ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,

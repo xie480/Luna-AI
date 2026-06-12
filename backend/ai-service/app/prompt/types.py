@@ -55,11 +55,13 @@ class PromptCategory(str, Enum):
     MCP_SKILL_SCREENING = "mcp_skill_screening"
     MCP_SKILL_LOADING = "mcp_skill_loading"
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
-    MCP_SKILL_FALLBACK = "mcp_skill_fallback"
 
     # --- Phase 12 新增：资源提取子 Agent Prompt 分类 ---
     MCP_RESOURCE_EXTRACTION = "mcp_resource_extraction"
     MCP_SKILL_FALLBACK_EXTRACTION = "mcp_skill_fallback_extraction"
+
+    # --- Phase 12（v3.0）新增：MCP 前置判断 Prompt 分类 ---
+    MCP_INTENT_JUDGE = "mcp_intent_judge"
 
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。

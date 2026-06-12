@@ -9,8 +9,8 @@
   （无可用技能）
 {% endfor %}
 
-【用户输入】
-{{ USER_INPUT }}
+【MCP 意图】
+{{ MCP_INTENT }}
 
 【输入重构判定】
 是否需要技能：{{ SKILL_NEED_TOOL }}
@@ -24,7 +24,8 @@
 #### {{ key }}
 - 技能：{{ state.skill }}
 - 资源：{{ state.resource | default('无') }}
-- 工具：{{ state.tools | default('无') }}
+- 工具：{{ state.tool | default('无') }}
+- 目标：{{ state.goal | default('无') }}
 - 状态：{{ state.status }}
 - 结果：{{ state.result }}
 {% endfor %}

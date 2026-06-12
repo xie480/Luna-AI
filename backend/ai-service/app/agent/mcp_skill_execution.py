@@ -2,12 +2,12 @@
 MCP Skill 执行 Agent（Agent 3）。
 
 做什么：按照 Agent 2 输出的 ExecutionPlan 逐项执行工具。
-        每步执行前，将当前步骤的资源配置、资源上下文和前序工具结果
-        注入到 LLM Prompt，由 LLM 判断是否可以继续执行（can_proceed）
-        并提取工具调用参数（tool_parameters）。
-        执行后累积结果供退回检测使用。
+         每步执行前，将当前步骤的 goal（执行目标）、资源配置、资源上下文和前序工具结果
+         注入到 LLM Prompt，由 LLM 判断是否可以继续执行（can_proceed）
+         并提取工具调用参数（tool_parameters）。
+         执行后累积结果供退回检测使用。
 为什么这样做：将"是否可以继续"的判断和"工具参数提取"交由 LLM 一次调用完成，
-            业务代码负责统计和状态追踪。
+             业务代码负责统计和状态追踪。
 边界条件：
     - execution_plan 为空时不执行任何操作。
     - 工具执行失败时记录错误但不中断整个计划。
@@ -16,8 +16,11 @@ MCP Skill 执行 Agent（Agent 3）。
 
 from __future__ import annotations
 
+import json
+import time
 from typing import Any
 
+from app.llm.client import llm_client
 from app.logger import logger
 from app.mcp.skill_types import ExecutionPlan
 from app.prompt.types import PromptCategory
@@ -42,43 +45,41 @@ class MCPSkillExecutionAgent:
         self,
         trace_id: str,
         step_name: str,
+        step_goal: str,
         execution_plan: ExecutionPlan,
         tool_results: list[dict[str, Any]],
         resource_context: dict[str, str],
         prompt_manager: Any,
-        user_input: str,
+        mcp_intent: str,
     ) -> dict[str, Any]:
         """执行单个工具步骤。
 
-        做什么：将当前步骤的所需资源、已加载资源上下文、前序工具结果
+        做什么：将当前步骤的 goal、所需资源、已加载资源上下文、前序工具结果
                 注入到 LLM Prompt 中，由 LLM 判断是否可以继续执行，
                 并在可以继续时提取工具调用参数。
 
         参数:
             trace_id: 全链路追踪 ID。
             step_name: 执行步骤名称（工具名称）。
+            step_goal: 当前步骤的执行目标（来自 ExecutionPlan 中的 goal 字段）。
             execution_plan: 执行计划。
             tool_results: 已累积的工具执行结果。
             resource_context: 资源上下文映射（resource_name -> extracted_info）。
             prompt_manager: Prompt Manager 实例。
-            user_input: 用户原始输入。
+            mcp_intent: 重构后的 MCP 意图文本（用于替代原始用户输入注入 Prompt）。
         返回:
             dict: 包含 tool_name、success、can_proceed、tool_parameters、
                   fallback_reason、latency_ms。
                   can_proceed: 由 LLM 判断，业务代码仅做透传。
                   tool_parameters: LLM 提取的工具调用参数（can_proceed=true 时）。
         """
-        import json
-        import time
-        from app.llm.client import llm_client
-
         started_at = time.monotonic()
 
         # 查找执行计划中当前 state
         current_state = None
         current_state_key = None
         for state_key, state_val in execution_plan.states.items():
-            if step_name in state_val.tools:
+            if step_name == state_val.tool:
                 current_state = state_val
                 current_state_key = state_key
                 break
@@ -94,16 +95,17 @@ class MCPSkillExecutionAgent:
             }
 
         # 构建当前步骤的上下文
-        required_resources = current_state.resource
-        depends_on_tools: list[str] = []
+        required_resources = [current_state.resource] if current_state.resource else []
 
-        # 从 execution_plan 中推断前序依赖（当前 state 之前的 state 中的 tools）
-        if current_state_key and execution_plan.execution_order:
-            current_idx = execution_plan.execution_order.index(current_state_key)
-            for prev_key in execution_plan.execution_order[:current_idx]:
+        # 推断前序依赖：当前 state_key 之前的 state 中的工具
+        depends_on_tools: list[str] = []
+        state_keys = sorted(execution_plan.states.keys())
+        if current_state_key and state_keys:
+            current_idx = state_keys.index(current_state_key)
+            for prev_key in state_keys[:current_idx]:
                 prev_state = execution_plan.states.get(prev_key)
-                if prev_state:
-                    depends_on_tools.extend(prev_state.tools)
+                if prev_state and prev_state.tool:
+                    depends_on_tools.append(prev_state.tool)
 
         # 注入资源上下文
         full_context: dict[str, str] = {}
@@ -124,13 +126,13 @@ class MCPSkillExecutionAgent:
         memory_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_EXECUTION,
             {
-                "STEP_NAME": step_name,
-                "STEP_PURPOSE": f"工具 '{step_name}' 的调用目的（来自执行计划）",
+                "STEP_TOOL": step_name,
+                "STEP_GOAL": step_goal,
                 "REQUIRED_RESOURCES": json.dumps(required_resources, ensure_ascii=False),
                 "DEPENDS_ON_TOOLS": json.dumps(depends_on_tools, ensure_ascii=False),
                 "RESOURCE_CONTEXT": full_context,
                 "PREVIOUS_TOOL_RESULTS": previous_tool_results,
-                "USER_INPUT": user_input,
+                "MCP_INTENT": mcp_intent,
             },
         )
         runtime_prompt = await prompt_manager.assemble_prompt(
@@ -138,6 +140,12 @@ class MCPSkillExecutionAgent:
         )
 
         full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
+
+        # 记录完整 prompt 日志
+        logger.info(
+            f"[MCP Skill Execution] 完整 Prompt trace_id={trace_id} "
+            f"step_name={step_name} full_prompt={full_prompt}"
+        )
 
         try:
             response = await llm_client.generate_structured(
@@ -152,6 +160,12 @@ class MCPSkillExecutionAgent:
                     },
                 },
                 timeout=30.0,
+            )
+
+            # 记录 LLM 完整输出
+            logger.info(
+                f"[MCP Skill Execution] LLM 完整输出 trace_id={trace_id} "
+                f"step_name={step_name} output={response}"
             )
 
             can_proceed = response.get("can_proceed", False)

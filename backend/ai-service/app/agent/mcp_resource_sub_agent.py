@@ -2,12 +2,12 @@
 MCP 资源加载子 Agent（SubAgent），基于 LLM 语义提取。
 
 做什么：负责加载 Skill 中的资源文件。采用文件读写方式读取完整文件内容，
-        对每一行文本追加括号行号标注后，调用 LLM 基于语义理解提取
-        与当前阶段需求相关的关键信息。这些信息随后注入到对应 Tool 的
-        Prompt 中供主 Agent 使用。不进行截断，保证信息完整性。
+         对每一行文本追加括号行号标注后，调用 LLM 基于语义理解提取
+         与当前阶段需求相关的关键信息。这些信息随后注入到对应 Tool 的
+         Prompt 中供主 Agent 使用。不进行截断，保证信息完整性。
 为什么这样做：将资源加载从主 Agent 中分离，多个资源可以并行加载，
-            提升执行效率。每行追加行号标注使 LLM 输出的行号引用
-            精确对应源文件。
+             提升执行效率。每行追加行号标注使 LLM 输出的行号引用
+             精确对应源文件。
 边界条件：
     - 只处理 resource_type=file 的资源，其他类型跳过。
     - 文件不存在或读取失败时返回错误信息，不阻塞其他资源加载。
@@ -185,6 +185,12 @@ class MCPResourceSubAgent:
 
         full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
+        # 记录完整 prompt 日志
+        logger.info(
+            f"[MCP Resource Extraction] 完整 Prompt trace_id={trace_id} "
+            f"resource={resource_name} full_prompt={full_prompt}"
+        )
+
         try:
             response = await llm_client.generate_structured(
                 model=prompt_manager.get_model_for_extraction(),
@@ -210,6 +216,12 @@ class MCPResourceSubAgent:
                     },
                 },
                 timeout=60.0,
+            )
+
+            # 记录 LLM 完整输出
+            logger.info(
+                f"[MCP Resource Extraction] LLM 完整输出 trace_id={trace_id} "
+                f"resource={resource_name} output={response}"
             )
 
             has_relevant_info = response.get("has_relevant_info", False)
@@ -271,19 +283,21 @@ class MCPResourceSubAgent:
             resource_results: 已加载的资源结果列表。
             prompt_manager: Prompt Manager 实例，用于 LLM 执行快照提取。
         返回:
-            dict: 执行快照字典。格式为 {"state1": {"skill": "...", "resource": [...],
-                   "tools": [...], "status": "...", "result": "..."}, ...}。
+            dict: 执行快照字典。v3.0 格式：
+                  {"state1": {"skill": "...", "resource": "...", "tool": "...",
+                             "goal": "...", "status": "...", "result": "..."}, ...}。
         """
         from app.llm.client import llm_client
 
-        # 构建执行计划渲染文本
+        # 构建执行计划渲染文本（v3.0：单工具单资源结构）
         execution_plan_rendered: dict[str, dict[str, Any]] = {}
         states = execution_plan.get("states", {})
         for state_key, state_val in states.items():
             execution_plan_rendered[state_key] = {
                 "skill": state_val.get("skill", ""),
-                "resource": state_val.get("resource", []),
-                "tools": state_val.get("tools", []),
+                "resource": state_val.get("resource", ""),
+                "tool": state_val.get("tool", ""),
+                "goal": state_val.get("goal", ""),
             }
 
         # 通过 PromptManager 组装三槽位模板
@@ -318,6 +332,12 @@ class MCPResourceSubAgent:
 
         full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
+        # 记录完整 prompt 日志
+        logger.info(
+            f"[MCP Fallback Extraction] 完整 Prompt trace_id={trace_id} "
+            f"full_prompt={full_prompt}"
+        )
+
         mid_model = self._get_mid_model()
         try:
             fallback_response = await llm_client.generate_structured(
@@ -330,6 +350,12 @@ class MCPResourceSubAgent:
                 timeout=30.0,
             )
 
+            # 记录 LLM 完整输出
+            logger.info(
+                f"[MCP Fallback Extraction] LLM 完整输出 trace_id={trace_id} "
+                f"output={fallback_response}"
+            )
+
             # 确保返回的字典包含所有 state_key
             snapshot: dict[str, dict[str, Any]] = {}
             for state_key in execution_plan_rendered:
@@ -338,7 +364,8 @@ class MCPResourceSubAgent:
                 snapshot[state_key] = {
                     "skill": state_data["skill"],
                     "resource": state_data["resource"],
-                    "tools": state_data["tools"],
+                    "tool": state_data["tool"],
+                    "goal": state_data["goal"],
                     "status": llm_state.get("status", "未执行"),
                     "result": llm_state.get("result", ""),
                 }
@@ -357,20 +384,24 @@ class MCPResourceSubAgent:
                 snapshot[state_key] = {
                     "skill": state_data["skill"],
                     "resource": state_data["resource"],
-                    "tools": state_data["tools"],
+                    "tool": state_data["tool"],
+                    "goal": state_data["goal"],
                     "status": "未执行（LLM 提取失败）",
                     "result": "",
                 }
 
-            # 尝试匹配工具执行结果
+            # 尝试匹配工具执行结果（v3.0：使用单工具字段 tool）
             for state_key, state_data in execution_plan_rendered.items():
+                state_tool = state_data.get("tool", "")
+                state_resource = state_data.get("resource", "")
+
                 matched_tool_results = [
                     r for r in tool_results
-                    if r.get("tool_name") in state_data.get("tools", [])
+                    if r.get("tool_name") == state_tool
                 ]
                 matched_resource_results = [
                     rr for rr in (resource_results or [])
-                    if rr.resource_name in state_data.get("resource", [])
+                    if rr.resource_name == state_resource
                 ]
 
                 status_parts: list[str] = []

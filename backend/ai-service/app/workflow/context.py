@@ -76,6 +76,10 @@ class ChatSessionState(BaseModel):
     token_budget_used: int = Field(default=0, ge=0)
     context_window_status: str = CHAT_WORKFLOW_CONTEXT_WINDOW_READY
     memory_snippets: str = ""
+    rag_evidence_text: str = Field(
+        default="",
+        description="RAG 召回证据的拼接文本，供 MCP 前置判断节点使用。",
+    )
 
 
 class ChatRouteState(BaseModel):
@@ -96,7 +100,27 @@ class ChatRouteState(BaseModel):
     knowledge_route: RagRetrievalRoute = RagRetrievalRoute.HYBRID
     emotion_state: dict[str, Any] = Field(default_factory=dict)
 
-    # --- Phase 12 新增：MCP 工具调用路由 ---
+    # --- Phase 12（v3.0）变更：MCP 判断由 MCP 前置节点处理 ---
+    # MCP 前置节点完成判断后，将判定结果写入以下字段
+    should_enter_skill: bool = Field(
+        default=False,
+        description="MCP 前置判断节点判定是否需要进入 MCP Skill 执行节点。"
+                    "True 表示需要使用技能，False 表示无需。",
+    )
+    skill_judgment_json: dict[str, Any] | None = Field(
+        default=None,
+        description="MCP 前置判断节点的判定结果 JSON，"
+                    "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
+                    "当触发退回机制时，还会包含 fallback_context 字段。",
+    )
+    mcp_intent: str = Field(
+        default="",
+        description="MCP 前置判断节点提炼的 MCP 意图文本，"
+                    "用于替代原始用户输入注入到下游 Agent 的 Prompt 中。"
+                    "当 should_enter_skill=False 时此字段为空字符串。",
+    )
+
+    # --- Phase 12 保留（兼容旧路径）：MCP 工具调用路由 ---
     should_enter_mcp_tool: bool = Field(
         default=False,
         description="输入重构节点判定是否需要进入 MCP 工具执行节点。"
@@ -106,19 +130,6 @@ class ChatRouteState(BaseModel):
         default=None,
         description="输入重构节点输出的 MCP 工具调用 JSON 判定结果，"
                     "包含 need_tool(bool)、reason(str)、keywords(list[str])。",
-    )
-
-    # --- Phase 12（v3.0）：MCP Skill 调用路由（取代原有的 should_enter_mcp_tool）---
-    should_enter_skill: bool = Field(
-        default=False,
-        description="输入重构节点判定是否需要进入 MCP Skill 执行节点。"
-                    "True 表示需要使用技能，False 表示无需。",
-    )
-    skill_judgment_json: dict[str, Any] | None = Field(
-        default=None,
-        description="输入重构节点输出的 MCP Skill 调用 JSON 判定结果，"
-                    "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
-                    "当触发退回机制时，还会包含 fallback_context 字段。",
     )
 
 
@@ -210,42 +221,48 @@ class ChatErrorState(BaseModel):
 
 
 class ChatMCPToolState(BaseModel):
-    """MCP 工具执行状态（工具链循环执行版）。
-
-    做什么：承载 MCP 工具执行节点的工具链循环执行全流程状态，
-            包含 Agent 1 的工具链计划、Agent 2 的多轮参数提取记录、
-            多轮工具执行结果、Agent 3 的聚合对齐结果。
-    为什么这样做：工具链循环执行涉及多轮中间状态，需要保留每一轮的
-                参数提取结果和执行结果以供审计。
+    """MCP 工具执行状态（含 Skill 执行状态）。
+    为什么这样做：MCP Tool 和 Skill 共用 mcp_tool_state 字段，
+                 避免新增字段导致其他依赖该字段的节点（如 base.py 的降级检测）大范围修改。
     """
     # 条件路由
     entered_by_condition: bool = False
     condition_reason: str = ""
 
-    # Agent 阶段标识
+    # Agent 阶段标识（兼容 Tool 和 Skill 两个阶段枚举）
     agent_phase: str = Field(
         default=ChatMCPAgentPhase.IDLE.value,
-        description="当前 Agent 执行阶段，使用 ChatMCPAgentPhase 枚举值。"
-                    "calling_[index] 和 execution_[index] 为动态拼接值。",
+        description="当前 Agent 执行阶段。",
     )
 
-    # Agent 1：工具链计划
+    # Agent 1 结果
     screening_result: dict[str, Any] = Field(
         default_factory=dict,
-        description="Agent 1 输出的 ToolChainPlan，包含有序工具链列表。",
+        description="Agent 1 输出的筛选结果。Tool 模式为 ToolChainPlan，Skill 模式为 SkillChainPlan。",
     )
 
     # Agent 2：多轮参数提取结果累积
     calling_results: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="Agent 2 多轮 Tool Calling 结果的累积数组。索引与 tool_chain 顺序一致。",
+        description="Agent 2 多轮 Tool Calling 结果的累积数组。",
     )
 
-    # 工具链执行结果累积
+    # 执行计划（Skill 模式）
+    execution_plan: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Skill 模式的执行计划。Tool 模式为空。",
+    )
+
+    # 资源加载结果（Skill 模式）
+    resource_results: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Skill 模式的资源加载结果。",
+    )
+
+    # 工具执行结果累积
     tool_results: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="工具链中每轮工具执行的累积结果数组。每项包含 tool_name、"
-                    "execution_id、output_text、latency_ms。",
+        description="每轮工具执行的累积结果数组。",
     )
 
     # 最后一次工具执行结果（兼容下游对单次结果的读取）
@@ -272,6 +289,12 @@ class ChatMCPToolState(BaseModel):
     )
     quality_issue: bool = False
 
+    # 最终失败信息（Skill 模式）
+    final_fail_state: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Skill 模式的最终失败状态。",
+    )
+
     # 降级标记
     degraded: bool = False
     degraded_reason: str = ""
@@ -290,7 +313,7 @@ class ChatWorkflowState(BaseModel):
     knowledge_state: ChatKnowledgeRagState = Field(default_factory=ChatKnowledgeRagState)
     mcp_tool_state: ChatMCPToolState = Field(
         default_factory=ChatMCPToolState,
-        description="Phase 12 MCP 工具执行状态，包含三 Agent 协作和各轮工具链结果。",
+        description="MCP 工具/Skill 执行状态。",
     )
     prompt_state: ChatPromptState = Field(default_factory=ChatPromptState)
     generation_state: ChatGenerationState

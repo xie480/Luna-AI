@@ -254,6 +254,9 @@ class ChatWorkflowNode:
         # --- Phase 12（v3.0）新增：MCP Skill 执行节点降级检测 ---
         if self.node_type == ChatWorkflowNodeType.MCP_SKILL_EXECUTION:
             return state.mcp_tool_state.degraded
+        # --- Phase 12（v3.0）新增：MCP 前置判断节点降级检测 ---
+        if self.node_type == ChatWorkflowNodeType.MCP_INTENT_JUDGE:
+            return state.route_state.should_enter_skill is False and state.route_state.mcp_intent == ""
         return False
 
     def _degraded_reason(self, state: ChatWorkflowState) -> str:
@@ -270,6 +273,9 @@ class ChatWorkflowNode:
         # --- Phase 12（v3.0）新增：MCP Skill 执行节点降级原因 ---
         if self.node_type == ChatWorkflowNodeType.MCP_SKILL_EXECUTION:
             return state.mcp_tool_state.degraded_reason
+        # --- Phase 12（v3.0）新增：MCP 前置判断节点降级原因 ---
+        if self.node_type == ChatWorkflowNodeType.MCP_INTENT_JUDGE:
+            return state.mcp_tool_state.degraded_reason or "MCP 前置判断降级"
         return ""
 
 

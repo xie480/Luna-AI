@@ -314,6 +314,8 @@ class ChatStatusStage(str, Enum):
     MCP_TOOL_EXECUTION = "mcp_tool_execution"
     # --- Phase 12（v3.0）新增：Skill 执行阶段 ---
     MCP_SKILL_EXECUTION = "mcp_skill_execution"
+    # --- Phase 12（v3.0）新增：MCP 前置判断阶段 ---
+    MCP_INTENT_JUDGE = "mcp_intent_judge"
 
 
 class ChatStatusState(str, Enum):

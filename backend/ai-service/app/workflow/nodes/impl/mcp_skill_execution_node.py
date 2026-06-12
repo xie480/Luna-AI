@@ -1,5 +1,5 @@
 """
-MCP Skill 执行节点 — Skill 三阶段 Agent 核心工作流节点。
+MCP Skill 执行节点 — Skill 三阶段 Agent 核心工作流节点（v3.0）。
 
 做什么：作为 LangGraph 的节点适配器，串联三阶段 Agent 流程：
         Agent 1（Skill 初筛）→ Agent 2（Skill 加载·生成执行计划）
@@ -7,10 +7,16 @@ MCP Skill 执行节点 — Skill 三阶段 Agent 核心工作流节点。
         本节点替换原有的 MCPToolExecutionNode。
 为什么这样做：将"工具调用"升级为"技能调用"，通过三阶段分层决策
              实现更灵活的能力编排。引入退回和终止机制保证容错。
+v3.0 变更：
+    - 注入变量从 raw_user_message 改为 mcp_intent（MCP 前置节点提炼的意图文本）
+    - execution_plan 的 state 结构变为单工具单资源（tool/resource 为字符串非数组）
+    - 移除 execution_order，states 字典 key 顺序即执行顺序
+    - 主循环各阶段细化 display_text，前端可查看更详细的状态
+    - 步长超限触发退回重试而非直接失败
 边界条件：
     - prompt_manager 不可用时直接降级跳过。
     - 无候选 Skill 或 no_suitable_skill=True 时降级跳过。
-    - 退回次数超过上限或达到最大步长时触发最终失败。
+    - 退回次数超过上限时触发最终失败。
     - 所有异常由本节点捕获并降级，不阻断主工作流。
 """
 
@@ -22,6 +28,7 @@ from typing import Any
 from app.agent.mcp_resource_sub_agent import MCPResourceSubAgent
 from app.agent.mcp_skill_execution import MCPSkillExecutionAgent
 from app.agent.mcp_skill_finalizer import (
+    is_step_count_exceeded,
     should_trigger_final_fail,
 )
 from app.agent.mcp_skill_loading import MCPSkillLoadingAgent
@@ -41,8 +48,7 @@ from app.mcp.skill_types import (
 )
 from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.constants import (
-    CHAT_WORKFLOW_NO_MCP_ROUTE_REASON,
-    CHAT_WORKFLOW_SKILL_NO_SKILL_REASON,
+    CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON,
     ChatWorkflowNodeType,
 )
 from app.workflow.context import ChatWorkflowState
@@ -52,7 +58,7 @@ from app.workflow.nodes.helpers import first_reason
 
 
 class MCPSkillExecutionNode(ChatWorkflowNode):
-    """MCP Skill 执行节点（三阶段 Agent + 退回与终止机制）。"""
+    """MCP Skill 执行节点（三阶段 Agent + 退回与终止机制，v3.0 单步 state 结构）。"""
 
     def __init__(self, dependencies: WorkflowDependencies):
         super().__init__(
@@ -69,22 +75,11 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         state.mcp_tool_state.entered_by_condition = True
         state.mcp_tool_state.condition_reason = first_reason(
             state.route_state.route_reasons,
-            CHAT_WORKFLOW_NO_MCP_ROUTE_REASON,
+            CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON,
         )
 
-        # 发布 RUNNING 状态
-        await self._publish_chat_status(
-            state=state,
-            stage=ChatStatusStage.MCP_SKILL_EXECUTION,
-            status=ChatStatusState.RUNNING,
-            display_text=get_chat_status_text(
-                ChatStatusStage.MCP_SKILL_EXECUTION, ChatStatusState.RUNNING
-            ),
-        )
-
-        prompt_manager = self.dependencies.prompt_manager
-        if not prompt_manager:
-            return self._degrade_and_skip(state, "Prompt 管理器不可用")
+        # 获取 MCP 意图文本（来自 MCP 前置判断节点）
+        mcp_intent = state.route_state.mcp_intent or state.input_payload.raw_user_message
 
         # 初始化状态
         state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_SCREENING.value
@@ -92,6 +87,20 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         step_count = 0
         all_tool_results: list[dict[str, Any]] = []
         last_fallback_state: FallbackState | None = None
+
+        prompt_manager = self.dependencies.prompt_manager
+        if not prompt_manager:
+            return self._degrade_and_skip(state, "Prompt 管理器不可用")
+
+        # ============================================================
+        # 发布 RUNNING 状态（初筛阶段）
+        # ============================================================
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+            status=ChatStatusState.RUNNING,
+            display_text="让Luna找找哪个技能最合适……",
+        )
 
         # ============================================================
         # 主循环：Agent 1（初筛）→ Agent 2（加载）→ Agent 3（执行）→ 检查退回
@@ -113,7 +122,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
                 chain_plan: SkillChainPlan = await MCPSkillScreeningAgent().screen(
                     trace_id=state.runtime.trace_id,
-                    user_input=state.input_payload.raw_user_message,
+                    mcp_intent=mcp_intent,
                     skill_judgment=skill_judgment,
                     prompt_manager=prompt_manager,
                 )
@@ -125,13 +134,13 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         "[MCP Skill Execution] No suitable skill found.",
                         extra={
                             "trace_id": state.runtime.trace_id,
-                            "user_message": state.input_payload.raw_user_message,
+                            "mcp_intent": mcp_intent,
                             "skill_judgment": skill_judgment,
                         },
                     )
                     return self._degrade_and_skip(
                         state,
-                        chain_plan.reasoning or CHAT_WORKFLOW_SKILL_NO_SKILL_REASON,
+                        chain_plan.reasoning or "MCP Agent 判定无需调用技能",
                     )
 
                 # ============================================================
@@ -139,10 +148,18 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 # ============================================================
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_LOADING.value
 
+                # 更新 display_text 为加载阶段
+                await self._publish_chat_status(
+                    state=state,
+                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    status=ChatStatusState.RUNNING,
+                    display_text="让Luna展开技能详情看看……",
+                )
+
                 execution_plan: ExecutionPlan = await MCPSkillLoadingAgent().load(
                     trace_id=state.runtime.trace_id,
                     skill_ids=chain_plan.selected_skill_ids,
-                    user_input=state.input_payload.raw_user_message,
+                    mcp_intent=mcp_intent,
                     prompt_manager=prompt_manager,
                 )
 
@@ -154,22 +171,57 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     )
 
                 state.mcp_tool_state.execution_plan = execution_plan.model_dump(mode="json")
-                step_count += execution_plan.total_expected_steps
 
-                # 检查是否达到最大步长
-                final_fail = should_trigger_final_fail(
-                    step_count=step_count,
-                    fallback_count=fallback_count,
-                    tool_results=all_tool_results,
-                    execution_plan=execution_plan.model_dump(mode="json"),
-                )
-                if final_fail:
-                    return self._handle_final_fail(state, final_fail)
+                # v3.0：由业务代码统计 state 数量得到总步数
+                state_count = len(execution_plan.states)
+                step_count += state_count
+
+                # 检查步长是否超限，超限则触发退回
+                if is_step_count_exceeded(step_count):
+                    logger.info(
+                        f"MCP Skill 步长超限 trace_id={state.runtime.trace_id} "
+                        f"step_count={step_count} fallback_count={fallback_count}，触发退回"
+                    )
+                    # 步长超限触发退回（不直接最终失败）
+                    # 构造一个空的执行快照，表示当前计划超出步长
+                    empty_snapshot = {}
+                    for state_key, state_val in execution_plan.states.items():
+                        empty_snapshot[state_key] = {
+                            "skill": state_val.skill,
+                            "tool": state_val.tool,
+                            "resource": state_val.resource,
+                            "goal": state_val.goal,
+                            "status": "未执行（步长超限）",
+                            "result": "",
+                        }
+                    last_fallback_state = FallbackState(
+                        execution_snapshot=empty_snapshot,
+                    )
+                    fallback_count += 1
+
+                    # 检查最终失败
+                    final_fail = should_trigger_final_fail(
+                        step_count=step_count,
+                        fallback_count=fallback_count,
+                        tool_results=all_tool_results,
+                        execution_plan=execution_plan.model_dump(mode="json"),
+                    )
+                    if final_fail:
+                        return self._handle_final_fail(state, final_fail)
+                    continue  # 退回至 Agent 1
 
                 # ============================================================
                 # Agent 3：Skill 执行
                 # ============================================================
-                state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_EXECUTION.value
+                state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_RESOURCE_LOADING.value
+
+                # 更新 display_text 为资源加载阶段
+                await self._publish_chat_status(
+                    state=state,
+                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    status=ChatStatusState.RUNNING,
+                    display_text="Luna在读文件资料……",
+                )
 
                 # Step 3.1：并行加载所有 state 中的 Resources
                 resource_results: list[ResourceLoadResult] = []
@@ -179,6 +231,9 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
                 registry = SkillRegistry()
                 for state_key, state_val in execution_plan.states.items():
+                    # 如果此 state 有资源需要加载
+                    if not state_val.resource:
+                        continue
                     # 通过技能名称查找对应的 skill detail
                     detail = None
                     for sid in chain_plan.selected_skill_ids:
@@ -189,21 +244,20 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     if not detail:
                         continue
 
-                    for res_name in state_val.resource:
-                        resource_def = next(
-                            (r for r in detail.resources if r["name"] == res_name),
-                            None,
-                        )
-                        if resource_def and resource_def.get("resource_type") == "file":
-                            load_tasks.append(
-                                sub_agent.load_resource(
-                                    trace_id=state.runtime.trace_id,
-                                    resource_def=resource_def,
-                                    load_purpose=f"为技能 '{state_val.skill}' 的 state '{state_key}' 加载资源",
-                                    prompt_manager=prompt_manager,
-                                )
+                    resource_def = next(
+                        (r for r in detail.resources if r["name"] == state_val.resource),
+                        None,
+                    )
+                    if resource_def and resource_def.get("resource_type") == "file":
+                        load_tasks.append(
+                            sub_agent.load_resource(
+                                trace_id=state.runtime.trace_id,
+                                resource_def=resource_def,
+                                load_purpose=f"为技能 '{state_val.skill}' 的 state '{state_key}' 加载资源: {state_val.goal}",
+                                prompt_manager=prompt_manager,
                             )
-                            resource_to_state_map[res_name] = state_key
+                        )
+                        resource_to_state_map[state_val.resource] = state_key
 
                 # 并行执行所有资源加载
                 if load_tasks:
@@ -219,56 +273,80 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     if rr.success:
                         resource_context_map[rr.resource_name] = rr.extracted_info
 
-                # Step 3.2：按 execution_order 执行每个 state 中的 Tools
+                # Step 3.2：按 state 字典顺序执行每个 state 中的 Tool
+                state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_EXECUTION.value
+
+                # 更新 display_text 为执行阶段
+                total_states = len(execution_plan.states)
+                await self._publish_chat_status(
+                    state=state,
+                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    status=ChatStatusState.RUNNING,
+                    display_text=f"Luna开始干活了……共 {total_states} 步",
+                )
+
                 tool_results: list[dict[str, Any]] = []
                 exec_agent = MCPSkillExecutionAgent()
 
-                for state_key in execution_plan.execution_order:
+                # v3.0：按排序后的 state_key 顺序执行
+                state_keys = sorted(execution_plan.states.keys())
+                for idx, state_key in enumerate(state_keys):
                     state_val = execution_plan.states.get(state_key)
                     if not state_val:
                         continue
 
-                    # 为当前 state 中的每个工具执行
-                    for tool_name in state_val.tools:
-                        # Agent 3 判断是否可以继续 + 提取参数
-                        step_result = await exec_agent.execute_step(
-                            trace_id=state.runtime.trace_id,
-                            step_name=tool_name,
-                            execution_plan=execution_plan,
-                            tool_results=tool_results,
-                            resource_context=resource_context_map,
-                            prompt_manager=prompt_manager,
-                            user_input=state.input_payload.raw_user_message,
-                        )
+                    # 如果此 state 有工具需要执行
+                    if not state_val.tool:
+                        continue
 
-                        if step_result.get("can_proceed", False):
-                            # 可以继续：使用 LLM 提取的 tool_parameters 执行工具
-                            calling_result = await self._execute_single_tool(
-                                trace_id=state.runtime.trace_id,
-                                tool_name=tool_name,
-                                tool_parameters=step_result.get("tool_parameters", {}),
-                            )
-                            tool_results.append({
-                                "tool_name": tool_name,
-                                "success": not calling_result.get("failed", False),
-                                "output_text": calling_result.get("output", ""),
-                                "error_message": calling_result.get("error", ""),
-                                "resource_context_injected": step_result.get("resource_context_injected", []),  # noqa: E501
-                                "latency_ms": calling_result.get("latency_ms", 0),
-                                "can_proceed": True,
-                            })
-                        else:
-                            # 无法继续：记录退回原因
-                            tool_results.append({
-                                "tool_name": tool_name,
-                                "success": False,
-                                "output_text": "",
-                                "error_message": step_result.get("fallback_reason", ""),
-                                "resource_context_injected": step_result.get("resource_context_injected", []),  # noqa: E501
-                                "latency_ms": step_result.get("latency_ms", 0),
-                                "can_proceed": False,
-                                "fallback_reason": step_result.get("fallback_reason", ""),
-                            })
+                    # 更新 display_text 显示当前执行进度
+                    await self._publish_chat_status(
+                        state=state,
+                        stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                        status=ChatStatusState.RUNNING,
+                        display_text=f"Luna正在执行第 {idx + 1}/{total_states} 步：{state_val.goal or state_val.tool}",
+                    )
+
+                    # Agent 3 判断是否可以继续 + 提取参数
+                    step_result = await exec_agent.execute_step(
+                        trace_id=state.runtime.trace_id,
+                        step_name=state_val.tool,
+                        step_goal=state_val.goal,
+                        execution_plan=execution_plan,
+                        tool_results=tool_results,
+                        resource_context=resource_context_map,
+                        prompt_manager=prompt_manager,
+                        mcp_intent=mcp_intent,
+                    )
+
+                    if step_result.get("can_proceed", False):
+                        # 可以继续：使用 LLM 提取的 tool_parameters 执行工具
+                        calling_result = await self._execute_single_tool(
+                            trace_id=state.runtime.trace_id,
+                            tool_name=state_val.tool,
+                            tool_parameters=step_result.get("tool_parameters", {}),
+                        )
+                        tool_results.append({
+                            "tool_name": state_val.tool,
+                            "success": not calling_result.get("failed", False),
+                            "output_text": calling_result.get("output", ""),
+                            "error_message": calling_result.get("error", ""),
+                            "resource_context_injected": step_result.get("resource_context_injected", []),
+                            "latency_ms": calling_result.get("latency_ms", 0),
+                            "can_proceed": True,
+                        })
+                    else:
+                        # 无法继续：记录退回原因
+                        tool_results.append({
+                            "tool_name": state_val.tool,
+                            "success": False,
+                            "output_text": "",
+                            "error_message": step_result.get("fallback_reason", ""),
+                            "resource_context_injected": step_result.get("resource_context_injected", []),
+                            "latency_ms": step_result.get("latency_ms", 0),
+                            "can_proceed": False,
+                            "fallback_reason": step_result.get("fallback_reason", ""),
+                        })
 
                 all_tool_results.extend(tool_results)
                 state.mcp_tool_state.tool_results = all_tool_results
@@ -284,13 +362,30 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 if not need_fallback:
                     # 执行成功，退出循环
                     state.mcp_tool_state.agent_phase = SkillAgentPhase.COMPLETED.value
-                    break
+
+                    await self._publish_chat_status(
+                        state=state,
+                        stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                        status=ChatStatusState.COMPLETED,
+                        display_text=get_chat_status_text(
+                            ChatStatusStage.MCP_SKILL_EXECUTION, ChatStatusState.COMPLETED
+                        ),
+                        is_terminal=True,
+                    )
+                    return state
 
                 # 需要退回
                 fallback_count += 1
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_FALLBACK.value
 
-                # 提取执行快照（新格式：原计划 + 状态 + 结果）
+                await self._publish_chat_status(
+                    state=state,
+                    stage=ChatStatusStage.MCP_SKILL_EXECUTION,
+                    status=ChatStatusState.RUNNING,
+                    display_text="唔……Luna换个思路试试",
+                )
+
+                # 提取执行快照（v3.0 格式：tool/resource 为字符串）
                 execution_snapshot = await sub_agent.extract_fallback_info(
                     trace_id=state.runtime.trace_id,
                     execution_plan=execution_plan.model_dump(mode="json"),
@@ -321,20 +416,6 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     f"session_id={state.runtime.session_id} error={exc!s}"
                 )
                 return self._degrade_and_skip(state, f"MCP 节点异常: {exc!s}")
-
-        # 执行成功：发布 COMPLETED 状态
-        await self._publish_chat_status(
-            state=state,
-            stage=ChatStatusStage.MCP_SKILL_EXECUTION,
-            status=ChatStatusState.COMPLETED,
-            display_text=get_chat_status_text(
-                ChatStatusStage.MCP_SKILL_EXECUTION,
-                ChatStatusState.COMPLETED,
-            ),
-            is_terminal=True,
-        )
-
-        return state
 
     async def _execute_single_tool(
         self,
@@ -421,7 +502,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         try:
             publisher: ChatStatusPublisher | None = self.dependencies.chat_status_publisher
             if publisher:
-                _ = asyncio.create_task(  # noqa: RUF006
+                _ = asyncio.create_task(
                     publisher.publish(
                         trace_id=state.runtime.trace_id,
                         session_id=state.runtime.session_id,
@@ -449,7 +530,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         try:
             publisher: ChatStatusPublisher | None = self.dependencies.chat_status_publisher
             if publisher:
-                _ = asyncio.create_task(  # noqa: RUF006
+                _ = asyncio.create_task(
                     publisher.publish(
                         trace_id=state.runtime.trace_id,
                         session_id=state.runtime.session_id,

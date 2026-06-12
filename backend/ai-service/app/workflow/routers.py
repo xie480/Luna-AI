@@ -273,6 +273,68 @@ class ChatWorkflowRouter:
 
         return state.as_graph_state()
 
+    # ---- Phase 12（v3.0）新增：MCP 前置判断后的 Skill 路由 ----
+
+    async def route_mcp_skill_from_judge(self, graph_state: dict[str, Any]) -> str:
+        """
+        评估是否从 MCP 前置判断节点进入 MCP Skill 执行节点。
+
+        做什么：根据 MCP 前置判断节点的判定结果（should_enter_skill）路由。
+        为什么这样做：与原有的 route_mcp_skill 逻辑一致，但来源节点不同（
+                    原来源为 INPUT_RECONSTRUCTION，新来源为 MCP_INTENT_JUDGE）。
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        entered = state.route_state.should_enter_skill
+        reason = (
+            f"MCP 前置判断需要技能调用: "
+            f"{state.route_state.skill_judgment_json.get('reason', '') if state.route_state.skill_judgment_json else ''}"
+            if entered
+            else CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON
+        )
+        await self._publish_condition(
+            state=state,
+            source_node_type=ChatWorkflowNodeType.MCP_INTENT_JUDGE,
+            target_node_type=ChatWorkflowNodeType.MCP_SKILL_EXECUTION,
+            condition_entered=entered,
+            route_name=(
+                ChatConditionalRoute.ENTER_MCP_SKILL_FROM_JUDGE
+                if entered
+                else ChatConditionalRoute.BYPASS_MCP_SKILL_FROM_JUDGE
+            ),
+            reason=reason,
+        )
+        return (
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value
+            if entered
+            else ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value
+        )
+
+    async def bypass_mcp_intent(self, graph_state: dict[str, Any]) -> dict[str, Any]:
+        """
+        MCP 前置判断条件未进入时写入显式观测记录、推送 SKIPPED 状态并汇合。
+
+        做什么：当 MCP 前置判断节点判定不需要技能调用时，记录观测并跳转到上下文治理。
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        _append_not_entered_observation(
+            state, ChatWorkflowNodeType.MCP_INTENT_JUDGE,
+            CHAT_WORKFLOW_NO_SKILL_ROUTE_REASON,
+        )
+
+        # 发布 EVT_CHAT_STATUS：MCP 前置判断阶段被跳过（SKIPPED，不可见）
+        await self.chat_status_publisher.publish(
+            trace_id=state.runtime.trace_id,
+            session_id=state.runtime.session_id,
+            message_id=state.generation_state.assistant_message_id,
+            stage=ChatStatusStage.MCP_INTENT_JUDGE,
+            state=ChatStatusState.SKIPPED,
+            display_text="",
+            is_visible=False,
+            is_terminal=True,
+        )
+
+        return state.as_graph_state()
+
     async def _publish_condition(
         self,
         *,

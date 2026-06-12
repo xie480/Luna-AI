@@ -18,6 +18,8 @@ from app.workflow.nodes.impl.user_profile_injection_node import UserProfileInjec
 from app.workflow.nodes.impl.mcp_tool_execution_node import MCPToolExecutionNode
 # --- Phase 12（v3.0）新增：MCP Skill 工作流节点导入 ---
 from app.workflow.nodes.impl.mcp_skill_execution_node import MCPSkillExecutionNode
+# --- Phase 12（v3.0）新增：MCP 前置判断节点导入 ---
+from app.workflow.nodes.impl.mcp_intent_judge_node import MCPIntentJudgeNode
 from app.workflow.routers import ChatWorkflowRouter
 
 
@@ -38,6 +40,10 @@ class ChatWorkflowNodeRegistry:
             # --- Phase 12（v3.0）新增：MCP Skill 相关节点 ---
             ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value: MCPSkillExecutionNode(dependencies),
             ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value: self.router.bypass_mcp_skill,
+            # -------------------------------------------------
+            # --- Phase 12（v3.0）新增：MCP 前置判断相关节点 ---
+            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE.value: MCPIntentJudgeNode(dependencies),
+            ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS.value: self.router.bypass_mcp_intent,
             # -------------------------------------------------
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value: SessionContextLoadNode(dependencies),
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value: LongTermMemoryNode(dependencies),
