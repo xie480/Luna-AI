@@ -406,6 +406,12 @@ export interface LocalServerInfo {
   enabled: boolean;
   /** 该服务器下已注册的工具数量。 */
   tool_count: number;
+  /** 服务器 endpoint URL（适用于 SSE 模式）。 */
+  endpoint_url: string;
+  /** 健康状态：unknown / online / offline / error。 */
+  health_status: string;
+  /** 扩展元数据。 */
+  metadata: Record<string, unknown>;
   /** 创建时间（ISO 8601）。 */
   created_at: string;
   /** 更新时间（ISO 8601）。 */

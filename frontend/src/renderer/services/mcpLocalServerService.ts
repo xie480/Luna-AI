@@ -17,6 +17,17 @@ import { LocalServerConfig, LocalServerInfo } from '../../shared/types';
 const BASE_URL = `${AI_SERVICE_BASE_URL}/api/v1/mcp/local`;
 
 /**
+ * 后端统一响应包装结构。
+ * 所有后端 API 均返回 { code, msg, data, trace_id } 格式。
+ */
+interface ApiResponse<T> {
+  code: number;
+  msg: string;
+  data: T;
+  trace_id: string;
+}
+
+/**
  * 注册本地 MCP 服务器请求体
  */
 export interface RegisterLocalServerRequest extends LocalServerConfig {}
@@ -27,7 +38,6 @@ export interface RegisterLocalServerRequest extends LocalServerConfig {}
 export interface RegisterLocalServerResponse {
   server_id: string;
   success: boolean;
-  tool_names: string[];
 }
 
 /**
@@ -43,16 +53,30 @@ export interface UpdateLocalServerRequest {
 }
 
 /**
- * 注册单个本地 MCP 服务器。
+ * 批量注册响应 data 结构。
  */
-export async function registerLocalServer(
-  config: RegisterLocalServerRequest
-): Promise<RegisterLocalServerResponse> {
-  const response = await fetch(BASE_URL + '/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
+interface BatchRegisterData {
+  success_count: number;
+  failed_count: number;
+  failures: Array<{ name: string; error: string }>;
+}
+
+/**
+ * 更新/删除响应 data 结构。
+ */
+interface MutateResponseData {
+  success: boolean;
+}
+
+/**
+ * 发起 API 请求并自动解包 data 字段。
+ *
+ * 做什么：统一处理 fetch 调用、错误检测、JSON 解析和 data 字段提取。
+ * 为什么这样做：所有后端 API 返回统一包装格式 { code, msg, data, trace_id }，
+ *              前端只需关注 data 内的业务内容。
+ */
+async function _request<T>(url: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(url, options);
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -66,7 +90,24 @@ export async function registerLocalServer(
     throw new Error(errorMsg);
   }
 
-  return response.json();
+  const json: ApiResponse<T> = await response.json();
+  if (json.code !== 0) {
+    throw new Error(json.msg || '后端返回非零错误码');
+  }
+  return json.data;
+}
+
+/**
+ * 注册单个本地 MCP 服务器。
+ */
+export async function registerLocalServer(
+  config: RegisterLocalServerRequest
+): Promise<RegisterLocalServerResponse> {
+  return _request<RegisterLocalServerResponse>(BASE_URL + '/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
 }
 
 /**
@@ -74,43 +115,19 @@ export async function registerLocalServer(
  */
 export async function batchRegisterLocalServers(
   configs: RegisterLocalServerRequest[]
-): Promise<{
-  success_count: number;
-  failed_count: number;
-  failures: Array<{ name: string; error: string }>;
-}> {
-  const response = await fetch(BASE_URL + '/batch-register', {
+): Promise<BatchRegisterData> {
+  return _request<BatchRegisterData>(BASE_URL + '/batch-register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ servers: configs }),
   });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    let errorMsg: string;
-    try {
-      const errorJson = JSON.parse(errorBody);
-      errorMsg = errorJson.detail || errorJson.msg || `HTTP ${response.status}`;
-    } catch {
-      errorMsg = errorBody || `HTTP ${response.status}`;
-    }
-    throw new Error(errorMsg);
-  }
-
-  return response.json();
 }
 
 /**
  * 获取已注册的本地服务器列表。
  */
 export async function listLocalServers(): Promise<LocalServerInfo[]> {
-  const response = await fetch(BASE_URL + '/servers');
-
-  if (!response.ok) {
-    throw new Error(`获取本地服务器列表失败: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return _request<LocalServerInfo[]>(BASE_URL + '/servers');
 }
 
 /**
@@ -119,26 +136,12 @@ export async function listLocalServers(): Promise<LocalServerInfo[]> {
 export async function updateLocalServer(
   serverId: string,
   config: UpdateLocalServerRequest
-): Promise<{ success: boolean }> {
-  const response = await fetch(`${BASE_URL}/servers/${serverId}`, {
+): Promise<MutateResponseData> {
+  return _request<MutateResponseData>(`${BASE_URL}/servers/${serverId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    let errorMsg: string;
-    try {
-      const errorJson = JSON.parse(errorBody);
-      errorMsg = errorJson.detail || errorJson.msg || `HTTP ${response.status}`;
-    } catch {
-      errorMsg = errorBody || `HTTP ${response.status}`;
-    }
-    throw new Error(errorMsg);
-  }
-
-  return response.json();
 }
 
 /**
@@ -146,14 +149,8 @@ export async function updateLocalServer(
  */
 export async function deleteLocalServer(
   serverId: string
-): Promise<{ success: boolean }> {
-  const response = await fetch(`${BASE_URL}/servers/${serverId}`, {
+): Promise<MutateResponseData> {
+  return _request<MutateResponseData>(`${BASE_URL}/servers/${serverId}`, {
     method: 'DELETE',
   });
-
-  if (!response.ok) {
-    throw new Error(`删除本地服务器失败: HTTP ${response.status}`);
-  }
-
-  return response.json();
 }

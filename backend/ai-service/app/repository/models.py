@@ -515,6 +515,49 @@ class Resource(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class MCPServerRegistration(Base):
+    """
+    对应 PostgreSQL 中的 mcp_server_registrations 表（本地 MCP 服务器注册）。
+
+    做什么：存储用户在本机配置的 MCP 服务器注册信息，包括启动命令、参数、
+            环境变量等完整配置。服务器与工具是独立的概念：一个服务器进程可以
+            提供多个工具，此表只记录服务器本身的配置与状态。
+    为什么这样做：Phase 12 要求本地 MCP 服务器的注册信息独立落库，与
+                 mcp_tool_registrations（工具注册表）逻辑解耦。服务器配置
+                 直接映射为表字段，不再嵌套存储在 parameters_schema JSONB 中。
+    边界条件：
+        - name 唯一索引，禁止重复注册。
+        - enabled=False 的服务器不会被尝试启动。
+        - health_status 跟踪服务器进程的健康状态（unknown/online/offline/error）。
+        - metadata 存储扩展属性，如版本号、作者信息等。
+    """
+    __tablename__ = "mcp_server_registrations"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    """服务器唯一名称。"""
+    command: Mapped[str] = mapped_column(String(512), nullable=False)
+    """启动命令（如 node、python 等）。"""
+    args: Mapped[list] = mapped_column(JSONB, nullable=False, server_default="[]")
+    """命令参数列表。"""
+    env: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    """环境变量键值对。"""
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    """服务器描述信息。"""
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    """是否启用。"""
+    tool_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    """此服务器提供的工具数量。"""
+    endpoint_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    """服务器暴露的 endpoint URL（适用于 SSE 模式）。"""
+    health_status: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    """健康状态：unknown / online / offline / error。"""
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
+    """扩展元数据（版本号、作者信息等）。"""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class MCPMarketplaceDiscoveryLog(Base):
     """
     对应 PostgreSQL 中的 mcp_marketplace_discovery_log 表（数据采集审计日志）。

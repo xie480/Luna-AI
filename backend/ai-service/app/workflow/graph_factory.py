@@ -44,7 +44,7 @@ class ChatGraphFactory:
         Returns:
             CompiledGraph: 编译后的 LangGraph 图对象，可用于执行聊天工作流
         """
-        graph = StateGraph(WorkflowGraphState)
+        graph = StateGraph(ChatWorkflowState)
         # 定义工作流中使用的所有活动节点
         active_nodes = [
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION,
