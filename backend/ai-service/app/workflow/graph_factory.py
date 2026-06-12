@@ -5,7 +5,7 @@ from __future__ import annotations
 from langgraph.graph import StateGraph
 
 from app.workflow.constants import ChatWorkflowGraphNodeName
-from app.workflow.context import WorkflowGraphState
+from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.registry import ChatWorkflowNodeRegistry
 

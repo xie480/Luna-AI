@@ -9,8 +9,9 @@ from app.api.chat_status_texts import get_chat_status_text
 from app.logger import logger
 from app.rag.types import RagSearchRequest
 from app.types.constants import ChatStatusStage, ChatStatusState
+from app.rag.types import KnowledgeCitation
 from app.workflow.constants import CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON, ChatWorkflowNodeType
-from app.workflow.context import ChatWorkflowState, KnowledgeCitation
+from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
 from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.nodes.helpers import first_reason

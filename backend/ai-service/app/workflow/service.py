@@ -33,7 +33,7 @@ from app.workflow.constants import (
 from app.workflow.context import (
     ChatGenerationState,
     ChatInputPayload,
-    ChatRuntimeContext,
+    ChatRuntimeState,
     ChatWorkflowState,
 )
 from app.workflow.events import ChatStreamChunkPayload, ChatWorkflowEvent, ChatWorkflowEventPublisher
@@ -115,7 +115,7 @@ class ChatWorkflowService:
         interaction_id = generate_string_id()
         # 创建聊天工作流状态对象
         state = ChatWorkflowState(
-            runtime=ChatRuntimeContext(
+            runtime=ChatRuntimeState(
                 trace_id=trace_id,
                 interaction_id=interaction_id,
                 session_id=cleaned_session_id,

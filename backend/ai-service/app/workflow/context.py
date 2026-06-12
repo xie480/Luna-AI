@@ -12,9 +12,12 @@ from pydantic import BaseModel, Field
 
 from app.mcp.skill_types import FallbackState, FinalFailState
 from app.mcp.types import MCPToolResult
-from app.rag.types import RagEvidence, RagRetrievalRoute
-from app.types.constants import KnowledgeCitation
-from app.workflow.graph_factory import WorkflowGraphState
+from app.rag.types import KnowledgeCitation, RagEvidence, RagRetrievalRoute
+
+
+# LangGraph 需要一个简单的 TypedDict 作为状态，这里使用 Pydantic BaseModel 也是可以的
+# 为了保持兼容性，提供一个别名
+WorkflowGraphState = dict[str, Any]
 
 
 # ===========================================================================

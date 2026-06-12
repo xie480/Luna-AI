@@ -14,7 +14,7 @@ from app.workflow.constants import (
     ChatWorkflowErrorCode,
     ChatWorkflowNodeType,
 )
-from app.workflow.context import ChatErrorState, ChatWorkflowState
+from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
 from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.nodes.helpers import handle_stream_piece, history_to_model_messages, publish_stream_payload
@@ -150,13 +150,7 @@ class MainChatLlmNode(ChatWorkflowNode):
                         self.dependencies.event_publisher,
                         error=str(exc),
                     )
-                    state.error_state = ChatErrorState(
-                        node_type=self.node_type,
-                        error_code=ChatWorkflowErrorCode.MAIN_LLM_FAILED.value,
-                        message=f"主模型生成失败(已重试 {attempt} 次): {exc}",
-                        recoverable=False,
-                    )
-                    raise RuntimeError(state.error_state.message) from exc
+                    raise RuntimeError(f"主模型生成失败(已重试 {attempt} 次): {exc}") from exc
 
         return state
 

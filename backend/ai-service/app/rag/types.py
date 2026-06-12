@@ -190,6 +190,15 @@ class RagThoughtEventPayload(BaseModel):
     msg: str
 
 
+class KnowledgeCitation(BaseModel):
+    citation_id: int
+    document_id: str
+    document_name: str
+    chunk_id: str
+    content: str
+    source_type: RagSourceType
+
+
 class RagCitationEventPayload(BaseModel):
     """RAG 溯源 SSE 事件载荷。"""
 

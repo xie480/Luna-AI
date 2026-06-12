@@ -26,7 +26,7 @@ from app.workflow.constants import (
     ChatWorkflowGraphNodeName,
     ChatWorkflowNodeType,
 )
-from app.workflow.context import ChatNodeObservation, ChatWorkflowState
+from app.workflow.context import ChatWorkflowState
 from app.workflow.events import ChatConditionEvaluatedPayload, ChatWorkflowEvent, ChatWorkflowEventPublisher
 
 
@@ -319,16 +319,16 @@ def _append_not_entered_observation(
     """写入条件未进入节点观测。"""
     now_ms = _now_ms()
     state.observability.node_observations.append(
-        ChatNodeObservation(
-            node_type=node_type,
-            status=ChatNodeStatus.NOT_ENTERED_BY_CONDITION,
-            started_at_ms=now_ms,
-            ended_at_ms=now_ms,
-            latency_ms=0,
-            retry_count=state.runtime.retry_count,
-            condition_entered=False,
-            condition_reason=reason,
-        )
+        {
+            "node_type": node_type,
+            "status": ChatNodeStatus.NOT_ENTERED_BY_CONDITION,
+            "started_at_ms": now_ms,
+            "ended_at_ms": now_ms,
+            "latency_ms": 0,
+            "retry_count": state.runtime.retry_count,
+            "condition_entered": False,
+            "condition_reason": reason,
+        }
     )
 
 

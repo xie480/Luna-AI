@@ -9,7 +9,7 @@ from app.api.chat_status_texts import get_chat_status_text
 from app.prompt.types import PromptCategory
 from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.constants import ChatWorkflowErrorCode, ChatWorkflowNodeType
-from app.workflow.context import ChatErrorState, ChatWorkflowState
+from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
 from app.workflow.nodes.dependencies import WorkflowDependencies
 
@@ -45,13 +45,7 @@ class PromptAssemblyNode(ChatWorkflowNode):
                 is_terminal=True,
                 error="PromptManager 不可用",
             )
-            state.error_state = ChatErrorState(
-                node_type=self.node_type,
-                error_code=ChatWorkflowErrorCode.PROMPT_ASSEMBLY_FAILED.value,
-                message="PromptManager 不可用，无法装配主 Chat Prompt",
-                recoverable=False,
-            )
-            raise RuntimeError(state.error_state.message)
+            raise RuntimeError("PromptManager 不可用，无法装配主 Chat Prompt")
         try:
             system_prompt = await self.dependencies.prompt_manager.assemble_prompt(
                 PromptCategory.CHAT,
@@ -78,13 +72,7 @@ class PromptAssemblyNode(ChatWorkflowNode):
                 is_terminal=True,
                 error=str(exc),
             )
-            state.error_state = ChatErrorState(
-                node_type=self.node_type,
-                error_code=ChatWorkflowErrorCode.PROMPT_ASSEMBLY_FAILED.value,
-                message=f"Prompt 装配失败: {exc}",
-                recoverable=False,
-            )
-            raise RuntimeError(state.error_state.message) from exc
+            raise RuntimeError(f"Prompt 装配失败: {exc}") from exc
 
     async def _publish_chat_status(
         self,

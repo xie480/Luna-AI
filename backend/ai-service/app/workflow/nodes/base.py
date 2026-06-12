@@ -17,9 +17,7 @@ from app.workflow.constants import (
 )
 from app.workflow.context import ChatWorkflowState
 from app.workflow.events import (
-    ChatNodeCompletedPayload,
-    ChatNodeFailedPayload,
-    ChatNodeStartedPayload,
+    ChatNodeStatusPayload,
     ChatWorkflowEvent,
     ChatWorkflowEventPublisher,
 )
@@ -62,8 +60,9 @@ class ChatWorkflowNode:
             plan_preset_id=chat_state.runtime.plan_preset_id,
             node_type=self.node_type,
             timestamp_ms=started_at_ms,
-            payload=ChatNodeStartedPayload(
-                node_type=self.node_type,
+            payload=ChatNodeStatusPayload(
+                node_type=self.node_type.value,
+                status="started",
             ).model_dump(mode="json"),
         )
         chat_state.observability.emitted_event_ids.append(node_start_event.event_id)
@@ -82,9 +81,10 @@ class ChatWorkflowNode:
                 plan_preset_id=chat_state.runtime.plan_preset_id,
                 node_type=self.node_type,
                 timestamp_ms=ended_at_ms,
-                payload=ChatNodeFailedPayload(
-                    node_type=self.node_type,
-                    error=str(exc),
+                payload=ChatNodeStatusPayload(
+                    node_type=self.node_type.value,
+                    status="failed",
+                    error_message=str(exc),
                     duration_ms=ended_at_ms - started_at_ms,
                 ).model_dump(mode="json"),
             )
@@ -102,8 +102,9 @@ class ChatWorkflowNode:
             plan_preset_id=updated_state.runtime.plan_preset_id,
             node_type=self.node_type,
             timestamp_ms=ended_at_ms,
-            payload=ChatNodeCompletedPayload(
-                node_type=self.node_type,
+            payload=ChatNodeStatusPayload(
+                node_type=self.node_type.value,
+                status="completed",
                 duration_ms=ended_at_ms - started_at_ms,
                 degraded=self._is_node_degraded(updated_state),
             ).model_dump(mode="json"),

@@ -10,9 +10,11 @@
  * 异常行为：网络错误抛出异常，组件层负责错误提示。
  */
 
+import { AI_SERVICE_BASE_URL } from '../appConfig';
 import { LocalServerConfig, LocalServerInfo } from '../../shared/types';
 
-const BASE_URL = '/api/v1/mcp/local';
+/** MCP 本地服务器 API 基础 URL（端口从 .env 文件统一读取） */
+const BASE_URL = `${AI_SERVICE_BASE_URL}/api/v1/mcp/local`;
 
 /**
  * 注册本地 MCP 服务器请求体

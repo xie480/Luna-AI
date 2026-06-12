@@ -124,6 +124,7 @@ CHAT_WORKFLOW_CONTEXT_WINDOW_DEGRADED: Final[str] = "degraded"
 CHAT_WORKFLOW_EMPTY_PROFILE_REASON: Final[str] = "用户画像为空"
 CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON: Final[str] = "未触发长期记忆检索"
 CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON: Final[str] = "未触发知识库检索"
+CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON: Final[str] = "输入重构降级"
 
 class ChatMCPAgentPhase(str, Enum):
     """MCP Agent 执行阶段枚举。
@@ -169,3 +170,6 @@ CHAT_STREAM_EMPTY_RESPONSE_ERROR: Final[str] = "Assistant returned empty content
 CHAT_WORKFLOW_REDIS_WRITE_OK: Final[str] = "redis_write_ok"
 CHAT_WORKFLOW_REDIS_WRITE_SKIPPED: Final[str] = "redis_write_skipped"
 CHAT_WORKFLOW_REDIS_WRITE_FAILED: Final[str] = "redis_write_failed"
+CHAT_WORKFLOW_PG_WRITE_OK: Final[str] = "pg_write_ok"
+CHAT_WORKFLOW_PG_WRITE_SKIPPED: Final[str] = "pg_write_skipped"
+CHAT_WORKFLOW_PG_WRITE_FAILED: Final[str] = "pg_write_failed"
