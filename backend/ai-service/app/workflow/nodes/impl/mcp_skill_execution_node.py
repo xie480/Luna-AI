@@ -38,12 +38,14 @@ import json
 from typing import Any
 
 from app.agent.mcp_resource_sub_agent import MCPResourceSubAgent
+from app.agent.mcp_evaluation import MCPEvaluationAgent
 from app.agent.mcp_skill_execution import MCPSkillExecutionAgent
 from app.agent.mcp_skill_finalizer import (
     is_step_count_exceeded,
     should_trigger_final_fail,
 )
 from app.agent.mcp_skill_loading import MCPSkillLoadingAgent
+from app.agent.mcp_skill_memory import MCPSkillMemoryAgent
 from app.agent.mcp_skill_screening import MCPSkillScreeningAgent
 from app.api.chat_status import ChatStatusPublisher
 from app.api.chat_status_texts import (
@@ -99,12 +101,12 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         # 获取 MCP 意图文本（来自 MCP 前置判断节点）
         mcp_intent = state.route_state.mcp_intent or state.input_payload.raw_user_message
 
-        # 初始化状态
+        # 初始化状态 (重构后引入宏观与微观双层循环)
         state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_SCREENING.value
-        fallback_count = 0
+        outer_retry_count = 0
         step_count = 0
         all_tool_results: list[dict[str, Any]] = []
-        all_round_data: list[dict[str, Any]] = []  # v3.1：累积所有轮次的原始执行数据
+        all_round_data: list[dict[str, Any]] = []  # 累积所有轮次的原始执行数据
         last_fallback_state: FallbackState | None = None
 
         prompt_manager = self.dependencies.prompt_manager
@@ -130,16 +132,16 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         while True:
             try:
                 # ============================================================
-                # Agent 1：Skill 初筛
+                # Agent 1：Skill 初筛 (Macro-Loop)
                 # ============================================================
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_SCREENING.value
                 skill_judgment = state.route_state.skill_judgment_json or {}
 
-                # 如果有退回上下文，注入到 skill_judgment
+                # 如果有外层退回上下文，注入到 skill_judgment
                 if last_fallback_state:
                     skill_judgment["fallback_context"] = {
                         "execution_snapshot": last_fallback_state.execution_snapshot,
-                        "fallback_count": fallback_count,
+                        "outer_retry_count": outer_retry_count,
                     }
 
                 chain_plan: SkillChainPlan = await MCPSkillScreeningAgent().screen(
@@ -195,251 +197,248 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
                 state.mcp_tool_state.execution_plan = execution_plan.model_dump(mode="json")
 
-                # v3.0：由业务代码统计 state 数量得到总步数
-                state_count = len(execution_plan.states)
-                step_count += state_count
-
-                # 检查步长是否超限，超限则触发退回
-                if is_step_count_exceeded(step_count):
-                    logger.info(
-                        f"MCP Skill 步长超限 trace_id={state.runtime.trace_id} "
-                        f"step_count={step_count} fallback_count={fallback_count}，触发退回"
-                    )
-                    # 步长超限触发退回（不直接最终失败）
-                    # 构造一个空的执行快照，表示当前计划超出步长
-                    empty_snapshot = {}
-                    for state_key, state_val in execution_plan.states.items():
-                        empty_snapshot[state_key] = {
-                            "skill": state_val.skill,
-                            "tool": state_val.tool,
-                            "resource": state_val.resource,
-                            "goal": state_val.goal,
-                            "status": "未执行（步长超限）",
-                            "result": "",
-                        }
-                    last_fallback_state = FallbackState(
-                        execution_snapshot=empty_snapshot,
-                    )
-                    fallback_count += 1
-
-                    # 检查最终失败
-                    final_fail = should_trigger_final_fail(
-                        step_count=step_count,
-                        fallback_count=fallback_count,
-                        tool_results=all_tool_results,
-                        execution_plan=execution_plan.model_dump(mode="json"),
-                    )
-                    if final_fail:
-                        return await self._handle_final_fail(
-                            state, final_fail,
-                            all_round_data=all_round_data,
-                        )
-                    continue  # 退回至 Agent 1
-
-                # ============================================================
-                # Agent 3：Skill 执行
-                # ============================================================
-                state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_RESOURCE_LOADING.value
-
-                await self._publish_chat_status(
-                    state=state,
-                    stage=ChatStatusStage.MCP_SKILL_RESOURCE_LOADING,
-                    status=ChatStatusState.RUNNING,
-                    display_text=get_chat_status_text(
-                        ChatStatusStage.MCP_SKILL_RESOURCE_LOADING, ChatStatusState.RUNNING
-                    ),
-                )
-
-                # Step 3.1：并行加载所有 state 中的 Resources
-                resource_results: list[ResourceLoadResult] = []
-                sub_agent = MCPResourceSubAgent()
-                load_tasks = []
-                resource_to_state_map: dict[str, str] = {}  # resource_name -> state_key
-
+                inner_retry_count = 0
+                inner_suggestion = ""
                 registry = SkillRegistry()
-                for state_key, state_val in execution_plan.states.items():
-                    # 如果此 state 有资源需要加载
-                    if not state_val.resource:
-                        continue
-                    # 通过技能名称查找对应的 skill detail
-                    detail = None
-                    for sid in chain_plan.selected_skill_ids:
-                        d = registry.get_skill_detail(sid)
-                        if d and d.name == state_val.skill:
-                            detail = d
-                            break
-                    if not detail:
-                        continue
 
-                    resource_def = next(
-                        (r for r in detail.resources if r["name"] == state_val.resource),
-                        None,
-                    )
-                    if resource_def and resource_def.get("resource_type") == "file":
-                        load_tasks.append(
-                            sub_agent.load_resource(
-                                trace_id=state.runtime.trace_id,
-                                resource_def=resource_def,
-                                load_purpose=f"为技能 '{state_val.skill}' 的 state '{state_key}' 加载资源: {state_val.goal}",
-                                prompt_manager=prompt_manager,
-                            )
+                # ============================================================
+                # 内层循环：微观策略调整 (Micro-Loop)
+                # 在固定的执行计划下，通过 MCPSkillMemoryAgent 动态调参
+                # ============================================================
+                while inner_retry_count <= 3:
+                    state_count = len(execution_plan.states)
+                    step_count += state_count
+
+                    # 检查步长超限 (触发外层退回)
+                    if is_step_count_exceeded(step_count):
+                        logger.info(
+                            f"MCP Skill 步长超限 trace_id={state.runtime.trace_id} "
+                            f"step_count={step_count} outer_retry_count={outer_retry_count}，触发外层退回"
                         )
-                        resource_to_state_map[state_val.resource] = state_key
+                        break
 
-                # 并行执行所有资源加载
-                if load_tasks:
-                    resource_results = await asyncio.gather(*load_tasks)
+                    # Step 3.0: 动态提取专属技能记忆 (如果有)
+                    # 我们只需要检查当前执行计划中涉及的第一个有效技能的 memory_schema
+                    skill_memory_context = None
+                    first_skill_name = next(
+                        (s.skill for s in execution_plan.states.values() if s.skill), ""
+                    )
+                    if first_skill_name:
+                        skill_id = registry.get_skill_id_by_name(first_skill_name)
+                        if skill_id:
+                            skill_detail = registry.get_skill_detail(skill_id)
+                            # 如果该技能在注册时声明了 memory_schema
+                            if skill_detail and hasattr(skill_detail, 'memory_schema') and skill_detail.memory_schema:
+                                memory_agent = MCPSkillMemoryAgent()
+                                skill_memory_context = await memory_agent.extract_memory_variables(
+                                    trace_id=state.runtime.trace_id,
+                                    skill_name=first_skill_name,
+                                    memory_schema=skill_detail.memory_schema,
+                                    mcp_intent=mcp_intent,
+                                    all_round_data=all_round_data,
+                                    inner_suggestion=inner_suggestion,
+                                )
 
-                state.mcp_tool_state.resource_results = [
-                    r.model_dump(mode="json") for r in resource_results
-                ]
+                    # ============================================================
+                    # Agent 3：Skill 执行 (Resource Loading + Tool Executing)
+                    # ============================================================
+                    state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_RESOURCE_LOADING.value
 
-                # 构建资源上下文映射
-                resource_context_map: dict[str, str] = {}
-                for rr in resource_results:
-                    if rr.success:
-                        resource_context_map[rr.resource_name] = rr.extracted_info
+                    await self._publish_chat_status(
+                        state=state,
+                        stage=ChatStatusStage.MCP_SKILL_RESOURCE_LOADING,
+                        status=ChatStatusState.RUNNING,
+                        display_text=get_chat_status_text(
+                            ChatStatusStage.MCP_SKILL_RESOURCE_LOADING, ChatStatusState.RUNNING
+                        ),
+                    )
 
-                # Step 3.2：按 state 字典顺序执行每个 state 中的 Tool
-                state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_EXECUTION.value
+                    resource_results: list[ResourceLoadResult] = []
+                    sub_agent = MCPResourceSubAgent()
+                    load_tasks = []
 
-                # 使用集中管理的执行开始文案
-                total_states = len(execution_plan.states)
-                await self._publish_chat_status(
-                    state=state,
-                    stage=ChatStatusStage.MCP_SKILL_TOOL_EXECUTING,
-                    status=ChatStatusState.RUNNING,
-                    display_text=format_execution_start(total_states),
-                )
+                    for state_key, state_val in execution_plan.states.items():
+                        if not state_val.resource:
+                            continue
+                        detail = None
+                        for sid in chain_plan.selected_skill_ids:
+                            d = registry.get_skill_detail(sid)
+                            if d and d.name == state_val.skill:
+                                detail = d
+                                break
+                        if not detail:
+                            continue
 
-                tool_results: list[dict[str, Any]] = []
-                exec_agent = MCPSkillExecutionAgent()
+                        resource_def = next(
+                            (r for r in detail.resources if r["name"] == state_val.resource), None
+                        )
+                        if resource_def and resource_def.get("resource_type") == "file":
+                            load_tasks.append(
+                                sub_agent.load_resource(
+                                    trace_id=state.runtime.trace_id,
+                                    resource_def=resource_def,
+                                    load_purpose=f"为技能 '{state_val.skill}' 的 state '{state_key}' 加载资源: {state_val.goal}",
+                                    prompt_manager=prompt_manager,
+                                )
+                            )
 
-                # v3.0：按排序后的 state_key 顺序执行
-                state_keys = sorted(execution_plan.states.keys())
-                for idx, state_key in enumerate(state_keys):
-                    state_val = execution_plan.states.get(state_key)
-                    if not state_val:
-                        continue
+                    if load_tasks:
+                        resource_results = await asyncio.gather(*load_tasks)
 
-                    # 如果此 state 有工具需要执行
-                    if not state_val.tool:
-                        continue
+                    state.mcp_tool_state.resource_results = [
+                        r.model_dump(mode="json") for r in resource_results
+                    ]
 
-                    # 使用集中管理的步骤进度文案
+                    resource_context_map: dict[str, str] = {
+                        rr.resource_name: rr.extracted_info for rr in resource_results if rr.success
+                    }
+
+                    # 执行工具
+                    state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_EXECUTION.value
+                    total_states = len(execution_plan.states)
                     await self._publish_chat_status(
                         state=state,
                         stage=ChatStatusStage.MCP_SKILL_TOOL_EXECUTING,
                         status=ChatStatusState.RUNNING,
-                        display_text=format_step_progress(
-                            current_step=idx + 1,
-                            total_steps=total_states,
-                            step_goal=state_val.goal,
-                        ),
+                        display_text=format_execution_start(total_states),
                     )
 
-                    # Agent 3 判断是否可以继续 + 提取参数
-                    step_result = await exec_agent.execute_step(
-                        trace_id=state.runtime.trace_id,
-                        step_name=state_val.tool,
-                        step_goal=state_val.goal,
-                        execution_plan=execution_plan,
-                        tool_results=tool_results,
-                        resource_context=resource_context_map,
-                        prompt_manager=prompt_manager,
-                        mcp_intent=mcp_intent,
-                    )
+                    tool_results: list[dict[str, Any]] = []
+                    exec_agent = MCPSkillExecutionAgent()
+                    state_keys = sorted(execution_plan.states.keys())
 
-                    if step_result.get("can_proceed", False):
-                        # 可以继续：使用 LLM 提取的 tool_parameters 执行工具
-                        calling_result = await self._execute_single_tool(
-                            trace_id=state.runtime.trace_id,
-                            tool_name=state_val.tool,
-                            tool_parameters=step_result.get("tool_parameters", {}),
-                        )
-                        tool_results.append({
-                            "tool_name": state_val.tool,
-                            "success": not calling_result.get("failed", False),
-                            "output_text": calling_result.get("output", ""),
-                            "error_message": calling_result.get("error", ""),
-                            "resource_context_injected": step_result.get("resource_context_injected", []),
-                            "latency_ms": calling_result.get("latency_ms", 0),
-                            "can_proceed": True,
-                        })
-                    else:
-                        # 无法继续：记录退回原因
-                        tool_results.append({
-                            "tool_name": state_val.tool,
-                            "success": False,
-                            "output_text": "",
-                            "error_message": step_result.get("fallback_reason", ""),
-                            "resource_context_injected": step_result.get("resource_context_injected", []),
-                            "latency_ms": step_result.get("latency_ms", 0),
-                            "can_proceed": False,
-                            "fallback_reason": step_result.get("fallback_reason", ""),
-                        })
+                    for idx, state_key in enumerate(state_keys):
+                        state_val = execution_plan.states.get(state_key)
+                        if not state_val or not state_val.tool:
+                            continue
 
-                all_tool_results.extend(tool_results)
-                state.mcp_tool_state.tool_results = all_tool_results
-
-                # ============================================================
-                # (v3.1) 累积本轮原始执行数据（不做压缩），留待出口统一压缩
-                # ============================================================
-                all_round_data.append({
-                    "round_index": len(all_round_data) + 1,
-                    "execution_plan": execution_plan.model_dump(mode="json"),
-                    "tool_results": tool_results,
-                    "resource_results": [r.model_dump(mode="json") for r in resource_results],
-                })
-                # ============================================================
-
-                # ============================================================
-                # 检查是否需要退回
-                # ============================================================
-                need_fallback = self._evaluate_need_fallback(
-                    tool_results=tool_results,
-                    resource_results=resource_results,
-                )
-
-                if not need_fallback:
-                    # 执行成功，退出循环
-                    state.mcp_tool_state.agent_phase = SkillAgentPhase.COMPLETED.value
-
-                    # ============================================================
-                    # (v3.1) 后置处理：统一对所有轮次的原始数据进行 LLM 压缩降噪
-                    # 使用集中管理的 display_text（MCP_SKILL_SUMMARY 阶段）
-                    # ============================================================
-                    if all_round_data:
                         await self._publish_chat_status(
                             state=state,
-                            stage=ChatStatusStage.MCP_SKILL_SUMMARY,
+                            stage=ChatStatusStage.MCP_SKILL_TOOL_EXECUTING,
                             status=ChatStatusState.RUNNING,
-                            display_text=get_chat_status_text(
-                                ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.RUNNING
+                            display_text=format_step_progress(
+                                current_step=idx + 1,
+                                total_steps=total_states,
+                                step_goal=state_val.goal,
                             ),
                         )
 
-                        # 单次 LLM 调用：所有轮次数据一起压缩
-                        summary = await self._compress_and_summarize_results(
+                        step_result = await exec_agent.execute_step(
                             trace_id=state.runtime.trace_id,
-                            all_round_data=all_round_data,
+                            step_name=state_val.tool,
+                            step_goal=state_val.goal,
+                            execution_plan=execution_plan,
+                            tool_results=tool_results,
+                            resource_context=resource_context_map,
+                            prompt_manager=prompt_manager,
+                            mcp_intent=mcp_intent,
+                            skill_memory_context=skill_memory_context,
                         )
-                        state.mcp_tool_state.execution_summary = summary
+
+                        if step_result.get("can_proceed", False):
+                            calling_result = await self._execute_single_tool(
+                                trace_id=state.runtime.trace_id,
+                                tool_name=state_val.tool,
+                                tool_parameters=step_result.get("tool_parameters", {}),
+                            )
+                            tool_results.append({
+                                "tool_name": state_val.tool,
+                                "success": not calling_result.get("failed", False),
+                                "output_text": calling_result.get("output", ""),
+                                "error_message": calling_result.get("error", ""),
+                                "resource_context_injected": step_result.get("resource_context_injected", []),
+                                "latency_ms": calling_result.get("latency_ms", 0),
+                                "can_proceed": True,
+                                "tool_parameters": step_result.get("tool_parameters", {}),
+                            })
+                        else:
+                            tool_results.append({
+                                "tool_name": state_val.tool,
+                                "success": False,
+                                "output_text": "",
+                                "error_message": step_result.get("fallback_reason", ""),
+                                "resource_context_injected": step_result.get("resource_context_injected", []),
+                                "latency_ms": step_result.get("latency_ms", 0),
+                                "can_proceed": False,
+                                "fallback_reason": step_result.get("fallback_reason", ""),
+                            })
+
+                    all_tool_results.extend(tool_results)
+                    state.mcp_tool_state.tool_results = all_tool_results
+
+                    all_round_data.append({
+                        "round_index": len(all_round_data) + 1,
+                        "execution_plan": execution_plan.model_dump(mode="json"),
+                        "tool_results": tool_results,
+                        "resource_results": [r.model_dump(mode="json") for r in resource_results],
+                    })
+
                     # ============================================================
+                    # 机械层面的 Fallback 检测（检查是否有工具抛出 Exception 或无法进行）
+                    # ============================================================
+                    mechanical_fallback = self._evaluate_need_fallback(tool_results, resource_results)
 
-                    await self._publish_chat_status(
-                        state=state,
-                        stage=ChatStatusStage.MCP_SKILL_SUMMARY,
-                        status=ChatStatusState.COMPLETED,
-                        display_text=get_chat_status_text(
-                            ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.COMPLETED
-                        ),
-                        is_terminal=True,
+                    if mechanical_fallback:
+                        # 机械故障，不再评估语义目标，直接触发外层退回
+                        logger.info(f"内层发现机械错误，跳出微观循环 trace_id={state.runtime.trace_id}")
+                        break
+                        
+                    # ============================================================
+                    # 语义层面的目标达成评估 (MCPEvaluationAgent)
+                    # ============================================================
+                    eval_agent = MCPEvaluationAgent()
+                    step_goal = next((s.goal for s in execution_plan.states.values() if s.goal), "完成任务")
+                    eval_result = await eval_agent.evaluate(
+                        trace_id=state.runtime.trace_id,
+                        mcp_intent=mcp_intent,
+                        step_goal=step_goal,
+                        tool_results=tool_results,
                     )
-                    return state
 
-                # 需要退回
-                fallback_count += 1
+                    if eval_result.get("is_met", False):
+                        # ============================================================
+                        # 成功退出！目标已达成！
+                        # ============================================================
+                        state.mcp_tool_state.agent_phase = SkillAgentPhase.COMPLETED.value
+                        if all_round_data:
+                            await self._publish_chat_status(
+                                state=state,
+                                stage=ChatStatusStage.MCP_SKILL_SUMMARY,
+                                status=ChatStatusState.RUNNING,
+                                display_text=get_chat_status_text(
+                                    ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.RUNNING
+                                ),
+                            )
+                            summary = await self._compress_and_summarize_results(
+                                trace_id=state.runtime.trace_id,
+                                all_round_data=all_round_data,
+                            )
+                            state.mcp_tool_state.execution_summary = summary
+
+                        await self._publish_chat_status(
+                            state=state,
+                            stage=ChatStatusStage.MCP_SKILL_SUMMARY,
+                            status=ChatStatusState.COMPLETED,
+                            display_text=get_chat_status_text(
+                                ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.COMPLETED
+                            ),
+                            is_terminal=True,
+                        )
+                        return state
+                    
+                    # 目标未达成
+                    inner_suggestion = eval_result.get("suggestion", "")
+                    inner_retry_count += 1
+                    
+                    logger.info(
+                        f"目标未达成，进行内层微调重试 trace_id={state.runtime.trace_id} "
+                        f"inner_retry={inner_retry_count} suggestion={inner_suggestion}"
+                    )
+                    # 继续内层循环
+
+                # [内层循环结束] 如果执行到这里，说明内层 3 次调参重试耗尽，或者发生了机械故障
+                # 准备触发外层宏观 Fallback
+                outer_retry_count += 1
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_FALLBACK.value
 
                 await self._publish_chat_status(
@@ -451,7 +450,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     ),
                 )
 
-                # 提取执行快照（v3.0 格式：tool/resource 为字符串）
+                sub_agent = MCPResourceSubAgent()
                 execution_snapshot = await sub_agent.extract_fallback_info(
                     trace_id=state.runtime.trace_id,
                     execution_plan=execution_plan.model_dump(mode="json"),
@@ -463,10 +462,10 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     execution_snapshot=execution_snapshot,
                 )
 
-                # 检查是否需要触发最终失败
+                # 检查外层最终失败
                 final_fail = should_trigger_final_fail(
                     step_count=step_count,
-                    fallback_count=fallback_count,
+                    fallback_count=outer_retry_count,
                     tool_results=all_tool_results,
                     execution_plan=execution_plan.model_dump(mode="json"),
                 )
@@ -476,7 +475,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         all_round_data=all_round_data,
                     )
 
-                # 继续循环（退回至 Agent 1）
+                # 继续外层循环（退回至 Agent 1 重新规划）
 
             except Exception as exc:
                 logger.warning(

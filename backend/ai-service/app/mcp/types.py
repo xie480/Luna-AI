@@ -124,6 +124,11 @@ class MCPToolSchema(BaseModel):
         description="鉴权类型：none / bearer / api_key / basic。"
                     "仅 source=remote 时有效。",
     )
+    memory_schema: dict[str, Any] | None = Field(
+        default=None,
+        description="该工具所属技能的专属多轮记忆 Schema。"
+                    "用于多轮执行中提取历史策略状态，并在专属 Prompt 中渲染。",
+    )
 
 
 # ============================================================

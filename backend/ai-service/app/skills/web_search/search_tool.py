@@ -51,6 +51,77 @@ _SEARXNG_OUTPUT_MAX_CHARS: int = 8192
 
 
 # ============================================================
+# 专属多轮记忆 Memory Schema 定义
+# ============================================================
+
+WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "search_goal": {
+            "type": "string",
+            "description": "本次总的搜索目的"
+        },
+        "previous_query": {
+            "type": "string",
+            "description": "刚尝试搜索的关键词"
+        },
+        "previous_categories": {
+            "type": "string",
+            "description": "上一轮使用的分类"
+        },
+        "previous_language": {
+            "type": "string",
+            "description": "上一轮使用的语言"
+        },
+        "previous_pageno": {
+            "type": "integer"
+        },
+        "previous_engines": {
+            "type": "string"
+        },
+        "previous_results_summary": {
+            "type": "string",
+            "description": "上一轮搜索得到的核心结果或没找到的原因"
+        },
+        "attempted_queries": {
+            "type": "string",
+            "description": "历史已经尝试过的所有搜索词列表，格式如 ['词1', '词2']"
+        },
+        "gathered_information": {
+            "type": "string",
+            "description": "至今累积搜集到的有效关键信息"
+        },
+        "need_continue_search": {
+            "type": "string",
+            "enum": ["是", "否"]
+        },
+        "continue_reason": {
+            "type": "string",
+            "description": "为什么要继续搜索/改变策略的原因"
+        },
+        "this_round_goal": {
+            "type": "string",
+            "description": "下一轮想要搜什么"
+        },
+        "this_query": {
+            "type": "string",
+            "description": "下一轮建议使用的搜索词"
+        },
+        "category_adjust_reason": {
+            "type": "string"
+        },
+        "language_adjust_reason": {
+            "type": "string"
+        },
+        "need_specific_engine": {
+            "type": "string",
+            "enum": ["是", "否"]
+        }
+    }
+}
+
+
+# ============================================================
 # 搜索工具的 parameters_schema（JSON Schema 格式）
 # ============================================================
 

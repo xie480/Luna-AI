@@ -241,27 +241,6 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     # 11. MCP 工具执行 (MCPToolExecutionNode)
     #     文案方向：Luna 在"用工具办事"时的实感
     #     ================================================================
-    (ChatStatusStage.MCP_TOOL_EXECUTION, ChatStatusState.RUNNING): [
-        "让Luna用个小工具帮你查一下……",
-        "等一下，Luna 调用一下工具~",
-        "让Luna用工具搞一下……别急别急",
-        "嗯……Luna 找个工具来帮忙",
-        "Luna动动手指查一下~",
-    ],
-    (ChatStatusStage.MCP_TOOL_EXECUTION, ChatStatusState.COMPLETED): [
-        "好啦，Luna 搞定了！",
-        "查到了查到了！让Luna告诉你~",
-        "搞定~工具返回结果了",
-        "好啦，Luna拿到数据了！",
-        "嗯嗯，Luna查到了~",
-    ],
-    (ChatStatusStage.MCP_TOOL_EXECUTION, ChatStatusState.ERROR): [
-        "唔……工具出了点小问题，不过Luna还在！",
-        "啊……工具好像没反应……Luna换个方式回你",
-        "工具报错了……不过没关系Luna能处理",
-        "咦……工具没跑通……Luna想想别的办法",
-        "呼……工具调用失败了，Luna直接回你~",
-    ],
 
     # ================================================================
     # 12. MCP 前置判断 (MCPIntentJudge)

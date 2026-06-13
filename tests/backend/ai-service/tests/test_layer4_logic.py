@@ -61,7 +61,7 @@ class TestPromptTypes:
         assert PLACEHOLDER_RUNTIME == "{runtime}"
 
     def test_render_template(self) -> None:
-        template = "Hello {{ NAME }}, today is {{DAY}}."
+        template = "Hello {{NAME}}, today is {{DAY}}."
         variables = {"NAME": "Luna", "DAY": "Monday"}
         result = render_template(template, variables)
         assert result == "Hello Luna, today is Monday."

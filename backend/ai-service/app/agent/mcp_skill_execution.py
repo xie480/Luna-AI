@@ -51,6 +51,7 @@ class MCPSkillExecutionAgent:
         resource_context: dict[str, str],
         prompt_manager: Any,
         mcp_intent: str,
+        skill_memory_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """执行单个工具步骤。
 
@@ -119,11 +120,8 @@ class MCPSkillExecutionAgent:
             if r.get("tool_name") in depends_on_tools
         ]
 
-        # 组装三槽位 Prompt
-        system_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_EXECUTION, {}
-        )
-        memory_prompt = await prompt_manager.assemble_prompt(
+        # 组装通用状态的 memory prompt（使用框架层的 memory.j2）
+        system_context_str = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_EXECUTION,
             {
                 "STEP_TOOL": step_name,
@@ -135,11 +133,45 @@ class MCPSkillExecutionAgent:
                 "MCP_INTENT": mcp_intent,
             },
         )
-        runtime_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_EXECUTION, {}
-        )
 
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
+        skill_name = current_state.skill if current_state else ""
+        full_prompt = ""
+
+        # 如果传入了专属的 skill_memory_context（包含了动态提取的变量），尝试渲染该工具专属的 Prompt
+        if skill_name and skill_memory_context is not None:
+            from app.prompt.types import render_template
+            import os
+
+            # 寻找该工具的专属 prompt 模板文件
+            prompt_dir = os.path.join(
+                os.path.dirname(__file__), "..", "skills", skill_name, "prompts"
+            )
+            prompt_file = os.path.join(prompt_dir, f"{step_name}_prompt.j2")
+            
+            if os.path.exists(prompt_file):
+                with open(prompt_file, encoding="utf-8") as f:
+                    tool_template = f.read()
+                
+                # 合并变量：将通用上下文注入到 system_context 字段
+                merged_context = {
+                    "system_context": system_context_str,
+                    "user_input": mcp_intent,
+                }
+                merged_context.update(skill_memory_context)
+                
+                full_prompt = render_template(tool_template, merged_context)
+                logger.info(f"成功渲染专属 Prompt: {prompt_file}")
+
+        # 如果没有渲染出专属 Prompt，则回退到原始的通用 Prompt 拼接模式
+        if not full_prompt:
+            system_prompt = await prompt_manager.assemble_prompt(
+                PromptCategory.MCP_SKILL_EXECUTION, {}
+            )
+            # 这里的 system_context_str 其实对应于原本的 memory_prompt
+            runtime_prompt = await prompt_manager.assemble_prompt(
+                PromptCategory.MCP_SKILL_EXECUTION, {}
+            )
+            full_prompt = f"{system_prompt}\n\n{system_context_str}\n\n{runtime_prompt}"
 
         # 记录完整 prompt 日志
         logger.info(

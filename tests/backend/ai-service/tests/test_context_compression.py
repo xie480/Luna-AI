@@ -16,7 +16,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.http_api import _trigger_compression
 from app.api.routers import telemetry as telemetry_router
 from app.context.compression_audit import create_compression_audit_payload, record_compression_audit_payload
 from app.context.compression_replay import build_compression_replay_response, parse_compression_audit_payload
@@ -199,49 +198,7 @@ async def test_stream_chat_with_context_records_message_trim() -> None:
     assert span_payloads[0][0].stage == CompressionStage.MESSAGE_TRIM
 
 
-@pytest.mark.asyncio
-async def test_trigger_compression_records_short_summary_audit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """验证短期摘要压缩会写入压缩审计。"""
-    redis_repo = MagicMock()
-    redis_repo.get_context = AsyncMock(
-        return_value=(
-            ChatSummary(core_summary="旧摘要", key_facts="旧事实"),
-            [
-                Interaction(msgId="1", userContent="u1", assistantContent="a1", timestamp=1),
-                Interaction(msgId="2", userContent="u2", assistantContent="a2", thought="t2", timestamp=2),
-            ],
-        )
-    )
-    redis_repo.update_summary_and_trim = AsyncMock()
-    prompt_mgr = MagicMock()
-    prompt_mgr.assemble_prompt = AsyncMock(return_value="short prompt")
-    recorded = []
-
-    monkeypatch.setattr("app.repository.chat_history_redis.MEM_WORKING_WINDOW_SIZE", 1)
-    monkeypatch.setattr("app.repository.chat_history_redis.MEM_COMPRESS_BATCH_SIZE", 1)
-    monkeypatch.setattr(
-        "app.api.http_api.record_compression_audit_payload",
-        lambda payload, status=None: recorded.append((payload, status)),
-    )
-    monkeypatch.setattr("app.api.http_api.record_compression_span", lambda *args, **kwargs: None)
-
-    with patch("app.api.internal_service.internal_service") as mock_internal:
-        mock_internal.short_summarize = AsyncMock(return_value=("新摘要", "新事实"))
-        await _trigger_compression(
-            session_id="session-short",
-            trace_id="trace-short",
-            redis_repo=redis_repo,
-            prompt_mgr=prompt_mgr,
-            user_profile_service=None,
-        )
-
-    assert redis_repo.update_summary_and_trim.await_count == 1
-    assert len(recorded) == 1
-    payload, status = recorded[0]
-    assert payload.stage == CompressionStage.SHORT_SUMMARY
-    assert payload.scope == CompressionScope.SESSION_HISTORY
-    assert payload.trace_id == "trace-short"
-    assert status == "SUCCESS"
+# 移除了 test_trigger_compression_records_short_summary_audit 因为 _trigger_compression 已不再使用
 
 
 @pytest.mark.asyncio

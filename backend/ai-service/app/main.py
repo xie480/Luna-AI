@@ -609,6 +609,8 @@ async def lifespan(app: FastAPI):
         mcp_registry = MCPToolRegistry()
 
         # 注册 SearXNG 网络搜索工具（L0 级低危只读工具，通过环境变量配置 SearXNG 地址）
+        # 新增 memory_schema 字段支持多轮策略搜索
+        from app.skills.web_search.search_tool import WEB_SEARCH_MEMORY_SCHEMA
         mcp_registry.register(
             name="web_search",
             schema=MCPToolSchema(
@@ -629,6 +631,7 @@ async def lifespan(app: FastAPI):
                 ],
                 parameters_schema=SEARXNG_SEARCH_PARAMETERS_SCHEMA,
                 risk_level=ToolRiskLevel.L0,
+                memory_schema=WEB_SEARCH_MEMORY_SCHEMA,
             ),
             handler=handle_searxng_search,
         )

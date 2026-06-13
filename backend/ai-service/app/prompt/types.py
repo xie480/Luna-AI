@@ -98,17 +98,19 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
     """
     渲染 Prompt 模板。
 
-    做什么：将模板中的变量占位符 {{VAR_NAME}} 替换为运行时变量值。
+    做什么：将模板中的变量占位符 {{VAR_NAME}} 或 {{ VAR_NAME }} 替换为运行时变量值。
     为什么这样做：简单的字符串替换，不引入 Jinja2 以避免依赖膨胀。
     输入输出：输入模板字符串和变量字典，输出渲染后的字符串。
-    边界条件：未定义的变量占位符被替换为空字符串；空值按 _normalize_variable_value 处理。
+    边界条件：未定义的变量占位符被保留（或者按照正则清除）；空值按 _normalize_variable_value 处理。
     """
     result = template
-    for key, value in variables.items():
-        placeholder = "{{" + key + "}}"
-        if placeholder in result:
-            result = result.replace(placeholder, _normalize_variable_value(value))
-    # 清理残余未替换占位符
     import re
-    result = re.sub(r"\{\{[A-Za-z_][A-Za-z0-9_]*\}\}", "", result)
+    
+    for key, value in variables.items():
+        # 支持 {{KEY}} 和 {{ KEY }} 格式
+        pattern = r"\{\{\s*" + re.escape(key) + r"\s*\}\}"
+        result = re.sub(pattern, _normalize_variable_value(value), result)
+        
+    # 清理残余未替换占位符
+    result = re.sub(r"\{\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}\}", "", result)
     return result
