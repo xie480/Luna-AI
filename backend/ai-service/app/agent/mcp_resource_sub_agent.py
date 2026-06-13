@@ -6,8 +6,8 @@ MCP 资源加载子 Agent（SubAgent），基于 LLM 语义提取。
          与当前阶段需求相关的关键信息。这些信息随后注入到对应 Tool 的
          Prompt 中供主 Agent 使用。不进行截断，保证信息完整性。
 为什么这样做：将资源加载从主 Agent 中分离，多个资源可以并行加载，
-             提升执行效率。每行追加行号标注使 LLM 输出的行号引用
-             精确对应源文件。
+              提升执行效率。每行追加行号标注使 LLM 输出的行号引用
+              精确对应源文件。
 边界条件：
     - 只处理 resource_type=file 的资源，其他类型跳过。
     - 文件不存在或读取失败时返回错误信息，不阻塞其他资源加载。
@@ -319,27 +319,54 @@ class MCPResourceSubAgent:
                 "goal": state_val.get("goal", ""),
             }
 
-        # 通过 PromptManager 组装三槽位模板
-        tool_results_rendered = "\n".join(
-            f"[工具 {r.get('tool_name', 'unknown')}]: "
-            f"成功={r.get('success')} "
-            f"输出={r.get('output_text', '')[:500]}"
-            for r in tool_results
-        ) if tool_results else "无已执行工具结果"
+        # 构建截断后的工具结果列表（过滤无实际内容的空执行条目）
+        # 注意：必须传递列表而非字符串，否则 Jinja2 的 for 循环会按字符逐字迭代
+        truncated_tool_results: list[dict[str, Any]] = []
+        for r in (tool_results or []):
+            tool_name = r.get("tool_name", "")
+            output_text = r.get("output_text", "")
+            success = r.get("success", False)
+            # 跳过无工具名称且无输出内容的空条目（占位占位符）
+            if not tool_name and not output_text:
+                continue
+            truncated_tool_results.append({
+                "tool_name": tool_name,
+                "success": success,
+                "output_text": output_text if output_text else "",
+                "error_message": r.get("error_message", "") if r.get("error_message") else "",
+            })
+        # 如果过滤后仍为空，提供一个占位标记
+        if not truncated_tool_results:
+            truncated_tool_results = [{
+                "tool_name": "(空)",
+                "success": False,
+                "output_text": "无已执行工具结果",
+                "error_message": "",
+            }]
 
-        resource_results_rendered = "\n".join(
-            f"[资源 {rr.resource_name}]: "
-            f"成功={rr.success} "
-            f"提取={rr.extracted_info[:500] if rr.success else rr.error_message}"
-            for rr in (resource_results or [])
-        ) if resource_results else "无已加载资源"
+        # 构建截断后的资源加载结果列表
+        truncated_resource_results: list[dict[str, Any]] = []
+        for rr in (resource_results or []):
+            truncated_resource_results.append({
+                "resource_name": rr.resource_name,
+                "success": rr.success,
+                "extracted_info": rr.extracted_info[:500] if rr.extracted_info else "",
+                "error_message": rr.error_message or "",
+            })
+        if not truncated_resource_results:
+            truncated_resource_results = [{
+                "resource_name": "(空)",
+                "success": False,
+                "extracted_info": "无已加载资源",
+                "error_message": "",
+            }]
 
         full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_FALLBACK_EXTRACTION,
             {
                 "EXECUTION_PLAN": execution_plan_rendered,
-                "TOOL_RESULTS": tool_results_rendered,
-                "RESOURCE_RESULTS": resource_results_rendered,
+                "TOOL_RESULTS": truncated_tool_results,
+                "RESOURCE_RESULTS": truncated_resource_results,
             },
         )
 

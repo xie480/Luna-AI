@@ -12,22 +12,33 @@
 {% endif %}
 
 ### 工具执行结果
-{% if TOOL_RESULTS %}
+{% if TOOL_RESULTS is iterable %}
+{% set has_valid_tool = namespace(flag=false) %}
 {% for r in TOOL_RESULTS %}
+{% if r.tool_name is defined and r.tool_name and r.tool_name != '(空)' %}
+{% set has_valid_tool.flag = true %}
 [工具 {{ r.tool_name }}]
 - 成功：{{ r.success }}
 - 输出：{{ r.output_text }}
 {% if r.error_message %}
 - 错误：{{ r.error_message }}
 {% endif %}
+
+{% endif %}
 {% endfor %}
+{% if not has_valid_tool.flag %}
+无已执行工具结果
+{% endif %}
 {% else %}
 无已执行工具结果
 {% endif %}
 
 ### 资源加载结果
-{% if RESOURCE_RESULTS %}
+{% if RESOURCE_RESULTS is iterable %}
+{% set has_valid_resource = namespace(flag=false) %}
 {% for rr in RESOURCE_RESULTS %}
+{% if rr.resource_name is defined and rr.resource_name and rr.resource_name != '(空)' %}
+{% set has_valid_resource.flag = true %}
 [资源 {{ rr.resource_name }}]
 - 成功：{{ rr.success }}
 {% if rr.success %}
@@ -36,7 +47,12 @@
 {% if rr.error_message %}
 - 错误：{{ rr.error_message }}
 {% endif %}
+
+{% endif %}
 {% endfor %}
+{% if not has_valid_resource.flag %}
+无已加载资源
+{% endif %}
 {% else %}
 无已加载资源
 {% endif %}
