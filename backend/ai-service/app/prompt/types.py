@@ -102,19 +102,32 @@ def render_template(template: str, variables: Dict[str, Any]) -> str:
     """
     渲染 Prompt 模板。
 
-    做什么：将模板中的变量占位符 {{VAR_NAME}} 或 {{ VAR_NAME }} 替换为运行时变量值。
-    为什么这样做：简单的字符串替换，不引入 Jinja2 以避免依赖膨胀。
+    做什么：使用 Jinja2 渲染模板，支持复杂的逻辑如 {% for %} 和 {% if %}。
+    为什么这样做：MCP 技能调用等需要处理列表迭代和条件分支，简单的正则替换已无法满足需求。
     输入输出：输入模板字符串和变量字典，输出渲染后的字符串。
-    边界条件：未定义的变量占位符被保留（或者按照正则清除）；空值按 _normalize_variable_value 处理。
+    边界条件：未定义的变量会被安全地渲染为空字符串；复杂对象按 JSON 输出。
     """
-    result = template
-    import re
-    
-    for key, value in variables.items():
-        # 支持 {{KEY}} 和 {{ KEY }} 格式
-        pattern = r"\{\{\s*" + re.escape(key) + r"\s*\}\}"
-        result = re.sub(pattern, _normalize_variable_value(value), result)
-        
-    # 清理残余未替换占位符
-    result = re.sub(r"\{\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}\}", "", result)
-    return result
+    from jinja2 import Environment, Undefined
+    import json
+
+    def finalize_value(value: Any) -> Any:
+        if value is None or isinstance(value, Undefined):
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (dict, list)):
+            try:
+                return json.dumps(value, ensure_ascii=False)
+            except Exception:
+                return str(value)
+        return str(value)
+
+    env = Environment(finalize=finalize_value)
+    try:
+        tmpl = env.from_string(template)
+        return tmpl.render(**variables)
+    except Exception as e:
+        from app.logger import logger
+        logger.error(f"Jinja2 渲染 Prompt 失败: {e}")
+        # 如果 Jinja2 渲染失败（例如语法错误），回退到返回原始模板文本
+        return template
