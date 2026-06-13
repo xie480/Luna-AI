@@ -33,7 +33,7 @@
       "prompts": [
         {
           "phase": "execution",
-          "content_path": "app/skills/web_search/prompts/search_tool_prompt.j2",
+          "content_path": "app/skills/web_search/prompts/web_search_prompt.j2",
           "variables": [
             {"name": "system_context", "description": "系统上下文", "required": false},
             {"name": "search_goal", "description": "搜索目标", "required": false},

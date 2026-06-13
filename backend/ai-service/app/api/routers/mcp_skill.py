@@ -12,6 +12,7 @@ MCP Skill 管理 API 路由。
     - name 字段唯一，重复注册返回 409 冲突。
 """
 
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -254,20 +255,6 @@ async def batch_register_skills(
                 
                 await session.flush()
 
-                # Process Prompts
-                from app.repository.models import Prompt
-                if "prompts" in skill_config:
-                    await session.execute(delete(Prompt).where(Prompt.skill_id == skill_id))
-                    for p in skill_config["prompts"]:
-                        session.add(Prompt(
-                            id=generate_string_id(),
-                            skill_id=skill_id,
-                            phase=p.get("phase", "execution"),
-                            content_path=p.get("content_path", ""),
-                            variables=p.get("variables", []),
-                            version_num=p.get("version_num", 1)
-                        ))
-
                 # Process Resources
                 from app.repository.models import Resource
                 if "resources" in skill_config:
@@ -301,6 +288,7 @@ async def batch_register_skills(
                             tool_rec.description = t.get("description", tool_rec.description)
                             tool_rec.parameters_schema = t.get("parameters_schema", tool_rec.parameters_schema)
                             tool_rec.skill_id = skill_id
+                            tool_rec.module_path = t.get("module_path", tool_rec.module_path)
                         else:
                             tool_rec = MCPToolRegistration(
                                 id=generate_string_id(),
@@ -315,6 +303,7 @@ async def batch_register_skills(
                                 core_purpose=t.get("core_purpose", ""),
                                 final_deliverable=t.get("final_deliverable", ""),
                                 source=t.get("source", "local"),
+                                module_path=t.get("module_path", ""),
                                 skill_id=skill_id
                             )
                             session.add(tool_rec)
@@ -334,6 +323,41 @@ async def batch_register_skills(
                                     config_data=t["tool_config"],
                                     description=f"Auto generated config for {tool_name}"
                                 ))
+                                
+                await session.flush() # Ensure tools are flushed before processing prompts
+
+                # Process Prompts
+                from app.repository.models import Prompt
+                if "prompts" in skill_config:
+                    await session.execute(delete(Prompt).where(Prompt.skill_id == skill_id))
+                    for p in skill_config["prompts"]:
+                        # Extract tool name from content_path, e.g., prompts/web_search_prompt.j2 -> web_search
+                        content_path = p.get("content_path", "")
+                        tool_id = None
+                        if content_path:
+                            # 尝试从 content_path 推断绑定的 tool_name
+                            file_name = os.path.basename(content_path)
+                            if file_name.endswith("_prompt.j2"):
+                                tool_name = file_name.replace("_prompt.j2", "")
+                                # 去查找对应的 tool_id
+                                from app.repository.models import MCPToolRegistration
+                                tool_res = await session.execute(
+                                    select(MCPToolRegistration.id).where(
+                                        MCPToolRegistration.name == tool_name,
+                                        MCPToolRegistration.skill_id == skill_id
+                                    ).limit(1)
+                                )
+                                tool_id = tool_res.scalar_one_or_none()
+                        
+                        session.add(Prompt(
+                            id=generate_string_id(),
+                            skill_id=skill_id,
+                            tool_id=tool_id,
+                            phase=p.get("phase", "execution"),
+                            content_path=content_path,
+                            variables=p.get("variables", []),
+                            version_num=p.get("version_num", 1)
+                        ))
 
                 # Process Servers
                 from app.repository.models import MCPServerRegistration
