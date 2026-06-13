@@ -696,22 +696,16 @@ async def lifespan(app: FastAPI):
         from app.mcp.types import MCPToolSchema, ToolRiskLevel
         from app.repository.mcp_tool_pg import MCPToolPGRepo
         from app.skills.web_search.search_tool import (
-            CONFIG_KEY_CONCURRENT_REQUESTS,
             WEB_SEARCH_MEMORY_SCHEMA,
-            TOOL_NAME as WEB_SEARCH_TOOL_NAME,
             build_web_search_schema,
             handle_searxng_search,
         )
-        from app.config.tool_config_manager import ToolConfigManager
 
         mcp_registry = MCPToolRegistry()
 
-        # 从 ToolConfigManager 读取 web_search 的并发请求数量，用于构建 Schema
-        web_search_config = ToolConfigManager().get_config(WEB_SEARCH_TOOL_NAME)
-        concurrent_requests = int(
-            web_search_config.get(CONFIG_KEY_CONCURRENT_REQUESTS, 3)
-        )
-        web_search_schema = build_web_search_schema(concurrent_requests)
+        # concurrent_requests 为固定常量，与 Prompt 模板中硬编码的 minItems/maxItems 保持一致
+        # 如需修改并发数，需同步更新 web_search_prompt.j2 中的 output 格式示例
+        web_search_schema = build_web_search_schema()
 
         # 注册 SearXNG 网络搜索工具（L0 级低危只读工具，通过环境变量配置 SearXNG 地址）
         # 新增 memory_schema 字段支持多轮策略搜索
@@ -739,7 +733,7 @@ async def lifespan(app: FastAPI):
             ),
             handler=handle_searxng_search,
         )
-        logger.info("MCP 内置工具注册完成（web_search concurrent_requests=%d）", concurrent_requests)
+        logger.info("MCP 内置工具注册完成（web_search concurrent_requests=%d）", 3)
 
         # 从 PG 加载已注册的工具（如果在 PG 中有额外的动态注册工具）
         if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:

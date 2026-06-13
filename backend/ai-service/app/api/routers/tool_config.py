@@ -78,15 +78,6 @@ TOOL_CONFIG_SCHEMAS: dict[str, dict[str, Any]] = {
                 "description": "搜索请求超时时间，单位秒。默认：15",
             },
             {
-                "key": "concurrent_requests",
-                "label": "并发请求数量",
-                "type": "number",
-                "required": False,
-                "default": "3",
-                "placeholder": "3",
-                "description": "同时发送的搜索请求组数量，也是 query 外层数组的长度。范围：1-10。默认：3",
-            },
-            {
                 "key": "results_per_request",
                 "label": "每请求结果数",
                 "type": "number",

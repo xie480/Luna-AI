@@ -35,7 +35,6 @@ TOOL_NAME: str = "web_search"
 # 配置键名
 CONFIG_KEY_BASE_URL: str = "base_url"                               # SearXNG 实例基础 URL
 CONFIG_KEY_TIMEOUT: str = "timeout"                                 # 请求超时秒数
-CONFIG_KEY_CONCURRENT_REQUESTS: str = "concurrent_requests"         # 并发请求数量
 CONFIG_KEY_RESULTS_PER_REQUEST: str = "results_per_request"         # 每个请求的搜索结果数量
 CONFIG_KEY_MAX_URL_FETCH_LENGTH: str = "max_url_fetch_length"       # URL抓取内容长度上限
 CONFIG_KEY_SAFE_SEARCH_LEVEL: str = "safe_search_level"             # 安全搜索级别
@@ -388,12 +387,9 @@ async def handle_searxng_search(
     tool_config = config_mgr.get_config(TOOL_NAME)
     base_url: str = tool_config.get(CONFIG_KEY_BASE_URL, "")
     timeout = _safe_float(tool_config.get(CONFIG_KEY_TIMEOUT), _SEARXNG_DEFAULT_TIMEOUT)
-    concurrent_requests = _safe_int(
-        tool_config.get(CONFIG_KEY_CONCURRENT_REQUESTS),
-        _DEFAULT_CONCURRENT_REQUESTS,
-        minimum=1,
-        maximum=10,
-    )
+    # concurrent_requests 为固定常量，与 Prompt 模板中硬编码的 minItems/maxItems 保持一致
+    # 如需修改并发数，需同步更新 web_search_prompt.j2 中的 output 格式示例
+    concurrent_requests: int = _DEFAULT_CONCURRENT_REQUESTS
     results_per_request = _safe_int(
         tool_config.get(CONFIG_KEY_RESULTS_PER_REQUEST),
         _DEFAULT_RESULTS_PER_REQUEST,
@@ -439,9 +435,9 @@ async def handle_searxng_search(
     # 校验外层数组长度必须与并发请求数量一致
     if len(query) != concurrent_requests:
         return (
-            f"【搜索参数错误】搜索查询词外层数组长度必须与'并发请求数量'配置一致。"
-            f"当前外层数组长度: {len(query)}，配置的并发请求数量: {concurrent_requests}。"
-            f"请调整查询词组数量或修改'并发请求数量'配置。"
+            f"【搜索参数错误】搜索查询词外层数组长度必须与固定并发数一致。"
+            f"当前外层数组长度: {len(query)}，固定并发请求数量: {concurrent_requests}。"
+            f"请将 query 外层数组调整为 {concurrent_requests} 组搜索词。"
         )
 
     # 清理并校验每个内层数组

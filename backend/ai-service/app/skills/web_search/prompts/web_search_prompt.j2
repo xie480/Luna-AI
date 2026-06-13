@@ -180,10 +180,21 @@
       "type": "object",
       "properties": {
            "query": {
-               "type": "string",
-               "minLength": 1,
-               "maxLength": 500,
-               "description": "搜索查询关键词。必填。例如：'2024年诺贝尔奖获得者'。",
+               "type": "array",
+               "items": {
+                   "type": "array",
+                   "items": {
+                       "type": "string",
+                       "minLength": 1,
+                       "maxLength": 500
+                   },
+                   "minItems": 1,
+                   "maxItems": 50,
+                   "description": "该并发请求要同时使用的多个搜索词。例如：['2024年诺贝尔奖获得者', 'Nobel Prize winners 2024']。"
+               },
+               "minItems": 3,
+               "maxItems": 3,
+               "description": "搜索查询关键词外层数组。必填。外层数组共 3 个子数组，每个子数组包含该并发请求要同时使用的多个搜索词。示例（搜索 2026 世界杯）：[['2026世界杯 赛程 6月14日 比赛结果'], ['FIFA World Cup 2026 June 14 results'], ['世界杯 2026 6月14日 战报']]。其中外层数组长度 3 对应 3 个并发请求。"
            },
            "categories": {
                "type": "string",
@@ -192,12 +203,6 @@
                               "  social media。默认：general。例如：'general,news'。",
                "default": "general",
            },
-           "engines": {
-               "type": "string",
-               "description": "指定使用的搜索引擎，可选。多个引擎用逗号分隔。"
-                              "例如：'google,bing,duckduckgo'。不指定则使用 SearXNG 默认引擎。",
-               "default": "",
-         },
          "language": {
              "type": "string",
              "description": "搜索结果语言过滤，可选。使用 ISO 639-1 语言代码。"
@@ -205,26 +210,6 @@
                             "默认：'zh-CN'。",
              "default": "zh-CN",
          },
-         "pageno": {
-             "type": "integer",
-             "minimum": 1,
-             "maximum": 50,
-             "description": "搜索结果页码，可选。从 1 开始，默认：1。",
-             "default": 1,
-         },
-         "safesearch": {
-             "type": "integer",
-             "enum": [0, 1, 2],
-             "description": "安全搜索级别，可选。0=关闭，1=中等，2=严格。默认：1。",
-             "default": 1,
-           },
-           "max_results": {
-               "type": "integer",
-               "minimum": 1,
-               "maximum": 50,
-               "description": "返回的最大结果数量，可选。默认：10，最大：50。",
-               "default": 10,
-           },
            "time_range": {
                "type": "string",
                "enum": [
@@ -237,8 +222,8 @@
                "description": "时间范围过滤"
            }
        },
-       "required": ["query"],
-   }
+       "required": ["query"]
+   },
   "fallback_reason": "字符串。\n仅当 can_proceed=false 时必填，详细描述无法继续执行的原因：\n1. 缺失哪些必需资源\n2. 哪些前序工具失败\n3. 数据不充分的具体表现\n4. 目标无法达成的原因\n当 can_proceed=true 时此字段为空字符串。"
 }
 ```

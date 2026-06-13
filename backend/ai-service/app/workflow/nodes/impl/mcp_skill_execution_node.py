@@ -784,9 +784,16 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 cleaned = cleaned[:-3]
             cleaned = cleaned.strip()
 
-            parsed_list = json.loads(cleaned)
-            if not isinstance(parsed_list, list):
-                raise ValueError(f"LLM 输出不是 JSON 数组: {type(parsed_list).__name__}")
+            parsed_data = json.loads(cleaned)
+            # 容错处理：如果 LLM 返回的是单个 dict 对象，自动包装为 list
+            if isinstance(parsed_data, dict):
+                parsed_list = [parsed_data]
+            elif isinstance(parsed_data, list):
+                parsed_list = parsed_data
+            else:
+                raise ValueError(
+                    f"LLM 输出不是 JSON 数组也不是 JSON 对象: {type(parsed_data).__name__}"
+                )
 
             # 5. 将 JSON 数组格式化为自然文本
             formatted_lines: list[str] = []
