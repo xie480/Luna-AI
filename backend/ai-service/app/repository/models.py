@@ -429,42 +429,44 @@ class Skill(Base):
 
 class Prompt(Base):
     """
-    对应 PostgreSQL 中的 prompts 表（提示模板表，关联 skill）。
+    对应 PostgreSQL 中的 prompts 表（提示模板表，关联 skill/tool）。
 
-    做什么：存储与 Skill 关联的提示模板内容。每个 Skill 可以定义
+    做什么：存储与 Skill 或 Tool 关联的提示模板内容。每个 Skill 可以定义
             多个阶段的 Prompt（screening/loading/execution），
-            每个阶段包含 system/memory/runtime 三个槽位。
-    为什么这样做：将 Prompt 管理与 Skill 绑定，而不是分散在
+            我们去除了三槽位设计，直接保存单一内容 (content)。
+    为什么这样做：将 Prompt 管理与 Skill/Tool 绑定，而不是分散在
                 业务代码中。支持版本管理和阶段化注入。
     输入输出：
         - id: 雪花算法生成的唯一标识。
         - skill_id: 关联的技能 ID。
+        - tool_id: 关联的工具 ID（用于给 tool 单独挂载 prompt）。
         - phase: 阶段标识（screening/loading/execution）。
-        - system_prompt/memory_prompt/runtime_prompt: 三槽位模板。
+        - content: 完整的模板内容。
         - variables: 模板变量定义。
         - version_num: 版本号，支持版本回溯。
         - status: draft/published/archived。
     边界条件：
-        - skill_id + phase + version_num 联合唯一索引。
+        - (skill_id 或 tool_id) + phase + version_num 联合唯一索引（应用层保证）。
         - status 默认 draft，published 状态不可直接修改。
     """
     __tablename__ = "prompts"
     __table_args__ = (
         Index("idx_prompts_skill_phase", "skill_id", "phase"),
-        Index("idx_prompts_skill_phase_version", "skill_id", "phase", "version_num", unique=True),
+        Index("idx_prompts_tool_phase", "tool_id", "phase"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    skill_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("skills.id", ondelete="CASCADE"), nullable=False, index=True
+    skill_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("skills.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    tool_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("mcp_tool_registrations.id", ondelete="CASCADE"), nullable=True, index=True
     )
     phase: Mapped[str] = mapped_column(
         String(32), nullable=False,
         comment="阶段标识：screening（初筛）/ loading（加载）/ execution（执行）",
     )
-    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    memory_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    runtime_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     variables: Mapped[list | dict] = mapped_column(
         JSONB, nullable=False, server_default="[]",
         comment="模板变量定义，格式：[{name: str, description: str, required: bool}]",

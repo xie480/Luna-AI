@@ -51,6 +51,10 @@ class PromptCategory(str, Enum):
 
     # --- Phase 12（v3.0）新增：MCP 前置判断 Prompt 分类 ---
     MCP_INTENT_JUDGE = "mcp_intent_judge"
+    
+    # --- Phase 12 新增：多轮策略与评价 ---
+    MCP_SKILL_MEMORY = "mcp_skill_memory"
+    MCP_EVALUATION = "mcp_evaluation"
 
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。

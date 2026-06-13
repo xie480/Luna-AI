@@ -137,37 +137,66 @@ class MCPSkillExecutionAgent:
         skill_name = current_state.skill if current_state else ""
         full_prompt = ""
 
-        # 如果传入了专属的 skill_memory_context（包含了动态提取的变量），尝试渲染该工具专属的 Prompt
-        if skill_name and skill_memory_context is not None:
+        # 尝试加载该工具的专属 Prompt（优先从 prompts 表根据 skill_id + tool_id 查询）
+        if skill_name:
             from app.prompt.types import render_template
+            from app.mcp.skill_registry import SkillRegistry
             import os
 
-            # 寻找该工具的专属 prompt 模板文件
-            prompt_dir = os.path.join(
-                os.path.dirname(__file__), "..", "skills", skill_name, "prompts"
-            )
-            prompt_file = os.path.join(prompt_dir, f"{step_name}_prompt.j2")
-            
-            if os.path.exists(prompt_file):
-                with open(prompt_file, encoding="utf-8") as f:
-                    tool_template = f.read()
-                
-                # 合并变量：将通用上下文注入到 system_context 字段
-                merged_context = {
-                    "system_context": system_context_str,
-                    "user_input": mcp_intent,
-                }
-                merged_context.update(skill_memory_context)
-                
-                full_prompt = render_template(tool_template, merged_context)
-                logger.info(f"成功渲染专属 Prompt: {prompt_file}")
+            # 通过 SkillRegistry 查找 tool_id
+            registry = SkillRegistry()
+            tool_id = None
+            detail = None
+            for sid, det in registry._skills.items():
+                if det.name == skill_name:
+                    detail = det
+                    for t in det.tools:
+                        if t.get("name") == step_name:
+                            tool_id = t.get("tool_id", "")
+                            break
+                    break
+
+            # 如果传入了专属的 skill_memory_context（包含了动态提取的变量），尝试渲染该工具专属的 Prompt
+            if skill_memory_context is not None:
+                # 先尝试从文件系统加载（旧路径）
+                prompt_dir = os.path.join(
+                    os.path.dirname(__file__), "..", "skills", skill_name, "prompts"
+                )
+                prompt_file = os.path.join(prompt_dir, f"{step_name}_prompt.j2")
+
+                tool_template = ""
+                if os.path.exists(prompt_file):
+                    with open(prompt_file, encoding="utf-8") as f:
+                        tool_template = f.read()
+                elif prompt_manager and prompt_manager.cache_mgr:
+                    # 尝试从数据库加载该工具的 Prompt
+                    try:
+                        db_prompt = await prompt_manager.assemble_prompt(
+                            PromptCategory.MCP_SKILL_EXECUTION,
+                            {"STEP_TOOL": step_name, "STEP_GOAL": step_goal},
+                        )
+                        if db_prompt and len(db_prompt) > 10:
+                            tool_template = db_prompt
+                            logger.info(f"从 DB 加载 Prompt 成功: tool={step_name}")
+                    except Exception:
+                        pass
+
+                if tool_template:
+                    # 合并变量：将通用上下文注入到 system_context 字段
+                    merged_context = {
+                        "system_context": system_context_str,
+                        "user_input": mcp_intent,
+                    }
+                    merged_context.update(skill_memory_context or {})
+
+                    full_prompt = render_template(tool_template, merged_context)
+                    logger.info(f"成功渲染专属 Prompt: {prompt_file if os.path.exists(prompt_file) else 'DB Prompt'}")
 
         # 如果没有渲染出专属 Prompt，则回退到原始的通用 Prompt 拼接模式
         if not full_prompt:
             system_prompt = await prompt_manager.assemble_prompt(
                 PromptCategory.MCP_SKILL_EXECUTION, {}
             )
-            # 这里的 system_context_str 其实对应于原本的 memory_prompt
             runtime_prompt = await prompt_manager.assemble_prompt(
                 PromptCategory.MCP_SKILL_EXECUTION, {}
             )
