@@ -262,23 +262,44 @@ export const ToolConfigDialog: React.FC<ToolConfigDialogProps> = ({
                     <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
                   )}
                 </label>
-                <input
-                  type={field.type === 'password' ? 'password' : 'text'}
-                  value={values[field.key] ?? ''}
-                  onChange={(e) => handleChange(field.key, e.target.value)}
-                  placeholder={field.placeholder}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: '#0f1117',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 6,
-                    color: '#e2e8f0',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
+                {field.type === 'number' ? (
+                  <input
+                    type="number"
+                    value={values[field.key] ?? ''}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    min={0}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: '#0f1117',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 6,
+                      color: '#e2e8f0',
+                      fontSize: 14,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                ) : (
+                  <input
+                    type={field.type === 'password' ? 'password' : 'text'}
+                    value={values[field.key] ?? ''}
+                    onChange={(e) => handleChange(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: '#0f1117',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 6,
+                      color: '#e2e8f0',
+                      fontSize: 14,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                )}
                 {field.description && (
                   <p
                     style={{

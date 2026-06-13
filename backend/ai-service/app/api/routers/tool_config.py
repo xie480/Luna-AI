@@ -58,7 +58,7 @@ class ToolConfigResponse(BaseModel):
 TOOL_CONFIG_SCHEMAS: dict[str, dict[str, Any]] = {
     "web_search": {
         "title": "Web Search 搜索工具配置",
-        "description": "配置 SearXNG 元搜索引擎的连接参数。",
+        "description": "配置 SearXNG 元搜索引擎的连接参数与并发搜索策略。",
         "fields": [
             {
                 "key": "base_url",
@@ -76,6 +76,42 @@ TOOL_CONFIG_SCHEMAS: dict[str, dict[str, Any]] = {
                 "default": "15",
                 "placeholder": "15",
                 "description": "搜索请求超时时间，单位秒。默认：15",
+            },
+            {
+                "key": "concurrent_requests",
+                "label": "并发请求数量",
+                "type": "number",
+                "required": False,
+                "default": "3",
+                "placeholder": "3",
+                "description": "同时发送的搜索请求组数量，也是 query 外层数组的长度。范围：1-10。默认：3",
+            },
+            {
+                "key": "results_per_request",
+                "label": "每请求结果数",
+                "type": "number",
+                "required": False,
+                "default": "10",
+                "placeholder": "10",
+                "description": "每组请求期望收集的结果条数。范围：1-50。默认：10",
+            },
+            {
+                "key": "max_url_fetch_length",
+                "label": "输出内容长度上限",
+                "type": "number",
+                "required": False,
+                "default": "8192",
+                "placeholder": "8192",
+                "description": "格式化输出结果的最大字符数。默认：8192",
+            },
+            {
+                "key": "safe_search_level",
+                "label": "安全搜索级别",
+                "type": "number",
+                "required": False,
+                "default": "1",
+                "placeholder": "1",
+                "description": "安全搜索级别。0=关闭，1=中等，2=严格。默认：1",
             },
         ],
     },

@@ -694,23 +694,33 @@ async def lifespan(app: FastAPI):
     try:
         from app.mcp.registry import MCPToolRegistry
         from app.mcp.types import MCPToolSchema, ToolRiskLevel
+        from app.repository.mcp_tool_pg import MCPToolPGRepo
         from app.skills.web_search.search_tool import (
-            SEARXNG_SEARCH_PARAMETERS_SCHEMA,
+            CONFIG_KEY_CONCURRENT_REQUESTS,
+            WEB_SEARCH_MEMORY_SCHEMA,
+            TOOL_NAME as WEB_SEARCH_TOOL_NAME,
+            build_web_search_schema,
             handle_searxng_search,
         )
-        from app.repository.mcp_tool_pg import MCPToolPGRepo
+        from app.config.tool_config_manager import ToolConfigManager
 
         mcp_registry = MCPToolRegistry()
 
+        # 从 ToolConfigManager 读取 web_search 的并发请求数量，用于构建 Schema
+        web_search_config = ToolConfigManager().get_config(WEB_SEARCH_TOOL_NAME)
+        concurrent_requests = int(
+            web_search_config.get(CONFIG_KEY_CONCURRENT_REQUESTS, 3)
+        )
+        web_search_schema = build_web_search_schema(concurrent_requests)
+
         # 注册 SearXNG 网络搜索工具（L0 级低危只读工具，通过环境变量配置 SearXNG 地址）
         # 新增 memory_schema 字段支持多轮策略搜索
-        from app.skills.web_search.search_tool import WEB_SEARCH_MEMORY_SCHEMA
         mcp_registry.register(
             name="web_search",
             schema=MCPToolSchema(
                 name="web_search",
                 description="通过 SearXNG 元搜索引擎执行网络搜索，获取最新互联网信息。"
-                            "支持分类筛选、引擎选择、语言过滤和分页。",
+                            "支持分类筛选、语言过滤和并发搜索。",
                 core_purpose="搜索互联网获取最新信息",
                 final_deliverable="格式化的搜索结果列表，包含标题、摘要、来源 URL 和引擎信息，"
                                  "以及知识卡片和相关搜索建议",
@@ -723,13 +733,13 @@ async def lifespan(app: FastAPI):
                     "最近有什么关于 AI 的新闻",
                     "查找 2024 年诺贝尔奖获得者",
                 ],
-                parameters_schema=SEARXNG_SEARCH_PARAMETERS_SCHEMA,
+                parameters_schema=web_search_schema,
                 risk_level=ToolRiskLevel.L0,
                 memory_schema=WEB_SEARCH_MEMORY_SCHEMA,
             ),
             handler=handle_searxng_search,
         )
-        logger.info("MCP 内置工具注册完成")
+        logger.info("MCP 内置工具注册完成（web_search concurrent_requests=%d）", concurrent_requests)
 
         # 从 PG 加载已注册的工具（如果在 PG 中有额外的动态注册工具）
         if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:
