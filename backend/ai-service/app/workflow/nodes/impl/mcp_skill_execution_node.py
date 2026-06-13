@@ -229,6 +229,14 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                             skill_detail = registry.get_skill_detail(skill_id)
                             # 如果该技能在注册时声明了 memory_schema
                             if skill_detail and hasattr(skill_detail, 'memory_schema') and skill_detail.memory_schema:
+                                await self._publish_chat_status(
+                                    state=state,
+                                    stage=ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING,
+                                    status=ChatStatusState.RUNNING,
+                                    display_text=get_chat_status_text(
+                                        ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING, ChatStatusState.RUNNING
+                                    ),
+                                )
                                 memory_agent = MCPSkillMemoryAgent()
                                 skill_memory_context = await memory_agent.extract_memory_variables(
                                     trace_id=state.runtime.trace_id,
@@ -410,6 +418,15 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     # ============================================================
                     # 语义层面的目标达成评估 (MCPEvaluationAgent)
                     # ============================================================
+                    await self._publish_chat_status(
+                        state=state,
+                        stage=ChatStatusStage.MCP_SKILL_EVALUATING,
+                        status=ChatStatusState.RUNNING,
+                        display_text=get_chat_status_text(
+                            ChatStatusStage.MCP_SKILL_EVALUATING, ChatStatusState.RUNNING
+                        ),
+                    )
+                    
                     eval_agent = MCPEvaluationAgent(prompt_manager=prompt_manager)
                     step_goal = next((s.goal for s in execution_plan.states.values() if s.goal), "完成任务")
                     eval_result = await eval_agent.evaluate(
@@ -420,6 +437,14 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     )
 
                     if eval_result.get("is_met", False):
+                        await self._publish_chat_status(
+                            state=state,
+                            stage=ChatStatusStage.MCP_SKILL_EVALUATING,
+                            status=ChatStatusState.COMPLETED,
+                            display_text=get_chat_status_text(
+                                ChatStatusStage.MCP_SKILL_EVALUATING, ChatStatusState.COMPLETED
+                            ),
+                        )
                         # ============================================================
                         # 成功退出！目标已达成！
                         # ============================================================

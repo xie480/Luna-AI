@@ -247,9 +247,9 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #     文案方向：Luna 在判断是否需要使用能力
     #     ================================================================
     (ChatStatusStage.MCP_INTENT_JUDGE, ChatStatusState.RUNNING): [
-        "让Luna想想该用什么能力帮你……",
-        "嗯……让Luna判断一下要不要动工具~",
-        "Luna看看这情况需不需要召唤能力……",
+        "让Luna看看要不要用什么工具帮忙……",
+        "嗯……Luna判断一下这里需不需要用技能~",
+        "这事儿要不要Luna开个外挂？等Luna看看……",
         "等等……让Luna决定一下要不要动手~",
         "唔……Luna想想该不该上工具呢~",
     ],
@@ -333,6 +333,37 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "让Luna操作一下……",
         "嗯……Luna正在搞这个~",
         "Luna开始执行了……",
+    ],
+
+    # ================================================================
+    # 17.1 MCP Skill 子阶段 — 记忆提取 (MCP_SKILL_MEMORY_EXTRACTING)
+    #      文案方向：分析历史执行数据、识别进展和缺口、推演下一轮策略
+    #      ================================================================
+    (ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING, ChatStatusState.RUNNING): [
+        "让Luna看看前面做得怎么样了……",
+        "嗯……Luna总结一下目前的进展~",
+        "等等……Luna想想接下来该怎么做",
+        "让Luna分析一下刚才跑出来的数据……",
+        "唔……Luna调整一下执行策略~",
+    ],
+
+    # ================================================================
+    # 17.2 MCP Skill 子阶段 — 结果评估 (MCP_SKILL_EVALUATING)
+    #      文案方向：检查目标是否达成
+    #      ================================================================
+    (ChatStatusStage.MCP_SKILL_EVALUATING, ChatStatusState.RUNNING): [
+        "让Luna看看搞定了没有……",
+        "嗯……Luna检查一下结果对不对~",
+        "等等……Luna确认一下是不是这个效果",
+        "让Luna评估一下现在的进度……",
+        "唔……Luna看看还差不差什么~",
+    ],
+    (ChatStatusStage.MCP_SKILL_EVALUATING, ChatStatusState.COMPLETED): [
+        "嗯嗯，Luna看过了，没问题！",
+        "好啦，Luna确认完毕~",
+        "没错就是这样，Luna放心了！",
+        "行，检查过了没毛病~",
+        "好嘞，评估完毕！",
     ],
 
     # ================================================================
