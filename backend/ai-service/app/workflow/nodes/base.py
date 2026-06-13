@@ -62,7 +62,7 @@ class ChatWorkflowNode:
             timestamp_ms=started_at_ms,
             payload=ChatNodeStatusPayload(
                 node_type=self.node_type.value,
-                status="started",
+                status=ChatNodeStatus.RUNNING,
             ).model_dump(mode="json"),
         )
         chat_state.observability.emitted_event_ids.append(node_start_event.event_id)

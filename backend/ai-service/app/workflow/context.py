@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.mcp.skill_types import FallbackState, FinalFailState
 from app.mcp.types import MCPToolResult
 from app.rag.types import KnowledgeCitation, RagEvidence, RagRetrievalRoute
+from app.workflow.constants import ChatPlanPreset, ChatWorkflowNodeType
 
 
 # LangGraph 需要一个简单的 TypedDict 作为状态，这里使用 Pydantic BaseModel 也是可以的
@@ -31,11 +32,13 @@ class ChatRuntimeState(BaseModel):
     trace_id: str = ""
     session_id: str = ""
     interaction_id: str = ""
-    plan_preset_id: str = ""
+    plan_preset_id: str = ChatPlanPreset.DAILY_CHAT_DEFAULT.value
     start_ms: int = Field(default=0, ge=0)
     locale: str = "zh-CN"
     user_id: str = "local_default_user"
     retry_count: int = Field(default=0, ge=0)
+    chat_mode: ChatPlanPreset = ChatPlanPreset.DAILY_CHAT_DEFAULT
+    current_node_type: ChatWorkflowNodeType | None = None
 
 
 class ChatInputPayload(BaseModel):
