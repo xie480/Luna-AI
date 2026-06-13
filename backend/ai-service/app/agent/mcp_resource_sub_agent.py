@@ -63,23 +63,32 @@ class MCPResourceSubAgent:
                 latency_ms=max(0, int((time.monotonic() - started_at) * 1000)),
             )
 
+        # 获取基础路径（AI服务根目录）
+        from app.config.settings import settings
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        # 尝试使用相对路径（相对于 AI服务根目录）
+        abs_uri = uri
+        if not os.path.isabs(uri):
+            abs_uri = os.path.join(base_dir, uri)
+            
         # 检查文件是否存在
-        if not os.path.exists(uri):
+        if not os.path.exists(abs_uri):
             logger.warning(
                 f"MCP 资源加载子 Agent 文件不存在 trace_id={trace_id} "
-                f"resource={resource_name} path={uri}"
+                f"resource={resource_name} path={abs_uri} (original={uri})"
             )
             return ResourceLoadResult(
                 resource_name=resource_name,
                 success=False,
                 extracted_info="",
-                error_message=f"文件不存在: {uri}",
+                error_message=f"文件不存在: {abs_uri}",
                 latency_ms=max(0, int((time.monotonic() - started_at) * 1000)),
             )
 
         try:
             # 读取完整文件内容（不截断）
-            with open(uri, "r", encoding="utf-8") as f:
+            with open(abs_uri, "r", encoding="utf-8") as f:
                 content = f.read()
 
             file_lines = content.split("\n")

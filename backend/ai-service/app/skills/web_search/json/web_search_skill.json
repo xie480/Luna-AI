@@ -33,7 +33,7 @@
       "prompts": [
         {
           "phase": "execution",
-          "content_path": "prompts/search_tool_prompt.j2",
+          "content_path": "app/skills/web_search/prompts/search_tool_prompt.j2",
           "variables": [
             {"name": "system_context", "description": "系统上下文", "required": false},
             {"name": "search_goal", "description": "搜索目标", "required": false},
@@ -61,7 +61,7 @@
         {
           "name": "web_search_skill_design",
           "resource_type": "file",
-          "uri": "resource/web_search_skill_design.md",
+          "uri": "app/skills/web_search/resource/web_search_skill_design.md",
           "description": "Web Search Skill 通用搜索建议和推荐最佳实践",
           "mime_type": "text/markdown",
           "auto_load": true
@@ -136,6 +136,7 @@
           "core_purpose": "通过本地或局域网部署的 SearXNG 实例获取网络信息，满足本地优先和隐私保护需求。",
           "final_deliverable": "包含来源 URL 的搜索结果汇总和整理",
           "source": "local",
+          "module_path": "app.skills.web_search.search_tool",
           "tool_config": {
             "base_url": "http://127.0.0.1:8080",
             "timeout": 15.0

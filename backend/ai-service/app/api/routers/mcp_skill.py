@@ -263,7 +263,7 @@ async def batch_register_skills(
                             id=generate_string_id(),
                             skill_id=skill_id,
                             phase=p.get("phase", "execution"),
-                            content=p.get("content_path", p.get("content", "")),
+                            content_path=p.get("content_path", ""),
                             variables=p.get("variables", []),
                             version_num=p.get("version_num", 1)
                         ))
@@ -513,7 +513,7 @@ async def get_skill_detail(
                 prompts.append({
                     "id": p.id,
                     "phase": p.phase,
-                    "content": p.content,
+                    "content_path": p.content_path,
                 })
                 
             # 查 Resources

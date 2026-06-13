@@ -181,6 +181,16 @@ class MCPSkillExecutionAgent:
                     except Exception:
                         pass
 
+                if not tool_template and skill_name and prompt_manager and prompt_manager.cache_mgr:
+                    # 如果仍然没有获取到 tool_template，尝试读取文件系统（旧路径 / 新路径结构）
+                    # 新路径：app/skills/{skill_name}/prompts/
+                    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                    skill_prompt_dir = os.path.join(base_dir, "app", "skills", skill_name, "prompts")
+                    skill_prompt_file = os.path.join(skill_prompt_dir, f"{step_name}_prompt.j2")
+                    if os.path.exists(skill_prompt_file):
+                        with open(skill_prompt_file, encoding="utf-8") as f:
+                            tool_template = f.read()
+
                 if tool_template:
                     # 合并变量：将通用上下文注入到 system_context 字段
                     merged_context = {
@@ -190,7 +200,7 @@ class MCPSkillExecutionAgent:
                     merged_context.update(skill_memory_context or {})
 
                     full_prompt = render_template(tool_template, merged_context)
-                    logger.info(f"成功渲染专属 Prompt: {prompt_file if os.path.exists(prompt_file) else 'DB Prompt'}")
+                    logger.info(f"成功渲染专属 Prompt: DB Prompt 或文件 Prompt")
 
         # 如果没有渲染出专属 Prompt，则回退到原始的通用 Prompt 拼接模式
         if not full_prompt:

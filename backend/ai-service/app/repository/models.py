@@ -314,6 +314,7 @@ class MCPToolRegistration(Base):
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="local")
     endpoint_url: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
     remote_instance_id: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    module_path: Mapped[str | None] = mapped_column(String(1024), nullable=True, default=None, comment="供本地tool调用使用的路径")
     # --- Phase 12 新增：关联技能 ID。当工具属于某个 Skill 时非空；独立工具时为空。 ---
     skill_id: Mapped[str | None] = mapped_column(
         String(64),
@@ -433,7 +434,7 @@ class Prompt(Base):
 
     做什么：存储与 Skill 或 Tool 关联的提示模板内容。每个 Skill 可以定义
             多个阶段的 Prompt（screening/loading/execution），
-            我们去除了三槽位设计，直接保存单一内容 (content)。
+            我们去除了三槽位设计，直接保存单一路径 (content_path)。
     为什么这样做：将 Prompt 管理与 Skill/Tool 绑定，而不是分散在
                 业务代码中。支持版本管理和阶段化注入。
     输入输出：
@@ -441,7 +442,7 @@ class Prompt(Base):
         - skill_id: 关联的技能 ID。
         - tool_id: 关联的工具 ID（用于给 tool 单独挂载 prompt）。
         - phase: 阶段标识（screening/loading/execution）。
-        - content: 完整的模板内容。
+        - content_path: 模板相对路径。
         - variables: 模板变量定义。
         - version_num: 版本号，支持版本回溯。
         - status: draft/published/archived。
@@ -466,7 +467,7 @@ class Prompt(Base):
         String(32), nullable=False,
         comment="阶段标识：screening（初筛）/ loading（加载）/ execution（执行）",
     )
-    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    content_path: Mapped[str] = mapped_column(String(1024), nullable=True, default="", comment="供本地tool调用使用的相对路径")
     variables: Mapped[list | dict] = mapped_column(
         JSONB, nullable=False, server_default="[]",
         comment="模板变量定义，格式：[{name: str, description: str, required: bool}]",

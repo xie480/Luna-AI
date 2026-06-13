@@ -183,9 +183,7 @@ class SkillRegistry:
                 prompts_by_phase: dict[str, dict[str, str]] = {}
                 for p in prompt_rows:
                     prompts_by_phase[p.phase] = {
-                        "system_prompt": p.system_prompt,
-                        "memory_prompt": p.memory_prompt,
-                        "runtime_prompt": p.runtime_prompt,
+                        "content_path": p.content_path,
                         "variables": p.variables,
                     }
 
