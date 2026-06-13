@@ -768,7 +768,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
             compression_client = CompressionLLMClient()
             raw_output = await compression_client.summarize_once(
                 messages=messages,
-                timeout=15.0,
+                timeout=30.0,
             )
             raw_output = raw_output.strip()
 
