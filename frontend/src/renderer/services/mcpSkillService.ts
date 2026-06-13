@@ -35,6 +35,11 @@ export interface SkillConfig {
   version?: string;
   /** 是否启用。 */
   enabled?: boolean;
+  metadata?: Record<string, any>;
+  prompts?: any[];
+  resources?: any[];
+  tools?: any[];
+  servers?: any[];
 }
 
 /**

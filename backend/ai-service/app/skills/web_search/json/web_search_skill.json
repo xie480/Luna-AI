@@ -1,0 +1,148 @@
+{
+  "skills": [
+    {
+      "name": "web_search",
+      "description": "提供通过 SearXNG 搜索引擎实例执行网络搜索的工具实现。支持自定义查询、分类筛选、引擎选择、语言过滤和分页。作为 L0 级低危工具直接放行无需用户确认。",
+      "version": "1.0.0",
+      "enabled": true,
+      "metadata": {
+        "author": "Luna-AI",
+        "tags": ["search", "information-retrieval", "web", "searxng"],
+        "memory_schema": {
+          "type": "object",
+          "properties": {
+            "search_goal": { "type": "string", "description": "本次总的搜索目的" },
+            "previous_query": { "type": "string", "description": "刚尝试搜索的关键词" },
+            "previous_categories": { "type": "string", "description": "上一轮使用的分类" },
+            "previous_language": { "type": "string", "description": "上一轮使用的语言" },
+            "previous_pageno": { "type": "integer" },
+            "previous_engines": { "type": "string" },
+            "previous_results_summary": { "type": "string", "description": "上一轮搜索得到的核心结果或没找到的原因" },
+            "attempted_queries": { "type": "string", "description": "历史已经尝试过的所有搜索词列表，格式如 ['词1', '词2']" },
+            "gathered_information": { "type": "string", "description": "至今累积搜集到的有效关键信息" },
+            "need_continue_search": { "type": "string", "enum": ["是", "否"] },
+            "continue_reason": { "type": "string", "description": "为什么要继续搜索/改变策略的原因" },
+            "this_round_goal": { "type": "string", "description": "下一轮想要搜什么" },
+            "this_query": { "type": "string", "description": "下一轮建议使用的搜索词" },
+            "category_adjust_reason": { "type": "string" },
+            "language_adjust_reason": { "type": "string" },
+            "need_specific_engine": { "type": "string", "enum": ["是", "否"] }
+          }
+        }
+      },
+      "prompts": [
+        {
+          "phase": "execution",
+          "content_path": "prompts/search_tool_prompt.j2",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false},
+            {"name": "search_goal", "description": "搜索目标", "required": false},
+            {"name": "previous_query", "description": "上一轮查询词", "required": false},
+            {"name": "previous_categories", "description": "上一轮分类", "required": false},
+            {"name": "previous_language", "description": "上一轮语言", "required": false},
+            {"name": "previous_pageno", "description": "上一轮页码", "required": false},
+            {"name": "previous_engines", "description": "上一轮引擎", "required": false},
+            {"name": "previous_results_summary", "description": "上一轮结果摘要", "required": false},
+            {"name": "attempted_queries", "description": "已尝试的查询词列表", "required": false},
+            {"name": "gathered_information", "description": "已获取的关键信息", "required": false},
+            {"name": "need_continue_search", "description": "是否需要继续搜索", "required": false},
+            {"name": "continue_reason", "description": "继续原因", "required": false},
+            {"name": "this_round_goal", "description": "本轮搜索目标", "required": false},
+            {"name": "this_query", "description": "本轮查询词", "required": false},
+            {"name": "category_adjust_reason", "description": "分类调整理由", "required": false},
+            {"name": "language_adjust_reason", "description": "语言调整理由", "required": false},
+            {"name": "need_specific_engine", "description": "是否需要指定引擎", "required": false},
+            {"name": "user_input", "description": "用户原始输入", "required": true},
+            {"name": "search_max_results", "description": "单次搜索最大结果数", "required": false}
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "name": "web_search_skill_design",
+          "resource_type": "file",
+          "uri": "resource/web_search_skill_design.md",
+          "description": "Web Search Skill 通用搜索建议和推荐最佳实践",
+          "mime_type": "text/markdown",
+          "auto_load": true
+        }
+      ],
+      "tools": [
+        {
+          "name": "web_search",
+          "description": "通过 SearXNG 执行网络搜索",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "搜索查询关键词。必填。例如：'2024年诺贝尔奖获得者'。"
+              },
+              "categories": {
+                "type": "string",
+                "description": "搜索分类筛选，可选。多个分类用逗号分隔。可选值：general, news, images, videos, files, music, it, science,  social media。默认：general。例如：'general,news'。",
+                "default": "general"
+              },
+              "engines": {
+                "type": "string",
+                "description": "指定使用的搜索引擎，可选。多个引擎用逗号分隔。例如：'google,bing,duckduckgo'。不指定则使用 SearXNG 默认引擎。",
+                "default": ""
+              },
+              "language": {
+                "type": "string",
+                "description": "搜索结果语言过滤，可选。使用 ISO 639-1 语言代码。例如：'zh-CN'（简体中文）、'en-US'（美式英语）。默认：'zh-CN'。",
+                "default": "zh-CN"
+              },
+              "pageno": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "description": "搜索结果页码，可选。从 1 开始，默认：1。",
+                "default": 1
+              },
+              "safesearch": {
+                "type": "integer",
+                "enum": [0, 1, 2],
+                "description": "安全搜索级别，可选。0=关闭，1=中等，2=严格。默认：1。",
+                "default": 1
+              },
+              "max_results": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 50,
+                "description": "返回的最大结果数量，可选。默认：10，最大：50。",
+                "default": 10
+              },
+              "time_range": {
+                "type": "string",
+                "enum": ["", "day", "month", "year"],
+                "default": "",
+                "description": "时间范围过滤"
+              }
+            },
+            "required": ["query"]
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["search", "web", "information"],
+          "category": "utility",
+          "use_case_examples": [
+            "搜索今天的新闻",
+            "查找 Python 3.12 的新特性",
+            "搜索如何使用 Docker 部署 SearXNG"
+          ],
+          "core_purpose": "通过本地或局域网部署的 SearXNG 实例获取网络信息，满足本地优先和隐私保护需求。",
+          "final_deliverable": "包含来源 URL 的搜索结果汇总和整理",
+          "source": "local",
+          "tool_config": {
+            "base_url": "http://127.0.0.1:8080",
+            "timeout": 15.0
+          }
+        }
+      ],
+      "servers": []
+    }
+  ]
+}

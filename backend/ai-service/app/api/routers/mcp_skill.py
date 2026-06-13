@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 
 from app.logger import logger
 from app.infrastructure.postgres import PostgresClient
@@ -46,7 +46,7 @@ class SkillConfig(BaseModel):
 
 class BatchSkillRegisterRequest(BaseModel):
     """批量注册 MCP Skill 的请求体。"""
-    skills: list[SkillConfig]
+    skills: list[dict[str, Any]]
     """待注册的技能列表。"""
 
 
@@ -219,36 +219,155 @@ async def batch_register_skills(
     for skill_config in body.skills:
         async with pg_client.session_factory() as session:
             try:
+                skill_name = skill_config.get("name")
+                if not skill_name:
+                    raise ValueError("Skill 名称不能为空")
+
                 # 检查重复
                 existing_result = await session.execute(
                     select(Skill).where(
-                        Skill.name == skill_config.name,
+                        Skill.name == skill_name,
                     ).limit(1)
                 )
-                if existing_result.scalar_one_or_none():
-                    failed_count += 1
-                    failures.append({
-                        "name": skill_config.name,
-                        "error": "该 Skill 已经注册",
-                    })
-                    continue
+                
+                skill = existing_result.scalar_one_or_none()
+                skill_id = skill.id if skill else generate_string_id()
+                
+                if skill:
+                    # Update
+                    skill.description = skill_config.get("description", skill.description)
+                    skill.version = skill_config.get("version", skill.version)
+                    skill.enabled = skill_config.get("enabled", skill.enabled)
+                    if "metadata" in skill_config:
+                        skill.metadata_ = skill_config["metadata"]
+                else:
+                    # Insert
+                    skill = Skill(
+                        id=skill_id,
+                        name=skill_name,
+                        description=skill_config.get("description", ""),
+                        version=skill_config.get("version", "1.0.0"),
+                        enabled=skill_config.get("enabled", True),
+                        metadata_=skill_config.get("metadata", {}),
+                    )
+                    session.add(skill)
+                
+                await session.flush()
 
-                # 创建新记录
-                skill_id = generate_string_id()
-                new_skill = Skill(
-                    id=skill_id,
-                    name=skill_config.name,
-                    description=skill_config.description,
-                    version=skill_config.version,
-                    enabled=skill_config.enabled,
-                )
-                session.add(new_skill)
+                # Process Prompts
+                from app.repository.models import Prompt
+                if "prompts" in skill_config:
+                    await session.execute(delete(Prompt).where(Prompt.skill_id == skill_id))
+                    for p in skill_config["prompts"]:
+                        session.add(Prompt(
+                            id=generate_string_id(),
+                            skill_id=skill_id,
+                            phase=p.get("phase", "execution"),
+                            content=p.get("content_path", p.get("content", "")),
+                            variables=p.get("variables", []),
+                            version_num=p.get("version_num", 1)
+                        ))
+
+                # Process Resources
+                from app.repository.models import Resource
+                if "resources" in skill_config:
+                    await session.execute(delete(Resource).where(Resource.skill_id == skill_id))
+                    for r in skill_config["resources"]:
+                        session.add(Resource(
+                            id=generate_string_id(),
+                            skill_id=skill_id,
+                            name=r.get("name", "unknown"),
+                            resource_type=r.get("resource_type", "file"),
+                            uri=r.get("uri", ""),
+                            description=r.get("description", ""),
+                            mime_type=r.get("mime_type", ""),
+                            auto_load=r.get("auto_load", False)
+                        ))
+
+                # Process Tools
+                from app.repository.models import MCPToolRegistration, ToolConfig
+                if "tools" in skill_config:
+                    # Note: Not deleting existing tools mapped to this skill for safety,
+                    # but typically tools are tightly bound to the skill.
+                    for t in skill_config["tools"]:
+                        tool_name = t.get("name")
+                        if not tool_name: continue
+                        
+                        tool_res = await session.execute(
+                            select(MCPToolRegistration).where(MCPToolRegistration.name == tool_name).limit(1)
+                        )
+                        tool_rec = tool_res.scalar_one_or_none()
+                        if tool_rec:
+                            tool_rec.description = t.get("description", tool_rec.description)
+                            tool_rec.parameters_schema = t.get("parameters_schema", tool_rec.parameters_schema)
+                            tool_rec.skill_id = skill_id
+                        else:
+                            tool_rec = MCPToolRegistration(
+                                id=generate_string_id(),
+                                name=tool_name,
+                                description=t.get("description", ""),
+                                parameters_schema=t.get("parameters_schema", {}),
+                                risk_level=t.get("risk_level", "L0"),
+                                enabled=t.get("enabled", True),
+                                tags=t.get("tags", []),
+                                category=t.get("category", ""),
+                                use_case_examples=t.get("use_case_examples", []),
+                                core_purpose=t.get("core_purpose", ""),
+                                final_deliverable=t.get("final_deliverable", ""),
+                                source=t.get("source", "local"),
+                                skill_id=skill_id
+                            )
+                            session.add(tool_rec)
+                            
+                        # Process Tool Config
+                        if "tool_config" in t:
+                            cfg_res = await session.execute(
+                                select(ToolConfig).where(ToolConfig.tool_name == tool_name).limit(1)
+                            )
+                            cfg_rec = cfg_res.scalar_one_or_none()
+                            if cfg_rec:
+                                cfg_rec.config_data = t["tool_config"]
+                            else:
+                                session.add(ToolConfig(
+                                    id=generate_string_id(),
+                                    tool_name=tool_name,
+                                    config_data=t["tool_config"],
+                                    description=f"Auto generated config for {tool_name}"
+                                ))
+
+                # Process Servers
+                from app.repository.models import MCPServerRegistration
+                if "servers" in skill_config:
+                    for s in skill_config["servers"]:
+                        server_name = s.get("name")
+                        if not server_name: continue
+                        
+                        srv_res = await session.execute(
+                            select(MCPServerRegistration).where(MCPServerRegistration.name == server_name).limit(1)
+                        )
+                        srv_rec = srv_res.scalar_one_or_none()
+                        if srv_rec:
+                            srv_rec.command = s.get("command", srv_rec.command)
+                            srv_rec.args = s.get("args", srv_rec.args)
+                            srv_rec.env = s.get("env", srv_rec.env)
+                        else:
+                            session.add(MCPServerRegistration(
+                                id=generate_string_id(),
+                                name=server_name,
+                                command=s.get("command", ""),
+                                args=s.get("args", []),
+                                env=s.get("env", {}),
+                                description=s.get("description", ""),
+                                enabled=s.get("enabled", True),
+                                metadata_=s.get("metadata", {})
+                            ))
+
                 await session.commit()
                 success_count += 1
 
                 logger.info(
                     f"批量注册 Skill 成功 "
-                    f"trace_id={trace_id} name={skill_config.name} "
+                    f"trace_id={trace_id} name={skill_name} "
                     f"skill_id={skill_id}"
                 )
 
@@ -256,12 +375,12 @@ async def batch_register_skills(
                 await session.rollback()
                 failed_count += 1
                 failures.append({
-                    "name": skill_config.name,
+                    "name": skill_config.get("name", "Unknown"),
                     "error": str(e)[:200],
                 })
                 logger.warning(
                     f"批量注册 Skill 失败 "
-                    f"trace_id={trace_id} name={skill_config.name} error={e}"
+                    f"trace_id={trace_id} name={skill_config.get('name')} error={e}"
                 )
 
     logger.info(

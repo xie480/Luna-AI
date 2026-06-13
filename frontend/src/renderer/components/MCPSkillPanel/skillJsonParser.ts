@@ -29,6 +29,11 @@ export interface SkillJSON {
     version?: string;
     /** 是否启用（可选，默认 true）。 */
     enabled?: boolean;
+    metadata?: Record<string, any>;
+    prompts?: any[];
+    resources?: any[];
+    tools?: any[];
+    servers?: any[];
   }>;
 }
 
@@ -86,6 +91,7 @@ export function parseSkillJSON(jsonText: string): {
       description: skill.description ?? '',
       version: skill.version ?? '1.0.0',
       enabled: skill.enabled ?? true,
+      ...skill,
     };
 
     const validation = validateSkillRow(configToValidate);
@@ -93,6 +99,7 @@ export function parseSkillJSON(jsonText: string): {
     if (validation.valid) {
       validCount++;
       rows.push({
+        ...skill,
         name: skill.name.trim(),
         description: skill.description?.trim() ?? '',
         version: skill.version ?? '1.0.0',
