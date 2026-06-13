@@ -15,7 +15,7 @@ from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
 from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.nodes.helpers import first_reason
-from app.config import settings
+from app.config.settings import global_config_container, settings
 
 
 class KnowledgeRagNode(ChatWorkflowNode):

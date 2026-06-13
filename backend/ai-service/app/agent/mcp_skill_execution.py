@@ -219,29 +219,49 @@ class MCPSkillExecutionAgent:
         )
 
         try:
-            response = await llm_client.generate_structured(
-                model=self.model_name,
-                messages=[{"role": "system", "content": full_prompt}],
-                response_format={
-                    "type": "json_object",
-                    "properties": {
-                        "can_proceed": {"type": "boolean"},
-                        "tool_parameters": {"type": "object"},
-                        "fallback_reason": {"type": "string"},
-                    },
+            response_schema = {
+                "type": "json_object",
+                "properties": {
+                    "can_proceed": {"type": "boolean"},
+                    "tool_parameters": {"type": "object"},
+                    "fallback_reason": {"type": "string"},
                 },
+                "required": ["can_proceed", "tool_parameters", "fallback_reason"]
+            }
+            
+            schema_prompt = (
+                f"\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
+                f"{json.dumps(response_schema, ensure_ascii=False, indent=2)}\n\n"
+                "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
+            )
+            
+            response_text = await llm_client.generate_structured_text(
+                model=self.model_name,
+                messages=[{"role": "system", "content": full_prompt + schema_prompt}],
                 timeout=30.0,
             )
+
+            # 清理可能存在的 markdown 代码块
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+            
+            result_dict = json.loads(cleaned_text)
 
             # 记录 LLM 完整输出
             logger.info(
                 f"[MCP Skill Execution] LLM 完整输出 trace_id={trace_id} "
-                f"step_name={step_name} output={response}"
+                f"step_name={step_name} output={result_dict}"
             )
 
-            can_proceed = response.get("can_proceed", False)
-            tool_parameters = response.get("tool_parameters", {})
-            fallback_reason = response.get("fallback_reason", "")
+            can_proceed = result_dict.get("can_proceed", False)
+            tool_parameters = result_dict.get("tool_parameters", {})
+            fallback_reason = result_dict.get("fallback_reason", "")
 
             elapsed_ms = max(0, int((time.monotonic() - started_at) * 1000))
 

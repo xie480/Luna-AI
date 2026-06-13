@@ -108,23 +108,49 @@ class MCPSkillMemoryAgent:
         )
 
         try:
-            response = await llm_client.generate_structured(
+            # 由于 memory_schema 是一个 dict（JSON Schema 字典），而不是 Pydantic BaseModel 类型，
+            # 所以不能直接传给要求 type[BaseModel] 的 generate_structured 方法。
+            # 这里调用底层的 generate_structured_text 结合手动注入 prompt 的方式
+            from app.agent.schemas.input_reconstruction import BaseModel
+            
+            # 使用 Pydantic 的 create_model 动态创建一个 BaseModel 以支持原生 Structured Output
+            from pydantic import create_model
+            
+            # 从 JSON Schema 动态构建字段
+            # 注意：实际业务中如果 schema 很复杂，这里可能需要更复杂的转换逻辑。
+            # 最稳妥的方法是退级使用 generate_structured_text 并要求输出 JSON
+            schema_prompt = (
+                f"\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
+                f"{json.dumps(memory_schema, ensure_ascii=False, indent=2)}\n\n"
+                "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
+            )
+            
+            response_text = await llm_client.generate_structured_text(
                 model=self.model_name,
-                messages=[{"role": "system", "content": full_prompt}],
-                response_format=memory_schema,
+                messages=[{"role": "system", "content": full_prompt + schema_prompt}],
                 timeout=30.0,
             )
 
             elapsed_ms = max(0, int((time.monotonic() - started_at) * 1000))
+            
+            # 清理可能存在的 markdown 代码块
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+            
+            result_dict = json.loads(cleaned_text)
+            
             logger.info(
                 f"[MCP Skill Memory Agent] 提取完成 trace_id={trace_id} "
-                f"latency_ms={elapsed_ms}"
+                f"latency_ms={elapsed_ms} result={result_dict}"
             )
 
-            # response 是一个 BaseModel 或 dict，如果是 BaseModel，转换为 dict
-            if hasattr(response, "model_dump"):
-                return response.model_dump(mode="json")
-            return dict(response)
+            return result_dict
 
         except Exception as exc:
             logger.warning(

@@ -192,40 +192,59 @@ class MCPResourceSubAgent:
         )
 
         try:
-            response = await llm_client.generate_structured(
-                model=prompt_manager.get_model_for_extraction(),
-                messages=[{"role": "system", "content": full_prompt}],
-                response_format={
-                    "type": "json_object",
-                    "properties": {
-                        "has_relevant_info": {"type": "boolean"},
-                        "extractions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "extracted_content": {"type": "string"},
-                                    "matched_lines": {
-                                        "type": "array",
-                                        "items": {"type": "integer"},
-                                    },
-                                    "summary": {"type": "string"},
+            response_schema = {
+                "type": "json_object",
+                "properties": {
+                    "has_relevant_info": {"type": "boolean"},
+                    "extractions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "extracted_content": {"type": "string"},
+                                "matched_lines": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
                                 },
+                                "summary": {"type": "string"},
                             },
                         },
                     },
                 },
+            }
+            
+            schema_prompt = (
+                f"\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
+                f"{json.dumps(response_schema, ensure_ascii=False, indent=2)}\n\n"
+                "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
+            )
+            
+            response_text = await llm_client.generate_structured_text(
+                model=self._get_mid_model(),
+                messages=[{"role": "system", "content": full_prompt + schema_prompt}],
                 timeout=60.0,
             )
+
+            # 清理可能存在的 markdown 代码块
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+            
+            result_dict = json.loads(cleaned_text)
 
             # 记录 LLM 完整输出
             logger.info(
                 f"[MCP Resource Extraction] LLM 完整输出 trace_id={trace_id} "
-                f"resource={resource_name} output={response}"
+                f"resource={resource_name} output={result_dict}"
             )
 
-            has_relevant_info = response.get("has_relevant_info", False)
-            extractions = response.get("extractions", [])
+            has_relevant_info = result_dict.get("has_relevant_info", False)
+            extractions = result_dict.get("extractions", [])
 
             if not has_relevant_info or not extractions:
                 return "", []
@@ -332,15 +351,36 @@ class MCPResourceSubAgent:
 
         mid_model = self._get_mid_model()
         try:
-            fallback_response = await llm_client.generate_structured(
+            fallback_schema = {
+                "type": "json_object",
+                "properties": {},
+                "additionalProperties": True,
+                "description": "返回一个以 state_key 为键，包含 status 和 result 字段的对象为值的 JSON"
+            }
+            
+            schema_prompt = (
+                f"\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
+                f"{json.dumps(fallback_schema, ensure_ascii=False, indent=2)}\n\n"
+                "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
+            )
+            
+            response_text = await llm_client.generate_structured_text(
                 model=mid_model,
-                messages=[{"role": "system", "content": full_prompt}],
-                response_format={
-                    "type": "json_object",
-                    "properties": {},
-                },
+                messages=[{"role": "system", "content": full_prompt + schema_prompt}],
                 timeout=30.0,
             )
+
+            # 清理可能存在的 markdown 代码块
+            cleaned_text = response_text.strip()
+            if cleaned_text.startswith("```json"):
+                cleaned_text = cleaned_text[7:]
+            elif cleaned_text.startswith("```"):
+                cleaned_text = cleaned_text[3:]
+            if cleaned_text.endswith("```"):
+                cleaned_text = cleaned_text[:-3]
+            cleaned_text = cleaned_text.strip()
+            
+            fallback_response = json.loads(cleaned_text)
 
             # 记录 LLM 完整输出
             logger.info(
