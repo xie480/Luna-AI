@@ -287,44 +287,117 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import inspect
 
         def _sync_schema(sync_conn):
+            from sqlalchemy import inspect
+            from sqlalchemy import text as from_sqlalchemy_text
+            
             inspector = inspect(sync_conn)
-            # 获取当前数据库中已存在的表
-            existing_tables = inspector.get_table_names()
+            existing_tables = set(inspector.get_table_names())
 
-            # 使用 Base.metadata.create_all 只能创建新表，不能修改现有表。
-            # 为了新增字段，需要对比模型和现有表的列。
-            Base.metadata.create_all(sync_conn)
-            TelemetryBase.metadata.create_all(sync_conn)
+            # 收集本地所有定义的表
+            local_tables_map = {}
+            local_tables_map.update(Base.metadata.tables)
+            local_tables_map.update(TelemetryBase.metadata.tables)
+            
+            # 白名单保护系统表与非 SQLAlchemy ORM 表
+            whitelist_tables = {"langgraph_chat_checkpoints"}
 
-            # --- Phase 12 MCP Marketplace Tables Initialization ---
-            # mcp_marketplace, mcp_remote_instances, mcp_marketplace_discovery_log
-            # Base.metadata.create_all(sync_conn) will automatically create these new tables
+            # 1. 动态创建新表（存在则跳过）
+            try:
+                Base.metadata.create_all(sync_conn)
+                TelemetryBase.metadata.create_all(sync_conn)
+            except Exception as e:
+                logger.error(f"[Schema Sync] 创建新表失败: {e}")
 
-            for table_name, table in Base.metadata.tables.items():
+            # 2. 检查并删除多余的表
+            for db_table in existing_tables:
+                if db_table not in local_tables_map and db_table not in whitelist_tables:
+                    drop_stmt = f"DROP TABLE IF EXISTS {db_table} CASCADE"
+                    try:
+                        logger.info(f"[Schema Sync] 检测到废弃表，执行删除: {drop_stmt}")
+                        sync_conn.execute(from_sqlalchemy_text(drop_stmt))
+                    except Exception as e:
+                        logger.error(f"[Schema Sync] 删除表 {db_table} 失败: {e}")
+
+            existing_tables = set(inspector.get_table_names())
+
+            # 3. 字段级差异比对与同步
+            for table_name, table in local_tables_map.items():
                 if table_name in existing_tables:
-                    existing_columns = {col['name'] for col in inspector.get_columns(table_name)}
+                    db_columns_info = inspector.get_columns(table_name)
+                    db_columns = {col['name']: col for col in db_columns_info}
+                    
+                    local_col_names = {col.name for col in table.columns}
+                    
+                    # a. 删除数据库中多余的字段
+                    for db_col_name in db_columns:
+                        if db_col_name not in local_col_names:
+                            drop_col_stmt = f'ALTER TABLE {table_name} DROP COLUMN "{db_col_name}" CASCADE'
+                            logger.info(f"[Schema Sync] 表 {table_name} 检测到废弃字段，执行删除: {drop_col_stmt}")
+                            try:
+                                sync_conn.execute(from_sqlalchemy_text(drop_col_stmt))
+                            except Exception as e:
+                                logger.error(f"[Schema Sync] 表 {table_name} 删除字段 {db_col_name} 失败: {e}")
+
+                    # b. 新增字段或修改字段属性
                     for column in table.columns:
-                        if column.name not in existing_columns:
-                            # 存在缺失的列，构建 ALTER TABLE 语句
+                        col_name = column.name
+                        if col_name not in db_columns:
+                            # 新增字段
                             col_type = column.type.compile(sync_conn.dialect)
                             nullable_str = "NULL" if column.nullable else "NOT NULL"
-                            # 暂时忽略默认值的复杂同步，只简单添加列
-                            alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{column.name}" {col_type} {nullable_str}'
-                            logger.info(f"检测到缺失字段，执行: {alter_stmt}")
+                            alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{col_name}" {col_type} {nullable_str}'
+                            logger.info(f"[Schema Sync] 表 {table_name} 检测到缺失字段，执行: {alter_stmt}")
                             try:
                                 sync_conn.execute(from_sqlalchemy_text(alter_stmt))
                             except Exception as alter_err:
-                                logger.warning(f"添加列失败: {alter_err}")
+                                logger.error(f"[Schema Sync] 表 {table_name} 添加列 {col_name} 失败: {alter_err}")
 
-                            # 如果列有索引，添加索引
+                            # 添加新字段对应的索引
                             if column.index:
-                                index_name = f"ix_{table_name}_{column.name}"
-                                index_stmt = f'CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ("{column.name}")'
-                                logger.info(f"为新字段创建索引: {index_stmt}")
+                                index_name = f"ix_{table_name}_{col_name}"
+                                index_stmt = f'CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ("{col_name}")'
+                                logger.info(f"[Schema Sync] 为新字段创建索引: {index_stmt}")
                                 try:
                                     sync_conn.execute(from_sqlalchemy_text(index_stmt))
                                 except Exception as idx_err:
-                                    logger.warning(f"创建索引失败: {idx_err}")
+                                    logger.error(f"[Schema Sync] 创建索引失败: {idx_err}")
+                        else:
+                            # 字段属性与类型差异比对
+                            db_col = db_columns[col_name]
+                            db_nullable = db_col.get('nullable', True)
+                            if column.nullable != db_nullable:
+                                alter_null_stmt = f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" {"DROP" if column.nullable else "SET"} NOT NULL'
+                                logger.info(f"[Schema Sync] 表 {table_name} 字段 {col_name} Nullable 变更，执行: {alter_null_stmt}")
+                                try:
+                                    sync_conn.execute(from_sqlalchemy_text(alter_null_stmt))
+                                except Exception as e:
+                                    logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 修改 Nullable 失败: {e}")
+                            
+                            # 类型比对
+                            expected_type_str = str(column.type.compile(sync_conn.dialect)).lower()
+                            db_type_str = str(db_col['type']).lower()
+                            
+                            exp_base_type = expected_type_str.split('(')[0].strip()
+                            db_base_type = db_type_str.split('(')[0].strip()
+                            
+                            type_equivalents = {
+                                'character varying': 'varchar',
+                                'timestamp with time zone': 'timestamp',
+                                'timestamp without time zone': 'timestamp',
+                                'integer': 'int',
+                                'boolean': 'bool',
+                            }
+                            exp_base_type = type_equivalents.get(exp_base_type, exp_base_type)
+                            db_base_type = type_equivalents.get(db_base_type, db_base_type)
+
+                            # 忽略 JSON 相关类型的复杂差异，只对基础类型的不同进行 ALTER
+                            if exp_base_type != db_base_type and "json" not in exp_base_type and "json" not in db_base_type:
+                                alter_type_stmt = f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" TYPE {expected_type_str} USING "{col_name}"::{expected_type_str}'
+                                logger.info(f"[Schema Sync] 表 {table_name} 字段 {col_name} 类型变更 ({db_type_str} -> {expected_type_str})，执行: {alter_type_stmt}")
+                                try:
+                                    sync_conn.execute(from_sqlalchemy_text(alter_type_stmt))
+                                except Exception as e:
+                                    logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 修改类型失败: {e}")
 
         from sqlalchemy import text as from_sqlalchemy_text
 
@@ -393,6 +466,27 @@ async def lifespan(app: FastAPI):
     if settings.qdrant_address:
         qdrant_client = QdrantClientWrapper(settings.qdrant_address)
         ltm_qdrant_repo = LongTermMemoryQdrantRepo(qdrant_client)
+
+        # 自动同步向量数据库集合（严格比对：删除废弃集合）
+        try:
+            logger.info("[Schema Sync] 开始同步 Qdrant 向量数据库集合...")
+            from app.infrastructure.qdrant import QDRANT_COLLECTION_LONG_TERM_MEMORIES
+            from app.types.constants import RAG_QDRANT_COLLECTION
+            
+            local_collections = {QDRANT_COLLECTION_LONG_TERM_MEMORIES, RAG_QDRANT_COLLECTION}
+            
+            await qdrant_client._ensure_client()
+            db_collections_response = await qdrant_client.client.get_collections()
+            db_collections = {col.name for col in db_collections_response.collections}
+            
+            for db_col in db_collections:
+                if db_col not in local_collections:
+                    logger.info(f"[Schema Sync] Qdrant 检测到废弃集合，执行删除: {db_col}")
+                    await qdrant_client.client.delete_collection(db_col)
+                    
+            logger.info("[Schema Sync] Qdrant 向量数据库集合同步完成")
+        except Exception as e:
+            logger.error(f"[Schema Sync] Qdrant 向量数据库同步失败: {e}")
 
     # 8. 初始化推理服务
     from app.inference.service import InferenceService

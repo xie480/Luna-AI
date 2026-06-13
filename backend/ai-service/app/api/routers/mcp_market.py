@@ -338,8 +338,8 @@ async def list_marketplace(
     category: str | None = Query(None, description="按分类筛选"),
     tag: str | None = Query(None, description="按标签筛选"),
     health_status: str | None = Query(None, description="按健康状态筛选: online/offline/unknown"),
-    sort_by: str = Query("trust_score", regex="^(trust_score|github_stars|install_count|updated_at)$", description="排序字段"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$", description="排序方向: asc/desc"),
+    sort_by: str = Query("trust_score", pattern="^(trust_score|github_stars|install_count|updated_at)$", description="排序字段"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$", description="排序方向: asc/desc"),
 ) -> MarketplaceListResponse:
     """MCP 市场列表（分页）。
 
