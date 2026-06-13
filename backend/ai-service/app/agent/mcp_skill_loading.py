@@ -129,11 +129,7 @@ class MCPSkillLoadingAgent:
             for r in aggregated_resources
         ) if aggregated_resources else "  （无可用资源）"
 
-        # 组装三槽位 Prompt
-        system_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_LOADING, {}
-        )
-        memory_prompt = await prompt_manager.assemble_prompt(
+        full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_LOADING,
             {
                 "SKILL_CONTEXT": skills_context,
@@ -143,13 +139,8 @@ class MCPSkillLoadingAgent:
                 "MAX_STEPS": str(_MAX_EXECUTION_STEPS),
             },
         )
-        runtime_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_LOADING, {}
-        )
 
         from app.llm.client import llm_client
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         # 带重试的 LLM 调用
         for attempt in range(self.max_retries + 1):

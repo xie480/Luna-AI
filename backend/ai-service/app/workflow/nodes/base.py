@@ -104,7 +104,7 @@ class ChatWorkflowNode:
             timestamp_ms=ended_at_ms,
             payload=ChatNodeStatusPayload(
                 node_type=self.node_type.value,
-                status="completed",
+                status=ChatNodeStatus.SUCCEEDED,
                 duration_ms=ended_at_ms - started_at_ms,
                 degraded=self._is_node_degraded(updated_state),
             ).model_dump(mode="json"),

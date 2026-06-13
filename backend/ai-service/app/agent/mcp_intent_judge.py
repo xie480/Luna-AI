@@ -21,31 +21,21 @@ from app.logger import logger
 from app.prompt.types import PromptCategory
 
 
-class MCPIntentJudgeJudgment:
+from pydantic import BaseModel, Field
+
+class MCPIntentJudgeJudgment(BaseModel):
     """MCP 前置判断结果。
 
     做什么：封装 MCP 前置判断 Agent 的输出。
     """
-    def __init__(
-        self,
-        need_skill: bool,
-        reason: str,
-        keywords: list[str],
-        mcp_intent: str,
-    ):
-        self.need_skill = need_skill
-        self.reason = reason
-        self.keywords = keywords
-        self.mcp_intent = mcp_intent
+    need_skill: bool = Field(..., description="布尔值。true 表示需要使用 MCP 能力；false 表示无需使用。")
+    reason: str = Field(..., description="判断原因说明，详细解释为什么需要或不需要 MCP 能力。")
+    keywords: list[str] = Field(..., description="关键词数组，用于匹配技能。至少包含 1 个，建议 1~5 个关键词。当 need_skill=false 时为空数组 []。")
+    mcp_intent: str = Field(..., description="MCP 意图文本。当 need_skill=true 时，为重构后的需求描述；当 need_skill=false 时，此字段为空字符串。")
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""
-        return {
-            "need_skill": self.need_skill,
-            "reason": self.reason,
-            "keywords": self.keywords,
-            "mcp_intent": self.mcp_intent,
-        }
+        return self.model_dump(mode="json")
 
 
 class MCPIntentJudgeAgent:
@@ -85,24 +75,16 @@ class MCPIntentJudgeAgent:
             MCPIntentJudgeJudgment: 判断结果。
         """
 
-        # 组装三槽位 Prompt
-        system_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_INTENT_JUDGE, {}
-        )
-        memory_prompt = await prompt_manager.assemble_prompt(
+        # 组装完整的 Prompt
+        full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_INTENT_JUDGE,
             {
                 "RECONSTRUCTED_INPUT": reconstructed_input,
                 "RAG_EVIDENCE": rag_evidence or "（无 RAG 召回证据）",
             },
         )
-        runtime_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_INTENT_JUDGE, {}
-        )
 
         from app.llm.client import llm_client
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         # 带重试的 LLM 调用
         for attempt in range(self.max_retries + 1):
@@ -113,21 +95,11 @@ class MCPIntentJudgeAgent:
                     f"attempt={attempt} full_prompt={full_prompt}"
                 )
 
+                from app.agent.mcp_intent_judge import MCPIntentJudgeJudgment
                 response = await llm_client.generate_structured(
                     model=self.model_name,
                     messages=[{"role": "system", "content": full_prompt}],
-                    response_format={
-                        "type": "json_object",
-                        "properties": {
-                            "need_skill": {"type": "boolean"},
-                            "reason": {"type": "string"},
-                            "keywords": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
-                            "mcp_intent": {"type": "string"},
-                        },
-                    },
+                    response_format=MCPIntentJudgeJudgment,
                     timeout=30.0,
                 )
 
@@ -137,25 +109,12 @@ class MCPIntentJudgeAgent:
                     f"attempt={attempt} output={response}"
                 )
 
-                need_skill = response.get("need_skill", False)
-                reason = response.get("reason", "")
-                keywords = response.get("keywords", [reconstructed_input])
-                mcp_intent = response.get("mcp_intent", "")
-
-                if not isinstance(keywords, list):
-                    keywords = [str(keywords)]
-
                 logger.info(
                     f"MCP 前置判断完成 trace_id={trace_id} "
-                    f"need_skill={need_skill} reason={reason}"
+                    f"need_skill={response.need_skill} reason={response.reason}"
                 )
 
-                return MCPIntentJudgeJudgment(
-                    need_skill=need_skill,
-                    reason=reason,
-                    keywords=keywords,
-                    mcp_intent=mcp_intent,
-                )
+                return response
 
             except Exception as exc:
                 logger.warning(

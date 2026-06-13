@@ -68,12 +68,10 @@ class MCPEvaluationAgent:
         system_prompt = ""
         memory_prompt = ""
         runtime_prompt = ""
+        full_prompt = ""
         if self.prompt_manager:
             try:
-                system_prompt = await self.prompt_manager.assemble_prompt(
-                    PromptCategory.MCP_EVALUATION, {}
-                )
-                memory_prompt = await self.prompt_manager.assemble_prompt(
+                full_prompt = await self.prompt_manager.assemble_prompt(
                     PromptCategory.MCP_EVALUATION,
                     {
                         "MCP_INTENT": mcp_intent,
@@ -81,13 +79,8 @@ class MCPEvaluationAgent:
                         "EXECUTION_RESULTS": results_text,
                     },
                 )
-                runtime_prompt = await self.prompt_manager.assemble_prompt(
-                    PromptCategory.MCP_EVALUATION, {}
-                )
             except Exception:
                 pass
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         logger.info(f"[MCP Evaluation Agent] 开始评估 trace_id={trace_id}")
 

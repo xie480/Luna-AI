@@ -60,25 +60,16 @@ class MCPSkillMemoryAgent:
         system_prompt = ""
         memory_prompt = ""
         runtime_prompt = ""
+        full_prompt = ""
         if self.prompt_manager:
             try:
-                system_prompt = await self.prompt_manager.assemble_prompt(
+                full_prompt = await self.prompt_manager.assemble_prompt(
                     PromptCategory.MCP_SKILL_MEMORY,
                     {
                         "SKILL_NAME": skill_name,
                         "MCP_INTENT": mcp_intent,
                         "INNER_SUGGESTION": inner_suggestion or "",
-                    },
-                )
-                memory_prompt = await self.prompt_manager.assemble_prompt(
-                    PromptCategory.MCP_SKILL_MEMORY,
-                    {
                         "EXECUTION_HISTORY_CONTEXT": context_str,
-                    },
-                )
-                runtime_prompt = await self.prompt_manager.assemble_prompt(
-                    PromptCategory.MCP_SKILL_MEMORY,
-                    {
                         "MEMORY_SCHEMA": json.dumps(memory_schema, ensure_ascii=False, indent=2),
                     },
                 )
@@ -86,7 +77,7 @@ class MCPSkillMemoryAgent:
                 pass
 
         # 回退：如果 prompt_manager 不可用，使用旧的硬编码形式
-        if not system_prompt:
+        if not full_prompt:
             system_prompt = (
                 f"你是一个专门用于 {skill_name} 技能的状态提取与分析引擎。\n\n"
                 f"用户的最终目标意图是：{mcp_intent}\n\n"
@@ -109,8 +100,7 @@ class MCPSkillMemoryAgent:
                 "请根据以上数据和指示，严格按照以下 JSON Schema 输出记忆状态变量字典：\n\n"
                 f"{json.dumps(memory_schema, ensure_ascii=False, indent=2)}"
             )
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
+            full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         logger.info(
             f"[MCP Skill Memory Agent] 开始提取 trace_id={trace_id} "

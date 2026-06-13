@@ -78,11 +78,7 @@ class MCPSkillScreeningAgent:
         execution_snapshot = fallback_context.get("execution_snapshot", {})
         fallback_count = fallback_context.get("fallback_count", 0)
 
-        # 组装三槽位 Prompt
-        system_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_SCREENING, {}
-        )
-        memory_prompt = await prompt_manager.assemble_prompt(
+        full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_SCREENING,
             {
                 "CANDIDATE_SKILLS": candidates,
@@ -94,13 +90,8 @@ class MCPSkillScreeningAgent:
                 "FALLBACK_COUNT": fallback_count,
             },
         )
-        runtime_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_SCREENING, {}
-        )
 
         from app.llm.client import llm_client
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         # 带重试的 LLM 调用
         for attempt in range(self.max_retries + 1):

@@ -769,18 +769,18 @@ async def lifespan(app: FastAPI):
     # 16. 启动 MCP 市场定时采集调度器
     # 做什么：每天一次从远程 Registry 采集 MCP Server 列表并持久化到 PG。
     # 为什么这样做：采集逻辑存在但从未被调用，需通过调度器接入运行生命周期。
-    mcp_discovery_scheduler = None
-    if pg_client:
-        try:
-            from app.mcp.market.scheduler import MarketDiscoveryScheduler
-            mcp_discovery_scheduler = MarketDiscoveryScheduler(pg_client)
-            await mcp_discovery_scheduler.start()
-            app.state.mcp_discovery_scheduler = mcp_discovery_scheduler
-            logger.info("MCP 市场定时采集调度器初始化完成（每天执行一次）")
-        except Exception as e:
-            logger.warning(f"MCP 市场定时采集调度器初始化失败 error={e}")
-    else:
-        logger.warning("PG 客户端不可用，MCP 市场定时采集调度器跳过启动")
+    # mcp_discovery_scheduler = None
+    # if pg_client:
+    #     try:
+    #         from app.mcp.market.scheduler import MarketDiscoveryScheduler
+    #         mcp_discovery_scheduler = MarketDiscoveryScheduler(pg_client)
+    #         await mcp_discovery_scheduler.start()
+    #         app.state.mcp_discovery_scheduler = mcp_discovery_scheduler
+    #         logger.info("MCP 市场定时采集调度器初始化完成（每天执行一次）")
+    #     except Exception as e:
+    #         logger.warning(f"MCP 市场定时采集调度器初始化失败 error={e}")
+    # else:
+    #     logger.warning("PG 客户端不可用，MCP 市场定时采集调度器跳过启动")
 
     # 标记服务已完全就绪
     app.state.is_ready = True

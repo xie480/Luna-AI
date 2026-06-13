@@ -165,11 +165,8 @@ class MCPResourceSubAgent:
         """
         from app.llm.client import llm_client
 
-        # 通过 PromptManager 组装三槽位模板
-        system_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_RESOURCE_EXTRACTION, {}
-        )
-        memory_prompt = await prompt_manager.assemble_prompt(
+        # 通过 PromptManager 组装完整模板
+        full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_RESOURCE_EXTRACTION,
             {
                 "LOAD_PURPOSE": load_purpose,
@@ -178,12 +175,6 @@ class MCPResourceSubAgent:
                 "FILE_CONTENT": annotated_content,
             },
         )
-        runtime_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_RESOURCE_EXTRACTION,
-            {"LOAD_PURPOSE": load_purpose},
-        )
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         # 记录完整 prompt 日志
         logger.info(
@@ -315,10 +306,7 @@ class MCPResourceSubAgent:
             for rr in (resource_results or [])
         ) if resource_results else "无已加载资源"
 
-        system_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_FALLBACK_EXTRACTION, {}
-        )
-        memory_prompt = await prompt_manager.assemble_prompt(
+        full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_FALLBACK_EXTRACTION,
             {
                 "EXECUTION_PLAN": execution_plan_rendered,
@@ -326,11 +314,6 @@ class MCPResourceSubAgent:
                 "RESOURCE_RESULTS": resource_results_rendered,
             },
         )
-        runtime_prompt = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_FALLBACK_EXTRACTION, {}
-        )
-
-        full_prompt = f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}"
 
         # 记录完整 prompt 日志
         logger.info(
