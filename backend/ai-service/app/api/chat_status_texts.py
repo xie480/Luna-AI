@@ -410,16 +410,18 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
 def format_step_progress(current_step: int, total_steps: int, step_goal: str = "") -> str:
     """生成步骤执行进度文案。
 
-    做什么：拼接当前执行步骤的进度文本。
+    做什么：拼接当前执行步骤的进度文本。如果 step_goal 过长，进行截断以防止前端显示阶段。
     参数:
         current_step: 当前执行的步骤序号（从 1 开始）。
         total_steps: 总步骤数。
         step_goal: 当前步骤的执行目标。
     返回:
-        str: 如 "Luna正在执行第 2/5 步：搜索项目文档"
+        str: 如 "第 2/5 步：搜索项目..."
     """
+    if step_goal and len(step_goal) > 12:
+        step_goal = step_goal[:11] + "…"
     goal_suffix = f"：{step_goal}" if step_goal else ""
-    return f"Luna正在执行第 {current_step}/{total_steps} 步{goal_suffix}"
+    return f"第 {current_step}/{total_steps} 步{goal_suffix}"
 
 
 def format_execution_start(total_steps: int) -> str:

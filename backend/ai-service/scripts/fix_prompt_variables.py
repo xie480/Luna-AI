@@ -29,8 +29,8 @@ from app.infrastructure.postgres import PostgresClient
 from app.logger import logger
 from app.repository.models import PromptVersion
 
-# 提取 Jinja 风格变量名，如 {{ CORE_SUMMARY }}
-VARIABLE_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
+# 提取 Jinja 风格变量名，支持带有 filter 的写法如 {{ MEMORY_SCHEMA | default(...) }}
+VARIABLE_PATTERN = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)(?:\s*\|.*?)?\s*\}\}")
 
 
 async def sync_variables_in_versions(session: AsyncSession) -> tuple[int, int]:

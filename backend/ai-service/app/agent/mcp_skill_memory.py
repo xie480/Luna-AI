@@ -81,7 +81,9 @@ class MCPSkillMemoryAgent:
 
         # 回退：如果 prompt_manager 不可用，使用旧的硬编码形式
         if not full_prompt:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
             system_prompt = (
+                f"当前时间: {current_time}\n"
                 f"你是一个专门用于 {skill_name} 技能的状态提取与分析引擎。\n\n"
                 f"用户的最终目标意图是：{mcp_intent}\n\n"
                 "【任务说明】\n"
