@@ -7,8 +7,8 @@ const DEFAULT_MODEL_CONFIG: ModelConfig = {
   base_url: 'https://api.openai.com/v1',
   api_key: '',
   model_id: '',
-  max_tokens: 8192,
-  max_context_tokens: 0,
+  max_tokens: 16384,
+  max_context_tokens: 128000,
   temperature: 0.7,
 };
 
@@ -349,6 +349,17 @@ export const ApiConfigPresetPanel: React.FC = () => {
           min="0"
           value={config.max_tokens}
           onChange={e => setConfig({ ...config, max_tokens: parseInt(e.target.value) || 0 })}
+        />
+      </div>
+
+      <div className="config-field">
+        <label className="field-label">Max Context Tokens（上下文窗口上限）</label>
+        <input
+          className="config-input"
+          type="number"
+          min="0"
+          value={config.max_context_tokens}
+          onChange={e => setConfig({ ...config, max_context_tokens: parseInt(e.target.value) || 0 })}
         />
       </div>
 

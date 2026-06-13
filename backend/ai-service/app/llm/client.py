@@ -760,10 +760,14 @@ class LLMClient:
 
         # 1. 尝试进行 Token 截断 (复用现有逻辑获取截断后的列表)
         try:
-            from app.config.settings import global_config_container
+            from app.config.settings import global_config_container, settings
             from app.types.constants import ModelSize
             config = global_config_container.get_model_config(ModelSize.MEDIUM)
-            max_context_tokens = config.get("max_context_tokens", 128000)
+            # 优先使用动态配置中的 max_context_tokens，若为 0 或负数则回退到 settings 的静态默认值
+            # 为什么这样做：前端 API 配置预设默认值为 0，导致 max_input_tokens 计算为负数，
+            # 每次请求都触发消息级裁剪且永远失败（参考压缩审计日志 COMPRESSION_FAILED）
+            dynamic_max = config.get("max_context_tokens", 0)
+            max_context_tokens = dynamic_max if dynamic_max > 0 else settings.max_context_tokens
 
             trim_started_at = current_timestamp_ms()
             trim_metrics = measure_truncate_context(
