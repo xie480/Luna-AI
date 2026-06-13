@@ -15,6 +15,7 @@
             "previous_query": { "type": "string", "description": "刚尝试搜索的关键词" },
             "previous_categories": { "type": "string", "description": "上一轮使用的分类" },
             "previous_language": { "type": "string", "description": "上一轮使用的语言" },
+            "previous_time_range": { "type": "string", "description": "上一轮使用的时间范围" },
             "previous_pageno": { "type": "integer" },
             "previous_engines": { "type": "string" },
             "previous_results_summary": { "type": "string", "description": "上一轮搜索得到的核心结果或没找到的原因" },
@@ -26,6 +27,7 @@
             "this_query": { "type": "string", "description": "下一轮建议使用的搜索词" },
             "category_adjust_reason": { "type": "string" },
             "language_adjust_reason": { "type": "string" },
+            "time_range_adjust_reason": { "type": "string" },
             "need_specific_engine": { "type": "string", "enum": ["是", "否"] }
           }
         }
@@ -40,6 +42,7 @@
             {"name": "previous_query", "description": "上一轮查询词", "required": false},
             {"name": "previous_categories", "description": "上一轮分类", "required": false},
             {"name": "previous_language", "description": "上一轮语言", "required": false},
+            {"name": "previous_time_range", "description": "上一轮时间范围", "required": false},
             {"name": "previous_pageno", "description": "上一轮页码", "required": false},
             {"name": "previous_engines", "description": "上一轮引擎", "required": false},
             {"name": "previous_results_summary", "description": "上一轮结果摘要", "required": false},
@@ -51,6 +54,7 @@
             {"name": "this_query", "description": "本轮查询词", "required": false},
             {"name": "category_adjust_reason", "description": "分类调整理由", "required": false},
             {"name": "language_adjust_reason", "description": "语言调整理由", "required": false},
+            {"name": "time_range_adjust_reason", "description": "时间范围调整理由", "required": false},
             {"name": "need_specific_engine", "description": "是否需要指定引擎", "required": false},
             {"name": "user_input", "description": "用户原始输入", "required": true},
             {"name": "search_max_results", "description": "单次搜索最大结果数", "required": false}

@@ -73,6 +73,10 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
             "type": "string",
             "description": "上一轮使用的语言"
         },
+        "previous_time_range": {
+            "type": "string",
+            "description": "上一轮使用的时间范围"
+        },
         "previous_pageno": {
             "type": "integer"
         },
@@ -111,6 +115,9 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
             "type": "string"
         },
         "language_adjust_reason": {
+            "type": "string"
+        },
+        "time_range_adjust_reason": {
             "type": "string"
         },
         "need_specific_engine": {
@@ -267,6 +274,7 @@ async def handle_searxng_search(
     categories: str = parameters.get("categories", "general")
     engines: str = parameters.get("engines", "")
     language: str = parameters.get("language", "zh-CN")
+    time_range: str = parameters.get("time_range", "")
     pageno = _safe_int(
         parameters.get("pageno"),
         default=1,
@@ -305,6 +313,9 @@ async def handle_searxng_search(
         "pageno": pageno,
         "safesearch": safesearch,
     }
+
+    if time_range:
+        search_params["time_range"] = time_range
 
     # 可选参数：指定搜索引擎
     if engines:
