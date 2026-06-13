@@ -3,6 +3,7 @@
 【候选技能列表】（仅含技能名称和描述，不含具体工具和资源）
 {% for skill in CANDIDATE_SKILLS %}
   - 技能名称：「{{ skill.name }}」
+    技能ID：{{ skill.skill_id }}
     技能描述：{{ skill.description }}
     版本：{{ skill.version }}
 {% else %}

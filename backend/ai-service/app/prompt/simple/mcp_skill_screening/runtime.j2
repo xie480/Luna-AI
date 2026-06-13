@@ -38,7 +38,7 @@
   - 多个 Skill 之间的协作关系（串行还是并行）。
 
 #### Step 5：最终校验
-- 所有选中的 `skill_id` 必须严格来自【候选技能列表】，**绝对禁止虚构技能名称**。
+- 所有选中的 `selected_skill_ids` 元素必须是【候选技能列表】中对应技能的 **`skill_id`（技能ID）**，**绝对不能使用技能名称（技能名称）来替代**。候选列表中已明确标注了每个技能的 skill_id。
 - 如果 `no_suitable_skill=true`，`selected_skill_ids` **必须为空列表**。
 - 如果 `selected_skill_ids` 为空列表但 `no_suitable_skill=false`，这个组合是无效的。
 

@@ -159,10 +159,12 @@ class ChatWorkflowService:
                 f"PostgreSQL 不可用 跳过 checkpoint 写入 trace_id={state.runtime.trace_id}"
             )
             return
+        chat_mode_val = state.runtime.chat_mode.value if hasattr(state.runtime.chat_mode, "value") else state.runtime.chat_mode
+        preset_id_val = state.runtime.plan_preset_id.value if hasattr(state.runtime.plan_preset_id, "value") else state.runtime.plan_preset_id
         checkpoint_ns = (
-            f"{state.runtime.chat_mode.value}"
+            f"{chat_mode_val}"
             f"{CHAT_WORKFLOW_CHECKPOINT_NS_SEPARATOR}"
-            f"{state.runtime.plan_preset_id.value}"
+            f"{preset_id_val}"
         )
         checkpoint_sql = (
             f"INSERT INTO {CHAT_WORKFLOW_CHECKPOINT_TABLE} "
@@ -171,6 +173,11 @@ class ChatWorkflowService:
             "VALUES (:checkpoint_id, :thread_id, :checkpoint_ns, :trace_id, "
             ":interaction_id, :node_type, CAST(:payload AS JSONB), NOW())"
         )
+        
+        node_type_val = ChatWorkflowNodeType.FINALIZE.value
+        if state.runtime.current_node_type:
+            node_type_val = state.runtime.current_node_type.value if hasattr(state.runtime.current_node_type, "value") else state.runtime.current_node_type
+
         async with self.pg_client.session_factory() as session:
             await session.execute(
                 text(checkpoint_sql),
@@ -180,9 +187,7 @@ class ChatWorkflowService:
                     "checkpoint_ns": checkpoint_ns,
                     "trace_id": state.runtime.trace_id,
                     "interaction_id": state.runtime.interaction_id,
-                    "node_type": (
-                        state.runtime.current_node_type or ChatWorkflowNodeType.FINALIZE
-                    ).value,
+                    "node_type": node_type_val,
                     "payload": json.dumps(state.model_dump(mode="json"), ensure_ascii=False),
                 },
             )
@@ -193,13 +198,16 @@ class ChatWorkflowService:
         state: ChatWorkflowState,
         event_type: ChatWorkflowEventType,
     ) -> None:
+        node_type_val = state.runtime.current_node_type if not state.runtime.current_node_type else (
+            state.runtime.current_node_type if hasattr(state.runtime.current_node_type, "value") else ChatWorkflowNodeType(state.runtime.current_node_type)
+        )
         event = ChatWorkflowEvent(
             event_type=event_type,
             trace_id=state.runtime.trace_id,
             interaction_id=state.runtime.interaction_id,
             session_id=state.runtime.session_id,
             plan_preset_id=ChatPlanPreset.DAILY_CHAT_DEFAULT,
-            node_type=state.runtime.current_node_type,
+            node_type=node_type_val,
             timestamp_ms=current_time_ms(),
             payload={"assistant_message_id": state.generation_state.assistant_message_id},
         )
@@ -209,6 +217,10 @@ class ChatWorkflowService:
     async def publish_error_chunk(self, state: ChatWorkflowState, error: str) -> None:
         from app.api.sse import sse_manager
 
+        node_type_val = state.runtime.current_node_type or ChatWorkflowNodeType.MAIN_CHAT_LLM
+        if node_type_val and not hasattr(node_type_val, "value"):
+            node_type_val = ChatWorkflowNodeType(node_type_val)
+
         payload = ChatStreamChunkPayload(
             type=CHAT_STREAM_TYPE_REPLY_CHUNK,
             chunk="",
@@ -217,7 +229,7 @@ class ChatWorkflowService:
             error=error,
             interaction_id=state.runtime.interaction_id,
             assistant_message_id=state.generation_state.assistant_message_id,
-            current_node_type=state.runtime.current_node_type or ChatWorkflowNodeType.MAIN_CHAT_LLM,
+            current_node_type=node_type_val,
             is_final_chunk=True,
         )
         await sse_manager.publish(

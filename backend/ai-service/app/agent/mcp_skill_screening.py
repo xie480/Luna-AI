@@ -5,11 +5,12 @@ MCP Skill 初筛 Agent（Agent 1）。
          由 LLM 依据轻量元数据（不含 Tool/Resource）输出 SkillChainPlan。
          此时 Skill 处于未展开状态，仅作为能力指针存在。
 为什么这样做：将原有的"工具初筛"升级为"技能初筛"。Skill 作为能力
-             指针，Agent 1 在初筛阶段不加载具体工具和资源，
-             大幅节省 Token 消耗。
+              指针，Agent 1 在初筛阶段不加载具体工具和资源，
+              大幅节省 Token 消耗。
 边界条件：
     - 候选 Skill 列表为空时直接标记 no_suitable_skill=True，不调用 LLM。
-    - LLM 输出的 skill_id 不在候选列表中时降级为 no_suitable_skill=True。
+    - LLM 可能输出 skill_id 或 skill_name，校验逻辑自动解析名称到真实 ID。
+    - LLM 输出既不是 skill_id 也不是 skill_name 时降级为 no_suitable_skill=True。
     - LLM 调用失败重试 2 次，重试耗尽后降级返回空列表。
 """
 
@@ -115,13 +116,27 @@ class MCPSkillScreeningAgent:
                     f"attempt={attempt} output={response.model_dump(mode='json')}"
                 )
 
-                # 校验所有 skill_id 是否在候选列表中
+                # 校验所有 skill_id/name 是否在候选列表中（兼容大模型输出 name 而非 ID 的情况）
                 if not response.no_suitable_skill and response.selected_skill_ids:
                     candidate_ids = {c["skill_id"] for c in candidates}
+                    name_to_id = {c["name"]: c["skill_id"] for c in candidates}
+
+                    resolved_ids = []
                     for sid in response.selected_skill_ids:
-                        if sid not in candidate_ids:
+                        if sid in candidate_ids:
+                            # 直接命中 skill_id
+                            resolved_ids.append(sid)
+                        elif sid in name_to_id:
+                            # 兼容大模型输出 skill_name 而非 skill_id
+                            actual_id = name_to_id[sid]
+                            logger.info(
+                                f"MCP Skill 初筛 Agent 将 name '{sid}' 解析为 "
+                                f"skill_id '{actual_id}' trace_id={trace_id}"
+                            )
+                            resolved_ids.append(actual_id)
+                        else:
                             logger.warning(
-                                f"MCP Skill 初筛 Agent 选定 skill_id '{sid}' "
+                                f"MCP Skill 初筛 Agent 选定 skill_id/name '{sid}' "
                                 f"不在候选列表中 trace_id={trace_id}，降级"
                             )
                             return SkillChainPlan(
@@ -129,6 +144,9 @@ class MCPSkillScreeningAgent:
                                 reasoning=f"LLM 选定 '{sid}' 不在候选列表中",
                                 no_suitable_skill=True,
                             )
+
+                    # 用解析后的真实 skill_id 覆盖原始输出
+                    response.selected_skill_ids = resolved_ids
 
                 logger.info(
                     f"MCP Skill 初筛完成 trace_id={trace_id} "
