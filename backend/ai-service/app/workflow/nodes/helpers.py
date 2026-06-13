@@ -22,12 +22,12 @@ def format_recent_history(history: list[dict[str, Any]] | list[Interaction]) -> 
     parts: list[str] = []
     for index, item in enumerate(history):
         # 兼容 dict 和 Interaction 对象
-        user_content = item.get("userContent", "") if isinstance(item, dict) else item.userContent
-        assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else item.assistantContent
-        thought = item.get("thought", "") if isinstance(item, dict) else item.thought
-        emotion = item.get("emotion", "") if isinstance(item, dict) else item.emotion
-        error = item.get("error", "") if isinstance(item, dict) else item.error
-        timestamp = item.get("timestamp", 0) if isinstance(item, dict) else item.timestamp
+        user_content = item.get("userContent", "") if isinstance(item, dict) else getattr(item, "userContent", "")
+        assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else getattr(item, "assistantContent", "")
+        thought = item.get("thought", "") if isinstance(item, dict) else getattr(item, "thought", "")
+        emotion = item.get("emotion", "") if isinstance(item, dict) else getattr(item, "emotion", "")
+        error = item.get("error", "") if isinstance(item, dict) else getattr(item, "error", "")
+        timestamp = item.get("timestamp", 0) if isinstance(item, dict) else getattr(item, "timestamp", 0)
 
         parts.append(f"[对话 {index + 1}]\n")
         parts.append(f"用户: {user_content}\n")
@@ -64,9 +64,9 @@ def history_to_model_messages(history: list[dict[str, Any]] | list[Interaction])
     messages: list[dict[str, str]] = []
     for item in history:
         # 兼容 dict 和 Interaction 对象
-        user_content = item.get("userContent", "") if isinstance(item, dict) else item.userContent
-        error = item.get("error", "") if isinstance(item, dict) else item.error
-        assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else item.assistantContent
+        user_content = item.get("userContent", "") if isinstance(item, dict) else getattr(item, "userContent", "")
+        error = item.get("error", "") if isinstance(item, dict) else getattr(item, "error", "")
+        assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else getattr(item, "assistantContent", "")
         
         messages.append({"role": Role.USER.value, "content": user_content})
         messages.append({"role": Role.ASSISTANT.value, "content": error or assistant_content})

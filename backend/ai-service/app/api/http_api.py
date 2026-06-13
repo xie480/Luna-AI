@@ -146,10 +146,10 @@ async def sync_init_state(
     last_3_history = recent_history[-3:]
     recent_qa = [
         InteractionQA(
-            msgId=item.msgId,
-            userContent=item.userContent,
-            assistantContent=item.assistantContent,
-            timestamp=item.timestamp,
+            msgId=item.get("msgId", "") if isinstance(item, dict) else getattr(item, "msgId", ""),
+            userContent=item.get("userContent", "") if isinstance(item, dict) else getattr(item, "userContent", ""),
+            assistantContent=item.get("assistantContent", "") if isinstance(item, dict) else getattr(item, "assistantContent", ""),
+            timestamp=item.get("timestamp", 0) if isinstance(item, dict) else getattr(item, "timestamp", 0),
         )
         for item in last_3_history
     ]

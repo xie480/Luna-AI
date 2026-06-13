@@ -192,50 +192,26 @@ class MCPResourceSubAgent:
         )
 
         try:
-            response_schema = {
-                "type": "json_object",
-                "properties": {
-                    "has_relevant_info": {"type": "boolean"},
-                    "extractions": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "extracted_content": {"type": "string"},
-                                "matched_lines": {
-                                    "type": "array",
-                                    "items": {"type": "integer"},
-                                },
-                                "summary": {"type": "string"},
-                            },
-                        },
-                    },
-                },
-            }
+            from pydantic import BaseModel, Field
+            from typing import List
             
-            schema_prompt = (
-                f"\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
-                f"{json.dumps(response_schema, ensure_ascii=False, indent=2)}\n\n"
-                "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
-            )
+            class ExtractionItem(BaseModel):
+                extracted_content: str
+                matched_lines: List[int]
+                summary: str
+                
+            class ResourceExtractionResponse(BaseModel):
+                has_relevant_info: bool
+                extractions: List[ExtractionItem]
             
-            response_text = await llm_client.generate_structured_text(
+            response_model = await llm_client.generate_structured(
                 model=self._get_mid_model(),
-                messages=[{"role": "system", "content": full_prompt + schema_prompt}],
+                messages=[{"role": "system", "content": full_prompt}],
+                response_format=ResourceExtractionResponse,
                 timeout=60.0,
             )
 
-            # 清理可能存在的 markdown 代码块
-            cleaned_text = response_text.strip()
-            if cleaned_text.startswith("```json"):
-                cleaned_text = cleaned_text[7:]
-            elif cleaned_text.startswith("```"):
-                cleaned_text = cleaned_text[3:]
-            if cleaned_text.endswith("```"):
-                cleaned_text = cleaned_text[:-3]
-            cleaned_text = cleaned_text.strip()
-            
-            result_dict = json.loads(cleaned_text)
+            result_dict = response_model.model_dump()
 
             # 记录 LLM 完整输出
             logger.info(
@@ -378,37 +354,30 @@ class MCPResourceSubAgent:
 
         mid_model = self._get_mid_model()
         try:
-            fallback_schema = {
-                "type": "json_object",
-                "properties": {},
-                "additionalProperties": True,
-                "description": "返回一个以 state_key 为键，包含 status 和 result 字段的对象为值的 JSON"
+            from pydantic import BaseModel, create_model
+            from typing import Any
+            
+            # 使用 Pydantic 构建动态 schema 模型，这里返回格式是一个 dict[str, dict] 的快照。
+            # 为了与底层 generate_structured 强类型校验兼容，我们创建一个带有任意附加属性的模型。
+            class StateSnapshot(BaseModel):
+                status: str
+                result: str
+                
+            # 动态创建一个与 execution_plan 中的 state 键对应的 Pydantic 模型
+            fields = {
+                key: (StateSnapshot, ...) for key in execution_plan_rendered.keys()
             }
+            FallbackResponseModel = create_model('FallbackResponseModel', **fields)
             
-            schema_prompt = (
-                f"\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
-                f"{json.dumps(fallback_schema, ensure_ascii=False, indent=2)}\n\n"
-                "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字。"
-            )
-            
-            response_text = await llm_client.generate_structured_text(
+            fallback_model = await llm_client.generate_structured(
                 model=mid_model,
-                messages=[{"role": "system", "content": full_prompt + schema_prompt}],
+                messages=[{"role": "system", "content": full_prompt}],
+                response_format=FallbackResponseModel,
                 timeout=30.0,
             )
-
-            # 清理可能存在的 markdown 代码块
-            cleaned_text = response_text.strip()
-            if cleaned_text.startswith("```json"):
-                cleaned_text = cleaned_text[7:]
-            elif cleaned_text.startswith("```"):
-                cleaned_text = cleaned_text[3:]
-            if cleaned_text.endswith("```"):
-                cleaned_text = cleaned_text[:-3]
-            cleaned_text = cleaned_text.strip()
             
-            fallback_response = json.loads(cleaned_text)
-
+            fallback_response = fallback_model.model_dump()
+            
             # 记录 LLM 完整输出
             logger.info(
                 f"[MCP Fallback Extraction] LLM 完整输出 trace_id={trace_id} "

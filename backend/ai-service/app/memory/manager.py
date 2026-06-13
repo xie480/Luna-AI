@@ -225,13 +225,18 @@ class Manager:
 
         context_parts = []
         for i, h in enumerate(history):
+            h_user_content = h.get("userContent", "") if isinstance(h, dict) else getattr(h, "userContent", "")
+            h_assistant_content = h.get("assistantContent", "") if isinstance(h, dict) else getattr(h, "assistantContent", "")
+            h_thought = h.get("thought", "") if isinstance(h, dict) else getattr(h, "thought", "")
+            h_emotion = h.get("emotion", "") if isinstance(h, dict) else getattr(h, "emotion", "")
+            
             context_parts.append(f"[对话 {i+1}]\n")
-            context_parts.append(f"用户: {h.userContent}\n")
-            context_parts.append(f"Luna: {h.assistantContent}\n")
-            if h.thought:
-                context_parts.append(f"(内心独白: {h.thought})\n")
-            if h.emotion:
-                context_parts.append(f"(心情: {h.emotion})\n")
+            context_parts.append(f"用户: {h_user_content}\n")
+            context_parts.append(f"Luna: {h_assistant_content}\n")
+            if h_thought:
+                context_parts.append(f"(内心独白: {h_thought})\n")
+            if h_emotion:
+                context_parts.append(f"(心情: {h_emotion})\n")
             context_parts.append("\n")
         
         messages_text = "".join(context_parts)
