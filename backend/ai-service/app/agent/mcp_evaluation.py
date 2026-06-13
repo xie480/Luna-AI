@@ -82,12 +82,14 @@ class MCPEvaluationAgent:
             except Exception:
                 pass
 
-        logger.info(f"[MCP Evaluation Agent] 开始评估 trace_id={trace_id}")
-
+        # 兜底：如果 full_prompt 为空（如 prompt_manager 未注入），使用默认评估提示，
+        # 避免发空内容给大模型引发 "contents field is required" 错误
+        effective_prompt = full_prompt or "请根据工具执行结果评估用户意图是否达成。"
+        logger.info(f"[MCP Evaluation Agent] 开始评估 trace_id={trace_id}, full_prompt={effective_prompt}")
         try:
             response = await llm_client.generate_structured(
                 model=self.model_name,
-                messages=[{"role": "system", "content": full_prompt}],
+                messages=[{"role": "system", "content": effective_prompt}],
                 response_format=EvaluationResult,
                 timeout=30.0,
             )

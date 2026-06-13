@@ -303,6 +303,11 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         display_text=format_execution_start(total_states),
                     )
 
+                    logger.info(
+                        f"MCP Skill 开始执行 trace_id={state.runtime.trace_id} "
+                        f"execution_plan={execution_plan.model_dump(mode='json')}"
+                    )
+
                     tool_results: list[dict[str, Any]] = []
                     exec_agent = MCPSkillExecutionAgent()
                     state_keys = sorted(execution_plan.states.keys())
@@ -336,10 +341,23 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         )
 
                         if step_result.get("can_proceed", False):
+                            logger.info(
+                                f"MCP Skill 步骤执行成功 trace_id={state.runtime.trace_id} "
+                                f"step_name={state_val.tool} "
+                                f"step_goal={state_val.goal} "
+                                f"step_result={step_result}"
+                            )
                             calling_result = await self._execute_single_tool(
                                 trace_id=state.runtime.trace_id,
                                 tool_name=state_val.tool,
                                 tool_parameters=step_result.get("tool_parameters", {}),
+                            )
+                            logger.info(
+                                f"MCP Skill 步骤调用工具成功 trace_id={state.runtime.trace_id} "
+                                f"step_name={state_val.tool} "
+                                f"step_goal={state_val.goal} "
+                                f"tool_name={calling_result.get('tool_name', '')} "
+                                f"tool_parameters={calling_result.get('tool_parameters', {})} "
                             )
                             tool_results.append({
                                 "tool_name": state_val.tool,
@@ -352,6 +370,12 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                                 "tool_parameters": step_result.get("tool_parameters", {}),
                             })
                         else:
+                            logger.info(
+                                f"MCP Skill 步骤执行失败 trace_id={state.runtime.trace_id} "
+                                f"step_name={state_val.tool} "
+                                f"step_goal={state_val.goal} "
+                                f"step_result={step_result}"
+                            )
                             tool_results.append({
                                 "tool_name": state_val.tool,
                                 "success": False,
@@ -386,7 +410,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     # ============================================================
                     # 语义层面的目标达成评估 (MCPEvaluationAgent)
                     # ============================================================
-                    eval_agent = MCPEvaluationAgent()
+                    eval_agent = MCPEvaluationAgent(prompt_manager=prompt_manager)
                     step_goal = next((s.goal for s in execution_plan.states.values() if s.goal), "完成任务")
                     eval_result = await eval_agent.evaluate(
                         trace_id=state.runtime.trace_id,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from app.agent.input_reconstructor import InputReconstructorAgent
@@ -22,6 +23,7 @@ from app.workflow.constants import (
     CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
     CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
     PROMPT_VARIABLE_CORE_SUMMARY,
+    PROMPT_VARIABLE_CURRENT_TIME,
     PROMPT_VARIABLE_KEY_FACTS,
     PROMPT_VARIABLE_MEMORY_SNIPPETS,
     ChatWorkflowNodeType,
@@ -85,9 +87,12 @@ class InputReconstructionNode(ChatWorkflowNode):
             dag_route_hints = [item.value for item in DagRouteHint]
             retrieval_types = [item.value for item in RetrievalType]
 
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+
             runtime_prompt = await prompt_manager.assemble_prompt(
                 PromptCategory.INPUT_RECONSTRUCTION,
                 {
+                    PROMPT_VARIABLE_CURRENT_TIME: current_time,
                     "USER_INPUT": state.input_payload.raw_user_message,
                     "PRIMARY_INTENTS": '"' + '", "'.join(primary_intents) + '"',
                     "CATEGORIES": '"' + '", "'.join(categories) + '"',
