@@ -314,7 +314,10 @@ class RagRetrievalOrchestrator:
             content_to_evaluate = candidates[0].candidate.chunk.content_text
             
             # 构建渲染上下文
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
             context = {
+                "CURRENT_TIME": current_time,
                 "disambiguated_text": request.disambiguated_text or request.query,
                 "search_queries": request.search_queries or [request.query],
                 "entity_mentions": request.entity_mentions or [],

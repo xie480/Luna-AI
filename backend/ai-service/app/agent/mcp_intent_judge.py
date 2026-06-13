@@ -15,6 +15,7 @@ MCP 前置判断 Agent — 延迟 MCP 意图判定。
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from app.logger import logger
@@ -76,9 +77,11 @@ class MCPIntentJudgeAgent:
         """
 
         # 组装完整的 Prompt
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_INTENT_JUDGE,
             {
+                "CURRENT_TIME": current_time,
                 "RECONSTRUCTED_INPUT": reconstructed_input,
                 "RAG_EVIDENCE": rag_evidence or "（无 RAG 召回证据）",
             },

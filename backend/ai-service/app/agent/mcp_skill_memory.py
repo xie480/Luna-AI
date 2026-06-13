@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from typing import Any
 
 from app.llm.client import llm_client
@@ -63,9 +64,11 @@ class MCPSkillMemoryAgent:
         full_prompt = ""
         if self.prompt_manager:
             try:
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
                 full_prompt = await self.prompt_manager.assemble_prompt(
                     PromptCategory.MCP_SKILL_MEMORY,
                     {
+                        "CURRENT_TIME": current_time,
                         "SKILL_NAME": skill_name,
                         "MCP_INTENT": mcp_intent,
                         "INNER_SUGGESTION": inner_suggestion or "",

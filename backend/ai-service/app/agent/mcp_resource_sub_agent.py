@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import datetime
 from typing import Any
 
 from app.logger import logger
@@ -175,9 +176,11 @@ class MCPResourceSubAgent:
         from app.llm.client import llm_client
 
         # 通过 PromptManager 组装完整模板
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_RESOURCE_EXTRACTION,
             {
+                "CURRENT_TIME": current_time,
                 "LOAD_PURPOSE": load_purpose,
                 "RESOURCE_NAME": resource_name,
                 "TOTAL_LINES": total_lines,
@@ -337,9 +340,11 @@ class MCPResourceSubAgent:
                 "error_message": "",
             }]
 
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_FALLBACK_EXTRACTION,
             {
+                "CURRENT_TIME": current_time,
                 "EXECUTION_PLAN": execution_plan_rendered,
                 "TOOL_RESULTS": truncated_tool_results,
                 "RESOURCE_RESULTS": truncated_resource_results,

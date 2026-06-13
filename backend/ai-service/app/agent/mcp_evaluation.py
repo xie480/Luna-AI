@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -71,9 +72,11 @@ class MCPEvaluationAgent:
         full_prompt = ""
         if self.prompt_manager:
             try:
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
                 full_prompt = await self.prompt_manager.assemble_prompt(
                     PromptCategory.MCP_EVALUATION,
                     {
+                        "CURRENT_TIME": current_time,
                         "MCP_INTENT": mcp_intent,
                         "STEP_GOAL": step_goal,
                         "EXECUTION_RESULTS": results_text,

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime
 from typing import Any
 
 from app.llm.client import llm_client
@@ -121,9 +122,11 @@ class MCPSkillExecutionAgent:
         ]
 
         # 组装通用状态的 memory prompt（使用框架层的 memory.j2）
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         system_context_str = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_EXECUTION,
             {
+                "CURRENT_TIME": current_time,
                 "STEP_TOOL": step_name,
                 "STEP_GOAL": step_goal,
                 "REQUIRED_RESOURCES": json.dumps(required_resources, ensure_ascii=False),
@@ -171,9 +174,10 @@ class MCPSkillExecutionAgent:
                 elif prompt_manager and prompt_manager.cache_mgr:
                     # 尝试从数据库加载该工具的 Prompt
                     try:
+                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
                         db_prompt = await prompt_manager.assemble_prompt(
                             PromptCategory.MCP_SKILL_EXECUTION,
-                            {"STEP_TOOL": step_name, "STEP_GOAL": step_goal},
+                            {"CURRENT_TIME": current_time, "STEP_TOOL": step_name, "STEP_GOAL": step_goal},
                         )
                         if db_prompt and len(db_prompt) > 10:
                             tool_template = db_prompt
@@ -204,11 +208,14 @@ class MCPSkillExecutionAgent:
 
         # 如果没有渲染出专属 Prompt，则回退到原始的通用 Prompt 拼接模式
         if not full_prompt:
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
             system_prompt = await prompt_manager.assemble_prompt(
-                PromptCategory.MCP_SKILL_EXECUTION, {}
+                PromptCategory.MCP_SKILL_EXECUTION,
+                {"CURRENT_TIME": current_time},
             )
             runtime_prompt = await prompt_manager.assemble_prompt(
-                PromptCategory.MCP_SKILL_EXECUTION, {}
+                PromptCategory.MCP_SKILL_EXECUTION,
+                {"CURRENT_TIME": current_time},
             )
             full_prompt = f"{system_prompt}\n\n{system_context_str}\n\n{runtime_prompt}"
 

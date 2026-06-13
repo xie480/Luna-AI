@@ -280,7 +280,10 @@ class Manager:
         memory_id = generate_string_id()
 
         # 组装长期记忆压缩提示词
+        from datetime import datetime
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         summarize_variables = {
+            "CURRENT_TIME": current_time,
             "CURRENT_CORE_SUMMARY": summary.core_summary,
             "CURRENT_KEY_FACTS": summary.key_facts,
             "MESSAGES_TEXT": messages_text,

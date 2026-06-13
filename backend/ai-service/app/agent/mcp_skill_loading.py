@@ -5,8 +5,8 @@ MCP Skill 加载 Agent（Agent 2），支持多 Skill 组合加载。
          完整展开信息，将所有 tools 和 resources 聚合后由 LLM 跨 Skill
          选拔最终需要的组合，生成统一的执行计划（ExecutionPlan）。
 为什么这样做：Agent 1 可能选择多个 Skill 协作完成任务，Agent 2 需要
-             将多 Skill 的 tools/resources 合并后让 LLM 统一选拔，
-             避免各 Skill 单独规划导致的冲突或冗余。
+              将多 Skill 的 tools/resources 合并后让 LLM 统一选拔，
+              避免各 Skill 单独规划导致的冲突或冗余。
 边界条件：
     - skill_ids 列表为空时直接返回空计划，触发退回机制。
     - 所有选中的 Skill 都不存在时返回空计划。
@@ -15,6 +15,7 @@ MCP Skill 加载 Agent（Agent 2），支持多 Skill 组合加载。
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from app.config.settings import settings
@@ -129,9 +130,11 @@ class MCPSkillLoadingAgent:
             for r in aggregated_resources
         ) if aggregated_resources else "  （无可用资源）"
 
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_LOADING,
             {
+                "CURRENT_TIME": current_time,
                 "SKILL_CONTEXT": skills_context,
                 "AGGREGATED_TOOLS": tools_context,
                 "AGGREGATED_RESOURCES": resources_context,

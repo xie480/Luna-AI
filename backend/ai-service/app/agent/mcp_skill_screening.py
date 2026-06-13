@@ -16,6 +16,7 @@ MCP Skill 初筛 Agent（Agent 1）。
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from app.logger import logger
@@ -79,9 +80,11 @@ class MCPSkillScreeningAgent:
         execution_snapshot = fallback_context.get("execution_snapshot", {})
         fallback_count = fallback_context.get("fallback_count", 0)
 
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
         full_prompt = await prompt_manager.assemble_prompt(
             PromptCategory.MCP_SKILL_SCREENING,
             {
+                "CURRENT_TIME": current_time,
                 "CANDIDATE_SKILLS": candidates,
                 "MCP_INTENT": mcp_intent,
                 "SKILL_NEED_TOOL": skill_judgment.get("need_skill", False),
