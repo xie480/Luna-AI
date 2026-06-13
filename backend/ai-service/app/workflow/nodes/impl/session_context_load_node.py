@@ -55,7 +55,7 @@ class SessionContextLoadNode(ChatWorkflowNode):
             return state
         try:
             summary, history = await self.dependencies.redis_repo.get_context(state.runtime.session_id)
-            state.session_state.recent_messages = history
+            state.session_state.recent_messages = [h.model_dump(mode="json") for h in history]
             state.session_state.short_summary = summary.core_summary
             state.session_state.key_facts = split_key_facts(summary.key_facts)
             state.session_state.memory_snippets = format_recent_history(history)

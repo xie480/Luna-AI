@@ -69,13 +69,11 @@ class ExperienceReflectionRouting(BaseModel):
     search_queries: list[str] = Field(default_factory=list)
     reflection_focus: str = Field(..., description="反思焦点，如 RISK_AVERSION")
 
-class RagRetrievalRoute(str, Enum):
-    KEYWORD = "keyword"
-    HYBRID = "hybrid"
-    AGENTIC = "agentic"
+# Use RagRetrievalRoute from types.constants instead
+from app.types.constants import RagRetrievalRoute
 
 class RetrievalRouting(BaseModel):
-    route_strategy: RagRetrievalRoute = Field(default=RagRetrievalRoute.HYBRID, description="RAG路由策略")
+    route_strategy: str = Field(default=RagRetrievalRoute.HYBRID.value, description="RAG路由策略")
     long_term_memory: LongTermMemoryRouting
     external_knowledge: ExternalKnowledgeRouting
     experience_reflection: ExperienceReflectionRouting

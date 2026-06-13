@@ -17,22 +17,30 @@ from app.workflow.context import ChatWorkflowState
 from app.workflow.events import ChatStreamChunkPayload, ChatWorkflowEventPublisher
 
 
-def format_recent_history(history: list[Interaction]) -> str:
+def format_recent_history(history: list[dict[str, Any]] | list[Interaction]) -> str:
     """把 Redis 短期窗口转换为 Prompt 可读文本。"""
     parts: list[str] = []
     for index, item in enumerate(history):
+        # 兼容 dict 和 Interaction 对象
+        user_content = item.get("userContent", "") if isinstance(item, dict) else item.userContent
+        assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else item.assistantContent
+        thought = item.get("thought", "") if isinstance(item, dict) else item.thought
+        emotion = item.get("emotion", "") if isinstance(item, dict) else item.emotion
+        error = item.get("error", "") if isinstance(item, dict) else item.error
+        timestamp = item.get("timestamp", 0) if isinstance(item, dict) else item.timestamp
+
         parts.append(f"[对话 {index + 1}]\n")
-        parts.append(f"用户: {item.userContent}\n")
-        if item.assistantContent:
-            parts.append(f"Luna: {item.assistantContent}\n")
-        if item.thought:
-            parts.append(f"(内心独白: {item.thought})\n")
-        if item.emotion:
-            parts.append(f"(心情: {item.emotion})\n")
-        if item.error:
-            parts.append(f"(错误: {item.error})\n")
-        if item.timestamp:
-            timestamp_text = datetime.fromtimestamp(item.timestamp).strftime("%Y-%m-%d %H:%M:%S %A")
+        parts.append(f"用户: {user_content}\n")
+        if assistant_content:
+            parts.append(f"Luna: {assistant_content}\n")
+        if thought:
+            parts.append(f"(内心独白: {thought})\n")
+        if emotion:
+            parts.append(f"(心情: {emotion})\n")
+        if error:
+            parts.append(f"(错误: {error})\n")
+        if timestamp:
+            timestamp_text = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S %A")
             parts.append(f"(时间: {timestamp_text})\n")
         parts.append("\n")
     return "".join(parts)
@@ -51,12 +59,17 @@ def first_reason(reasons: list[str], fallback: str) -> str:
     return fallback
 
 
-def history_to_model_messages(history: list[Interaction]) -> list[dict[str, str]]:
+def history_to_model_messages(history: list[dict[str, Any]] | list[Interaction]) -> list[dict[str, str]]:
     """把历史 Interaction 转为 LLM 对话上下文。"""
     messages: list[dict[str, str]] = []
     for item in history:
-        messages.append({"role": Role.USER.value, "content": item.userContent})
-        messages.append({"role": Role.ASSISTANT.value, "content": item.error or item.assistantContent})
+        # 兼容 dict 和 Interaction 对象
+        user_content = item.get("userContent", "") if isinstance(item, dict) else item.userContent
+        error = item.get("error", "") if isinstance(item, dict) else item.error
+        assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else item.assistantContent
+        
+        messages.append({"role": Role.USER.value, "content": user_content})
+        messages.append({"role": Role.ASSISTANT.value, "content": error or assistant_content})
     return messages
 
 

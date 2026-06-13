@@ -56,7 +56,7 @@ class ChatSessionState(BaseModel):
     short_summary: str = ""
     long_summary: str = ""
     key_facts: list[str] = Field(default_factory=list)
-    recent_messages: list[dict[str, Any]] = Field(default_factory=list)
+    recent_messages: list[Any] = Field(default_factory=list)
     token_budget_total: int = Field(default=0, ge=0)
     token_budget_used: int = Field(default=0, ge=0)
     context_window_status: str = "ready"
