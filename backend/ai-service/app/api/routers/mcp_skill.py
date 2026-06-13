@@ -167,6 +167,11 @@ async def register_skill(
                 f"trace_id={trace_id} skill_id={skill_id} name={body.name}"
             )
 
+            # 将注册的 Skill 更新到内存中
+            from app.mcp.skill_registry import SkillRegistry
+            registry = SkillRegistry()
+            await registry.load_from_pg(session)
+
             return {
                 "code": 0,
                 "msg": "success",
@@ -394,6 +399,11 @@ async def batch_register_skills(
                     f"trace_id={trace_id} name={skill_name} "
                     f"skill_id={skill_id}"
                 )
+
+                # 将注册的 Skill 更新到内存中
+                from app.mcp.skill_registry import SkillRegistry
+                registry = SkillRegistry()
+                await registry.load_from_pg(session)
 
             except Exception as e:
                 await session.rollback()
@@ -652,6 +662,11 @@ async def update_skill(
                 f"trace_id={trace_id} skill_id={skill_id}"
             )
 
+            # 将更新的 Skill 同步到内存中
+            from app.mcp.skill_registry import SkillRegistry
+            registry = SkillRegistry()
+            await registry.load_from_pg(session)
+
             return {
                 "code": 0,
                 "msg": "success",
@@ -719,6 +734,11 @@ async def delete_skill(
                 f"MCP Skill 删除完成 "
                 f"trace_id={trace_id} skill_id={skill_id} name={skill_name}"
             )
+
+            # 将删除操作同步到内存中
+            from app.mcp.skill_registry import SkillRegistry
+            registry = SkillRegistry()
+            await registry.load_from_pg(session)
 
             return {
                 "code": 0,

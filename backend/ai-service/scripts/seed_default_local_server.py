@@ -127,10 +127,10 @@ async def main() -> None:
     success = await seed_default_local_server()
     if success:
         logger.info("默认本地 MCP 服务器写入完成")
-        print("✅ 默认本地 MCP 服务器写入完成")
+        print("[SUCCESS] 默认本地 MCP 服务器写入完成")
     else:
         logger.error("默认本地 MCP 服务器写入失败")
-        print("❌ 默认本地 MCP 服务器写入失败")
+        print("[FAILED] 默认本地 MCP 服务器写入失败")
         sys.exit(1)
 
 

@@ -97,12 +97,24 @@ class InputReconstructionNode(ChatWorkflowNode):
             )
             from app.llm.client import llm_client
 
+            logger.info(
+                f"组装 Input Reconstruction Prompt trace_id={state.runtime.trace_id}, "
+                f"input_recon_system_prompt={system_prompt}, "
+                f"input_recon_memory_prompt={memory_prompt}, "
+                f"input_recon_runtime_prompt={runtime_prompt}"
+            )
+
             result = await InputReconstructorAgent(llm_client).process(
                 trace_id=state.runtime.trace_id,
                 user_input=state.input_payload.raw_user_message,
                 system_prompt=system_prompt,
                 memory_prompt=memory_prompt,
                 runtime_prompt=runtime_prompt,
+            )
+
+            logger.info(
+                f"Input Reconstruction trace_id={state.runtime.trace_id}, "
+                f"result={result.model_dump(mode='json')}"
             )
 
             reconstruction = result.reconstruction
