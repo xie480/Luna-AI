@@ -62,6 +62,27 @@ export interface SkillInfo {
   created_at: string;
   /** 更新时间。 */
   updated_at: string;
+  
+  /** 关联工具 */
+  tools?: Array<{
+    id: string;
+    name: string;
+    description: string;
+    core_purpose: string;
+  }>;
+  /** 关联 Prompt */
+  prompts?: Array<{
+    id: string;
+    phase: string;
+    content: string;
+  }>;
+  /** 关联资源 */
+  resources?: Array<{
+    id: string;
+    name: string;
+    resource_type: string;
+    uri: string;
+  }>;
 }
 
 /**
@@ -121,6 +142,13 @@ async function _request<T>(url: string, options?: RequestInit): Promise<T> {
  */
 export async function listSkills(): Promise<SkillInfo[]> {
   return _request<SkillInfo[]>(BASE_URL);
+}
+
+/**
+ * 获取 MCP Skill 详情（包含 tools, prompts, resources）。
+ */
+export async function getSkillDetail(skillId: string): Promise<SkillInfo> {
+  return _request<SkillInfo>(`${BASE_URL}/${skillId}`);
 }
 
 /**

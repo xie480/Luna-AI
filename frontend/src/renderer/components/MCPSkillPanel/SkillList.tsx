@@ -18,13 +18,6 @@ interface SkillListProps {
   onRefresh: () => Promise<void>;
 }
 
-/** 工具简略信息（从 Skill metadata 中提取）。 */
-interface ToolBrief {
-  name: string;
-  description: string;
-  core_purpose: string;
-}
-
 export const SkillList: React.FC<SkillListProps> = ({
   skills,
   onDelete,
@@ -40,46 +33,30 @@ export const SkillList: React.FC<SkillListProps> = ({
   // 配置对话框状态
   const [configDialogTool, setConfigDialogTool] = useState<string | null>(null);
 
-  // 工具的模拟数据（后续可以从后端 Skill 详情 API 获取）
-  // 目前为内置工具，后续会通过 API 返回 SkillDetail 中的 tools 列表
-  const [toolMapping, setToolMapping] = useState<Record<string, ToolBrief[]>>({});
+  // 详情数据（从后端获取）
+  const [skillDetails, setSkillDetails] = useState<Record<string, SkillInfo>>({});
+  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
 
-  // 展开时获取工具列表（模拟数据，后续可从后端获取）
+  // 展开时获取详情列表
   useEffect(() => {
     if (!expandedId) return;
-    if (toolMapping[expandedId]) return;
+    if (skillDetails[expandedId]) return;
 
-    // 当前内置 Skills 的工具关联（后续由后端 API 返回）
-    const builtInTools: Record<string, ToolBrief[]> = {
-      // 当 web_search 作为一个 Skill 注册时，关联的工具
+    const fetchDetail = async () => {
+      setLoadingDetails((prev) => ({ ...prev, [expandedId]: true }));
+      try {
+        const { getSkillDetail } = await import('../../services/mcpSkillService');
+        const detail = await getSkillDetail(expandedId);
+        setSkillDetails((prev) => ({ ...prev, [expandedId]: detail as unknown as SkillInfo }));
+      } catch (err) {
+        console.error('Failed to load skill details:', err);
+      } finally {
+        setLoadingDetails((prev) => ({ ...prev, [expandedId]: false }));
+      }
     };
-
-    // 根据技能名称猜测关联的工具
-    const skill = skills.find((s) => s.id === expandedId);
-    if (skill) {
-      const guessedTools: ToolBrief[] = [];
-      // web_search 内置工具
-      if (skill.name === 'web_search' || skill.name.includes('搜索') || skill.name.includes('search')) {
-        guessedTools.push({
-          name: 'web_search',
-          description: '通过 SearXNG 元搜索引擎执行网络搜索，获取最新互联网信息。',
-          core_purpose: '搜索互联网获取最新信息',
-        });
-      }
-      // time 工具
-      if (skill.name === 'get_current_time' || skill.name.includes('时间') || skill.name.includes('time')) {
-        guessedTools.push({
-          name: 'get_current_time',
-          description: '获取当前系统时间，可指定返回格式和时区。',
-          core_purpose: '查询当前日期和时间',
-        });
-      }
-      setToolMapping((prev) => ({
-        ...prev,
-        [expandedId]: guessedTools,
-      }));
-    }
-  }, [expandedId, skills, toolMapping]);
+    
+    fetchDetail();
+  }, [expandedId, skillDetails]);
 
   if (skills.length === 0) {
     return (
@@ -195,85 +172,171 @@ export const SkillList: React.FC<SkillListProps> = ({
                 borderBottom: '1px solid rgba(255,255,255,0.05)',
               }}
             >
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#64748b',
-                  marginBottom: 8,
-                  fontWeight: 500,
-                }}
-              >
-                关联工具
-              </div>
-              {(toolMapping[skill.id] ?? []).length === 0 ? (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: '#475569',
-                    padding: '8px 0',
-                  }}
-                >
-                  暂无关联工具（通过 MCP 工具注册中心关联）
-                </div>
+              {loadingDetails[skill.id] ? (
+                <div style={{ fontSize: 12, color: '#64748b', padding: '8px 0' }}>加载详情中...</div>
               ) : (
-                (toolMapping[skill.id] ?? []).map((tool) => (
-                  <div
-                    key={tool.name}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '6px 8px',
-                      marginBottom: 4,
-                      borderRadius: 6,
-                      background: 'rgba(255,255,255,0.03)',
-                    }}
-                  >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* 关联工具 */}
+                  <div>
                     <div
                       style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 2,
-                        flex: 1,
-                        minWidth: 0,
+                        fontSize: 12,
+                        color: '#64748b',
+                        marginBottom: 8,
+                        fontWeight: 500,
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: 13,
-                          color: '#e2e8f0',
-                          fontWeight: 500,
-                        }}
-                      >
-                        {tool.name}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          color: '#64748b',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {tool.core_purpose || tool.description}
-                      </span>
+                      关联工具
                     </div>
-                    <button
-                      className="btn-edit"
-                      onClick={() => setConfigDialogTool(tool.name)}
+                    {(!skillDetails[skill.id]?.tools || skillDetails[skill.id].tools!.length === 0) ? (
+                      <div style={{ fontSize: 12, color: '#475569', padding: '4px 0' }}>
+                        暂无关联工具
+                      </div>
+                    ) : (
+                      skillDetails[skill.id].tools!.map((tool) => (
+                        <div
+                          key={tool.name}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 8px',
+                            marginBottom: 4,
+                            borderRadius: 6,
+                            background: 'rgba(255,255,255,0.03)',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 2,
+                              flex: 1,
+                              minWidth: 0,
+                            }}
+                          >
+                            <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>
+                              {tool.name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: '#64748b',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {tool.core_purpose || tool.description}
+                            </span>
+                          </div>
+                          <button
+                            className="btn-edit"
+                            onClick={() => setConfigDialogTool(tool.name)}
+                            style={{
+                              fontSize: 12,
+                              padding: '4px 10px',
+                              whiteSpace: 'nowrap',
+                              marginLeft: 8,
+                            }}
+                            title={`配置 ${tool.name}`}
+                          >
+                            配置
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* 关联 Prompts */}
+                  <div>
+                    <div
                       style={{
                         fontSize: 12,
-                        padding: '4px 10px',
-                        whiteSpace: 'nowrap',
-                        marginLeft: 8,
+                        color: '#64748b',
+                        marginBottom: 8,
+                        fontWeight: 500,
                       }}
-                      title={`配置 ${tool.name}`}
                     >
-                      配置
-                    </button>
+                      关联 Prompts
+                    </div>
+                    {(!skillDetails[skill.id]?.prompts || skillDetails[skill.id].prompts!.length === 0) ? (
+                      <div style={{ fontSize: 12, color: '#475569', padding: '4px 0' }}>
+                        暂无关联 Prompt
+                      </div>
+                    ) : (
+                      skillDetails[skill.id].prompts!.map((prompt) => (
+                        <div
+                          key={prompt.id}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 4,
+                            padding: '8px',
+                            marginBottom: 4,
+                            borderRadius: 6,
+                            background: 'rgba(255,255,255,0.03)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, color: '#10b981', background: 'rgba(16,185,129,0.1)', padding: '2px 6px', borderRadius: 4 }}>
+                              {prompt.phase}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto' }}>
+                            {prompt.content}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ))
+
+                  {/* 关联 Resources */}
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#64748b',
+                        marginBottom: 8,
+                        fontWeight: 500,
+                      }}
+                    >
+                      关联 Resources
+                    </div>
+                    {(!skillDetails[skill.id]?.resources || skillDetails[skill.id].resources!.length === 0) ? (
+                      <div style={{ fontSize: 12, color: '#475569', padding: '4px 0' }}>
+                        暂无关联 Resource
+                      </div>
+                    ) : (
+                      skillDetails[skill.id].resources!.map((resource) => (
+                        <div
+                          key={resource.id}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 2,
+                            padding: '6px 8px',
+                            marginBottom: 4,
+                            borderRadius: 6,
+                            background: 'rgba(255,255,255,0.03)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500 }}>
+                              {resource.name}
+                            </span>
+                            <span style={{ fontSize: 11, color: '#3b82f6', background: 'rgba(59,130,246,0.1)', padding: '2px 6px', borderRadius: 4 }}>
+                              {resource.resource_type}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 12, color: '#94a3b8', wordBreak: 'break-all' }}>
+                            URI: {resource.uri}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}

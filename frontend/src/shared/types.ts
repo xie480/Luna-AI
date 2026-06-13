@@ -501,4 +501,25 @@ export interface SkillInfo {
   createdAt: string;
   /** 更新时间（ISO 8601）。 */
   updatedAt: string;
+  
+  /** 关联工具 */
+  tools?: Array<{
+    id: string;
+    name: string;
+    description: string;
+    core_purpose: string;
+  }>;
+  /** 关联 Prompt */
+  prompts?: Array<{
+    id: string;
+    phase: string;
+    content: string;
+  }>;
+  /** 关联资源 */
+  resources?: Array<{
+    id: string;
+    name: string;
+    resource_type: string;
+    uri: string;
+  }>;
 }

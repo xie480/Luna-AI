@@ -453,6 +453,108 @@ async def list_skills(request: Request):
         raise HTTPException(status_code=500, detail=f"查询失败: {e!s}")
 
 
+@router.get("/api/v1/mcp/skills/{skill_id}")
+async def get_skill_detail(
+    skill_id: str,
+    request: Request,
+):
+    """
+    获取单个 MCP Skill 的详细信息。
+
+    做什么：根据 skill_id 查询对应的 Skill，以及其关联的 Tools, Prompts, Resources。
+    为什么这样做：前端在展开 Skill 详情时需要展示这些关联数据。
+    边界条件：
+        - skill_id 不存在时返回 404。
+    参数:
+        skill_id: 要查询的 Skill ID。
+        request: FastAPI 请求对象。
+    返回:
+        dict: {"code": 0, "msg": "success", "data": {...}, "trace_id": "..."}
+    """
+    trace_id = request.headers.get("X-Trace-ID", generate_string_id())
+    pg_client = await _get_pg_client(request)
+
+    from app.repository.models import MCPToolRegistration, Prompt, Resource
+
+    try:
+        async with pg_client.session_factory() as session:
+            # 查 Skill
+            result = await session.execute(
+                select(Skill).where(Skill.id == skill_id).limit(1)
+            )
+            skill = result.scalar_one_or_none()
+            if not skill:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"MCP Skill '{skill_id}' 不存在",
+                )
+
+            skill_dict = await _row_to_skill_info(skill)
+
+            # 查 Tools
+            tools_result = await session.execute(
+                select(MCPToolRegistration).where(MCPToolRegistration.skill_id == skill_id)
+            )
+            tools = []
+            for t in tools_result.scalars().all():
+                tools.append({
+                    "id": t.id,
+                    "name": t.name,
+                    "description": t.description,
+                    "core_purpose": t.core_purpose,
+                })
+            
+            # 查 Prompts
+            prompts_result = await session.execute(
+                select(Prompt).where(Prompt.skill_id == skill_id)
+            )
+            prompts = []
+            for p in prompts_result.scalars().all():
+                prompts.append({
+                    "id": p.id,
+                    "phase": p.phase,
+                    "content": p.content,
+                })
+                
+            # 查 Resources
+            resources_result = await session.execute(
+                select(Resource).where(Resource.skill_id == skill_id)
+            )
+            resources = []
+            for r in resources_result.scalars().all():
+                resources.append({
+                    "id": r.id,
+                    "name": r.name,
+                    "resource_type": r.resource_type,
+                    "uri": r.uri,
+                })
+                
+            skill_dict["tools"] = tools
+            skill_dict["prompts"] = prompts
+            skill_dict["resources"] = resources
+
+            logger.info(
+                f"MCP Skill 详情查询完成 "
+                f"trace_id={trace_id} skill_id={skill_id}"
+            )
+
+            return {
+                "code": 0,
+                "msg": "success",
+                "data": skill_dict,
+                "trace_id": trace_id,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"查询 MCP Skill 详情失败 "
+            f"trace_id={trace_id} skill_id={skill_id} error={e}"
+        )
+        raise HTTPException(status_code=500, detail=f"查询失败: {e!s}")
+
+
 @router.patch("/api/v1/mcp/skills/{skill_id}")
 async def update_skill(
     skill_id: str,
