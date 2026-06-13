@@ -158,6 +158,11 @@ class ChatGenerationState(BaseModel):
     model_name: str = ""
     provider_name: str = ""
     stream_started_at_ms: int = Field(default=0, ge=0)
+    ttft_ms: int = Field(
+        default=0,
+        ge=0,
+        description="首 Token 到达延迟（TTFT），从请求开始到收到第一个有效生成 Token 的耗时，单位为毫秒。",
+    )
 
 
 class ChatObservabilityState(BaseModel):

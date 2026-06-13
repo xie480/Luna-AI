@@ -597,10 +597,6 @@ async def handle_searxng_search(
 
     output_text: str = "\n".join(output_parts)
 
-    # 输出长度截断
-    if len(output_text) > max_url_fetch_length:
-        output_text = output_text[:max_url_fetch_length] + "\n\n[truncated]"
-
     logger.info(
         f"SearXNG 搜索成功 trace_id={trace_id} "
         f"concurrent_groups={concurrent_requests} "

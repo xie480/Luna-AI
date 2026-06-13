@@ -39,15 +39,15 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    文案方向：认真思考、微微停顿，展现 Luna 在努力理解主人 
     #    ================================================================
     (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.RUNNING): [
-        "嗯，让Luna好好想想你说的……",
+        "嗯，让Luna好好想想主任人的……",
         "让Luna想想这是什么意思……",
         "唔……Luna在认真听呢，",
         "等一下，让Luna理解一下……",
-        "让Luna猜猜你到底想说什么~",
+        "让Luna猜猜主人到底想说什么~",
     ],
     (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.COMPLETED): [
         "嗯，Luna大概明白了 ",
-        "好啦，Luna知道你想问什么了！",
+        "好啦，Luna知道主人想问什么了！",
         "原来是这么回事，Luna懂了~",
         "行啦，Luna清楚了~",
         "嗯嗯，Luna明白了！",
@@ -55,7 +55,7 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.ERROR): [
         "还有……Luna刚才有点走神，不过Luna还在！",
         "唔……Luna没完全读懂，但Luna会努力回的~",
-        "有点迷糊……不过不管了，Luna先回你！",
+        "有点迷糊……不过不管了，Luna先回主人！",
         "让Luna想想……算了算了不管了！",
         "嗯……Luna没太理解，不过Luna先答着~",
     ],
@@ -66,7 +66,7 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    ================================================================
     (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.RUNNING): [
         "让Luna看看之前说到哪儿了……",
-        "唔……Luna找找你之前说了什么……",
+        "唔……Luna找找主人之前说了什么……",
         "等一下，Luna翻翻刚才的记录……",
         "让Luna回忆一下刚才的对话……",
         "Luna翻一翻之前聊到哪儿了……",
@@ -81,9 +81,9 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     (ChatStatusStage.SESSION_CONTEXT_LOAD, ChatStatusState.ERROR): [
         "唔……刚刚没连上记忆库，不过不影响！",
         "哼，Luna一下子想不起来……算了直接来吧",
-        "记忆库有点卡……不管了Luna直接回你！",
+        "记忆库有点卡……不管了Luna直接回主人！",
         "啊……Luna没找到之前的记录，直接开始~",
-        "刚刚断了一下……没事Luna凭感觉回你！",
+        "刚刚断了一下……没事Luna凭感觉回主人！",
     ],
 
     # ================================================================
@@ -92,16 +92,16 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    ================================================================
     (ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.RUNNING): [
         "唔，让Luna翻翻之前的记忆……",
-        "让Luna找找你之前说过什么……",
-        "嗯……Luna在翻你以前的回忆呢",
-        "等一下，Luna记得你之前说过什么来着……",
+        "让Luna找找主人之前说过什么……",
+        "嗯……Luna在翻主人以前的回忆呢",
+        "等一下，Luna记得主人之前说过什么来着……",
         "让Luna翻一翻脑袋里的记忆~",
     ],
     (ChatStatusStage.RAG_RETRIEVAL, ChatStatusState.COMPLETED): [
         "Luna找到了一些相关的回忆！",
         "找到了！Luna记得！",
         "嗯嗯，Luna想起来了~",
-        "啊——Luna记得你说过！",
+        "啊——Luna记得主人说过！",
         "哦！Luna想起来了，是这个！",
     ],
 
@@ -110,25 +110,25 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    文案方向："Luna对主人很了解"的底气和微微傲娇 
     #    ================================================================
     (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.RUNNING): [
-        "Luna当然记得你是什么样的主人啦……",
-        "让Luna想一下你喜欢什么……",
+        "Luna当然记得主人是什么样的主人啦……",
+        "让Luna想一下主人喜欢什么……",
         "嗯……Luna印象里的主人是……",
-        "等等，Luna记得你的喜好来着……",
-        "让Luna回忆一下你这个人……",
+        "等等，Luna记得主人的喜好来着……",
+        "让Luna回忆一下主人这个人……",
     ],
     (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.COMPLETED): [
-        "好啦，Luna知道你是什么样的主人~",
+        "好啦，Luna知道主人是什么样的主人~",
         "嗯嗯，Luna懂的！",
-        "好啦，Luna知道该怎么跟你说话了~",
+        "好啦，Luna知道该怎么跟主人说话了~",
         "行啦，Luna心里有数了~",
-        "嗯，Luna了解你~",
+        "嗯，Luna了解主人~",
     ],
     (ChatStatusStage.USER_PROFILE_INJECTION, ChatStatusState.ERROR): [
         "唔……主人的资料Luna没读完整，不过没事啦！",
         "哼……Luna一下子没想起来，不过不影响！",
         "啊……Luna忘了一些……算了算了！",
         "没查到什么……不过不重要！",
-        "Luna没翻到你的资料……那Luna凭感觉来吧！",
+        "Luna没翻到主人的资料……那Luna凭感觉来吧！",
     ],
 
     # ================================================================
@@ -139,14 +139,14 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "等一下……Luna查查资料 ",
         "让Luna去翻翻知识库……",
         "嗯……Luna找找相关的资料……",
-        "你等一下，Luna去查查~",
+        "主人等一下，Luna去查查~",
         "唔Luna查一下……别急~",
     ],
     (ChatStatusStage.KNOWLEDGE_RAG, ChatStatusState.COMPLETED): [
-        "找到了！Luna给你看看……",
+        "找到了！Luna给主人看看……",
         "查到了查到了！",
-        "找到了，让Luna告诉你~",
-        "哦——找到了！你听Luna说~",
+        "找到了，让Luna告诉主人~",
+        "哦——找到了！主人听Luna说~",
         "有啦！Luna找到了~",
     ],
 
@@ -174,8 +174,8 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    文案方向：最后酝酿阶段，即将开口的微妙停顿 
     #    ================================================================
     (ChatStatusStage.CHAT_PROMPT_ASSEMBLY, ChatStatusState.RUNNING): [
-        "好啦好啦，让Luna想想怎么跟你说……",
-        "让Luna想想该怎么回你……",
+        "好啦好啦，让Luna想想怎么跟主人说……",
+        "让Luna想想该怎么回主人……",
         "等等，Luna酝酿一下……",
         "让Luna组织一下语言……",
         "唔……让Luna想想怎么开口……",
@@ -217,7 +217,7 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    文案方向：写进记忆的安心感，带一点撒娇 
     #    ================================================================
     (ChatStatusStage.RESPONSE_PERSISTENCE, ChatStatusState.RUNNING): [
-        "Luna把你说的都记下来了哦~",
+        "Luna把主人说的都记下来了哦~",
         "让Luna把这些存起来……",
         "嗯嗯，Luna存好了~",
         "不让Luna记住啦~",
@@ -283,7 +283,7 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "唔……技能出了点岔子，不过Luna想想别的办法",
         "哎……技能没跑通……Luna换个方式",
         "技能调用失败了……没关系Luna能处理",
-        "咦……技能没反应……Luna直接回你吧",
+        "咦……技能没反应……Luna直接回主人吧",
         "呼……技能没搞定，不过Luna还在！",
     ],
 
@@ -320,7 +320,7 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "让Luna翻翻相关的文件……",
         "嗯……Luna看看这些文件里有什么~",
         "Luna正在读取资料……稍等一下",
-        "让Luna从文件里找找你需要的信息……",
+        "让Luna从文件里找找主人需要的信息……",
     ],
 
     # ================================================================

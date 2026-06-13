@@ -13,8 +13,7 @@ MCP 工具执行网关。
                 当前 Phase 12 直接放行 L0 工具；L2/L3 留待 Phase 13 拦截。
     - Phase 2: Execute — 异步执行工具 handler，含重试与超时控制。
                 默认超时 30s，最大重试 2 次。
-    - Phase 3: Post-process — 输出裁剪（4096 字符）、审计字段填充。
-                超长输出截断标记 [truncated]。
+    - Phase 3: Post-process — 审计字段填充（execution_id、latency_ms）。
 边界条件：
     - 仅限已注册到 MCPToolRegistry 的工具可执行。
     - 参数验证失败直接返回错误结果，不进入 Execute 阶段。

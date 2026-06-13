@@ -95,7 +95,7 @@ class MCPRemoteGateway:
             
             return MCPToolResult(
                 success=not is_error,
-                output_text=output[:4096] + ("[truncated]" if len(output) > 4096 else ""),
+                output_text=output,
                 error_message=output if is_error else "",
                 execution_id=generate_string_id()
             )

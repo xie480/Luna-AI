@@ -145,15 +145,14 @@ class MCPToolResult(BaseModel):
                  同时也为审计回放提供结构化数据。
     边界条件：
         - success=False 时，error_message 必须非空。
-        - output_text 最大长度为 4096 字符，超出截断并标记 [truncated]。
         - execution_id 由 Gateway 在执行时生成，用于审计回放。
     """
     success: bool = Field(
         ..., description="工具执行是否成功。true 表示正常返回，false 表示发生错误。"
     )
     output_text: str = Field(
-        default="", max_length=4096,
-        description="工具返回的输出文本。超出 4096 字符的部分截断并追加 [truncated] 标记。",
+        default="",
+        description="工具返回的输出文本。无长度限制，由下游消费方自行处理。",
     )
     error_message: str = Field(
         default="",
