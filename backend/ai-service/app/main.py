@@ -744,6 +744,18 @@ async def lifespan(app: FastAPI):
             await mcp_registry.persist_to_pg(mcp_pg_repo)
             logger.info("MCP 工具 PG 持久化同步完成")
 
+        # 初始化 SkillRegistry：从 PG 加载所有 Skill 到内存缓存
+        try:
+            from app.mcp.skill_registry import SkillRegistry
+
+            if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:
+                async with pg_client.session_factory() as session:
+                    skill_registry = SkillRegistry()
+                    await skill_registry.load_from_pg(session)
+                    logger.info("MCP Skill 注册中心初始化完成")
+        except Exception as exc:
+            logger.warning(f"MCP Skill 注册中心初始化失败: {exc}")
+
         # 初始化 ToolConfigManager：从 PG 加载工具配置到内存缓存
         # 做什么：加载 tool_configs 表的所有 ACTIVE 配置到内存。
         # 为什么这样做：工具在运行时通过 ToolConfigManager 读取配置，
