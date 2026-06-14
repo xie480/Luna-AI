@@ -180,6 +180,8 @@ class MCPSkillExecutionAgent:
                             {"CURRENT_TIME": current_time, "STEP_TOOL": step_name, "STEP_GOAL": step_goal},
                         )
                         if db_prompt and len(db_prompt) > 10:
+                            # 注意：assemble_prompt 返回的是已渲染的字符串，不可再次作为 Jinja2 模板渲染。
+                            # 此处用于兜底，效果有限但不会导致崩溃。
                             tool_template = db_prompt
                             logger.info(f"从 DB 加载 Prompt 成功: tool={step_name}")
                     except Exception:
@@ -206,18 +208,13 @@ class MCPSkillExecutionAgent:
                     full_prompt = render_template(tool_template, merged_context)
                     logger.info(f"成功渲染专属 Prompt: DB Prompt 或文件 Prompt")
 
-        # 如果没有渲染出专属 Prompt，则回退到原始的通用 Prompt 拼接模式
+        # 如果没有渲染出专属 Prompt，则回退到通用步骤上下文 Prompt。
+        # 修复：system_context_str 已通过 memory.j2 模板一次性注入所有步骤变量（CURRENT_TIME / STEP_TOOL / STEP_GOAL
+        # / REQUIRED_RESOURCES / DEPENDS_ON_TOOLS / RESOURCE_CONTEXT / PREVIOUS_TOOL_RESULTS / MCP_INTENT），
+        # 内容完整。之前错误地额外调用两次 assemble_prompt（仅传入 CURRENT_TIME）并与 system_context_str 拼接，
+        # 导致 memory.j2 被渲染三次注入到最终 prompt 中，造成内容重复且部分变量缺失。
         if not full_prompt:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
-            system_prompt = await prompt_manager.assemble_prompt(
-                PromptCategory.MCP_SKILL_EXECUTION,
-                {"CURRENT_TIME": current_time},
-            )
-            runtime_prompt = await prompt_manager.assemble_prompt(
-                PromptCategory.MCP_SKILL_EXECUTION,
-                {"CURRENT_TIME": current_time},
-            )
-            full_prompt = f"{system_prompt}\n\n{system_context_str}\n\n{runtime_prompt}"
+            full_prompt = system_context_str
 
         # 记录完整 prompt 日志
         logger.info(

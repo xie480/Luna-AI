@@ -26,11 +26,11 @@
 你必须严格输出如下 JSON 结构。
 【致命约束】：针对带有枚举约束的字段，你的输出值必须绝对限制在以下提供的有效值列表中，严禁自行编造！否则将导致系统严重崩溃！
 
-* 允许的 primary_intent: [ {{ PRIMARY_INTENTS | join(', ') }} ]
-* 允许的 category: [ {{ CATEGORIES | join(', ') }} ]
-* 允许的 dag_route_hint: [ {{ DAG_ROUTE_HINTS | join(', ') }} ]
-* 允许的 required_retrieval_types: [ {{ RETRIEVAL_TYPES | join(', ') }} ]
-* 允许的 route_strategy: [ {{ ROUTE_STRATEGIES | join(', ') }} ]
+* 允许的 primary_intent: [ {{ PRIMARY_INTENTS }} ]
+* 允许的 category: [ {{ CATEGORIES }} ]
+* 允许的 dag_route_hint: [ {{ DAG_ROUTE_HINTS }} ]
+* 允许的 required_retrieval_types: [ {{ RETRIEVAL_TYPES }} ]
+* 允许的 route_strategy: [ {{ ROUTE_STRATEGIES }} ]
 
 ```json
 {

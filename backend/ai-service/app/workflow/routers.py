@@ -50,9 +50,12 @@ class ChatWorkflowRouter:
             [state.route_state.route_reasons[0]] if state.route_state.route_reasons else [],
             CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
         )
+        # v3.1 修复：source_node_type 已从 SESSION_CONTEXT_LOAD 更新为 INPUT_RECONSTRUCTION。
+        # 为什么这样做：输入重构与会话上下文加载的执行顺序已交换，输入重构放在会话上下文
+        # 加载之后执行。现在条件路由路由出自分输入重构节点。
         await self._publish_condition(
             state=state,
-            source_node_type=ChatWorkflowNodeType.SESSION_CONTEXT_LOAD,
+            source_node_type=ChatWorkflowNodeType.INPUT_RECONSTRUCTION,
             target_node_type=ChatWorkflowNodeType.LONG_TERM_MEMORY_RAG,
             condition_entered=entered,
             route_name=(

@@ -25,9 +25,9 @@ class ChatGraphFactory:
         它设置了一系列节点和它们之间的边，形成一个有向无环图 (DAG)，
         用于管理聊天工作流的状态转换和执行逻辑。
 
-        工作流流程概述（v3.0 重构）：
-        1. 输入重构 -> 会话上下文加载
-        2. 会话上下文加载 -> 长期记忆 RAG 或绕过（条件分支）
+        工作流流程概述（v3.0 重构 + v3.1 修复）：
+        1. 会话上下文加载 -> 输入重构（v3.1 修复：交换执行顺序，确保记忆数据先就绪）
+        2. 输入重构 -> 长期记忆 RAG 或绕过（条件分支）
         3. 长期记忆 RAG/绕过 -> 用户资料注入
         4. 用户资料注入 -> 知识 RAG 或绕过（条件分支）
         5. 知识 RAG/绕过 -> MCP 意图判断或绕过（条件分支，v3.0 延迟判断）
@@ -70,18 +70,24 @@ class ChatGraphFactory:
         for node_name in active_nodes:
             graph.add_node(node_name.value, self.registry.get_node(node_name))
 
-        # 设置入口点
-        graph.set_entry_point(ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value)
+        # 设置入口点：会话上下文加载必须先于输入重构执行。
+        # 为什么这样做：输入重构需要使用 short_summary、key_facts、recent_messages
+        # 等短期记忆数据来进行代词消歧和路由决策。如果先运行输入重构，这些
+        # state.session_state 字段均为空默认值，导致 memory.j2 模板变量
+        # {{ CORE_SUMMARY }}、{{ KEY_FACTS }}、{{ MEMORY_SNIPPETS }} 虽正确渲染但值为空。
+        graph.set_entry_point(ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value)
 
-        # 输入重构 -> 会话上下文加载
+        # 会话上下文加载 -> 输入重构
         graph.add_edge(
-            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
         )
 
-        # 添加从会话上下文加载到长期记忆的条件边（RAG 或绕过）
+        # 输入重构后，根据路由结果（should_enter_long_term_memory_rag 等）决定
+        # 进入长期记忆 RAG 或绕过。此 conditional_edges 原关联于 SESSION_CONTEXT_LOAD，
+        # 交换节点顺序后移至 INPUT_RECONSTRUCTION。
         graph.add_conditional_edges(
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
             self.registry.router.route_long_term_memory,
             {
                 ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value:
@@ -175,7 +181,7 @@ class ChatGraphFactory:
         logger.info(
             "daily_chat 主图构建完成 | active_nodes=%d | entry_point=%s",
             len(active_nodes),
-            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
         )
         return compiled
 

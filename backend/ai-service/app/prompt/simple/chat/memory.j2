@@ -1,32 +1,32 @@
 # 记忆上下文注入层
 以下是从记忆库中检索到的相关记忆片段，用于生成更连贯、更有温度的回复。
 -长期记忆开始-
-{{LONG_TERM_MEMORY}}
+{{ LONG_TERM_MEMORY }}
 -长期记忆结束-
 -外部知识开始-
-{{EXTERNAL_KNOWLEDGE}}
+{{ EXTERNAL_KNOWLEDGE }}
 -外部知识结束-
 -用户画像开始-
-{{USER_PROFILE}}
+{{ USER_PROFILE }}
 -用户画像结束-
 -经验教训开始-
-{{LESSONS_LEARNED}}
+{{ LESSONS_LEARNED }}
 -经验教训结束-
 -当前会话背景开始-
 核心梗概：
-{{CORE_SUMMARY}}
+{{ CORE_SUMMARY }}
 关键事实：
-{{KEY_FACTS}} 
+{{ KEY_FACTS }}
 -当前会话背景结束-
 {% if SKILL_EXECUTION_SUMMARY %}
 -最近技能执行结果开始-
 以下是系统刚刚执行外部操作后压缩生成的总结报告，包含本次调用的技能、执行的操作和关键事实。
 请基于以下事实数据回答用户，无需提及"这是工具返回的"或"根据系统报告"：
-{{SKILL_EXECUTION_SUMMARY}}
+{{ SKILL_EXECUTION_SUMMARY }}
 -最近技能执行结果结束-
 {% endif %}
 -记忆片段开始-
-{{MEMORY_SNIPPETS}}
+{{ MEMORY_SNIPPETS }}
 -记忆片段结束-
 ### 调用原则
 1. **隐性调用（最高优先级）**

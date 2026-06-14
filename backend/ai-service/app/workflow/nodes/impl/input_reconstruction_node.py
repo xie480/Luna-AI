@@ -16,16 +16,13 @@ from app.types.constants import (
     DagRouteHint,
     IntentCategory,
     PrimaryIntent,
+    RagRetrievalRoute,
     RetrievalType,
 )
 from app.workflow.constants import (
     CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON,
     CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
     CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
-    PROMPT_VARIABLE_CORE_SUMMARY,
-    PROMPT_VARIABLE_CURRENT_TIME,
-    PROMPT_VARIABLE_KEY_FACTS,
-    PROMPT_VARIABLE_MEMORY_SNIPPETS,
     ChatWorkflowNodeType,
 )
 from app.workflow.context import ChatWorkflowState
@@ -71,50 +68,50 @@ class InputReconstructionNode(ChatWorkflowNode):
             memory_snippets = format_recent_history(state.session_state.recent_messages)
             state.session_state.memory_snippets = memory_snippets
 
-            system_prompt = await prompt_manager.assemble_prompt(PromptCategory.INPUT_RECONSTRUCTION, {})
-
-            memory_prompt = await prompt_manager.assemble_prompt(
-                PromptCategory.INPUT_RECONSTRUCTION,
-                {
-                    PROMPT_VARIABLE_CORE_SUMMARY: state.session_state.short_summary,
-                    PROMPT_VARIABLE_KEY_FACTS: "\n".join(state.session_state.key_facts),
-                    PROMPT_VARIABLE_MEMORY_SNIPPETS: memory_snippets,
-                },
-            )
-
-            primary_intents = [item.value for item in PrimaryIntent]
-            categories = [item.value for item in IntentCategory]
-            dag_route_hints = [item.value for item in DagRouteHint]
-            retrieval_types = [item.value for item in RetrievalType]
+            # 在 Python 层将枚举列表预转为逗号分隔的字符串，避免在 Jinja2 模板中使用 | join filter。
+            # 为什么这样做：Jinja2 的 finalize 函数与 | join filter 在特定环境下存在交互不稳定问题，
+            # 可能导致 finalize 将 list 转为 JSON 字符串后 join 无法正常处理，最终 render_template
+            # 抛异常并降级返回原始模板文本（包含未渲染的 {{ PRIMARY_INTENTS | join(', ') }}）。
+            # 改为在 Python 层预 join，模板只接收纯字符串变量，彻底消除 filter pipeline 不稳定性。
+            primary_intents = ", ".join(item.value for item in PrimaryIntent)
+            categories = ", ".join(item.value for item in IntentCategory)
+            dag_route_hints = ", ".join(item.value for item in DagRouteHint)
+            retrieval_types = ", ".join(item.value for item in RetrievalType)
+            route_strategies = ", ".join(item.value for item in RagRetrievalRoute)
 
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+            from app.llm.client import llm_client
 
-            runtime_prompt = await prompt_manager.assemble_prompt(
+            # 效仿 MCP Intent Judge 的变量注入方式：使用 assemble_prompt() 一次性渲染完整 Prompt。
+            # 为什么这样做：render_prompt() 返回的三槽位内容需要由 Agent 内部手动拼接，
+            # 且枚举约束（PRIMARY_INTENTS 等）已通过 {{ VAR_NAME }} 变量注入到 runtime.j2 模板中，
+            # 不再需要硬编码的 enum_constraints。assemble_prompt() 直接从 PG active 版本
+            # 用 Jinja2 渲染所有变量，确保模板变量被正确替换，消除了两阶段拼接的不一致性。
+            full_prompt = await prompt_manager.assemble_prompt(
                 PromptCategory.INPUT_RECONSTRUCTION,
                 {
-                    PROMPT_VARIABLE_CURRENT_TIME: current_time,
+                    "CORE_SUMMARY": state.session_state.short_summary,
+                    "KEY_FACTS": "\n".join(state.session_state.key_facts) if state.session_state.key_facts else "",
+                    "MEMORY_SNIPPETS": memory_snippets,
+                    "CURRENT_TIME": current_time,
                     "USER_INPUT": state.input_payload.raw_user_message,
-                    "PRIMARY_INTENTS": '"' + '", "'.join(primary_intents) + '"',
-                    "CATEGORIES": '"' + '", "'.join(categories) + '"',
-                    "DAG_ROUTE_HINTS": '"' + '", "'.join(dag_route_hints) + '"',
-                    "RETRIEVAL_TYPES": '"' + '", "'.join(retrieval_types) + '"',
+                    "PRIMARY_INTENTS": primary_intents,
+                    "CATEGORIES": categories,
+                    "DAG_ROUTE_HINTS": dag_route_hints,
+                    "RETRIEVAL_TYPES": retrieval_types,
+                    "ROUTE_STRATEGIES": route_strategies,
                 },
             )
-            from app.llm.client import llm_client
 
             logger.info(
                 f"组装 Input Reconstruction Prompt trace_id={state.runtime.trace_id}, "
-                f"input_recon_system_prompt={system_prompt}, "
-                f"input_recon_memory_prompt={memory_prompt}, "
-                f"input_recon_runtime_prompt={runtime_prompt}"
+                f"full_prompt={full_prompt}"
             )
 
             result = await InputReconstructorAgent(llm_client).process(
                 trace_id=state.runtime.trace_id,
                 user_input=state.input_payload.raw_user_message,
-                system_prompt=system_prompt,
-                memory_prompt=memory_prompt,
-                runtime_prompt=runtime_prompt,
+                prompt=full_prompt,
             )
 
             logger.info(

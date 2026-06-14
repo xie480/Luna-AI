@@ -23,33 +23,21 @@ class InputReconstructorAgent:
         config = global_config_container.get_model_config(ModelSize.MEDIUM)
         return config.get("model_id", "gpt-4o-mini")
 
-    def _build_prompt(self, system_prompt: str, memory_prompt: str, runtime_prompt: str) -> str:
-        """
-        动态组装路由与情绪提取指南 Prompt, 将枚举的有效值列表注入模板。
-        """
-        # 强制追加枚举约束，防止大模型幻觉
-        enum_constraints = (
-            "\nIMPORTANT: You MUST strictly use the following enum values for the respective fields. Do NOT invent new values.\n"
-            '- intent_routing.primary_intent: "MODIFY_PLAN", "GREETING", "QUERY_INFO", "EMOTION_VENTING", "SYSTEM_COMMAND", "TOOL_INVOCATION"\n'
-            '- intent_routing.category: "TASK_MANAGEMENT", "CHAT", "KNOWLEDGE_QUERY", "EMOTION_SUPPORT"\n'
-            '- intent_routing.dag_route_hint: "MULTI_SOURCE_RETRIEVAL_WORKFLOW", "FAST_CHAT", "AGENTIC_WORKFLOW", "GATING_APPROVAL"\n'
-            '- intent_routing.required_retrieval_types (array elements): "LONG_TERM_MEMORY", "EXTERNAL_KNOWLEDGE", "EXPERIENCE_REFLECTION" (If none, return empty array [])\n'
-            '- retrieval_routing.route_strategy: "keyword", "hybrid", "agentic"\n'
-        )
-        return f"{system_prompt}\n\n{memory_prompt}\n\n{runtime_prompt}\n\n{enum_constraints}"
-
     async def process(
         self,
         trace_id: str,
         user_input: str,
-        system_prompt: str,
-        memory_prompt: str,
-        runtime_prompt: str
+        prompt: str,
     ) -> InputReconstructionOutput:
         """
         执行输入重构与路由解析, 包含重试与降级兜底机制。
+
+        效仿 MCP Intent Judge 的变量注入方式：接收由 prompt_manager.assemble_prompt()
+        一次性渲染完成的完整 Prompt 字符串，不再由 Agent 内部手动拼接三槽位。
+        为什么这样做：assemble_prompt() 使用 Jinja2 直接从 PG active 版本渲染变量，
+        消除了 render_prompt() 三槽位拼接 + 硬编码枚举约束的双重不一致问题，
+        确保 {{ PRIMARY_INTENTS }} 等模板变量能正确注入。
         """
-        prompt = self._build_prompt(system_prompt, memory_prompt, runtime_prompt)
         
         for attempt in range(self.max_retries + 1):
             try:
@@ -59,6 +47,7 @@ class InputReconstructorAgent:
                 )
                 
                 # 利用大模型 Structured Outputs 特性强制返回 JSON
+                # 与 MCP Intent Judge 一致：直接将完整 prompt 作为 system message 发送
                 response = await self.llm_client.generate_structured(
                     model=self.model_name,
                     messages=[{"role": "system", "content": prompt}],
