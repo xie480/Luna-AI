@@ -348,8 +348,11 @@ async def lifespan(app: FastAPI):
                             # 构建默认值子句，防止 NOT NULL 且无默认导致错误
                             default_clause = ""
                             if col.default is not None or col.server_default is not None:
-                                # 这里使用空字符串作为默认值，满足 NOT NULL 约束
-                                default_clause = " DEFAULT ''"
+                                # timestamp 类型用 NOW() 作默认值，其他类型用空字符串
+                                if "timestamp" in col_type.lower():
+                                    default_clause = " DEFAULT NOW()"
+                                else:
+                                    default_clause = " DEFAULT ''"
                             alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{col_name}" {col_type} {nullable_str}{default_clause}'
                             logger.info(f"[Schema Sync] 表 {table_name} 检测到缺失字段，执行: {alter_stmt}")
                             try:
@@ -385,15 +388,35 @@ async def lifespan(app: FastAPI):
                             exp_base_type = expected_type_str.split('(')[0].strip()
                             db_base_type = db_type_str.split('(')[0].strip()
                             
+                            # 类型等价映射（注意：timestamp with/without time zone 必须严格区分）
+                            # 不要将 TIMESTAMPTZ 和 TIMESTAMP 混为一谈，否则会导致时区信息丢失
                             type_equivalents = {
                                 'character varying': 'varchar',
-                                'timestamp with time zone': 'timestamp',
-                                'timestamp without time zone': 'timestamp',
                                 'integer': 'int',
                                 'boolean': 'bool',
                             }
                             exp_base_type = type_equivalents.get(exp_base_type, exp_base_type)
                             db_base_type = type_equivalents.get(db_base_type, db_base_type)
+
+                            # 特殊处理：timestamp without time zone -> timestamp with time zone
+                            # 如果 ORM 模型期望带时区但实际库中不带，必须修复（否则时间少 8 小时）
+                            if (exp_base_type == 'timestamp with time zone' and db_base_type == 'timestamp without time zone'):
+                                # 使用 AT TIME ZONE 'UTC' 确保已有数据被正确解释为 UTC
+                                fix_tz_stmt = (
+                                    f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" '
+                                    f"TYPE TIMESTAMP WITH TIME ZONE USING \"{col_name}\" AT TIME ZONE 'UTC'"
+                                )
+                                logger.warning(
+                                    f"[Schema Sync] 表 {table_name} 字段 {col_name} 缺少时区"
+                                    f"（当前: {db_type_str}，期望: {expected_type_str}），"
+                                    f"执行转换: {fix_tz_stmt}"
+                                )
+                                try:
+                                    sync_conn.execute(from_sqlalchemy_text(fix_tz_stmt))
+                                except Exception as e:
+                                    logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 时区转换失败: {e}")
+                                # 跳过下方的通用 ALTER（类型已匹配，无需二次转换）
+                                continue
 
                             # 忽略 JSON 相关类型的复杂差异，只对基础类型的不同进行 ALTER
                             if exp_base_type != db_base_type and "json" not in exp_base_type and "json" not in db_base_type:
