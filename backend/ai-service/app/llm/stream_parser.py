@@ -37,8 +37,8 @@ _THOUGHT_END_RE = re.compile(r'"\s*,\s*"(?:emotion|thought|reply)"')
 _EMOTION_RE = re.compile(r'"emotion"\s*:\s*"([^"]+)"')
 # reply 字段起始标记
 _REPLY_START_RE = re.compile(r'"reply"\s*:\s*"')
-# 句子结束标点
-_SENTENCE_BOUNDARY_RE = re.compile(r'[。！？……,，\n]')
+# 句子结束标点：匹配主标点（及其可能的闭合符号），或者连续的逗号/换行，或者省略号
+_SENTENCE_BOUNDARY_RE = re.compile(r'([。！？!?]+[”’"\'\)）\]】》]?|(?<!\.)\.(?!\.)[”’"\'\)）\]】》]?|[，,\n]+[”’"\'\)）\]】》]?|……+|…+|\.{2,})')
 # 【问题2优化】末尾标点过滤：精准剔除末尾的逗号和句号，保留！、？、～、……
 _TRAILING_PUNCTUATION_RE = re.compile(r'[，,。\.]+$')
 # 匹配连续的省略号
@@ -164,10 +164,8 @@ class StreamParser:
             if not m:
                 break
             
+            # 正则已经贪婪匹配了完整的同类标点（及其闭合符号），直接使用 m.end()
             idx = m.end()
-            # 找到连续标点的结尾，例如 "……" 或 "!!!"
-            while idx < len(self._reply_buffer) and _SENTENCE_BOUNDARY_RE.match(self._reply_buffer[idx]):
-                idx += 1
                 
             sentence = self._reply_buffer[:idx]
             self._reply_buffer = self._reply_buffer[idx:]
