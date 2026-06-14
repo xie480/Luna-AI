@@ -233,6 +233,13 @@ class CompressionLLMClient:
         边界条件：调用方可传 timeout 控制单次请求耗时；max_tokens 仍由小模型动态配置控制。
         异常行为：网络、限流、超时异常原样抛出，由业务层决定是否兜底或重试。
         """
+        from app.llm.client import llm_client
+        wait_time = await llm_client.acquire_call_slot()
+        if wait_time > 0:
+            logger.info(f"触发频率限制，等待 {wait_time:.2f} 秒后发起 LLM 调用 (Summarize)")
+            import asyncio
+            await asyncio.sleep(wait_time)
+
         call_kwargs = self._build_summarize_call_kwargs(messages, kwargs)
         response = await self.client.chat.completions.create(**call_kwargs)
         return response.choices[0].message.content or ""
@@ -270,7 +277,82 @@ class LLMClient:
         self.client = None
         self.model_name = ""
         self.base_url = ""
+        self._next_allowed_time: float = 0.0
         self.reload_config()
+
+    async def _wait_for_slot(
+        self,
+        trace_id: str = "",
+        session_id: str = "",
+        message_id: str = "",
+    ) -> None:
+        """
+        等待调用槽位（频率限制），并在等待期间向前端发送状态通知。
+
+        做什么：根据配置的 llm_call_interval_seconds 检查是否需要等待，
+                若需等待则通过 SSE 直接向前端发送等待状态通知，然后异步休眠。
+                所有 LLM 调用入口（generate_structured / generate_structured_text /
+                stream_chat）共享此方法，共用一个时间窗口。
+        为什么这样做：确保一段时间内仅允许发起一次大模型请求。状态通知在此内部
+                    完成，调用方无需注入回调或适配节点。
+        输入输出：
+            - 输入：trace_id 全链路追踪 ID、session_id 会话 ID、message_id 消息 ID
+        边界条件：interval <= 0 时不等待，直接返回。
+        """
+        from app.config.settings import settings
+        interval = settings.llm_call_interval_seconds
+        if interval <= 0:
+            return
+
+        import time as _time
+        now = _time.monotonic()
+
+        if self._next_allowed_time > now:
+            wait_time = self._next_allowed_time - now
+            self._next_allowed_time += interval
+            logger.info(
+                f"[TraceID:{trace_id}] 触发频率限制，等待 {wait_time:.2f} 秒后发起 LLM 调用"
+            )
+
+            # 在等待期间，通过 SSE 向前端发布等待状态，告知用户当前处于阻塞阶段
+            if session_id and message_id:
+                try:
+                    from app.api.chat_status_texts import get_chat_status_text
+                    from app.api.sse import sse_manager
+                    from app.types.constants import (
+                        CHAT_STATUS_SCHEMA_VERSION,
+                        WS_MSG_TYPE_EVT_CHAT_STATUS,
+                        ChatStatusStage,
+                        ChatStatusState,
+                    )
+
+                    sse_payload: dict[str, object] = {
+                        "schema_version": CHAT_STATUS_SCHEMA_VERSION,
+                        "session_id": session_id,
+                        "message_id": message_id,
+                        "stage": ChatStatusStage.LLM_RATE_LIMIT_WAIT.value,
+                        "state": ChatStatusState.RUNNING.value,
+                        "display_text": get_chat_status_text(ChatStatusStage.LLM_RATE_LIMIT_WAIT, ChatStatusState.RUNNING),
+                        "is_visible": True,
+                        "is_terminal": False,
+                        "sequence": 1,
+                        "timestamp_ms": int(_time.time() * 1000),
+                        "error": "",
+                    }
+                    sse_event: dict[str, object] = {
+                        "type": WS_MSG_TYPE_EVT_CHAT_STATUS,
+                        "trace_id": trace_id,
+                        "payload": sse_payload,
+                    }
+                    await sse_manager.publish(sse_event)
+                except Exception as e:
+                    logger.warning(
+                        f"[TraceID:{trace_id}] 等待 LLM 调用期间发布状态失败: {e}"
+                    )
+
+            await asyncio.sleep(wait_time)
+        else:
+            self._next_allowed_time = now + interval
 
     def reload_config(self) -> None:
         """
@@ -368,6 +450,13 @@ class LLMClient:
         """
         logger.info(f"正在调用 LLM API (Structured Outputs), model: {model}")
         
+        # 从 kwargs 中提取链路标识用于频率限制等待状态通知
+        await self._wait_for_slot(
+            trace_id=str(kwargs.get("trace_id", "")),
+            session_id=str(kwargs.get("session_id", "")),
+            message_id=str(kwargs.get("message_id", "")),
+        )
+
         from app.config.settings import global_config_container
         from app.types.constants import ModelSize
         config = global_config_container.get_model_config(ModelSize.MEDIUM)
@@ -522,6 +611,12 @@ class LLMClient:
         边界条件：空内容返回空字符串，由调用方判定是否失败。
         异常行为：网络错误由 OpenAI 客户端抛出，调用方负责记录。
         """
+        await self._wait_for_slot(
+            trace_id=str(kwargs.get("trace_id", "")),
+            session_id=str(kwargs.get("session_id", "")),
+            message_id=str(kwargs.get("message_id", "")),
+        )
+
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
@@ -536,10 +631,18 @@ class LLMClient:
         prompt: str,
         trace_id: str,
         current_message: str,
+        session_id: str = "",
+        message_id: str = "",
         **kwargs: Any
     ) -> AsyncGenerator[dict[str, Any], None]:
         logger.info(f"[TraceID:{trace_id}] 开始调用 LLM API, model: {self.model_name}, prompt: {prompt}")
         buffer = LLMStreamBuffer()
+
+        await self._wait_for_slot(
+            trace_id=trace_id,
+            session_id=session_id,
+            message_id=message_id,
+        )
 
         try:
             response = await self._call_api_with_retry(prompt, current_message, **kwargs)
@@ -886,7 +989,14 @@ class LLMClient:
         final_message = disambiguated_text if disambiguated_text else current_message
 
         # 4. 以单体文本发起请求
-        async for chunk_data in self.stream_chat(full_combined_prompt, trace_id, final_message, **kwargs):
+        async for chunk_data in self.stream_chat(
+            full_combined_prompt,
+            trace_id,
+            final_message,
+            session_id=session_id_from_kwargs,
+            message_id=message_id_from_kwargs,
+            **kwargs
+        ):
             yield chunk_data
 
 

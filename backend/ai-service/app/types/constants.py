@@ -324,6 +324,8 @@ class ChatStatusStage(str, Enum):
     MCP_INTENT_JUDGE = "mcp_intent_judge"
     # --- Phase 13（v3.1）新增：MCP Skill 执行结果摘要阶段 ---
     MCP_SKILL_SUMMARY = "mcp_skill_summary"
+    # --- LLM 调用频率限制等待阶段 ---
+    LLM_RATE_LIMIT_WAIT = "llm_rate_limit_wait"
 
 
 class ChatStatusState(str, Enum):
