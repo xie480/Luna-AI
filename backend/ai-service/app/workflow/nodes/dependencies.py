@@ -10,6 +10,7 @@ from app.rag.retrieval import RagRetrievalOrchestrator
 from app.repository.chat_history_pg import ChatHistoryPGRepo
 from app.repository.chat_history_redis import ChatHistoryRedisRepo
 from app.repository.mcp_tool_pg import MCPToolPGRepo
+from app.repository.rag_pg import RagPGRepository
 from app.user_profile.service import UserProfileService
 from app.workflow.events import ChatWorkflowEventPublisher
 
@@ -32,6 +33,8 @@ class WorkflowDependencies:
         mcp_tool_registry: MCPToolRegistry | None = None,
         # --- Phase 12 新增：MCP 工具 PG 仓库（用于 BM25 检索） ---
         mcp_pg_repo: MCPToolPGRepo | None = None,
+        # --- Phase 12 新增：RAG 知识库 PG 仓库（用于注入 KNOWLEDGE_DOCS） ---
+        rag_pg_repo: RagPGRepository | None = None,
     ):
         """保存节点运行依赖，依赖由 FastAPI lifespan 注入。"""
         self.redis_repo = redis_repo
@@ -46,3 +49,5 @@ class WorkflowDependencies:
         self.mcp_tool_registry = mcp_tool_registry or MCPToolRegistry()
         # --- Phase 12 新增：MCP 工具 PG 仓库（Agent 1 BM25 检索用） ---
         self.mcp_pg_repo = mcp_pg_repo
+        # --- Phase 12 新增：RAG 知识库 PG 仓库（InputReconstructionNode 读取知识库文档列表用） ---
+        self.rag_pg_repo = rag_pg_repo

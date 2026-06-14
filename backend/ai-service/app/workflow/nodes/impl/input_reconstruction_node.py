@@ -23,6 +23,7 @@ from app.workflow.constants import (
     CHAT_WORKFLOW_INPUT_RECONSTRUCTION_DEGRADED_REASON,
     CHAT_WORKFLOW_NO_KNOWLEDGE_ROUTE_REASON,
     CHAT_WORKFLOW_NO_MEMORY_ROUTE_REASON,
+    PROMPT_VARIABLE_KNOWLEDGE_DOCS,
     ChatWorkflowNodeType,
 )
 from app.workflow.context import ChatWorkflowState
@@ -43,6 +44,51 @@ class InputReconstructionNode(ChatWorkflowNode):
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         return await self.run_with_observation(state, self._handle)
+
+    async def _load_knowledge_docs_text(self) -> str:
+        """
+        从 PostgreSQL 查询当前用户知识库中所有 ACTIVE 状态的文档，格式化为 LLM 可读的文本块。
+
+        做什么：调用 rag_pg_repo.list_documents() 获取文档列表，
+               并按如下格式拼装：
+               --
+               [文档1] doc_name
+               [简介1] doc_desc
+               --
+               [文档2] doc_name
+               [简介2] doc_desc
+               --
+
+        为什么这样做：让 InputReconstructor Agent 在解析用户输入时能够感知当前知识库中有哪些文档，
+                     从而更准确地判断是否需要触发知识库检索。
+
+        边界条件：rag_pg_repo 为 None 时返回空字符串；
+                 文档 description 为空时仅输出文档名称。
+        """
+        rag_pg_repo = self.dependencies.rag_pg_repo
+        if not rag_pg_repo:
+            return ""
+
+        try:
+            documents = await rag_pg_repo.list_documents(limit=200)
+        except Exception as e:
+            logger.warning(f"加载知识库文档列表失败 error={e}")
+            return ""
+
+        if not documents:
+            return ""
+
+        lines: list[str] = []
+        for idx, doc in enumerate(documents, start=1):
+            lines.append("--")
+            lines.append(f"[文档{idx}] {doc.filename or '未命名文档'}")
+            if doc.description:
+                lines.append(f"[简介{idx}] {doc.description}")
+        if lines:
+            lines.append("--")
+
+        logger.info(f"加载知识库文档列表完成 count={len(documents)} lines={len(lines)}")
+        return "\n".join(lines)
 
     async def _handle(self, state: ChatWorkflowState) -> ChatWorkflowState:
         # 发布 RUNNING 状态
@@ -82,6 +128,9 @@ class InputReconstructionNode(ChatWorkflowNode):
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
             from app.llm.client import llm_client
 
+            # 加载知识库文档列表，注入到 KNOWLEDGE_DOCS 变量
+            knowledge_docs_text = await self._load_knowledge_docs_text()
+
             # 效仿 MCP Intent Judge 的变量注入方式：使用 assemble_prompt() 一次性渲染完整 Prompt。
             # 为什么这样做：render_prompt() 返回的三槽位内容需要由 Agent 内部手动拼接，
             # 且枚举约束（PRIMARY_INTENTS 等）已通过 {{ VAR_NAME }} 变量注入到 runtime.j2 模板中，
@@ -93,6 +142,7 @@ class InputReconstructionNode(ChatWorkflowNode):
                     "CORE_SUMMARY": state.session_state.short_summary,
                     "KEY_FACTS": "\n".join(state.session_state.key_facts) if state.session_state.key_facts else "",
                     "MEMORY_SNIPPETS": memory_snippets,
+                    PROMPT_VARIABLE_KNOWLEDGE_DOCS: knowledge_docs_text,
                     "CURRENT_TIME": current_time,
                     "USER_INPUT": state.input_payload.raw_user_message,
                     "PRIMARY_INTENTS": primary_intents,

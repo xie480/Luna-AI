@@ -55,6 +55,8 @@ class ChatWorkflowService:
         rag_orchestrator: RagRetrievalOrchestrator | None,
         user_profile_service: UserProfileService | None,
         event_publisher: ChatWorkflowEventPublisher | None = None,
+        # --- Phase 12 新增：RAG 知识库 PG 仓库（InputReconstructionNode 注入 KNOWLEDGE_DOCS 用） ---
+        rag_pg_repo: Any = None,
     ):
         self.pg_client = pg_client
         self.event_publisher = event_publisher or ChatWorkflowEventPublisher()
@@ -70,6 +72,8 @@ class ChatWorkflowService:
             user_profile_service=user_profile_service,
             event_publisher=self.event_publisher,
             chat_status_publisher=chat_status_publisher,
+            # --- Phase 12 新增：透传 RAG 知识库 PG 仓库 ---
+            rag_pg_repo=rag_pg_repo,
         )
         self.graph = ChatGraphFactory(dependencies).build_daily_chat_graph()
         self.tasks: set[asyncio.Task[Any]] = set()

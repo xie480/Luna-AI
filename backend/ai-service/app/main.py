@@ -667,6 +667,8 @@ async def lifespan(app: FastAPI):
             rag_orchestrator=rag_retrieval_orchestrator,
             user_profile_service=user_profile_service,
             event_publisher=ChatWorkflowEventPublisher(),
+            # 注入 RAG 知识库 PG 仓库，供 InputReconstructionNode 加载 KNOWLEDGE_DOCS
+            rag_pg_repo=rag_pg_repo,
         )
         logger.info("Phase 8.5 ChatWorkflowService 初始化完成")
     except Exception as e:
