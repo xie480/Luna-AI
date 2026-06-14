@@ -122,8 +122,14 @@ class MainChatLlmNode(ChatWorkflowNode):
                         )
                         state.generation_state.finish_reason = chunk_data.get("finish_reason") or "stop"
                         break
+                        
+                # 如果没有正文且报错，或者有 error 需要外层重试
+                if state.generation_state.error and not state.generation_state.full_text:
+                    raise RuntimeError(f"流式生成中收到错误数据块: {state.generation_state.error}")
+                    
                 if not state.generation_state.full_text and not state.generation_state.error:
                     state.generation_state.error = CHAT_STREAM_EMPTY_RESPONSE_ERROR
+                    raise RuntimeError(f"流式生成无返回内容: {CHAT_STREAM_EMPTY_RESPONSE_ERROR}")
 
                 break
 

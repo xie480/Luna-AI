@@ -184,12 +184,19 @@ class CompressionLLMClient:
         """
         from app.config.settings import global_config_container
         from app.types.constants import ModelSize
+        import httpx
         config = global_config_container.get_model_config(ModelSize.SMALL)
         api_key = config.get("api_key") or "dummy"
         base_url = config.get("base_url") or "https://api.openai.com/v1"
+        
+        http_client = httpx.AsyncClient(
+            limits=httpx.Limits(keepalive_expiry=2.0, max_keepalive_connections=5)
+        )
+        
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
+            http_client=http_client,
             max_retries=0,
         )
         self.model_name = config.get("model_id") or "gpt-4o-mini"
@@ -389,13 +396,20 @@ class LLMClient:
         logger.info("LLM Client 正在重新加载配置...")
         from app.config.settings import global_config_container
         from app.types.constants import ModelSize
+        import httpx
         # 默认使用中模型进行日常对话
         config = global_config_container.get_model_config(ModelSize.MEDIUM)
         api_key = config.get("api_key") or "dummy"
         base_url = config.get("base_url") or "https://api.openai.com/v1"
+        
+        http_client = httpx.AsyncClient(
+            limits=httpx.Limits(keepalive_expiry=2.0, max_keepalive_connections=5)
+        )
+        
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
+            http_client=http_client,
         )
         self.model_name = config.get("model_id") or "gpt-3.5-turbo"
         self.base_url = base_url
