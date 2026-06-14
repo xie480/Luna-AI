@@ -48,6 +48,7 @@ class PromptCategory(str, Enum):
     # --- Phase 12 新增：资源提取子 Agent Prompt 分类 ---
     MCP_RESOURCE_EXTRACTION = "mcp_resource_extraction"
     MCP_SKILL_FALLBACK_EXTRACTION = "mcp_skill_fallback_extraction"
+    MCP_SKILL_EXECUTION_SUMMARY = "mcp_skill_execution_summary"
 
     # --- Phase 12（v3.0）新增：MCP 前置判断 Prompt 分类 ---
     MCP_INTENT_JUDGE = "mcp_intent_judge"

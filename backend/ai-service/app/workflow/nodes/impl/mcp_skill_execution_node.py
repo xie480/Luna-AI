@@ -53,7 +53,7 @@ from app.api.chat_status_texts import (
     format_step_progress,
     get_chat_status_text,
 )
-from app.prompt.types import render_template
+from app.prompt.types import PromptCategory, render_template
 from app.logger import logger
 from app.mcp.executor import execute_tool
 from app.mcp.skill_registry import SkillRegistry
@@ -426,6 +426,13 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                             ChatStatusStage.MCP_SKILL_EVALUATING, ChatStatusState.RUNNING
                         ),
                     )
+
+                    logger.info(
+                        f"开始评估 MCP Skill 目标 trace_id={state.runtime.trace_id} "
+                        f"mcp_intent={mcp_intent} "
+                        f"step_goal={mcp_intent} "
+                        f"tool_results={tool_results}"
+                    )
                     
                     eval_agent = MCPEvaluationAgent(prompt_manager=prompt_manager)
                     # 跳过纯 resource 的辅助步骤，只取真正调用工具（tool 非空）的 state 目标
@@ -438,6 +445,13 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         mcp_intent=mcp_intent,
                         step_goal=step_goal,
                         tool_results=tool_results,
+                    )
+
+                    logger.info(
+                        f"MCP Skill 步骤执行结果评估 trace_id={state.runtime.trace_id} "
+                        f"step_goal={step_goal} "
+                        f"tool_results={tool_results} "
+                        f"eval_result={eval_result}"
                     )
 
                     if eval_result.get("is_met", False):
@@ -462,11 +476,22 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                                     ChatStatusStage.MCP_SKILL_SUMMARY, ChatStatusState.RUNNING
                                 ),
                             )
+
+                            logger.info(
+                                f"开始生成技能执行摘要 trace_id={state.runtime.trace_id} "
+                                f"all_round_data={all_round_data}"
+                            )
+
                             summary = await self._compress_and_summarize_results(
                                 trace_id=state.runtime.trace_id,
                                 all_round_data=all_round_data,
                             )
                             state.mcp_tool_state.execution_summary = summary
+
+                            logger.info(
+                                f"技能执行摘要生成完毕 trace_id={state.runtime.trace_id} "
+                                f"summary={summary}"
+                            )
 
                         await self._publish_chat_status(
                             state=state,
@@ -718,56 +743,18 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
             all_round_text = "\n\n".join(round_parts)
 
-            # 2. 使用三槽位 Prompt 模板渲染 system + memory + runtime 提示词
-            #    从 prompt/simple/skill_execution_summary/ 逐槽位读取
-            #    - system.j2：系统指令与 JSON 输出约束
-            #    - memory.j2：数据载荷（ALL_ROUND_EXECUTION_RESULTS 插槽）
-            #    - runtime.j2：执行指令
-            import os as _os
-            _prompt_dir = _os.path.join(
-                _os.path.dirname(__file__),
-                "..", "..", "..", "..", "..", "prompt", "simple",
-                "skill_execution_summary",
-            )
-            _prompt_dir = _os.path.normpath(_prompt_dir)
-            _system_path = _os.path.join(_prompt_dir, "system.j2")
-            _memory_path = _os.path.join(_prompt_dir, "memory.j2")
-            _runtime_path = _os.path.join(_prompt_dir, "runtime.j2")
-            if _os.path.exists(_system_path):
-                with open(_system_path, encoding="utf-8") as _f:
-                    system_prompt = _f.read()
-            else:
-                system_prompt = "你是一个严格遵循指令的数据压缩与结构化分析助手。"
-            if _os.path.exists(_memory_path):
-                with open(_memory_path, encoding="utf-8") as _f:
-                    memory_template = _f.read()
-            else:
-                memory_template = (
-                    "【数据载荷——全部轮次的执行数据，用 ROUND 分隔】\n"
-                    "{{ALL_ROUND_EXECUTION_RESULTS}}"
+            # 2. 从 PromptManager 获取完整 Prompt 模板并渲染
+            prompt_manager = self.dependencies.prompt_manager
+            if prompt_manager:
+                full_prompt = await prompt_manager.assemble_prompt(
+                    PromptCategory.MCP_SKILL_EXECUTION_SUMMARY,
+                    {"ALL_ROUND_EXECUTION_RESULTS": all_round_text},
                 )
-            if _os.path.exists(_runtime_path):
-                with open(_runtime_path, encoding="utf-8") as _f:
-                    runtime_template = _f.read()
-            else:
-                runtime_template = (
-                    "请跨轮次综合分析，去除冗余结果，合并相同技能的多次执行输出。\n"
-                    "严格按照 system 指令中的 JSON 格式输出，不要包含任何额外说明文字。"
-                )
-
-            memory_content = render_template(
-                memory_template,
-                {"ALL_ROUND_EXECUTION_RESULTS": all_round_text},
-            )
-            runtime_content = runtime_template.strip()
-            # 将 memory（数据载荷）与 runtime（执行指令）合并为 user message
-            user_content = "\n\n".join(filter(None, [memory_content, runtime_content]))
-
-            # 3. 组装 system + user 消息并调用小模型
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ]
+                
+                # 3. 组装 system 消息并调用小模型
+                messages = [
+                    {"role": "system", "content": full_prompt},
+                ]
 
             compression_client = CompressionLLMClient()
             raw_output = await compression_client.summarize_once(
