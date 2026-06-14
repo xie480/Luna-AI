@@ -76,7 +76,18 @@ class KnowledgeRagNode(ChatWorkflowNode):
 
             state.knowledge_state.evidences = response.evidences
             state.knowledge_state.prompt_knowledge_text = response.prompt_context
-            state.knowledge_state.citations = [KnowledgeCitation(**item) for item in response.citations]
+            state.knowledge_state.citations = [
+                       KnowledgeCitation(
+                           citation_id=ev.citation_id,
+                           document_id=ev.document_id,
+                           document_name=ev.document_name,
+                           chunk_id=ev.chunk_id,
+                           content=ev.content,
+                           source_type=ev.source_type
+                       ) 
+                       for ev in response.evidences
+                    ]
+
             state.generation_state.citations = state.knowledge_state.citations
 
             await self._publish_chat_status(

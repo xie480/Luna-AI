@@ -46,6 +46,13 @@ class ChatInputPayload(BaseModel):
 
     raw_user_message: str = ""
     mention_luna: bool = True
+    frontend_message_id: str = Field(
+        default="",
+        description="前端消息ID，用于前端标识消息，与 assistant_message_id 共享同一值。",
+    )
+    client_timestamp_ms: int = Field(default=0, ge=0, description="客户端时间戳（毫秒）。")
+    locale: str = Field(default="zh-CN", description="本地化设置。")
+    timezone: str = Field(default="Asia/Shanghai", description="时区设置。")
     attachment_meta_list: list[dict[str, Any]] = Field(default_factory=list)
     extra_context: dict[str, Any] = Field(default_factory=dict)
 
