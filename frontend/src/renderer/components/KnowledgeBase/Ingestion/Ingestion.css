@@ -165,11 +165,18 @@
 
 .pending-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   padding: 10px 12px;
   background-color: var(--input-bg, #2d2d2d);
   border-radius: 6px;
   font-size: 13px;
+  gap: 6px;
+}
+
+.pending-item-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .pending-icon {
@@ -188,6 +195,27 @@
   color: var(--text-muted, #888);
   margin: 0 12px;
   font-size: 12px;
+}
+
+.pending-description-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-color, #444);
+  border-radius: 4px;
+  background-color: var(--input-bg, #2d2d2d);
+  color: var(--text-color, #e0e0e0);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.pending-description-input:focus {
+  border-color: var(--primary-color, #007acc);
+}
+
+.pending-description-input::placeholder {
+  color: var(--text-muted, #666);
 }
 
 .btn-remove-pending,

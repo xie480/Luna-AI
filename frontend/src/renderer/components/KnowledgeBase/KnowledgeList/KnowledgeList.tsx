@@ -131,6 +131,9 @@ const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView; isUpdateSelectorM
             </>
           )}
         </div>
+        {doc.description && (
+          <div className="doc-description">{doc.description}</div>
+        )}
         {doc.error_log && (
           <div className="doc-error" title={doc.error_log}>
             错误: {doc.error_log}

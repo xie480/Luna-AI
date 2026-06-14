@@ -64,6 +64,15 @@
   color: var(--text-muted, #888);
 }
 
+.doc-description {
+  font-size: 12px;
+  color: var(--text-muted, #888);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .doc-error {
   font-size: 11px;
   color: #f44336;

@@ -19,6 +19,11 @@ interface KnowledgeState {
   pendingFiles: File[];
   pendingUrls: string[];
 
+  /** 每个待处理文件的简介描述，以文件名为 key */
+  pendingFileDescriptions: Record<string, string>;
+  /** 每个待处理 URL 的简介描述，以 URL 字符串为 key */
+  pendingUrlDescriptions: Record<string, string>;
+
   globalUploadProgress: number; // 0-100
   isPolling: boolean;
 
@@ -38,6 +43,8 @@ interface KnowledgeState {
   addPendingUrl: (url: string) => void;
   removePendingUrl: (index: number) => void;
   clearPendingQueue: () => void;
+  setPendingFileDescription: (filename: string, description: string) => void;
+  setPendingUrlDescription: (url: string, description: string) => void;
 
   submitAllPending: () => Promise<void>;
   deleteKnowledge: (documentId: string) => Promise<void>;
@@ -66,6 +73,9 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   
   pendingFiles: [],
   pendingUrls: [],
+
+  pendingFileDescriptions: {},
+  pendingUrlDescriptions: {},
   
   globalUploadProgress: 0,
   isPolling: false,
@@ -77,6 +87,15 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
 
   setFilterState: (filter) => set((state) => ({ filterState: { ...state.filterState, ...filter } })),
   setDocumentToUpdate: (doc) => set({ documentToUpdate: doc }),
+
+  setPendingFileDescription: (filename, description) =>
+    set((state) => ({
+      pendingFileDescriptions: { ...state.pendingFileDescriptions, [filename]: description },
+    })),
+  setPendingUrlDescription: (url, description) =>
+    set((state) => ({
+      pendingUrlDescriptions: { ...state.pendingUrlDescriptions, [url]: description },
+    })),
   
   fetchKnowledgeList: async () => {
     try {
@@ -116,7 +135,15 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
     set((state) => ({ pendingFiles: [...state.pendingFiles, file] }));
   },
-  removePendingFile: (index: number) => set((state) => ({ pendingFiles: state.pendingFiles.filter((_, i) => i !== index) })),
+  removePendingFile: (index: number) => set((state) => {
+    const removed = state.pendingFiles[index];
+    if (!removed) return state;
+    const { [removed.name]: _, ...rest } = state.pendingFileDescriptions;
+    return {
+      pendingFiles: state.pendingFiles.filter((_, i) => i !== index),
+      pendingFileDescriptions: rest,
+    };
+  }),
   addPendingUrl: (url: string) => {
     try {
       const parsed = new URL(url);
@@ -131,11 +158,19 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     }
     set((state) => ({ pendingUrls: [...state.pendingUrls, url] }));
   },
-  removePendingUrl: (index: number) => set((state) => ({ pendingUrls: state.pendingUrls.filter((_, i) => i !== index) })),
-  clearPendingQueue: () => set({ pendingFiles: [], pendingUrls: [] }),
+  removePendingUrl: (index: number) => set((state) => {
+    const removed = state.pendingUrls[index];
+    if (!removed) return state;
+    const { [removed]: _, ...rest } = state.pendingUrlDescriptions;
+    return {
+      pendingUrls: state.pendingUrls.filter((_, i) => i !== index),
+      pendingUrlDescriptions: rest,
+    };
+  }),
+  clearPendingQueue: () => set({ pendingFiles: [], pendingUrls: [], pendingFileDescriptions: {}, pendingUrlDescriptions: {} }),
   
   submitAllPending: async () => {
-    const { pendingFiles, pendingUrls } = get();
+    const { pendingFiles, pendingUrls, pendingFileDescriptions, pendingUrlDescriptions } = get();
     if (pendingFiles.length === 0 && pendingUrls.length === 0) return;
     
     const config = useRagConfigStore.getState().buildRequestPayload();
@@ -144,7 +179,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     // 提交所有文件
     for (const file of pendingFiles) {
       try {
-        const res = await ragService.submitLocalFile(file, config);
+        const description = pendingFileDescriptions[file.name] || '';
+        const res = await ragService.submitLocalFile(file, config, description);
         newDocs.push({
           schema_version: 'rag.v1',
           id: res.document_id,
@@ -154,6 +190,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
           display_status: 'parsing',
           estimated_tokens: 0,
           error_log: null,
+          description: '',
           created_at: new Date().toISOString()
         });
         pollingStartTimes[res.document_id] = Date.now();
@@ -166,7 +203,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
     // 提交所有 URL
     for (const url of pendingUrls) {
       try {
-        const res = await ragService.submitUrl({ ...config, url });
+        const urlDescription = pendingUrlDescriptions[url] || '';
+        const res = await ragService.submitUrl({ ...config, url, description: urlDescription || undefined });
         newDocs.push({
           schema_version: 'rag.v1',
           id: res.document_id,

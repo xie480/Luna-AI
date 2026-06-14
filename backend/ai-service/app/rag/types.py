@@ -103,6 +103,7 @@ class RagDocumentDTO(BaseModel):
     file_size: int | None = None
     previous_version_id: str | None = None
     error_log: str | None = None
+    description: str = ""
     created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -130,6 +131,7 @@ class RagUrlIngestionRequest(BaseModel):
 
     schema_version: str = Field(default=RAG_SCHEMA_VERSION)
     url: str = Field(min_length=8, max_length=2048)
+    description: str = Field(default="", max_length=500)
     strategy: RagChunkStrategy = Field(default=RagChunkStrategy.STRUCTURED_AST)
     chunk_size: int = Field(default=500, ge=80, le=2000)
     overlap: int = Field(default=50, ge=0, le=500)

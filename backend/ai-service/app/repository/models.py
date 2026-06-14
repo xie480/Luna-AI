@@ -191,6 +191,7 @@ class RagDocument(Base):
     file_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     previous_version_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 

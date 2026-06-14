@@ -73,6 +73,7 @@ async def upload_knowledge_file(
     chunk_size: Annotated[int, Form(ge=80, le=2000)] = 500,
     overlap: Annotated[int, Form(ge=0, le=500)] = 50,
     regex_pattern: Annotated[str | None, Form(max_length=500)] = None,
+    description: Annotated[str, Form(max_length=500)] = "",
 ) -> ResponseModel:
     """提交本地知识文件异步摄入任务。支持拦截重复上传。"""
     if not file.filename:
@@ -86,6 +87,7 @@ async def upload_knowledge_file(
             content=content,
             options=IngestionOptions(strategy=strategy, chunk_size=chunk_size, overlap=overlap, regex_pattern=regex_pattern),
             trace_id=trace_id,
+            description=description,
         )
         return create_success_response(result.model_dump(), trace_id)
     except ValueError as exc:
@@ -154,6 +156,7 @@ async def update_knowledge_document(
         file_hash=file_hash,
         file_size=file_size,
         previous_version_id=document_id,
+        description=doc.description if hasattr(doc, 'description') else "",
     )
     
     options = IngestionOptions(strategy=strategy, chunk_size=chunk_size, overlap=overlap, regex_pattern=regex_pattern)

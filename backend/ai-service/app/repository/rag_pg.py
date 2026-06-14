@@ -54,6 +54,7 @@ class RagPGRepository:
         file_hash: str | None = None,
         file_size: int | None = None,
         previous_version_id: str | None = None,
+        description: str = "",
     ) -> RagDocument:
         """注册知识库文档并写入初始状态。"""
         document = RagDocument(
@@ -66,6 +67,7 @@ class RagPGRepository:
             file_size=file_size,
             previous_version_id=previous_version_id,
             error_log=None,
+            description=description,
         )
         async with self.pg_client.session_factory() as session:
             session.add(document)

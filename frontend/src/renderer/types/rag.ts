@@ -124,6 +124,7 @@ export interface KnowledgeDocument {
   status: RagDocumentStatus;
   estimated_tokens: number;
   error_log: string | null;
+  description: string;
   created_at: string | null;
 }
 
@@ -146,10 +147,10 @@ export interface RagDocumentUpdateResponse {
   document_id: string;
   previous_version_id: string;
 }
-
 /** URL 摄入请求。 */
 export interface RagUrlIngestionPayload extends RagChunkRequestPayload {
   url: string;
+  description?: string;
 }
 
 /** 检索证据项，用于溯源弹窗。 */

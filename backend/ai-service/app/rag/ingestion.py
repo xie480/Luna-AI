@@ -70,6 +70,7 @@ class RagIngestionService:
         content: bytes,
         options: IngestionOptions,
         trace_id: str,
+        description: str = "",
     ) -> RagIngestionTaskDTO:
         """提交本地文件摄入任务。实现 L1 与 L2 强防重逻辑。"""
         import hashlib
@@ -98,6 +99,7 @@ class RagIngestionService:
             status=RagDocumentStatus.PARSING,
             file_hash=file_hash,
             file_size=file_size,
+            description=description,
         )
         task = asyncio.create_task(
             self._run_file_ingestion(task_id, document_id, filename, content, options, trace_id)
@@ -121,6 +123,7 @@ class RagIngestionService:
             filename=request.url,
             source_type=RagSourceType.URL,
             status=RagDocumentStatus.PARSING,
+            description=request.description,
         )
         options = IngestionOptions(
             strategy=request.strategy,

@@ -339,13 +339,18 @@ async def lifespan(app: FastAPI):
                                 logger.error(f"[Schema Sync] 表 {table_name} 删除字段 {db_col_name} 失败: {e}")
 
                     # b. 新增字段或修改字段属性
-                    for column in table.columns:
-                        col_name = column.name
-                        if col_name not in db_columns:
-                            # 新增字段
-                            col_type = column.type.compile(sync_conn.dialect)
-                            nullable_str = "NULL" if column.nullable else "NOT NULL"
-                            alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{col_name}" {col_type} {nullable_str}'
+                    for col in table.columns:  # 遍历本地定义的列
+                        col_name = col.name
+                        if col_name not in db_columns:  # 检查数据库中是否缺少该字段
+                            col_type = str(col.type)
+                            nullable_str = "" if col.nullable else " NOT NULL"
+                            
+                            # 构建默认值子句，防止 NOT NULL 且无默认导致错误
+                            default_clause = ""
+                            if col.default is not None or col.server_default is not None:
+                                # 这里使用空字符串作为默认值，满足 NOT NULL 约束
+                                default_clause = " DEFAULT ''"
+                            alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{col_name}" {col_type} {nullable_str}{default_clause}'
                             logger.info(f"[Schema Sync] 表 {table_name} 检测到缺失字段，执行: {alter_stmt}")
                             try:
                                 sync_conn.execute(from_sqlalchemy_text(alter_stmt))
@@ -353,7 +358,7 @@ async def lifespan(app: FastAPI):
                                 logger.error(f"[Schema Sync] 表 {table_name} 添加列 {col_name} 失败: {alter_err}")
 
                             # 添加新字段对应的索引
-                            if column.index:
+                            if getattr(col, 'index', False):
                                 index_name = f"ix_{table_name}_{col_name}"
                                 index_stmt = f'CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ("{col_name}")'
                                 logger.info(f"[Schema Sync] 为新字段创建索引: {index_stmt}")
@@ -365,8 +370,8 @@ async def lifespan(app: FastAPI):
                             # 字段属性与类型差异比对
                             db_col = db_columns[col_name]
                             db_nullable = db_col.get('nullable', True)
-                            if column.nullable != db_nullable:
-                                alter_null_stmt = f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" {"DROP" if column.nullable else "SET"} NOT NULL'
+                            if col.nullable != db_nullable:
+                                alter_null_stmt = f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" {"DROP" if col.nullable else "SET"} NOT NULL'
                                 logger.info(f"[Schema Sync] 表 {table_name} 字段 {col_name} Nullable 变更，执行: {alter_null_stmt}")
                                 try:
                                     sync_conn.execute(from_sqlalchemy_text(alter_null_stmt))
@@ -374,7 +379,7 @@ async def lifespan(app: FastAPI):
                                     logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 修改 Nullable 失败: {e}")
                             
                             # 类型比对
-                            expected_type_str = str(column.type.compile(sync_conn.dialect)).lower()
+                            expected_type_str = str(col.type.compile(sync_conn.dialect)).lower()
                             db_type_str = str(db_col['type']).lower()
                             
                             exp_base_type = expected_type_str.split('(')[0].strip()
@@ -955,3 +960,7 @@ app.include_router(health_router)
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=settings.ai_service_port, reload=False)
+
+
+
+

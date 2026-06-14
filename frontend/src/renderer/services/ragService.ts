@@ -225,7 +225,7 @@ class RagService {
   }
 
   /** 提交本地文件摄入任务，后端立即返回 task_id 与 document_id。 */
-  async submitLocalFile(file: File, config: RagChunkRequestPayload): Promise<RagIngestionTaskResponse> {
+  async submitLocalFile(file: File, config: RagChunkRequestPayload, description = ''): Promise<RagIngestionTaskResponse> {
     const formData = new FormData();
     formData.set('file', file);
     formData.set('strategy', config.strategy);
@@ -233,6 +233,9 @@ class RagService {
     formData.set('overlap', String(config.overlap));
     if (config.regex_pattern) {
       formData.set('regex_pattern', config.regex_pattern);
+    }
+    if (description) {
+      formData.set('description', description);
     }
 
     const response = await fetch(`${RAG_API_BASE_URL}/knowledge/upload`, {
