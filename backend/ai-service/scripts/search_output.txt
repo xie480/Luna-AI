@@ -1,0 +1,47 @@
+开始测试 `handle_searxng_search`...
+
+--- 测试 1: 不带 categories (让 SearXNG 决定) ---
+【搜索结果】查询词：2026年6月14日 世界杯 比赛结果, FIFA World Cup 2026 June 14 results, 2026世界杯 6月14日 战报
+并发 3 组搜索，共获取 8 条常规结果与 0 条知识卡片
+
+1. 2026年国际足协世界杯 - 维基百科，自由的百科全书
+   2026年国际足协世界杯（英语：2026 FIFA World Cup Canada/Mexico/United States、法语：Coupe du monde de la FIFA de 2026 Canada/Mexique/États-Unis、西班牙语：Copa mundial de la FIFA Canadá/México/Estados Unidos 2026）为第23届国际足协世界杯赛事，由国际足联主办，定于2026年6月11日至7月19日举行，由美国、墨西哥和加拿大三国联合举办。赛事将在三个国家的16座城市间展开，是世界杯历史上首次由三个国家联合举办。
+   来源: https://zh.wikipedia.org/zh-hans/2026%E5%B9%B4%E5%9C%8B%E9%9A%9B%E8%B6%B3%E5%8D%94%E4%B8%96%E7%95%8C%E7%9B%83
+   引擎: brave
+
+2. FIFA世界杯2026：赛程及比分即时更新 - BBC News 中文
+   由美国、加拿大和墨西哥共同主办的2026年国际足联（FIFA）世界杯决赛周将于6月11日至7月19日举行，你可以在这里查阅赛事安排、跟踪比赛结果。
+   来源: https://www.bbc.com/zhongwen/articles/cx211w7zkkeo/simp
+   引擎: brave
+
+3. 世界杯早报：压力给到美国！加拿大1-1波黑 本届东道主依旧不败-直播吧
+   【世界杯战报】 · 世界杯首分！加拿大1-1波黑 卢基奇破门拉林替补登场121秒扳平
+   来源: https://news.zhibo8.com/zuqiu/2026-06-13/6a2c87fc3e6c7native.htm
+   引擎: brave
+
+4. 世界杯赛程_微博
+   #世界杯赛程#感觉这赛程也没那么夸张，白天还是有2场能看的，韩国打捷克那场我肯定要看的[笑cry] ​​​​ ​
+   来源: https://weibo.com/a/hot/1b5d0a51beae4eaa_0.html?type=grab
+   引擎: brave
+
+5. FIFA World Cup 2026 – live score, results & group matches | Sofascore
+   Follow FIFA World Cup 2026 live scores, fixtures, group standings, results and detailed match stats on Sofascore.
+   来源: https://www.sofascore.com/football/tournament/world/world-championship/16
+   引擎: brave
+
+6. 2026世界杯6月14日卡塔尔跟瑞士下单平台 - 数据统计及战报,美加墨世界杯今日赛事进程查看 - 专业的足球AI预测与分析平台
+   📅 2026年6月14日 · 2026世界杯 & 美加墨世界杯预选赛 · 完整赛程与实时数据 · 小组赛 · A组 · 🇶🇦 卡塔尔 2-1 瑞士 🇨🇭 · 卢赛尔体育场 · 21:00 · 进行中 详情 → · 预选赛 · 北美区 · 🇲🇽 墨西哥 1-0 美国 🇺🇸 · ...
+   来源: https://www.kesyx.com/sjb_186116
+   引擎: brave
+
+7. 世界杯播报丨揭幕战重演16年前对阵 三个东道主各有开幕式--文旅·体育--人民网
+   *巴西足协表示，正处于伤病中的内马尔日前接受了体检，结果显示他伤情恢复良好，但不确定何时能复出。巴西队本届世界杯首场比赛将于北京时间6月14日06:00对阵摩洛哥队。
+   来源: http://ent.people.com.cn/n1/2026/0611/c1012-40738617.html
+   引擎: brave
+
+8. 2026年世界杯赛程完整版（对阵、场地和时间） - 球迷屋
+   国际足联在2026年5月对外公布，这次世界杯的三个东道国——美国、加拿大和墨西哥，每个国家都会单独办一场开幕式。其中墨西哥的那场安排在6月11日，就在墨西哥城阿兹特克体育场举行，时间是揭幕战开球前90分钟。整个世界杯期间，阿兹特克球场——也就是现在的墨西哥城体育场，总共要承办五场比赛，揭幕战就是其中第一场。 ... 任意球专攻王 2小时前 【解放者杯】基多大学体育vs拉巴斯准备首发阵容名单(2026年05月27日) 球迷达人 2小时前 【法乙升级附加决赛】圣埃蒂安vs尼斯比赛结果：圣埃蒂安(0-0)尼斯比分战报(2026年05月27日)
+   来源: https://m.qiumiwu.com/news/1947973389671
+   引擎: brave
+
+

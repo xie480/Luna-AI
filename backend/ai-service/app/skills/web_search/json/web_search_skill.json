@@ -14,7 +14,6 @@
             "search_goal": { "type": "string", "description": "本次总的搜索目的" },
             "previous_query": { "type": "string", "description": "刚尝试搜索的关键词" },
             "previous_categories": { "type": "string", "description": "上一轮使用的分类" },
-            "previous_language": { "type": "string", "description": "上一轮使用的语言" },
             "previous_time_range": { "type": "string", "description": "上一轮使用的时间范围" },
             "previous_results_summary": { "type": "string", "description": "上一轮搜索得到的核心结果或没找到的原因" },
             "attempted_queries": { "type": "string", "description": "历史已经尝试过的所有搜索词列表，格式如 ['词1', '词2']" },
@@ -24,7 +23,6 @@
             "this_round_goal": { "type": "string", "description": "下一轮想要搜什么" },
             "this_query": { "type": "string", "description": "下一轮建议使用的搜索词" },
             "category_adjust_reason": { "type": "string" },
-            "language_adjust_reason": { "type": "string" },
             "time_range_adjust_reason": { "type": "string" }
           }
         }
@@ -38,7 +36,6 @@
             {"name": "search_goal", "description": "搜索目标", "required": false},
             {"name": "previous_query", "description": "上一轮查询词", "required": false},
             {"name": "previous_categories", "description": "上一轮分类", "required": false},
-            {"name": "previous_language", "description": "上一轮语言", "required": false},
             {"name": "previous_time_range", "description": "上一轮时间范围", "required": false},
             {"name": "previous_results_summary", "description": "上一轮结果摘要", "required": false},
             {"name": "attempted_queries", "description": "已尝试的查询词列表", "required": false},
@@ -48,7 +45,6 @@
             {"name": "this_round_goal", "description": "本轮搜索目标", "required": false},
             {"name": "this_query", "description": "本轮查询词", "required": false},
             {"name": "category_adjust_reason", "description": "分类调整理由", "required": false},
-            {"name": "language_adjust_reason", "description": "语言调整理由", "required": false},
             {"name": "time_range_adjust_reason", "description": "时间范围调整理由", "required": false},
             {"name": "user_input", "description": "用户原始输入", "required": true}
           ]
@@ -92,11 +88,6 @@
                 "type": "string",
                 "description": "搜索分类筛选，可选。多个分类用逗号分隔。可选值：general, news, images, videos, files, music, it, science, social media。默认：general。例如：'general,news'。",
                 "default": "general"
-              },
-              "language": {
-                "type": "string",
-                "description": "搜索结果语言过滤，可选。使用 ISO 639-1 语言代码。例如：'zh-CN'（简体中文）、'en-US'（美式英语）。默认：'zh-CN'。",
-                "default": "zh-CN"
               },
               "time_range": {
                 "type": "string",

@@ -70,10 +70,6 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
             "type": "string",
             "description": "上一轮使用的分类"
         },
-        "previous_language": {
-            "type": "string",
-            "description": "上一轮使用的语言"
-        },
         "previous_time_range": {
             "type": "string",
             "description": "上一轮使用的时间范围"
@@ -107,9 +103,6 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
             "description": "下一轮建议使用的搜索词"
         },
         "category_adjust_reason": {
-            "type": "string"
-        },
-        "language_adjust_reason": {
             "type": "string"
         },
         "time_range_adjust_reason": {
@@ -163,17 +156,10 @@ def build_web_search_schema(concurrent_requests: int = _DEFAULT_CONCURRENT_REQUE
             },
             "categories": {
                 "type": "string",
-                "description": "搜索分类筛选，可选。多个分类用逗号分隔。"
-                               "可选值：general, news, images, videos, files, music, it, science,"
-                               "  social media。默认：general。例如：'general,news'。",
-                "default": "general",
-            },
-            "language": {
-                "type": "string",
-                "description": "搜索结果语言过滤，可选。使用 ISO 639-1 语言代码。"
-                               "例如：'zh-CN'（简体中文）、'en-US'（美式英语）。"
-                               "默认：'zh-CN'。",
-                "default": "zh-CN",
+                "description": "搜索分类筛选，可选。多个分类用逗号分隔。留空则使用 SearXNG 内部配置的默认引擎。"
+                               "可选值：general, news, images, videos, files, music, it, science, social media。"
+                               "强烈建议默认留空，仅在需要特定媒体类型时才指定。例如：'general,news'。",
+                "default": "",
             },
             "time_range": {
                 "type": "string",
@@ -461,31 +447,25 @@ async def handle_searxng_search(
             )
         query_groups.append(cleaned_terms)
 
-    categories: str = parameters.get("categories", "general")
-    language: str = parameters.get("language", "zh-CN")
+    categories: str = parameters.get("categories", "")
     time_range: str = parameters.get("time_range", "")
 
     # ============================================================
     # 构造核心模板参数
-    # 注意：SearXNG 不接受空字符串参数值，例如 language= 会导致 400 Bad Request。
+    # 注意：SearXNG 不接受空字符串参数值，传递空值参数会导致 400 Bad Request。
     # 因此只在参数有值时加入字典，空值参数不传递。
+    # 不再传递 language 参数，使用 SearXNG 实例的默认语言配置。
     # ============================================================
     search_params_template: dict[str, Any] = {
         "format": "json",
         "safesearch": safe_search_level,
     }
 
-    if categories:
-        search_params_template["categories"] = categories
+    if categories and categories.strip():
+        search_params_template["categories"] = categories.strip()
 
-    if language:
-        search_params_template["language"] = language
-    else:
-        # language 为空时，使用 "all" 让 SearXNG 返回所有语言结果
-        search_params_template["language"] = "all"
-
-    if time_range:
-        search_params_template["time_range"] = time_range
+    if time_range and time_range.strip():
+        search_params_template["time_range"] = time_range.strip()
 
     logger.info(
         f"SearXNG 高级搜索请求 trace_id={trace_id} "

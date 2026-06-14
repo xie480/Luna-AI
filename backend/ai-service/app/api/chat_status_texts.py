@@ -39,7 +39,7 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
     #    文案方向：认真思考、微微停顿，展现 Luna 在努力理解主人 
     #    ================================================================
     (ChatStatusStage.INPUT_RECONSTRUCTION, ChatStatusState.RUNNING): [
-        "嗯，让Luna好好想想主任人的……",
+        "嗯，让Luna好好想想……",
         "让Luna想想这是什么意思……",
         "唔……Luna在认真听呢，",
         "等一下，让Luna理解一下……",
