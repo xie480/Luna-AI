@@ -419,30 +419,36 @@ export const Live2DView: React.FC = () => {
     return () => window.removeEventListener("wheel", onWheel, { capture: true });
   }, [model, app, container, live2dConfigMode]);
 
+  const isLive2dIdleThrottlingEnabled = useSystemStore((state) => state.isLive2dIdleThrottlingEnabled);
+  const isLive2dBackgroundSuspensionEnabled = useSystemStore((state) => state.isLive2dBackgroundSuspensionEnabled);
+  const live2dMaxFPS = useSystemStore((state) => state.live2dMaxFPS);
+
   // ---------- 动态渲染挂起与帧率节流策略 (维度五) ----------
   useEffect(() => {
     if (!app) return;
 
     let interactionTimeout: NodeJS.Timeout;
-    const FPS_ACTIVE = 60;
+    const FPS_ACTIVE = live2dMaxFPS;
     const FPS_IDLE = 15;  // 降低到 15 帧在无动画待机时节省大幅资源
     
-    // 唤醒逻辑：恢复为 60 FPS，并刷新超时计时器
+    // 唤醒逻辑：恢复为 maxFPS，并刷新超时计时器
     const wakeUpRenderer = () => {
       app.ticker.maxFPS = FPS_ACTIVE;
       clearTimeout(interactionTimeout);
       
-      interactionTimeout = setTimeout(() => {
-        // 只有当没有任何活跃情绪输出且静默超过 5 秒时才进行节流降频
-        if (!currentEmotion || currentEmotion === 'neutral' || currentEmotion.toLowerCase() === 'solemn') {
-          app.ticker.maxFPS = FPS_IDLE;
-        }
-      }, 5000);
+      if (isLive2dIdleThrottlingEnabled) {
+        interactionTimeout = setTimeout(() => {
+          // 只有当没有任何活跃情绪输出且静默超过 5 秒时才进行节流降频
+          if (!currentEmotion || currentEmotion === 'neutral' || currentEmotion.toLowerCase() === 'solemn') {
+            app.ticker.maxFPS = FPS_IDLE;
+          }
+        }, 5000);
+      }
     };
 
     // 系统可见性侦听：应用在后台（被遮挡或最小化）时，彻底切断渲染引擎
     const handleVisibilityChange = () => {
-      if (document.hidden) {
+      if (document.hidden && isLive2dBackgroundSuspensionEnabled) {
         app.ticker.stop();
         console.log("[Live2D] 应用转入后台，引擎渲染循环已挂起 (Sleep)");
       } else {
@@ -457,8 +463,12 @@ export const Live2DView: React.FC = () => {
     window.addEventListener("pointermove", wakeUpRenderer);
     window.addEventListener("pointerdown", wakeUpRenderer);
 
-    // 当情绪状态发生改变，立即唤醒动画渲染以保持流畅
-    wakeUpRenderer();
+    // 初始状态触发器
+    if (document.hidden && isLive2dBackgroundSuspensionEnabled) {
+       app.ticker.stop();
+    } else {
+       wakeUpRenderer();
+    }
 
     return () => {
       clearTimeout(interactionTimeout);
@@ -466,7 +476,7 @@ export const Live2DView: React.FC = () => {
       window.removeEventListener("pointermove", wakeUpRenderer);
       window.removeEventListener("pointerdown", wakeUpRenderer);
     };
-  }, [app, currentEmotion]);
+  }, [app, currentEmotion, isLive2dIdleThrottlingEnabled, isLive2dBackgroundSuspensionEnabled, live2dMaxFPS]);
 
   // ---------- 视线追踪 ----------
   useEffect(() => {

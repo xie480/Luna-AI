@@ -65,6 +65,12 @@ interface SystemState {
   clothingConfig: Record<string, boolean>;
   // Live2D 渲染开关
   isLive2dEnabled: boolean;
+  // Live2D 空闲降频开关
+  isLive2dIdleThrottlingEnabled: boolean;
+  // Live2D 后台挂起开关
+  isLive2dBackgroundSuspensionEnabled: boolean;
+  // Live2D 最大帧率
+  live2dMaxFPS: 30 | 60 | 90 | 120;
   // 主题设置
   theme: 'dark' | 'light';
 
@@ -97,6 +103,12 @@ interface SystemState {
   setClothingConfig: (id: string, enabled: boolean) => void;
   // 设置 Live2D 渲染开关
   setLive2dEnabled: (enabled: boolean) => void;
+  // 设置 Live2D 空闲降频开关
+  setLive2dIdleThrottlingEnabled: (enabled: boolean) => void;
+  // 设置 Live2D 后台挂起开关
+  setLive2dBackgroundSuspensionEnabled: (enabled: boolean) => void;
+  // 设置 Live2D 最大帧率
+  setLive2dMaxFPS: (fps: 30 | 60 | 90 | 120) => void;
   // 设置主题
   setTheme: (theme: 'dark' | 'light') => void;
   // 可观测性 Actions
@@ -135,6 +147,45 @@ function loadLive2dEnabled(): boolean {
   return true; // 默认开启
 }
 
+function loadLive2dIdleThrottlingEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem('luna:live2dIdleThrottlingEnabled');
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return true; // 默认开启
+}
+
+function loadLive2dBackgroundSuspensionEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem('luna:live2dBackgroundSuspensionEnabled');
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return true; // 默认开启
+}
+
+function loadLive2dMaxFPS(): 30 | 60 | 90 | 120 {
+  try {
+    const raw = localStorage.getItem('luna:live2dMaxFPS');
+    if (raw !== null) {
+      const fps = parseInt(raw, 10);
+      if (fps === 30 || fps === 60 || fps === 90 || fps === 120) {
+        return fps;
+      }
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return 60; // 默认 60 FPS
+}
+
 function loadTheme(): 'dark' | 'light' {
   try {
     const raw = localStorage.getItem('luna:theme');
@@ -164,6 +215,9 @@ export const useSystemStore = create<SystemState>((set) => ({
   // 初始化服装配置，从 localStorage 读取或使用空对象
   clothingConfig: loadClothingConfig(),
   isLive2dEnabled: loadLive2dEnabled(),
+  isLive2dIdleThrottlingEnabled: loadLive2dIdleThrottlingEnabled(),
+  isLive2dBackgroundSuspensionEnabled: loadLive2dBackgroundSuspensionEnabled(),
+  live2dMaxFPS: loadLive2dMaxFPS(),
   theme: loadTheme(),
   // 可观测性初始状态
   frontendErrors: [],
@@ -248,6 +302,36 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误
       }
       return { isLive2dEnabled: enabled };
+    }),
+
+  setLive2dIdleThrottlingEnabled: (enabled) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:live2dIdleThrottlingEnabled', JSON.stringify(enabled));
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { isLive2dIdleThrottlingEnabled: enabled };
+    }),
+
+  setLive2dBackgroundSuspensionEnabled: (enabled) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:live2dBackgroundSuspensionEnabled', JSON.stringify(enabled));
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { isLive2dBackgroundSuspensionEnabled: enabled };
+    }),
+
+  setLive2dMaxFPS: (fps) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:live2dMaxFPS', fps.toString());
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { live2dMaxFPS: fps };
     }),
 
   setTheme: (theme) =>
