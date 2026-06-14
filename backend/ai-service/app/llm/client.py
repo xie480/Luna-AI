@@ -354,6 +354,34 @@ class LLMClient:
         else:
             self._next_allowed_time = now + interval
 
+    async def acquire_call_slot(self) -> float:
+        """
+        获取 LLM 调用槽位，返回需要等待的秒数。
+
+        做什么：检查频率限制，若距离上次调用不足间隔时间则返回剩余等待秒数，
+                否则返回 0 并记录下次允许调用的时间点。
+        为什么这样做：为 CompressionLLMClient 等外部调用方提供统一的频率限制检查，
+                    由调用方自行决定是否等待，与内部 _wait_for_slot 的逻辑分离。
+        输入输出：
+            - 输出：需要等待的秒数（0 表示无需等待可直接发起调用）
+        边界条件：interval <= 0 时不限制，返回 0。
+        """
+        from app.config.settings import settings
+        interval = settings.llm_call_interval_seconds
+        if interval <= 0:
+            return 0.0
+
+        import time as _time
+        now = _time.monotonic()
+
+        if self._next_allowed_time > now:
+            wait_time = self._next_allowed_time - now
+            self._next_allowed_time += interval
+            return max(wait_time, 0.0)
+        else:
+            self._next_allowed_time = now + interval
+            return 0.0
+
     def reload_config(self) -> None:
         """
         重新加载配置并重新初始化客户端
