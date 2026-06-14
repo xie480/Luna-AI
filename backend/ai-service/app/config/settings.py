@@ -166,6 +166,20 @@ class Settings(BaseSettings):
     skill_max_fallback_count: int = 2
 
     # ============================================================
+    # 内存守护进程配置 (memory_guardian)
+    # ============================================================
+    # Windows 计划任务名称（用于触发内存清理）
+    memory_guardian_task_name: str = "MemoryBoost"
+    # 内存占用率触发阈值（百分比，达到此值时触发计划任务）
+    memory_guardian_threshold: float = 90.0
+    # 释放阈值（百分比，内存回落到此值以下后允许再次触发）
+    memory_guardian_release: float = 80.0
+    # 轮询间隔（秒）
+    memory_guardian_interval: int = 5
+    # 触发后冷却时间（秒）
+    memory_guardian_cooldown: int = 120
+
+    # ============================================================
     # LLM 调用频率限制配置
     # ============================================================
     # 调用大模型间隔时间(秒)

@@ -40,6 +40,8 @@ test-fe:
 	cd frontend && npm run test
 
 # 一键启动本地最小开发环境（三个服务并行运行）
+# 注意：Memory Guardian 守护进程已经嵌入到 Python AI Service 生命周期中，
+#       无需单独启动。
 run: run-go run-py run-fe
 
 run-go:

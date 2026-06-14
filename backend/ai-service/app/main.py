@@ -803,6 +803,42 @@ async def lifespan(app: FastAPI):
     # else:
     #     logger.warning("PG 客户端不可用，MCP 市场定时采集调度器跳过启动")
 
+    # ============================================================
+    # 内存守护进程：启动后台线程监控系统内存使用率
+    # ============================================================
+    # 做什么：启动独立线程运行 memory_guardian 轮询循环，监测系统内存使用率，
+    #          超过阈值时触发 Windows 计划任务执行内存清理。
+    # 为什么这样做：AI 模型长期运行可能产生内存泄漏，守护进程防止系统内存不足。
+    # 边界条件：
+    #   - 非 Windows 系统自动跳过
+    #   - 通过 threading.Event 实现优雅停止
+    #   - 线程启动失败不阻断服务启动（降级为仅记录警告）
+    guardian_stop_event = threading.Event()
+    guardian_thread = None
+    try:
+        from scripts.memory_guardian import GuardianConfig, run_guardian_loop
+        guardian_cfg = GuardianConfig(
+            task_name=settings.memory_guardian_task_name,
+            threshold=settings.memory_guardian_threshold,
+            release=settings.memory_guardian_release,
+            interval=settings.memory_guardian_interval,
+            cooldown=settings.memory_guardian_cooldown,
+        )
+        guardian_thread = threading.Thread(
+            target=run_guardian_loop,
+            args=(guardian_cfg, guardian_stop_event),
+            name="memory-guardian",
+            daemon=True,
+        )
+        guardian_thread.start()
+        logger.info(
+            f"内存守护线程已启动: "
+            f"threshold={guardian_cfg.threshold:.1f}% "
+            f"interval={guardian_cfg.interval}s"
+        )
+    except Exception as exc:
+        logger.warning(f"内存守护线程启动失败（将降级运行）: {exc}")
+
     # 标记服务已完全就绪
     app.state.is_ready = True
     logger.info("Luna AI Service 所有核心资源初始化完成，服务已就绪")
@@ -826,6 +862,20 @@ async def lifespan(app: FastAPI):
 
     if rollover_task:
         rollover_task.cancel()
+
+    # 停止内存守护进程线程
+    # 做什么：发送停止信号给 guardian 线程，等待其优雅退出。
+    # 为什么这样做：防止守护线程在服务关闭后仍在后台运行，造成资源泄露。
+    if guardian_thread is not None and guardian_thread.is_alive():
+        try:
+            guardian_stop_event.set()
+            guardian_thread.join(timeout=5)
+            if guardian_thread.is_alive():
+                logger.warning("内存守护线程未能在 5 秒内停止，将被强制回收")
+            else:
+                logger.info("内存守护线程已停止")
+        except Exception as e:
+            logger.warning(f"停止内存守护线程异常 error={e}")
 
     # 停止 MCP 市场定时采集调度器
     if getattr(app.state, "mcp_discovery_scheduler", None):
