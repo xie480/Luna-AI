@@ -125,7 +125,9 @@ class InputReconstructionNode(ChatWorkflowNode):
             long_term = retrieval_routing.long_term_memory
             external = retrieval_routing.external_knowledge
 
-            state.route_state.reconstructed_text = state.input_payload.raw_user_message
+            state.route_state.reconstructed_text = (
+                reconstruction.disambiguated_text or state.input_payload.raw_user_message
+            )
             state.route_state.disambiguated_text = (
                 reconstruction.disambiguated_text or state.input_payload.raw_user_message
             )
