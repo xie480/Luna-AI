@@ -428,7 +428,11 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     )
                     
                     eval_agent = MCPEvaluationAgent(prompt_manager=prompt_manager)
-                    step_goal = next((s.goal for s in execution_plan.states.values() if s.goal), "完成任务")
+                    # 跳过纯 resource 的辅助步骤，只取真正调用工具（tool 非空）的 state 目标
+                    step_goal = next(
+                        (s.goal for s in execution_plan.states.values() if s.goal and s.tool),
+                        mcp_intent,
+                    )
                     eval_result = await eval_agent.evaluate(
                         trace_id=state.runtime.trace_id,
                         mcp_intent=mcp_intent,

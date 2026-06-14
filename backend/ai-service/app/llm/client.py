@@ -702,9 +702,22 @@ class LLMClient:
 
         except Exception as e:
             # 其他未知异常，绝对不能崩溃传播
+            # NOTE: When exception message formatting fails, safely fallback to type name
+            try:
+                error_msg = f"{type(e).__name__}: {e}"
+            except Exception:
+                error_msg = f"{type(e).__name__}"
+            
             logger.error(
-                f"[TraceID:{trace_id}] LLM API 发生未知错误: {type(e).__name__}: {e}"
+                f"[TraceID:{trace_id}] LLM API 发生未知错误: {error_msg}"
             )
+            
+            # 安全获取错误名称，避免 Pydantic 校验异常
+            try:
+                error_name = str(type(e).__name__)
+            except Exception:
+                error_name = "UnknownError"
+
             # 尝试发送缓冲的剩余内容
             remaining = buffer.flush()
             if remaining:
@@ -713,19 +726,30 @@ class LLMClient:
                         chunk=remaining,
                         is_finished=True,
                         finish_reason="error",
-                        error=f"未知错误: {type(e).__name__}",
+                        error=f"未知错误: {error_name}",
                     )
                     yield chunk_model.model_dump()
                 except ValidationError as validation_error:
                     logger.error(f"[TraceID:{trace_id}] 异常兜底块校验失败: {validation_error}")
             else:
-                error_model = StreamChunkModel(
-                    chunk="",
-                    is_finished=True,
-                    finish_reason="error",
-                    error=f"AI 服务发生未知错误（{type(e).__name__}），请稍后重试",
-                )
-                yield error_model.model_dump()
+                try:
+                    error_model = StreamChunkModel(
+                        chunk="",
+                        is_finished=True,
+                        finish_reason="error",
+                        error=f"AI 服务发生未知错误（{error_name}），请稍后重试",
+                    )
+                    yield error_model.model_dump()
+                except ValidationError as validation_error:
+                    logger.error(f"[TraceID:{trace_id}] 最终错误块校验失败: {validation_error}")
+                    # 如果连带 error string 构造模型也失败了，最安全的退路是返回一个写死常量的模型
+                    fallback_model = StreamChunkModel(
+                        chunk="",
+                        is_finished=True,
+                        finish_reason="error",
+                        error="AI 服务发生系统内部错误，请稍后重试",
+                    )
+                    yield fallback_model.model_dump()
 
     async def stream_chat_with_context(
         self,

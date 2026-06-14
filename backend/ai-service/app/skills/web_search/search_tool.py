@@ -5,8 +5,8 @@ MCP 内置工具：通过 SearXNG 执行网络搜索。
         支持并发请求、自动翻页、自定义查询、分类筛选和语言过滤。
         作为 L0 级低危工具（仅发起只读 HTTP GET 请求），直接放行无需用户确认。
 为什么这样做：Phase 12 需要接入至少一个具备实际能力的数据获取工具来验证
-              工具链路在数据获取场景下的完整性。SearXNG 作为自托管的元搜索引擎，
-              满足本地优先原则，无需依赖第三方搜索 API 密钥。
+             工具链路在数据获取场景下的完整性。SearXNG 作为自托管的元搜索引擎，
+             满足本地优先原则，无需依赖第三方搜索 API 密钥。
 边界条件：
     - 依赖本地或局域网部署的 SearXNG 实例，URL 通过 ToolConfig 配置。
     - 用户在前端 Skill 面板的 web_search 工具条目中，点击"配置"按钮设置。
@@ -467,13 +467,22 @@ async def handle_searxng_search(
 
     # ============================================================
     # 构造核心模板参数
+    # 注意：SearXNG 不接受空字符串参数值，例如 language= 会导致 400 Bad Request。
+    # 因此只在参数有值时加入字典，空值参数不传递。
     # ============================================================
     search_params_template: dict[str, Any] = {
         "format": "json",
-        "categories": categories,
-        "language": language,
         "safesearch": safe_search_level,
     }
+
+    if categories:
+        search_params_template["categories"] = categories
+
+    if language:
+        search_params_template["language"] = language
+    else:
+        # language 为空时，使用 "all" 让 SearXNG 返回所有语言结果
+        search_params_template["language"] = "all"
 
     if time_range:
         search_params_template["time_range"] = time_range
