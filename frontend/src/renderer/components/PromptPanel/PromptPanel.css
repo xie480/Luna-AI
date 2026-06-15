@@ -66,3 +66,119 @@
   background-color: rgba(255, 77, 79, 0.1);
   border-left: 3px solid #ff4d4f;
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .prompt-panel {
+  background-color: var(--cyber-bg-base);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar {
+  border-right: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .prompt-category-item,
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .prompt-list-item {
+  color: var(--cyber-text-secondary);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .prompt-category-item:hover,
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .prompt-list-item:hover {
+  background-color: rgba(160, 130, 255, 0.08);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .active {
+  background-color: rgba(160, 130, 255, 0.06);
+  color: var(--cyber-accent-purple);
+  border-left: 3px solid var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-main {
+  border-left: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompt-editor-header {
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 12px;
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompt-editor-header .editor-header-actions button {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font-family: var(--cyber-font-mono);
+  border: 1px solid var(--cyber-border-color);
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompt-editor-header .editor-header-actions button:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+  background-color: rgba(160, 130, 255, 0.08);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompt-editor-header .editor-header-actions button.btn-primary {
+  background-color: var(--cyber-accent-purple);
+  color: #000;
+  border-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompt-editor-header .editor-header-actions button.btn-primary:hover {
+  background-color: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-editor {
+  border: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-editor .monaco-editor {
+  border: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-editor .monaco-editor .margin {
+  background-color: var(--cyber-bg-surface) !important;
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-editor .monaco-editor .monaco-editor-background {
+  background-color: var(--cyber-bg-base) !important;
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .section-title,
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar h3,
+[data-theme="cyberpunk"] .prompt-panel h2 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+  border-bottom: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .search-box input {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .search-box input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .readonly-line-decoration {
+  background-color: rgba(160, 130, 255, 0.03);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .readonly-line-margin {
+  background-color: rgba(255, 0, 0, 0.08);
+  border-left: 3px solid var(--cyber-accent-red);
+}
+
+[data-theme="cyberpunk"] .prompt-panel .prompts-sidebar .prompt-count {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}

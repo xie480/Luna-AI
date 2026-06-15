@@ -18,6 +18,7 @@ import { generateId } from '../shared/utils/snowflake';
 
 // 导入全局样式
 import './styles/global.css';
+import './styles/cyberpunk.css';
 
 // 导入加载屏组件（覆盖在 App 最上层，后端就绪后自动销毁）
 import { EventHorizonLoader } from './components/LoadingScreen/EventHorizonLoader';

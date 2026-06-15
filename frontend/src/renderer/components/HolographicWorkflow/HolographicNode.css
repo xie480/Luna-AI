@@ -164,7 +164,7 @@
 .status-running .node-label { color: #ffffff; text-shadow: 0 0 5px #00ffff; }
 
 
-/* SUCCESS - Mint Green */
+/* SUCCESS - Mint Purple */
 .status-success .stargate-ring { border-color: #00fa9a; box-shadow: 0 0 10px rgba(0, 250, 154, 0.2); }
 .status-success .diamond-shape { border-color: #00fa9a; background: rgba(0, 250, 154, 0.05); }
 .status-success .card-glass { border-color: #00fa9a; background: rgba(0, 250, 154, 0.05); }
@@ -172,15 +172,15 @@
 
 /* FAILED - Glitch Red */
 .status-failed .stargate-ring { border-color: #ff003c; }
-.status-failed .diamond-shape { border-color: #ff003c; background: rgba(255, 0, 60, 0.1); }
-.status-failed .card-glass { border-color: #ff003c; background: rgba(255, 0, 60, 0.1); }
+.status-failed .diamond-shape { border-color: #ff003c; background: rgba(255, 100, 120, 0.1); }
+.status-failed .card-glass { border-color: #ff003c; background: rgba(255, 100, 120, 0.1); }
 .status-failed .node-label { color: #ff003c; text-shadow: 2px 0 0 rgba(255,0,0,0.5), -2px 0 0 rgba(0,255,255,0.5); }
 
 /* Glitch Overlay */
 .glitch-overlay {
   position: absolute;
   inset: -2px;
-  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="1" fill="rgba(255,0,60,0.2)"/></svg>');
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="1" fill="rgba(255, 100, 120,0.2)"/></svg>');
   opacity: 0.5;
   pointer-events: none;
   animation: glitchAnim 0.2s linear infinite alternate;

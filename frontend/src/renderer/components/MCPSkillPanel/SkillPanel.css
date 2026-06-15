@@ -1,0 +1,428 @@
+/**
+ * MCP Skill 面板赛博朋克主题覆盖样式。
+ *
+ * 注意：SkillPanel 复用了 MCPPanel.css 中定义的 layout 类名，
+ *      因此大部分覆盖在 MCPPanel.css 中已有定义。
+ *      此处仅补充 SkillPanel 特有的或需要额外覆盖的样式。
+ */
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .local-server-panel {
+  background-color: var(--cyber-bg-base);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .local-server-panel__register-section {
+  border: 1px solid var(--cyber-border-color);
+  padding: 16px;
+  background-color: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .local-server-panel__list-section {
+  border-top: 1px solid var(--cyber-border-color);
+  padding-top: 16px;
+}
+
+[data-theme="cyberpunk"] .section-title {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 8px;
+}
+
+[data-theme="cyberpunk"] .loading-indicator {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .error-message {
+  border: 1px solid var(--cyber-accent-red);
+  border-radius: 0;
+  background: rgba(255, 0, 0, 0.1);
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .manual-register-form {
+  border: 1px solid var(--cyber-border-color);
+  padding: 16px;
+  background-color: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .manual-register-form__header {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+[data-theme="cyberpunk"] .manual-register-form__row {
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+[data-theme="cyberpunk"] .manual-register-form__row input[type="text"],
+[data-theme="cyberpunk"] .manual-register-form__row input[type="checkbox"] {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .manual-register-form__row input[type="text"]:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: 0 0 0 3px rgba(160, 130, 255, 0.16);
+}
+
+[data-theme="cyberpunk"] .btn-remove-row {
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  background: transparent;
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .btn-remove-row:hover:not(:disabled) {
+  background: rgba(255, 0, 0, 0.1);
+  border-color: var(--cyber-accent-red);
+  color: var(--cyber-accent-red);
+}
+
+[data-theme="cyberpunk"] .row-errors {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+  font-size: 12px;
+}
+
+[data-theme="cyberpunk"] .manual-register-form__actions {
+  border-top: 1px solid var(--cyber-border-color);
+  padding-top: 12px;
+  margin-top: 8px;
+}
+
+[data-theme="cyberpunk"] .btn-add-row {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-add-row:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-submit {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-purple);
+  background: var(--cyber-accent-purple);
+  color: #000;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-submit:hover:not(:disabled) {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-theme="cyberpunk"] .btn-reset {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-reset:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .submit-success {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .submit-error {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .local-server-list__empty {
+  border: 1px dashed var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .local-server-list__item {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  margin-bottom: 4px;
+}
+
+[data-theme="cyberpunk"] .local-server-list__item:hover {
+  border-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .server-name {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .server-info {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .server-actions {
+  gap: 4px;
+}
+
+[data-theme="cyberpunk"] .btn-edit {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-edit:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-delete {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-red);
+  background: transparent;
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-delete:hover:not(:disabled) {
+  background: rgba(255, 0, 0, 0.1);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-delete-confirm {
+  border-radius: 0;
+  border: 1px solid var(--cyber-accent-red);
+  background: rgba(255, 0, 0, 0.15);
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-delete-confirm:hover:not(:disabled) {
+  background: rgba(255, 0, 0, 0.25);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-delete-cancel {
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-delete-cancel:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .delete-confirm-group {
+  gap: 4px;
+}
+
+[data-theme="cyberpunk"] .json-import-panel {
+  border: 1px solid var(--cyber-border-color);
+  padding: 16px;
+  background-color: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .json-import-panel h4 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 8px;
+}
+
+[data-theme="cyberpunk"] .json-import-panel__file-upload button {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .json-import-panel__file-upload button:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .json-import-panel__editor textarea {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .json-import-panel__editor textarea:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-parse,
+[data-theme="cyberpunk"] .btn-confirm-import {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-purple);
+  background: var(--cyber-accent-purple);
+  color: #000;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-parse:hover:not(:disabled),
+[data-theme="cyberpunk"] .btn-confirm-import:hover:not(:disabled) {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-parse:disabled,
+[data-theme="cyberpunk"] .btn-confirm-import:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-theme="cyberpunk"] .btn-back {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-back:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .hint-text {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .parse-error {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-preview-list {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .import-preview__warnings {
+  color: #f59e0b;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-preview__warning-item {
+  color: #f59e0b;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-preview__valid-count {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-result {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .import-result__success {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-result__failed {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-result__details {
+  border-top: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .import-result__failure-item {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .edit-server-modal__toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+[data-theme="cyberpunk"] .edit-server-modal__toggle input[type="checkbox"] {
+  display: none;
+}
+
+[data-theme="cyberpunk"] .toggle-slider {
+  width: 36px;
+  height: 20px;
+  background-color: #333;
+  border-radius: 0;
+  position: relative;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+[data-theme="cyberpunk"] .toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  background-color: var(--cyber-text-secondary);
+  border-radius: 0;
+  transition: all 0.2s ease;
+}
+
+[data-theme="cyberpunk"] .edit-server-modal__toggle input:checked + .toggle-slider {
+  background-color: rgba(160, 130, 255, 0.5);
+}
+
+[data-theme="cyberpunk"] .edit-server-modal__toggle input:checked + .toggle-slider::after {
+  left: 19px;
+  background-color: var(--cyber-accent-purple);
+}

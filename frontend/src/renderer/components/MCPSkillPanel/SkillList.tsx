@@ -80,7 +80,7 @@ export const SkillList: React.FC<SkillListProps> = ({
                   width="10"
                   height="10"
                   viewBox="0 0 24 24"
-                  fill={skill.enabled ? '#22c55e' : '#a0a0a0'}
+                  fill={skill.enabled ? '#a082ff' : '#a0a0a0'}
                   stroke="none"
                 >
                   <circle cx="12" cy="12" r="8" />

@@ -212,7 +212,7 @@ export const SkillJsonImportPanel: React.FC = () => {
               width="14"
               height="14"
               viewBox="0 0 24 24"
-              fill="#22c55e"
+              fill="#a082ff"
               stroke="none"
               style={{ verticalAlign: 'middle', marginRight: 4 }}
             >
@@ -254,7 +254,7 @@ export const SkillJsonImportPanel: React.FC = () => {
             width="14"
             height="14"
             viewBox="0 0 24 24"
-            fill="#22c55e"
+            fill="#a082ff"
             stroke="none"
             style={{ verticalAlign: 'middle', marginRight: 4 }}
           >

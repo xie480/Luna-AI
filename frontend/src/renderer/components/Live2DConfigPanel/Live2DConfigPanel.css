@@ -85,3 +85,74 @@
 .exit-btn:hover {
   background-color: #cbd5e0;
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .live2d-config-portal {
+  z-index: 999999;
+}
+
+[data-theme="cyberpunk"] .live2d-config-status-bar {
+  background-color: rgba(0, 0, 0, 0.85);
+  color: var(--cyber-accent-purple);
+  border: 1px solid var(--cyber-accent-purple);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+  box-shadow: var(--cyber-border-glow-active);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+[data-theme="cyberpunk"] .config-btn {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font-family: var(--cyber-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12px;
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .save-btn {
+  background-color: var(--cyber-accent-purple);
+  color: #000;
+  border: 1px solid var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .save-btn:hover {
+  background-color: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .reset-btn {
+  background-color: var(--cyber-accent-blue);
+  color: #000;
+  border: 1px solid var(--cyber-accent-blue);
+}
+
+[data-theme="cyberpunk"] .reset-btn:hover {
+  background-color: transparent;
+  color: var(--cyber-accent-blue);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .exit-btn {
+  background-color: transparent;
+  color: var(--cyber-text-primary);
+  border: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .exit-btn:hover {
+  background-color: rgba(255, 0, 0, 0.1);
+  border-color: var(--cyber-accent-red);
+  color: var(--cyber-accent-red);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .live2d-config-panel {
+  gap: 12px;
+}
+
+[data-theme="cyberpunk"] .live2d-config-status-bar {
+  padding: 6px 20px;
+}

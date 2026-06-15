@@ -244,8 +244,8 @@
   color: #2196f3;
 }
 
-.text-green {
-  color: #4caf50;
+.text-purple {
+  color: #a082ff;
 }
 
 /* Global Submit */
@@ -329,4 +329,149 @@
   font-size: 12px;
   color: var(--text-color, #e0e0e0);
   text-align: center;
+}
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .file-upload-dropzone {
+  border: 2px dashed var(--cyber-border-color);
+  border-radius: 0;
+  background-color: var(--cyber-bg-surface-elevated);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .file-upload-dropzone.active,
+[data-theme="cyberpunk"] .file-upload-dropzone:hover {
+  border-color: var(--cyber-accent-purple);
+  background-color: rgba(160, 130, 255, 0.05);
+  box-shadow: var(--cyber-border-glow);
+  transform: none;
+}
+[data-theme="cyberpunk"] .dropzone-text {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .dropzone-hint {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+  font-size: 12px;
+}
+[data-theme="cyberpunk"] .url-scrape-input {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .url-scrape-input .text-input {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .url-scrape-input .text-input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+[data-theme="cyberpunk"] .ingestion-progress {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .progress-stats {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .progress-stats .text-red {
+  color: var(--cyber-accent-red);
+}
+[data-theme="cyberpunk"] .progress-bar-container {
+  background-color: rgba(160, 130, 255, 0.1);
+  border-radius: 0;
+}
+[data-theme="cyberpunk"] .progress-bar-fill {
+  background-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+[data-theme="cyberpunk"] .strategy-debugger-container {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .btn-strategy-toggle {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .strategy-config-expanded {
+  border-top-color: var(--cyber-border-color);
+}
+[data-theme="cyberpunk"] .pending-items-list {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+[data-theme="cyberpunk"] .pending-title {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .pending-item {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .pending-name {
+  color: var(--cyber-text-white);
+}
+[data-theme="cyberpunk"] .pending-size {
+  color: var(--cyber-text-secondary);
+}
+[data-theme="cyberpunk"] .pending-description-input {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .pending-description-input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+[data-theme="cyberpunk"] .btn-remove-pending:hover {
+  color: var(--cyber-accent-red);
+}
+[data-theme="cyberpunk"] .btn-preview-pending:hover {
+  color: var(--cyber-accent-purple);
+}
+[data-theme="cyberpunk"] .text-blue { color: var(--cyber-accent-blue); }
+[data-theme="cyberpunk"] .text-purple { color: var(--cyber-accent-purple); }
+[data-theme="cyberpunk"] .btn-global-submit {
+  background: transparent;
+  border: 1px solid var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  box-shadow: var(--cyber-border-glow);
+}
+[data-theme="cyberpunk"] .btn-global-submit:hover:not(:disabled) {
+  background: var(--cyber-accent-purple);
+  color: var(--cyber-bg-base);
+  box-shadow: var(--cyber-border-glow-active);
+  transform: none;
+}
+[data-theme="cyberpunk"] .btn-global-submit:disabled {
+  border-color: var(--cyber-text-secondary);
+  color: var(--cyber-text-secondary);
+  opacity: 0.4;
+}
+[data-theme="cyberpunk"] .global-submit-progress-fill {
+  background-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+[data-theme="cyberpunk"] .global-submit-progress-text {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
 }

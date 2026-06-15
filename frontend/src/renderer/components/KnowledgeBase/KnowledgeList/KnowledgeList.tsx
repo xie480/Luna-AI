@@ -77,7 +77,7 @@ const KnowledgeItemRow: React.FC<{ doc: KnowledgeDocumentView; isUpdateSelectorM
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed': return 'text-green';
+      case 'completed': return 'text-purple';
       case 'failed': return 'text-red';
       case 'offline_suspended': return 'text-gray';
       default: return 'text-orange'; // parsing, embedding

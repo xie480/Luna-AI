@@ -82,7 +82,7 @@
   margin-top: 2px;
 }
 
-.text-green { color: #4caf50; }
+.text-purple { color: #a082ff; }
 .text-red { color: #f44336; }
 .text-orange { color: #ff9800; }
 .text-gray { color: #9e9e9e; }
@@ -179,3 +179,69 @@
   margin-bottom: 12px;
   opacity: 0.5;
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .knowledge-row {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .knowledge-row:hover {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+[data-theme="cyberpunk"] .knowledge-row.confirm-mode {
+  background-color: rgba(255, 100, 120, 0.08);
+  border-color: var(--cyber-accent-red);
+}
+[data-theme="cyberpunk"] .doc-title {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .doc-meta,
+[data-theme="cyberpunk"] .doc-description {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .doc-error {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .btn-action {
+  background: transparent;
+  border: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-secondary);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+  font-size: 12px;
+}
+[data-theme="cyberpunk"] .btn-action:hover:not(:disabled) {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+[data-theme="cyberpunk"] .btn-action.btn-danger {
+  border-color: var(--cyber-accent-red);
+  color: var(--cyber-accent-red);
+  background: transparent;
+}
+[data-theme="cyberpunk"] .btn-action.btn-danger:hover:not(:disabled) {
+  background: var(--cyber-accent-red);
+  color: var(--cyber-bg-base);
+}
+[data-theme="cyberpunk"] .btn-action.btn-updating {
+  color: var(--cyber-accent-purple);
+  border-color: var(--cyber-accent-purple);
+}
+[data-theme="cyberpunk"] .knowledge-loading,
+[data-theme="cyberpunk"] .knowledge-empty {
+  color: var(--cyber-text-secondary);
+  border: 1px dashed var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .text-purple { color: var(--cyber-accent-purple); }
+[data-theme="cyberpunk"] .text-red { color: var(--cyber-accent-red); }
+[data-theme="cyberpunk"] .text-orange { color: var(--cyber-accent-yellow); }
+[data-theme="cyberpunk"] .text-gray { color: var(--cyber-text-secondary); }

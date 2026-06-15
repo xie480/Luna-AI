@@ -61,10 +61,10 @@ function registerDiffTheme(monaco: any): void { // eslint-disable-line @typescri
     rules: [],
     colors: {
       // 插入（新增）行 — 绿色
-      'diffEditor.insertedTextBackground': 'rgba(34, 197, 94, 0.15)',
-      'diffEditor.insertedTextBorder': 'rgba(34, 197, 94, 0.3)',
-      'diffEditor.insertedLineBackground': 'rgba(34, 197, 94, 0.08)',
-      'diffEditorOverview.insertedForeground': '#22c55e',
+      'diffEditor.insertedTextBackground': 'rgba(160, 130, 255, 0.15)',
+      'diffEditor.insertedTextBorder': 'rgba(160, 130, 255, 0.3)',
+      'diffEditor.insertedLineBackground': 'rgba(160, 130, 255, 0.08)',
+      'diffEditorOverview.insertedForeground': '#a082ff',
       // 删除行 — 红色
       'diffEditor.removedTextBackground': 'rgba(239, 68, 68, 0.15)',
       'diffEditor.removedTextBorder': 'rgba(239, 68, 68, 0.3)',

@@ -16,7 +16,7 @@
 }
 
 .connection-line-base.failed {
-  stroke: rgba(255, 0, 60, 0.3);
+  stroke: rgba(255, 100, 120, 0.3);
   stroke-dasharray: 5, 5;
   animation: dashFlow 2s linear infinite reverse;
 }

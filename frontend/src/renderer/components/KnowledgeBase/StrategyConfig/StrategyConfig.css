@@ -129,8 +129,8 @@
   opacity: 0.9;
 }
 
-.chunk-card.border-green {
-  border-left-color: #4caf50;
+.chunk-card.border-purple {
+  border-left-color: #a082ff;
 }
 .chunk-card.border-orange {
   border-left-color: #ff9800;
@@ -198,4 +198,106 @@
   100% {
     background-position: -200% 0;
   }
+}
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .strategy-form {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .form-group label {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+[data-theme="cyberpunk"] .text-input {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .text-input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+[data-theme="cyberpunk"] .chunk-preview-sandbox {
+  border-top-color: var(--cyber-border-color);
+}
+[data-theme="cyberpunk"] .sandbox-textarea {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .sandbox-textarea:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+[data-theme="cyberpunk"] .sandbox-error {
+  background-color: rgba(255, 100, 120, 0.08);
+  border: 1px solid var(--cyber-accent-red);
+  color: var(--cyber-accent-red);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .sandbox-warnings {
+  background-color: rgba(252, 238, 10, 0.08);
+  border: 1px solid var(--cyber-accent-yellow);
+  color: var(--cyber-accent-yellow);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .results-summary {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .chunk-card {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-left-width: 4px;
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .chunk-card.border-purple {
+  border-left-color: var(--cyber-accent-purple);
+}
+[data-theme="cyberpunk"] .chunk-card.border-orange {
+  border-left-color: var(--cyber-accent-yellow);
+}
+[data-theme="cyberpunk"] .chunk-card.border-red {
+  border-left-color: var(--cyber-accent-red);
+}
+[data-theme="cyberpunk"] .chunk-header {
+  background-color: var(--cyber-bg-base);
+  border-bottom: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .chunk-tokens.text-red {
+  color: var(--cyber-accent-red);
+}
+[data-theme="cyberpunk"] .chunk-body {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .chunk-footer {
+  background-color: var(--cyber-bg-base);
+  border-top: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .font-mono {
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .skeleton-card {
+  background: linear-gradient(90deg, #111115 25%, #1a1a20 50%, #111115 75%);
+  background-size: 200% 100%;
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
 }

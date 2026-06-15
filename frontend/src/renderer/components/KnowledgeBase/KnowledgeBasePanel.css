@@ -7,3 +7,122 @@
 .strategy-config-area {
   margin-bottom: 24px;
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .knowledge-base-panel {
+  background-color: var(--cyber-bg-base);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .search-input,
+[data-theme="cyberpunk"] .knowledge-base-panel input[type="text"],
+[data-theme="cyberpunk"] .knowledge-base-panel select {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel input:focus,
+[data-theme="cyberpunk"] .knowledge-base-panel select:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel button,
+[data-theme="cyberpunk"] .knowledge-base-panel .btn-action {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font-family: var(--cyber-font-mono);
+  border: 1px solid var(--cyber-border-color);
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel button:hover,
+[data-theme="cyberpunk"] .knowledge-base-panel .btn-action:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+  background-color: rgba(160, 130, 255, 0.08);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .btn-primary,
+[data-theme="cyberpunk"] .knowledge-base-panel .btn-submit {
+  background-color: var(--cyber-accent-purple);
+  color: #000;
+  border-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .btn-primary:hover,
+[data-theme="cyberpunk"] .knowledge-base-panel .btn-submit:hover {
+  background-color: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel table th,
+[data-theme="cyberpunk"] .knowledge-base-panel table td {
+  border-bottom: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel table th {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .card,
+[data-theme="cyberpunk"] .knowledge-base-panel .panel-section {
+  background-color: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .section-title,
+[data-theme="cyberpunk"] .knowledge-base-panel h2,
+[data-theme="cyberpunk"] .knowledge-base-panel h3 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .text-muted,
+[data-theme="cyberpunk"] .knowledge-base-panel .hint-text {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .strategy-config-area {
+  border: 1px solid var(--cyber-border-color);
+  padding: 16px;
+  background-color: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .pagination button {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .pagination button:hover:not(:disabled) {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .pagination button:disabled {
+  opacity: 0.4;
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .tag,
+[data-theme="cyberpunk"] .knowledge-base-panel .badge {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .knowledge-base-panel .loading-spinner {
+  border-top-color: var(--cyber-accent-purple);
+}

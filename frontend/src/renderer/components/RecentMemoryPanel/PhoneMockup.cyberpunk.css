@@ -1,0 +1,39 @@
+/* ============================================================
+ * 赛博朋克主题覆盖（[data-theme="cyberpunk"]）
+ * ============================================================ */
+[data-theme="cyberpunk"] .phone-mockup {
+  filter: drop-shadow(0 20px 30px rgba(160, 130, 255, 0.2));
+}
+
+[data-theme="cyberpunk"] .phone-frame {
+  background: var(--cyber-bg-surface-elevated);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 2px var(--cyber-border-color),
+              inset 0 0 0 6px var(--cyber-bg-surface-elevated),
+              inset 0 0 0 7px var(--cyber-bg-surface),
+              var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .dynamic-island {
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .phone-screen {
+  background: var(--cyber-bg-base);
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .back-btn {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .back-btn:hover {
+  color: var(--cyber-bg-base);
+  background: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}

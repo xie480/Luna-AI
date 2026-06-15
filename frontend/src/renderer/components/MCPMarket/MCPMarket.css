@@ -270,7 +270,7 @@
 }
 
 .installed-badge {
-  color: #22c55e;
+  color: #a082ff;
   font-weight: 600;
 }
 
@@ -856,9 +856,9 @@
 }
 
 .install-result.success {
-  background: rgba(34, 197, 94, 0.1);
+  background: rgba(160, 130, 255, 0.1);
   color: #86efac;
-  border: 1px solid rgba(34, 197, 94, 0.25);
+  border: 1px solid rgba(160, 130, 255, 0.25);
 }
 
 .install-result.error {
@@ -982,8 +982,8 @@
 }
 
 .status-indicator.online {
-  background: #22c55e;
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+  background: #a082ff;
+  box-shadow: 0 0 0 4px rgba(160, 130, 255, 0.12);
 }
 
 .status-indicator.offline {
@@ -1060,8 +1060,8 @@
 }
 
 .btn-toggle.active {
-  border-color: rgba(34, 197, 94, 0.4);
-  color: #22c55e;
+  border-color: rgba(160, 130, 255, 0.4);
+  color: #a082ff;
 }
 
 .btn-toggle.inactive {
@@ -1140,4 +1140,469 @@
   background: rgba(148, 163, 184, 0.12);
   border-color: rgba(148, 163, 184, 0.35);
   color: #f8fafc;
+}
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .mcp-market-page,
+[data-theme="cyberpunk"] .mcp-market-detail,
+[data-theme="cyberpunk"] .mcp-installed-page {
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .market-title {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .market-subtitle {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .mcp-market-search .search-input {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-market-search .search-input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: 0 0 0 3px rgba(160, 130, 255, 0.16);
+}
+
+[data-theme="cyberpunk"] .mcp-market-search .search-button {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-purple);
+  background: var(--cyber-accent-purple);
+  color: #000;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-market-search .search-button:hover {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .tag-tab {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .tag-tab:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .tag-tab.active {
+  background: rgba(160, 130, 255, 0.12);
+  color: var(--cyber-accent-purple);
+  border-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .sort-select {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-market-card {
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .mcp-market-card:hover {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+  transform: translateY(-2px);
+}
+
+[data-theme="cyberpunk"] .card-name {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .card-author,
+[data-theme="cyberpunk"] .card-description {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .tag-badge {
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .card-footer {
+  border-top: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .installed-badge {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .install-hint {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .market-loading .spinner,
+[data-theme="cyberpunk"] .detail-loading .spinner,
+[data-theme="cyberpunk"] .installed-loading .spinner {
+  border-top-color: var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .btn-retry,
+[data-theme="cyberpunk"] .btn-back {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-retry:hover,
+[data-theme="cyberpunk"] .btn-back:hover {
+  background: rgba(160, 130, 255, 0.08);
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-go-market,
+[data-theme="cyberpunk"] .btn-browse-market {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-purple);
+  background: var(--cyber-accent-purple);
+  color: #000;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-go-market:hover,
+[data-theme="cyberpunk"] .btn-browse-market:hover {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .page-btn {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .page-btn:hover:not(:disabled) {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .detail-back-btn {
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .detail-back-btn:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .detail-banner {
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .banner-name {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .banner-author,
+[data-theme="cyberpunk"] .detail-section h2 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .detail-description {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .btn-install {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-purple);
+  background: var(--cyber-accent-purple);
+  color: #000;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-install:hover {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-manage {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-manage:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .tool-item {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .tool-summary {
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .tool-summary .tool-name {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .tool-tag {
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .tool-detail {
+  border-top: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .tool-schema .schema-pre {
+  background: var(--cyber-bg-base);
+  color: var(--cyber-text-primary);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-install-dialog {
+  background: var(--cyber-bg-surface-elevated);
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .dialog-header h2 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .form-group label {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .form-group input {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .form-group input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: 0 0 0 3px rgba(160, 130, 255, 0.16);
+}
+
+[data-theme="cyberpunk"] .btn-cancel {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-cancel:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-confirm {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  border: 1px solid var(--cyber-accent-purple);
+  background: var(--cyber-accent-purple);
+  color: #000;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-confirm:hover {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .installed-header h1 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .installed-card {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+}
+
+[data-theme="cyberpunk"] .installed-card:hover {
+  border-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .instance-name {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .tool-name-badge {
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-toggle {
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-toggle.active {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-toggle:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-health-check {
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-health-check:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-uninstall {
+  border-radius: 0;
+  border: 1px solid var(--cyber-accent-red);
+  background: transparent;
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-uninstall:hover {
+  background: rgba(255, 0, 0, 0.1);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-confirm-yes {
+  border-radius: 0;
+  background: var(--cyber-accent-red);
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-confirm-no {
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-confirm-no:hover {
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .detail-section h2 {
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 8px;
+}
+
+[data-theme="cyberpunk"] .repo-link {
+  color: var(--cyber-accent-blue);
+  background: rgba(0, 122, 255, 0.08);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .repo-link:hover {
+  background: rgba(0, 122, 255, 0.16);
+  color: var(--cyber-accent-blue);
+}
+
+[data-theme="cyberpunk"] .trust-item {
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .trust-value {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .health-badge,
+[data-theme="cyberpunk"] .license-badge {
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-secondary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .status-indicator {
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .status-indicator.online {
+  background: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .status-indicator.offline {
+  background: var(--cyber-accent-red);
 }

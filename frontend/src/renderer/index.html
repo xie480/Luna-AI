@@ -6,6 +6,20 @@
     <title>Luna AI</title>
   </head>
   <body>
+    <!-- 同步设置 data-theme 属性，确保主题在 React 渲染前已生效（防止 FOUC） -->
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('luna:theme');
+          if (!theme || !['dark', 'light', 'cyberpunk'].includes(theme)) {
+            theme = 'cyberpunk';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch(e) {
+          document.documentElement.setAttribute('data-theme', 'cyberpunk');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script src="/live2dcubismcore.min.js"></script>
     <script src="/live2d.min.js"></script>

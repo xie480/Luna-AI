@@ -117,3 +117,99 @@
   font-size: 12px;
   color: var(--text-muted, #a0aec0);
 }
+
+/* ============================================================
+ * 赛博朋克主题覆盖（[data-theme="cyberpunk"]）
+ * ============================================================ */
+[data-theme="cyberpunk"] .left-sidebar {
+  background-color: var(--cyber-bg-surface);
+  border-right: 1px solid var(--cyber-border-color);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .sidebar-header {
+  border-bottom: 1px solid var(--cyber-border-color);
+  position: relative;
+}
+
+[data-theme="cyberpunk"] .sidebar-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+  opacity: 0.5;
+}
+
+[data-theme="cyberpunk"] .logo-text {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+[data-theme="cyberpunk"] .sidebar-menu-item {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+  font-size: 13px;
+  border-left: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+[data-theme="cyberpunk"] .sidebar-menu-item:hover {
+  background-color: rgba(160, 130, 255, 0.08);
+  color: var(--cyber-accent-purple);
+  border-left-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .sidebar-menu-item.expanded {
+  background-color: rgba(160, 130, 255, 0.12);
+  color: var(--cyber-accent-purple);
+  border-left-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .menu-arrow {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .sidebar-sub-menu {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  border-left: none;
+  border-right: none;
+}
+
+[data-theme="cyberpunk"] .sidebar-sub-menu-item {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+  font-size: 12px;
+  border-left: 2px solid transparent;
+}
+
+[data-theme="cyberpunk"] .sidebar-sub-menu-item:hover {
+  background-color: rgba(160, 130, 255, 0.05);
+  color: var(--cyber-accent-purple);
+  border-left-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .sidebar-footer {
+  border-top: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .version-info {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+  font-size: 11px;
+}
+
+[data-theme="cyberpunk"] .menu-icon {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .menu-label {
+  color: inherit;
+}

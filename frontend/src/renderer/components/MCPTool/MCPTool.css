@@ -167,3 +167,92 @@
     transform: translateY(0);
   }
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .mcp-tool-status-indicator {
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-status-indicator .spinner {
+  border-color: var(--cyber-border-color);
+  border-top-color: var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .mcp-tool-status-indicator .check-icon {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-status-indicator .warning-icon {
+  color: #f59e0b;
+}
+
+[data-theme="cyberpunk"] .mcp-tool-status-meta .latency-badge {
+  color: var(--cyber-text-secondary);
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-result-bubble {
+  border-radius: 0;
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-result-header {
+  background: var(--cyber-bg-surface);
+  border-bottom: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-result-header .tool-name {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-result-header .tool-result-label {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-result-body .mcp-tool-output {
+  font-family: var(--cyber-font-mono);
+  color: var(--cyber-text-primary);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-error-bubble {
+  border-radius: 0;
+  background: rgba(255, 0, 0, 0.08);
+  border: 1px solid var(--cyber-accent-red);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-error-header {
+  color: var(--cyber-accent-red);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-error-body {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-error-body .error-message {
+  color: var(--cyber-text-primary);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-error-body .error-tool-name {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .mcp-tool-status-meta .retry-badge {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid #f59e0b;
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}

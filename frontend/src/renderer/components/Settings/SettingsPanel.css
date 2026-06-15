@@ -330,3 +330,154 @@ input:checked + .slider:before {
   justify-content: flex-end;
   gap: 12px;
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .settings-panel-container {
+  background-color: var(--cyber-bg-base);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .settings-sidebar {
+  background-color: var(--cyber-bg-surface);
+  border-right: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .settings-nav-item {
+  border-radius: 0;
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .settings-nav-item:hover {
+  background-color: rgba(160, 130, 255, 0.08);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .settings-nav-item.active {
+  background-color: rgba(160, 130, 255, 0.06);
+  border-left: 3px solid var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .settings-section-title {
+  border-bottom: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .settings-item {
+  border-bottom: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .settings-item-desc {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .switch .slider {
+  background-color: #333;
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .switch .slider:before {
+  background-color: var(--cyber-text-primary);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] input:checked + .slider {
+  background-color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .slider.round {
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .slider.round:before {
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .theme-select {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .theme-select:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .btn-reset,
+[data-theme="cyberpunk"] .btn-save,
+[data-theme="cyberpunk"] .btn-cancel,
+[data-theme="cyberpunk"] .btn-confirm {
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .btn-reset {
+  background-color: transparent;
+  color: var(--cyber-text-primary);
+  border: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .btn-reset:hover {
+  background-color: rgba(160, 130, 255, 0.08);
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-save,
+[data-theme="cyberpunk"] .btn-confirm {
+  background-color: var(--cyber-accent-purple);
+  color: #000;
+  border: 1px solid var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .btn-save:hover,
+[data-theme="cyberpunk"] .btn-confirm:hover {
+  background-color: transparent;
+  color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .env-settings-error {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: var(--cyber-accent-red);
+  border: 1px solid var(--cyber-accent-red);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .env-editor-container {
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .env-editor-textarea {
+  background-color: var(--cyber-bg-surface);
+  color: var(--cyber-text-primary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .env-confirm-overlay {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+[data-theme="cyberpunk"] .env-confirm-dialog {
+  background-color: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .env-confirm-dialog h4 {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .env-confirm-dialog p {
+  color: var(--cyber-text-secondary);
+}

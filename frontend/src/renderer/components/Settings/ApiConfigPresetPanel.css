@@ -49,9 +49,9 @@
 .config-btn-activated {
   padding: 8px 16px;
   border-radius: 6px;
-  border: 1px solid var(--success-color, #22c55e);
+  border: 1px solid var(--success-color, #a082ff);
   background-color: transparent;
-  color: var(--success-color, #22c55e);
+  color: var(--success-color, #a082ff);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -60,7 +60,7 @@
 }
 
 .config-btn-activated:hover:not(:disabled) {
-  background-color: var(--success-color, #22c55e);
+  background-color: var(--success-color, #a082ff);
   color: #ffffff;
 }
 

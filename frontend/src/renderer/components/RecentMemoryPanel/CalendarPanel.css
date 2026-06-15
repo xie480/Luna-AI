@@ -1,3 +1,5 @@
+@import './CalendarPanel.cyberpunk.css';
+
 .calendar-panel-container {
   display: flex;
   flex-direction: column;

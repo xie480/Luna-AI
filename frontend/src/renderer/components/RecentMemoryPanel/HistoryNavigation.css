@@ -1,3 +1,5 @@
+@import './HistoryNavigation.cyberpunk.css';
+
 .history-navigation {
   display: flex;
   justify-content: flex-end;

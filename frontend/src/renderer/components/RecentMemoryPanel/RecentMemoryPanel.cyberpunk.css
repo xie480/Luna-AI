@@ -1,0 +1,66 @@
+/* ============================================================
+ * 赛博朋克主题覆盖（[data-theme="cyberpunk"]）
+ * ============================================================ */
+[data-theme="cyberpunk"] .recent-memory-panel {
+  background: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  box-shadow: var(--cyber-border-glow);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel:hover {
+  background: var(--cyber-bg-surface-elevated);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .panel-header {
+  border-bottom: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .panel-title {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel-content .qa-item {
+  background: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-left: 3px solid var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel-content .user-label {
+  color: var(--cyber-accent-blue);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel-content .user-text {
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel-content .luna-label {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel-content .luna-text {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .empty-state {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel-content::-webkit-scrollbar-thumb {
+  background: var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .recent-memory-panel::-webkit-resizer {
+  background: var(--cyber-accent-purple);
+  border-radius: 0;
+}

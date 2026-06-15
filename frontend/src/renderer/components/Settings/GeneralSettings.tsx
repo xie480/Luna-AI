@@ -96,10 +96,11 @@ export const GeneralSettings: React.FC = () => {
           <select
             className="theme-select"
             value={theme}
-            onChange={(e) => setTheme(e.target.value as 'dark' | 'light')}
+            onChange={(e) => setTheme(e.target.value as 'dark' | 'light' | 'cyberpunk')}
           >
             <option value="dark">暗色 (Dark)</option>
             <option value="light">亮色 (Light)</option>
+            <option value="cyberpunk">赛博朋克 (Cyberpunk)</option>
           </select>
         </div>
       </div>

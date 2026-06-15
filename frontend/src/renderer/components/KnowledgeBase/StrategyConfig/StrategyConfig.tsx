@@ -153,7 +153,7 @@ export const ChunkPreviewSandbox: React.FC<{ hideInput?: boolean }> = ({ hideInp
   };
 
   const getBorderColor = (tokens: number) => {
-    if (tokens < 512) return 'border-green';
+    if (tokens < 512) return 'border-purple';
     if (tokens <= 1000) return 'border-orange';
     return 'border-red';
   };

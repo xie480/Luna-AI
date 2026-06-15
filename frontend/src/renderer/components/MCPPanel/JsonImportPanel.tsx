@@ -187,7 +187,7 @@ export const JsonImportPanel: React.FC = () => {
           )}
 
           <div className="import-preview__valid-count">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#22c55e" stroke="none" style={{verticalAlign: 'middle', marginRight: 4}}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#a082ff" stroke="none" style={{verticalAlign: 'middle', marginRight: 4}}>
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
             {summary.valid} 条有效配置待导入
@@ -221,7 +221,7 @@ export const JsonImportPanel: React.FC = () => {
       <h4>批量导入完成</h4>
       <div className="import-result">
         <div className="import-result__success">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#22c55e" stroke="none" style={{verticalAlign: 'middle', marginRight: 4}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#a082ff" stroke="none" style={{verticalAlign: 'middle', marginRight: 4}}>
             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
           </svg>
           成功注册: {importResult?.success_count ?? 0} 条

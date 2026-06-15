@@ -1,0 +1,96 @@
+/* ============================================================
+ * 赛博朋克主题覆盖 - 聊天历史视图（[data-theme="cyberpunk"]）
+ * ============================================================ */
+[data-theme="cyberpunk"] .chat-history-view {
+  background: var(--cyber-bg-base);
+}
+
+[data-theme="cyberpunk"] .loading-spinner {
+  border: 2px solid var(--cyber-border-color);
+  border-top-color: var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .loading-text,
+[data-theme="cyberpunk"] .empty-text {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .chat-header {
+  background: rgba(5, 5, 5, 0.9);
+  border-bottom: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .chat-date {
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+  letter-spacing: 2px;
+}
+
+[data-theme="cyberpunk"] .chat-messages::-webkit-scrollbar-thumb {
+  background: var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .message-wrapper.user .message-bubble {
+  background: var(--cyber-accent-purple);
+  color: var(--cyber-bg-base);
+  border-radius: 0;
+  border: 1px solid var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .bubble-face.front .message-bubble {
+  background: var(--cyber-bg-surface);
+  color: var(--cyber-text-white);
+  border-radius: 0;
+  border: 1px solid var(--cyber-border-color);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .bubble-face.back .message-bubble {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  color: var(--cyber-accent-blue);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .message-wrapper.error-block .message-bubble {
+  background: rgba(255, 100, 120, 0.12);
+  border: 1px solid var(--cyber-accent-red);
+  color: var(--cyber-accent-red);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .error-header::before {
+  background: var(--cyber-accent-red);
+  color: var(--cyber-bg-base);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .message-time {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .action-icon-btn {
+  color: var(--cyber-accent-purple);
+  border: 1px solid transparent;
+}
+
+[data-theme="cyberpunk"] .action-icon-btn:hover {
+  color: var(--cyber-accent-purple);
+  background: rgba(160, 130, 255, 0.1);
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .action-icon-btn.flipped:hover {
+  color: var(--cyber-accent-blue);
+  background: rgba(0, 240, 255, 0.1);
+  border-color: var(--cyber-accent-blue);
+}

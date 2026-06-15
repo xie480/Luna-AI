@@ -1,0 +1,136 @@
+/* ============================================================
+ * 赛博朋克主题覆盖 - 日历面板（[data-theme="cyberpunk"]）
+ * ============================================================ */
+[data-theme="cyberpunk"] .calendar-header {
+  border-bottom: 1px solid var(--cyber-border-color);
+  padding-bottom: 12px;
+}
+
+[data-theme="cyberpunk"] .month-nav-btn {
+  background: transparent;
+  border: 1px solid var(--cyber-border-color);
+  color: var(--cyber-accent-purple);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .month-nav-btn:hover {
+  background: var(--cyber-accent-purple);
+  color: var(--cyber-bg-base);
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .current-month-display {
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .year-text {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .month-text {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .picker-arrow {
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .wheel-picker-popover {
+  background: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  box-shadow: var(--cyber-border-glow), 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="cyberpunk"] .wheel-picker-selection-overlay {
+  background: rgba(160, 130, 255, 0.12);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .wheel-picker-item {
+  font-family: var(--cyber-font-mono);
+  color: var(--cyber-text-secondary);
+}
+
+[data-theme="cyberpunk"] .wheel-picker-item:hover {
+  color: var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .wheel-picker-item.selected {
+  color: var(--cyber-accent-purple);
+  font-weight: 600;
+}
+
+[data-theme="cyberpunk"] .calendar-grid {
+  background: var(--cyber-bg-surface-elevated);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] .weekdays span {
+  color: var(--cyber-text-secondary);
+  font-family: var(--cyber-font-mono);
+  font-size: 10px;
+}
+
+[data-theme="cyberpunk"] .day-cell {
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .day-cell.no-record {
+  color: rgba(0, 143, 17, 0.3);
+}
+
+[data-theme="cyberpunk"] .day-cell.has-record {
+  color: var(--cyber-text-primary);
+  background: rgba(160, 130, 255, 0.05);
+  border: 1px solid transparent;
+}
+
+[data-theme="cyberpunk"] .day-cell.has-record:hover {
+  background: rgba(160, 130, 255, 0.12);
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .day-cell.selected {
+  background: rgba(160, 130, 255, 0.2) !important;
+  color: var(--cyber-accent-purple);
+  border: 1px solid var(--cyber-accent-purple) !important;
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .day-cell.today {
+  background: rgba(160, 130, 255, 0.1);
+  border: 1px solid var(--cyber-accent-purple);
+}
+
+[data-theme="cyberpunk"] .day-cell.today .day-number {
+  color: var(--cyber-accent-purple);
+  font-weight: 800;
+}
+
+[data-theme="cyberpunk"] .day-cell.today::after {
+  content: '»';
+  background: var(--cyber-accent-purple);
+  color: var(--cyber-bg-base);
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+  font-size: 8px;
+  box-shadow: 0 0 6px rgba(160, 130, 255, 0.4);
+}
+
+[data-theme="cyberpunk"] .record-dot {
+  background: var(--cyber-accent-purple);
+  box-shadow: 0 0 4px rgba(160, 130, 255, 0.4);
+}
+
+[data-theme="cyberpunk"] .day-cell.selected .record-dot {
+  background: var(--cyber-accent-purple);
+  box-shadow: 0 0 6px rgba(160, 130, 255, 0.6);
+}

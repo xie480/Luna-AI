@@ -47,7 +47,7 @@ export const LocalServerList: React.FC<LocalServerListProps> = ({
         <div key={server.id} className="local-server-list__item">
           <div className="server-info">
             <span className={`server-status ${server.enabled ? 'status-enabled' : 'status-disabled'}`}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill={server.enabled ? '#22c55e' : '#a0a0a0'} stroke="none">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill={server.enabled ? '#a082ff' : '#a0a0a0'} stroke="none">
                 <circle cx="12" cy="12" r="8"/>
               </svg>
             </span>

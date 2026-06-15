@@ -242,7 +242,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   },
 
   /**
-   * 更新指定文档的内容（基于 Blue-Green Update 策略）。
+   * 更新指定文档的内容（基于 Blue-Purple Update 策略）。
    *
    * 做什么：上传新文件替换已存在文档的内容，后端在后台完成切片与向量化后通过原子状态翻转上线。
    * 为什么这样做：更新期间旧文档保持 ACTIVE 服务不中断，详见 rag_deduplication_and_update_plan.md。

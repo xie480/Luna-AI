@@ -46,3 +46,31 @@
 .sidebar-trigger:hover .trigger-icon {
   transform: scale(1.1);
 }
+
+/* ===== 赛博朋克主题覆盖 ===== */
+[data-theme="cyberpunk"] .sidebar-trigger {
+  background-color: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  border-radius: 0;
+  color: var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+  box-shadow: var(--cyber-border-glow);
+}
+[data-theme="cyberpunk"] .sidebar-trigger:hover {
+  background-color: var(--cyber-accent-purple);
+  border-color: var(--cyber-accent-purple);
+  color: var(--cyber-bg-base);
+  box-shadow: var(--cyber-border-glow-active);
+}
+[data-theme="cyberpunk"] .sidebar-trigger:active {
+  transform: scale(0.95);
+}
+[data-theme="cyberpunk"] .sidebar-trigger.sidebar-open {
+  left: 272px;
+}
+[data-theme="cyberpunk"] .trigger-icon {
+  font-family: var(--cyber-font-mono);
+}
+[data-theme="cyberpunk"] .sidebar-trigger:hover .trigger-icon {
+  transform: scale(1.1);
+}

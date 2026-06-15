@@ -1,0 +1,254 @@
+/**
+ * Luna AI 桌面端全局样式: 赛博朋克/黑客风格
+ */
+
+:root[data-theme="cyberpunk"] {
+  /* 基础色彩系统 */
+  --cyber-bg-base: #050505;        /* 极深背景色 */
+  --cyber-bg-surface: #0a0a0c;     /* 组件面板背景色 */
+  --cyber-bg-surface-elevated: #111115; /* 浮层背景色 */
+  
+  /* 强调色 (Terminal Purple / Electric Blue / Neon Yellow) */
+  --cyber-accent-purple: #a082ff;   /* 柔和的紫色 */
+  --cyber-accent-blue: #00f0ff;    /* 电光蓝 */
+  --cyber-accent-yellow: #fcee0a;  /* 警告黄 */
+  --cyber-accent-red: #ff003c;     /* 错误红 */
+
+  /* 文本颜色 */
+  --cyber-text-primary: #e0e0e0; /* 主文本为浅灰色，避免与背景重叠 */
+  --cyber-text-secondary: #6b5c99;                 /* 次要文本暗紫 */
+  --cyber-text-white: #e0e0e0;                     /* 中立说明性文本 */
+  
+  /* 边框与阴影 */
+  --cyber-border-color: rgba(160, 130, 255, 0.4);
+  --cyber-border-glow: 0 0 8px rgba(160, 130, 255, 0.2);
+  --cyber-border-glow-active: 0 0 15px rgba(160, 130, 255, 0.5);
+  
+  /* 排版字体 */
+  --cyber-font-mono: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+  --cyber-font-sans: 'Inter', -apple-system, sans-serif;
+  
+  /* 覆盖原始变量为cyberpunk主题 */
+  --bg-color: var(--cyber-bg-base);
+  --text-color: var(--cyber-text-primary);
+  --modal-bg: var(--cyber-bg-surface);
+  --modal-border: var(--cyber-border-color);
+  --sidebar-bg: var(--cyber-bg-surface);
+  --hover-bg: rgba(160, 130, 255, 0.1);
+  --active-bg: rgba(160, 130, 255, 0.2);
+  --primary-color: var(--cyber-accent-purple);
+  --border-color: var(--cyber-border-color);
+  --border-color-light: rgba(160, 130, 255, 0.2);
+  --text-muted: var(--cyber-text-secondary);
+  --input-bg: var(--cyber-bg-surface-elevated);
+  --editor-bg: var(--cyber-bg-base);
+  --editor-fg: var(--cyber-text-primary);
+  
+  /* 全局基础样式覆盖 - 这是关键！直接在 :root 层级覆盖 html/body 的背景和文字 */
+  background-color: var(--cyber-bg-base);
+  color: var(--cyber-text-primary);
+}
+
+/* 隔离策略：强制重置排除的组件为原本变量 */
+.top-status-panel,
+.top-status-panel *,
+.input-area,
+.input-area *,
+.input-area-wrapper,
+.input-area-wrapper *,
+.chat-workflow-stack,
+.chat-workflow-stack *,
+.chat-workflow-timeline,
+.chat-workflow-timeline *,
+.chat-workflow-stepbar,
+.chat-workflow-stepbar *,
+.chat-workflow-metadata-panel,
+.chat-workflow-metadata-panel *,
+.chat-workflow-debug-drawer,
+.chat-workflow-debug-drawer *,
+.chat-workflow-node-badge,
+.chat-workflow-node-badge *,
+.chat-workflow-condition-item,
+.chat-workflow-condition-item *,
+.holographic-ar-panel,
+.holographic-ar-panel * {
+  /* 阻断 cyberpunk 主题的变量向下传递，重置为 default */
+  --bg-color: #1a1a2e;
+  --text-color: #ffffff;
+  --modal-bg: #252526;
+  --modal-border: #333;
+  --sidebar-bg: #252526;
+  --hover-bg: #2a2d2e;
+  --active-bg: #37373d;
+  --primary-color: #007acc;
+  --border-color: #333;
+  --border-color-light: #2d2d2d;
+  --text-muted: #888;
+  --input-bg: #3c3c3c;
+  --editor-bg: #1e1e1e;
+  --editor-fg: #d4d4d4;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* 注意：手机面板 (.phone-mockup) 已经从上面的黑名单中移出，恢复了其本身的独立样式体系 */
+
+/* 覆盖滚动条 */
+[data-theme="cyberpunk"] ::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+  height: 6px;
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-track {
+  background: var(--cyber-bg-base);
+  border-left: 1px solid var(--cyber-border-color);
+}
+[data-theme="cyberpunk"] ::-webkit-scrollbar-thumb {
+  background: var(--cyber-accent-purple);
+  border-radius: 0;
+}
+
+[data-theme="cyberpunk"] * {
+  scrollbar-width: thin;
+  -ms-overflow-style: auto;
+}
+
+/* 覆盖 global.css 中的滚动条隐藏 */
+[data-theme="cyberpunk"] ::-webkit-scrollbar {
+  display: block;
+}
+
+/* 基础组件样式预定义 */
+[data-theme="cyberpunk"] .cyber-panel {
+  background-color: var(--cyber-bg-surface);
+  border: 1px solid var(--cyber-border-color);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--cyber-font-mono);
+  border-radius: 0 !important;
+  color: var(--cyber-text-primary);
+}
+
+[data-theme="cyberpunk"] .cyber-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .cyber-panel::after {
+  content: 'SYS.MOD';
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 10px;
+  color: var(--cyber-text-secondary);
+  pointer-events: none;
+}
+
+[data-theme="cyberpunk"] .cyber-button {
+  background: transparent;
+  color: var(--cyber-accent-purple);
+  border: 1px solid var(--cyber-accent-purple);
+  font-family: var(--cyber-font-mono);
+  padding: 8px 16px;
+  text-transform: uppercase;
+  position: relative;
+  cursor: pointer;
+  box-shadow: var(--cyber-border-glow);
+  transition: all 0.2s ease-in-out;
+  border-radius: 0 !important;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-theme="cyberpunk"] .cyber-button:hover {
+  background: var(--cyber-accent-purple);
+  color: var(--cyber-bg-base);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .cyber-button::before {
+  content: '>';
+  margin-right: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+[data-theme="cyberpunk"] .cyber-button:hover::before {
+  opacity: 1;
+}
+
+[data-theme="cyberpunk"] .cyber-input {
+  background-color: var(--cyber-bg-base);
+  border: 1px solid var(--cyber-border-color);
+  color: var(--cyber-text-white);
+  font-family: var(--cyber-font-mono);
+  padding: 8px;
+  border-radius: 0 !important;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+[data-theme="cyberpunk"] .cyber-input:focus {
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow-active);
+}
+
+[data-theme="cyberpunk"] .cyber-cursor::after {
+  content: '_';
+  display: inline-block;
+  animation: blink 1s step-end infinite;
+  color: var(--cyber-accent-purple);
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+[data-theme="cyberpunk"] .crt-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.15;
+}
+
+@keyframes cyber-modal-in {
+  0% {
+    clip-path: inset(50% 0 50% 0);
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  40% {
+    clip-path: inset(10% 0 80% 0);
+  }
+  60% {
+    clip-path: inset(80% 0 10% 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+[data-theme="cyberpunk"] .cyber-modal {
+  animation: cyber-modal-in 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}

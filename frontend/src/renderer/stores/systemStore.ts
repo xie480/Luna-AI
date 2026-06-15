@@ -72,7 +72,7 @@ interface SystemState {
   // Live2D 最大帧率
   live2dMaxFPS: 30 | 60 | 90 | 120;
   // 主题设置
-  theme: 'dark' | 'light';
+  theme: 'dark' | 'light' | 'cyberpunk';
 
   // === 可观测性相关增强 ===
   // 前端异常缓冲区（环形缓冲，最多保留 100 条）
@@ -110,7 +110,7 @@ interface SystemState {
   // 设置 Live2D 最大帧率
   setLive2dMaxFPS: (fps: 30 | 60 | 90 | 120) => void;
   // 设置主题
-  setTheme: (theme: 'dark' | 'light') => void;
+  setTheme: (theme: 'dark' | 'light' | 'cyberpunk') => void;
   // 可观测性 Actions
   addFrontendError: (entry: FrontendErrorEntry) => void;
   clearFrontendErrors: () => void;
@@ -186,16 +186,16 @@ function loadLive2dMaxFPS(): 30 | 60 | 90 | 120 {
   return 60; // 默认 60 FPS
 }
 
-function loadTheme(): 'dark' | 'light' {
+function loadTheme(): 'dark' | 'light' | 'cyberpunk' {
   try {
     const raw = localStorage.getItem('luna:theme');
-    if (raw === 'dark' || raw === 'light') {
-      return raw;
+    if (raw === 'dark' || raw === 'light' || raw === 'cyberpunk') {
+      return raw as 'dark' | 'light' | 'cyberpunk';
     }
   } catch (e) {
     // 解析失败时返回默认值
   }
-  return 'dark'; // 默认暗色
+  return 'dark'; // 默认暗色，避免强制切换
 }
 
 /**

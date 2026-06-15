@@ -1,0 +1,27 @@
+/* ============================================================
+ * 赛博朋克主题覆盖 - 历史导航（[data-theme="cyberpunk"]）
+ * ============================================================ */
+[data-theme="cyberpunk"] .history-navigation {
+  border-bottom: 1px solid var(--cyber-border-color);
+}
+
+[data-theme="cyberpunk"] .nav-btn {
+  color: var(--cyber-text-secondary);
+  border: 1px solid transparent;
+  border-radius: 0;
+  font-family: var(--cyber-font-mono);
+}
+
+[data-theme="cyberpunk"] .nav-btn:hover {
+  color: var(--cyber-accent-purple);
+  background: rgba(160, 130, 255, 0.08);
+  border-color: var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
+
+[data-theme="cyberpunk"] .nav-btn.active {
+  color: var(--cyber-accent-purple);
+  background: rgba(160, 130, 255, 0.15);
+  border: 1px solid var(--cyber-accent-purple);
+  box-shadow: var(--cyber-border-glow);
+}
