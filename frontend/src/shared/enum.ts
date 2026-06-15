@@ -468,6 +468,16 @@ export const WS_MSG_TYPE = {
   REQ_GET_CHAT_HISTORY: "REQ_GET_CHAT_HISTORY",
   RES_CHAT_HISTORY: "RES_CHAT_HISTORY",
 
+  // === Phase 13：权限治理与前端 Gating 事件（Python AI Service -> Electron） ===
+  // Python -> Electron: 推送高危工具鉴权挂起事件，要求用户确认
+  EVT_TOOL_AUTH_REQUIRED: "EVT_TOOL_AUTH_REQUIRED",
+  // Electron -> Python: 用户对挂起鉴权请求的审批响应（同意/拒绝）
+  CMD_TOOL_AUTH_RESPONSE: "CMD_TOOL_AUTH_RESPONSE",
+  // Electron -> Python: 重连后请求同步当前所有 PENDING_APPROVAL 状态的鉴权请求
+  CMD_SYNC_PENDING_AUTHS: "CMD_SYNC_PENDING_AUTHS",
+  // Python -> Electron: 同步当前所有有效的 PENDING_APPROVAL 列表
+  EVT_PENDING_AUTHS_SYNC: "EVT_PENDING_AUTHS_SYNC",
+
   // === Chat 状态通知事件（来自 ChatStatusPublisher） ===
   EVT_CHAT_STATUS: "EVT_CHAT_STATUS",
 } as const;

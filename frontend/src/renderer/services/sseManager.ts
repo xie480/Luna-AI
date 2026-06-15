@@ -270,12 +270,16 @@ class SSEManager {
 
       // 连接成功后，请求同步初始状态
       this.syncInitState();
+      // Phase 13：重连后同步鉴权队列，防止"状态撕裂"
+      this.syncPendingAuths();
     });
 
     this.eventSource.onopen = () => {
       useSystemStore.getState().setConnectionStatus('connected');
       useSystemStore.getState().addSystemLog('SSE 已连接 (onopen)');
       this.syncInitState();
+      // Phase 13：重连后同步鉴权队列
+      this.syncPendingAuths();
     };
 
     // 监听 SERVER_READY 事件
@@ -304,6 +308,9 @@ class SSEManager {
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_PLAN_COMPLETED);
     // EVT_CHAT_STATUS — Chat 状态通知（来自 ChatStatusPublisher）
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_STATUS);
+    // === Phase 13：Gating 鉴权事件（Python AI Service -> Electron） ===
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_TOOL_AUTH_REQUIRED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_PENDING_AUTHS_SYNC);
 
     // 通用消息事件（兜底处理所有未注册的事件类型）
     this.eventSource.onmessage = (event) => {
@@ -621,12 +628,35 @@ class SSEManager {
         const historyPayload = msg.payload as { date: string; messages: unknown[] };
         import('../stores/historyStore').then(({ useHistoryStore }) => {
           useHistoryStore.getState().setChatHistory(historyPayload.date, historyPayload.messages as any); // eslint-disable-line @typescript-eslint/no-explicit-any
-        });
-        break;
-      }
-
-      default:
-        systemStore.addSystemLog(`收到未知消息类型: ${msg.type}`);
+          });
+          break;
+        }
+  
+        // ============================================================
+        // Phase 13：权限治理与前端 Gating 事件处理
+        // ============================================================
+  
+        case WS_MSG_TYPE.EVT_TOOL_AUTH_REQUIRED: {
+          import('./mcpSseHandlers').then(({ handleToolAuthRequired }) => {
+            handleToolAuthRequired({
+              trace_id: msg.trace_id,
+              task_id: '',
+              timestamp: Date.now(),
+              payload: msg.payload,
+            });
+          });
+          break;
+        }
+  
+        case WS_MSG_TYPE.EVT_PENDING_AUTHS_SYNC: {
+          import('./mcpSseHandlers').then(({ handlePendingAuthsSync }) => {
+            handlePendingAuthsSync(msg.payload as import('../../shared/types').PendingAuthsSyncPayload);
+          });
+          break;
+        }
+  
+        default:
+          systemStore.addSystemLog(`收到未知消息类型: ${msg.type}`);
     }
   }
 
@@ -782,6 +812,41 @@ class SSEManager {
       }
     } catch (err) {
       useSystemStore.getState().addSystemLog(`初始化状态同步失败: ${err}`);
+    }
+  }
+
+  /**
+   * 同步当前 PENDING_APPROVAL 状态的鉴权请求列表（Phase 13）。
+   *
+   * 做什么：断线重连后，向后端请求当前所有有效的 PENDING_APPROVAL 鉴权请求。
+   *         后端返回后，SSE 推送 EVT_PENDING_AUTHS_SYNC 事件，
+   *         handleMessage 中的对应 case 会清洗旧队列并重建。
+   * 为什么这样做：防止断线后后端的审批状态已变更，前端的陈旧卡片导致"状态撕裂"。
+   *             一刀切快照刷新是最可靠的恢复策略。
+   * 输入输出：发送 CMD_SYNC_PENDING_AUTHS 到后端。
+   * 边界条件：网络异常时静默降级，不影响主流程。
+   * 异常行为：无。
+   */
+  private async syncPendingAuths(): Promise<void> {
+    const traceId = `web-${generateId()}`;
+    try {
+      const resp = await fetch(`${this.backendUrl}/api/gating/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Trace-ID': traceId,
+        },
+        body: JSON.stringify({
+          type: WS_MSG_TYPE.CMD_SYNC_PENDING_AUTHS,
+          trace_id: traceId,
+          timestamp: Date.now(),
+        }),
+      });
+      if (!resp.ok) {
+        useSystemStore.getState().addSystemLog(`同步鉴权请求列表失败: HTTP ${resp.status}`);
+      }
+    } catch (err) {
+      useSystemStore.getState().addSystemLog(`同步鉴权请求列表异常: ${err}`);
     }
   }
 

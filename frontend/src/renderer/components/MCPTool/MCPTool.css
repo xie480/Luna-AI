@@ -256,3 +256,401 @@
   border-radius: 0;
   font-family: var(--cyber-font-mono);
 }
+
+/* ============================================================
+ * Phase 13：权限治理与前端 Gating 样式
+ * ============================================================
+ * 通过固定定位 + Z-Index 999999 确保浮层处于一切 UI 之上。
+ * 暗黑毛玻璃背景阻断底层面板交互，霓虹红色边框形成视觉威慑。
+ */
+
+/* -- 全屏遮罩层 -- */
+.gating-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(8, 8, 12, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+  animation: gating-fade-in 0.25s ease-out;
+}
+
+/* -- 弹窗容器 -- */
+.gating-modal-cyberpunk {
+  width: 680px;
+  max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  border: 2px solid #ff003c;
+  background: linear-gradient(135deg, #0d0d12 0%, #1a0a0e 100%);
+  box-shadow:
+    0 0 40px rgba(255, 0, 60, 0.35),
+    inset 0 0 30px rgba(255, 0, 60, 0.06);
+  padding: 28px 32px;
+  border-radius: 10px;
+  color: #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: gating-modal-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+/* -- 队列排队提示 -- */
+.gating-queue-notice {
+  background: rgba(255, 202, 40, 0.12);
+  border: 1px solid rgba(255, 202, 40, 0.35);
+  padding: 8px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: #ffca28;
+  border-radius: 6px;
+  margin-bottom: 2px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
+/* -- 头部警告区域 -- */
+.gating-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 0, 60, 0.25);
+}
+
+.gating-warning-icon {
+  font-size: 28px;
+  animation: gating-pulse-danger 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(255, 0, 0, 0.5));
+}
+
+.gating-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ff3b5c;
+  text-shadow: 0 0 12px rgba(255, 0, 60, 0.3);
+  letter-spacing: 0.5px;
+}
+
+/* -- 信息行 -- */
+.gating-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.gating-label {
+  flex-shrink: 0;
+  min-width: 120px;
+  color: #8a8a9a;
+  font-weight: 500;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gating-value {
+  color: #d0d0e0;
+  word-break: break-word;
+}
+
+.gating-tool-name {
+  color: #ff6b8a;
+  font-weight: 600;
+}
+
+.gating-tool-id {
+  color: #6a6a7a;
+  font-size: 12px;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+.gating-agent-output {
+  color: #b0b8d0;
+  font-style: italic;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 3px solid #4a4a6a;
+}
+
+.gating-reason {
+  color: #ff9a6a;
+  font-weight: 500;
+}
+
+/* -- 风险等级徽章 -- */
+.gating-risk-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 4px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+
+.gating-risk-badge.level-l0 {
+  background-color: #2e7d32;
+  color: #fff;
+}
+
+.gating-risk-badge.level-l1 {
+  background-color: #1565c0;
+  color: #fff;
+}
+
+.gating-risk-badge.level-l2 {
+  background-color: #e65100;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(230, 81, 0, 0.3);
+}
+
+.gating-risk-badge.level-l3 {
+  background-color: #c62828;
+  color: #fff;
+  animation: gating-pulse-danger 1.2s ease-in-out infinite;
+  box-shadow: 0 0 14px rgba(198, 40, 40, 0.5);
+}
+
+/* -- 参数 JSON 展示块 -- */
+.gating-param-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gating-json-block {
+  background: #12121a;
+  color: #7ecf6a;
+  padding: 14px 16px;
+  border-radius: 6px;
+  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  border-left: 4px solid #5a5a7a;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  tab-size: 2;
+}
+
+/* -- 反馈输入框 -- */
+.gating-feedback-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gating-cyber-input {
+  width: 100%;
+  background: #0d0d14;
+  border: 1px solid #3a3a4a;
+  border-radius: 6px;
+  color: #d0d0e0;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 50px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.gating-cyber-input:focus {
+  border-color: #ff3b5c;
+  box-shadow: 0 0 8px rgba(255, 0, 60, 0.15);
+}
+
+.gating-cyber-input::placeholder {
+  color: #5a5a6a;
+}
+
+.gating-cyber-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gating-feedback-counter {
+  font-size: 11px;
+  color: #6a6a7a;
+  text-align: right;
+  margin-top: -4px;
+}
+
+/* -- 错误消息提示 -- */
+.gating-error-message {
+  background: rgba(255, 0, 0, 0.1);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #ff5a5a;
+  font-size: 13px;
+}
+
+/* -- 断线提示 -- */
+.gating-disconnected-notice {
+  background: rgba(255, 202, 40, 0.1);
+  border: 1px solid rgba(255, 202, 40, 0.25);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #ffca28;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* -- 底部操作按钮区域 -- */
+.gating-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gating-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.5px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.gating-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.gating-btn-danger {
+  background: linear-gradient(135deg, #5a1a1a 0%, #3a0a0a 100%);
+  color: #ff6a6a;
+  border: 1px solid rgba(255, 60, 60, 0.3);
+}
+
+.gating-btn-danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7a2222 0%, #5a1010 100%);
+  border-color: rgba(255, 60, 60, 0.6);
+  box-shadow: 0 0 16px rgba(255, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.gating-btn-warning {
+  background: linear-gradient(135deg, #5a3a0a 0%, #3a2505 100%);
+  color: #ffab2a;
+  border: 1px solid rgba(255, 170, 0, 0.3);
+}
+
+.gating-btn-warning:hover:not(:disabled) {
+  background: linear-gradient(135deg, #7a4e0e 0%, #5a3508 100%);
+  border-color: rgba(255, 170, 0, 0.6);
+  box-shadow: 0 0 16px rgba(255, 170, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.gating-btn-confirming {
+  background: linear-gradient(135deg, #2a5a2a 0%, #1a3a1a 100%) !important;
+  color: #6aff6a !important;
+  border-color: rgba(60, 255, 60, 0.4) !important;
+  animation: gating-pulse-approve 0.8s ease-in-out infinite;
+}
+
+/* -- 动画 -- */
+@keyframes gating-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gating-modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes gating-pulse-danger {
+  0% {
+    opacity: 1;
+    text-shadow: 0 0 8px red;
+  }
+  50% {
+    opacity: 0.75;
+    text-shadow: 0 0 20px #ff003c;
+  }
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 8px red;
+  }
+}
+
+@keyframes gating-pulse-approve {
+  0% {
+    box-shadow: 0 0 6px rgba(60, 255, 60, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(60, 255, 60, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 6px rgba(60, 255, 60, 0.2);
+  }
+}
+
+/* -- 滚动条美化 -- */
+.gating-modal-cyberpunk::-webkit-scrollbar {
+  width: 6px;
+}
+
+.gating-modal-cyberpunk::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.gating-modal-cyberpunk::-webkit-scrollbar-thumb {
+  background: rgba(255, 0, 60, 0.25);
+  border-radius: 3px;
+}
+
+.gating-modal-cyberpunk::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 0, 60, 0.4);
+}
+
+.gating-json-block::-webkit-scrollbar {
+  width: 5px;
+}
+
+.gating-json-block::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.gating-json-block::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}

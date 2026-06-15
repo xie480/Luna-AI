@@ -32,6 +32,9 @@ import DebugPanel from './components/Settings/DebugPanel';
 import { Live2DConfigPanel } from './components/Live2DConfigPanel/Live2DConfigPanel';
 import { ErrorToast } from './components/ErrorToast/ErrorToast';
 
+// Phase 13：权限治理与前端 Gating 全局阻断审批弹窗
+import MCPToolApprovalOverlay from './components/MCPTool/MCPToolApprovalDialog';
+
 // 导入配置和服务
 import { AI_SERVICE_PORT } from './appConfig';
 import { sseManager } from './services/sseManager';
@@ -222,6 +225,13 @@ const App: React.FC = () => {
         {/* Live2D 配置面板：独立于模态窗口渲染，覆盖在最上层 */}
         <Live2DConfigPanel />
       </div>
+
+      {/* Phase 13：权限治理与前端 Gating 全局阻断审批弹窗 */}
+      {/* - 置于 app-container 外部，Z-Index 999999 高于一切 UI */}
+      {/* - 内部通过 Zustand authGatingStore 的 pendingRequests 队列控制显隐 */}
+      {/* - 队列不为空时全屏蒙层阻断所有底层交互 */}
+      {/* - 包裹在 ErrorBoundary 中防止渲染崩溃影响整个应用 */}
+      <MCPToolApprovalOverlay />
 
       {/* 全局成功/信息提示（非错误场景：如"配置已保存"） */}
       {globalMessage && (

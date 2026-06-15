@@ -523,3 +523,91 @@ export interface SkillInfo {
     uri: string;
   }>;
 }
+
+// ============================================================
+// Phase 13：权限治理与前端 Gating 类型定义
+// ============================================================
+
+/**
+ * 风险等级枚举。
+ * 做什么：定义工具调用的安全警戒等级。
+ * 为什么这样做：UI 展示风险徽章和拦截策略时需要根据等级区分视觉风格。
+ * 边界条件：L0 无需确认，L1 低风险告知，L2 必须用户确认，L3 致命警告+双重确认。
+ */
+export type RiskLevel = 'L0' | 'L1' | 'L2' | 'L3';
+
+/**
+ * 用户审批动作枚举。
+ * 做什么：定义用户在 Gating 弹窗中可以选择的审批行为。
+ * 为什么这样做：严格限定前端只能发送这两种枚举值，禁止自定义 action。
+ */
+export type AuthAction = 'APPROVE' | 'REJECT';
+
+/**
+ * Phase 13：EVT_TOOL_AUTH_REQUIRED 事件载荷 —— 后端推送的鉴权挂起请求。
+ *
+ * 做什么：定义 Python 后端通过 SSE/WebSocket 推送的高危工具鉴权挂起事件的数据结构。
+ * 为什么这样做：前端审批弹窗（ApprovalCard）渲染所需的全部字段必须来自后端，
+ *             前端不可自行拼接或推断任何字段。
+ * 输入输出：由 Python 后端 gating/service.py 中的 GatingService 生成并推送。
+ * 边界条件：
+ *   - risk_level 必须是 'L0' | 'L1' | 'L2' | 'L3' 之一。
+ *   - arguments 是任意合法的 JSON 对象，前端必须以原始格式展示。
+ *   - 可选字段（goal / skill_info / agent_output）可为 undefined。
+ * 异常行为：audit_log_id 为空值或格式非法时，前端 Store 会拒绝入队。
+ */
+export interface AuthRequiredPayload {
+  /** 关联后端审计主键（雪花算法 ID 转换来的 string） */
+  audit_log_id: string;
+  /** 调用的工具标识（例如 mcp.local_fs.write_file） */
+  tool_id: string;
+  /** 友好显示的工具名称 */
+  tool_name: string;
+  /** 告警等级 */
+  risk_level: RiskLevel;
+  /** 后端策略引擎生成的阻拦原因解释 */
+  reason: string;
+  /** 参数载荷（例如 {"path":"...", "content":"..."}） */
+  arguments: unknown;
+  /** AI 当前执行的目标描述 */
+  goal?: string;
+  /** 相关的 SKILL 元信息 */
+  skill_info?: unknown;
+  /** SKILL 执行 Agent 的输出信息 */
+  agent_output?: string;
+}
+
+/**
+ * Phase 13：CMD_TOOL_AUTH_RESPONSE 命令载荷 —— 前端发送的用户审批结果。
+ *
+ * 做什么：定义前端发送给后端的用户审批响应消息结构。
+ * 为什么这样做：前端只需将用户的"同意/拒绝"意图原封不动转发给后端，
+ *             不参与任何业务逻辑判断。
+ * 输入输出：由前端 Gating 组件生成，通过 SSE/WebSocket 发送给 Python 后端。
+ * 边界条件：
+ *   - action 只能是 'APPROVE' 或 'REJECT'。
+ *   - user_feedback 可选，为空字符串时后端按无反馈处理。
+ * 异常行为：audit_log_id 为空时后端应拒绝处理并返回错误。
+ */
+export interface AuthResponsePayload {
+  /** 关联后端审计主键（雪花算法 ID 转换来的 string） */
+  audit_log_id: string;
+  /** 用户审批动作 */
+  action: AuthAction;
+  /** 用户输入的反馈/修正意见 */
+  user_feedback: string;
+}
+
+/**
+ * Phase 13：EVT_PENDING_AUTHS_SYNC 事件载荷 —— 重连后的完整鉴权列表同步。
+ *
+ * 做什么：定义后端在重连同步时下发的当前所有 PENDING_APPROVAL 状态鉴权请求列表。
+ * 为什么这样做：断线重连后前端必须清洗旧队列再重新入队，同步后端当前有效状态。
+ * 输入输出：由 Python 后端在收到 CMD_SYNC_PENDING_AUTHS 时生成。
+ * 边界条件：列表可能为空数组，表示当前没有挂起的鉴权请求。
+ * 异常行为：无。
+ */
+export interface PendingAuthsSyncPayload {
+  /** 当前所有 PENDING_APPROVAL 状态的鉴权请求列表 */
+  requests: AuthRequiredPayload[];
+}
