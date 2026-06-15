@@ -1,0 +1,330 @@
+{
+  "skills": [
+    {
+      "name": "local_file_manager",
+      "description": "提供本地文件系统的安全读写与管理能力。包含目录遍历、文件搜索、元数据读取、移动/重命名、写入/创建、删除等工具。覆盖 L0 ~ L3 风险等级，用于验证 Phase 13 权限治理与前端 Gating 机制。",
+      "version": "1.0.0",
+      "enabled": true,
+      "metadata": {
+        "author": "Luna-AI",
+        "tags": ["file-management", "local-filesystem", "utility", "productivity"],
+        "memory_schema": {
+          "type": "object",
+          "properties": {
+            "operation_type": {
+              "type": "string",
+              "description": "本次文件操作的类型"
+            },
+            "target_path": {
+              "type": "string",
+              "description": "操作的目标路径或已确认的路径"
+            },
+            "operation_purpose": {
+              "type": "string",
+              "description": "用户要求本次操作的原因或目的"
+            },
+            "previous_search_pattern": {
+              "type": "string",
+              "description": "上一轮搜索使用的文件模式"
+            },
+            "previous_search_drive": {
+              "type": "string",
+              "description": "上一轮搜索指定的盘符"
+            },
+            "previous_search_results_summary": {
+              "type": "string",
+              "description": "上一轮搜索得到的结果摘要或没找到的原因"
+            },
+            "confirmed_files": {
+              "type": "string",
+              "description": "已经过用户或系统确认的文件路径列表"
+            },
+            "pending_dangerous_operation": {
+              "type": "string",
+              "description": "等待用户授权的高危操作详情"
+            },
+            "operation_status": {
+              "type": "string",
+              "enum": ["pending", "in_progress", "completed", "failed", "cancelled_by_user"],
+              "description": "当前文件操作的整体状态"
+            }
+          }
+        }
+      },
+      "prompts": [
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_file_manager/prompts/list_directory_prompt.j2",
+          "constraint": "tool=list_directory",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_file_manager/prompts/read_file_metadata_prompt.j2",
+          "constraint": "tool=read_file_metadata",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_file_manager/prompts/search_files_global_prompt.j2",
+          "constraint": "tool=search_files_global",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_file_manager/prompts/move_or_rename_file_prompt.j2",
+          "constraint": "tool=move_or_rename_file",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_file_manager/prompts/create_or_write_file_prompt.j2",
+          "constraint": "tool=create_or_write_file",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_file_manager/prompts/delete_local_file_prompt.j2",
+          "constraint": "tool=delete_local_file",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "name": "file_safety_policy",
+          "resource_type": "file",
+          "uri": "app/skills/local_file_manager/resource/file_safety_policy.md",
+          "description": "文件安全操作策略：包含系统默认路径快照、用户自定义快速路径映射与白名单、高危操作安全规程、风险等级映射、文件搜索策略、错误处理降级策略、隐私安全注意事项和工具参数快速参考",
+          "mime_type": "text/markdown",
+          "auto_load": true
+        }
+      ],
+      "tools": [
+        {
+          "name": "list_directory",
+          "description": "列出指定目录下的所有文件和文件夹。获取目录内容概览，帮助 AI 了解目录结构后做出后续决策。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "要列出内容的绝对目录路径。",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "required": ["path"]
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["file-management", "read", "directory"],
+          "category": "utility",
+          "use_case_examples": [
+            "看看我的桌面上有什么文件",
+            "在 D 盘的 Documents 目录下列出所有文件夹"
+          ],
+          "core_purpose": "安全遍历指定目录，帮助 AI 了解目录结构和内容，为后续的文件操作决策提供依据。",
+          "final_deliverable": "格式化的目录内容列表，包含子目录和文件的名称与大小信息",
+          "source": "local",
+          "module_path": "app.skills.local_file_manager.tools.list_directory",
+          "tool_config": {}
+        },
+        {
+          "name": "read_file_metadata",
+          "description": "获取文件的大小、创建时间、最后修改时间等元数据信息，不读取文件内容。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "目标文件的绝对路径。必须是已存在的文件而不是目录。",
+                "minLength": 1,
+                "maxLength": 1024
+              }
+            },
+            "required": ["path"]
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["file-management", "read", "metadata"],
+          "category": "utility",
+          "use_case_examples": [
+            "帮我看看这个文件是什么时候创建的",
+            "查询 report.docx 的文件大小"
+          ],
+          "core_purpose": "在不读取文件内容的前提下提供文件属性信息，辅助 AI 判断文件的重要性和时效性。",
+          "final_deliverable": "包含文件大小、创建时间、修改时间、访问时间、只读状态等元数据信息",
+          "source": "local",
+          "module_path": "app.skills.local_file_manager.tools.read_file_metadata",
+          "tool_config": {}
+        },
+        {
+          "name": "search_files_global",
+          "description": "Windows 资源管理器级别的全盘或指定盘符文件搜索。当用户不知道文件具体路径时使用。支持通配符匹配。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "文件匹配模式，支持通配符。例如：'*.txt', 'report_*.pdf', '精确文件名.docx'。",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "drive": {
+                "type": "string",
+                "description": "指定盘符（如 'C:', 'D:'）。如果不确定请留空，系统将自动搜索所有可用盘符。",
+                "default": "",
+                "maxLength": 10
+              }
+            },
+            "required": ["pattern"]
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["file-management", "search", "find"],
+          "category": "utility",
+          "use_case_examples": [
+            "帮我找到桌面上所有的 PDF 文件",
+            "搜索 C 盘下名字包含'报告'的 docx 文件"
+          ],
+          "core_purpose": "当用户不知道文件具体路径时，提供全局搜索能力，快速定位目标文件位置。",
+          "final_deliverable": "匹配搜索条件的文件路径列表，包含文件名、大小和修改时间",
+          "source": "local",
+          "module_path": "app.skills.local_file_manager.tools.search_files_global",
+          "tool_config": {
+            "search_timeout": 60,
+            "search_max_depth": 8,
+            "search_max_results": 200
+          }
+        },
+        {
+          "name": "move_or_rename_file",
+          "description": "移动文件或目录到新位置，或重命名文件/目录。支持跨盘符移动。操作前需要用户确认（L2 风险等级）。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "source_path": {
+                "type": "string",
+                "description": "源文件或目录的绝对路径。",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "destination_path": {
+                "type": "string",
+                "description": "目标文件或目录的绝对路径。",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "overwrite": {
+                "type": "boolean",
+                "description": "如果目标已存在，是否覆盖。默认 false。",
+                "default": false
+              }
+            },
+            "required": ["source_path", "destination_path"]
+          },
+          "risk_level": "L2",
+          "enabled": true,
+          "tags": ["file-management", "modify", "move", "rename"],
+          "category": "utility",
+          "use_case_examples": [
+            "把桌面上的 report.docx 移到 Documents 目录",
+            "将下载目录里的报告文件重命名为 2024年度报告.docx"
+          ],
+          "core_purpose": "提供文件整理能力，支持文件在不同目录间移动和重命名，帮助用户整理本地文件系统。",
+          "final_deliverable": "操作成功确认，包含源路径和目标路径",
+          "source": "local",
+          "module_path": "app.skills.local_file_manager.tools.move_or_rename_file",
+          "tool_config": {}
+        },
+        {
+          "name": "create_or_write_file",
+          "description": "写入内容到文件或创建新文件。支持 overwrite（覆盖）和 append（追加）两种模式。操作前需要用户确认（L2 风险等级）。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "要写入的文件的绝对路径。",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "content": {
+                "type": "string",
+                "description": "要写入的文件内容。",
+                "maxLength": 10485760
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["overwrite", "append"],
+                "description": "写入模式：'overwrite' 覆盖写入，'append' 追加写入。默认 'overwrite'。",
+                "default": "overwrite"
+              }
+            },
+            "required": ["path", "content"]
+          },
+          "risk_level": "L2",
+          "enabled": true,
+          "tags": ["file-management", "modify", "write", "create"],
+          "category": "utility",
+          "use_case_examples": [
+            "帮我保存这段文字到桌面上的备忘录.txt",
+            "在文档末尾追加一段总结"
+          ],
+          "core_purpose": "允许 AI 将生成的内容（如报告、备忘录、代码等）保存到本地文件系统。",
+          "final_deliverable": "操作成功确认，包含文件路径、写入大小和写入模式",
+          "source": "local",
+          "module_path": "app.skills.local_file_manager.tools.create_or_write_file",
+          "tool_config": {}
+        },
+        {
+          "name": "delete_local_file",
+          "description": "【极高危】删除文件或目录。如果是目录且 recursive=true，则递归删除所有子内容。操作前必须由用户通过前端 Gating 弹窗二次确认（L3 最高风险等级）。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "【极高危】要删除的文件或目录的绝对路径。必须确保路径完全正确且不是系统保护目录。",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "recursive": {
+                "type": "boolean",
+                "description": "如果是目录，是否递归删除其下所有内容。默认 false。",
+                "default": false
+              }
+            },
+            "required": ["path"]
+          },
+          "risk_level": "L3",
+          "enabled": true,
+          "tags": ["file-management", "delete", "dangerous"],
+          "category": "utility",
+          "use_case_examples": [
+            "帮我删除桌面上的临时文件 temp.txt",
+            "清空下载目录里的过期文件夹（需要递归删除）"
+          ],
+          "core_purpose": "允许 AI 删除本地文件或目录。L3 极高危等级，必须强制触发前端 Gating 弹窗确认后放行。用于验证 Phase 13 权限治理链路的完整性。",
+          "final_deliverable": "删除操作成功确认，包含路径和是否递归删除等信息",
+          "source": "local",
+          "module_path": "app.skills.local_file_manager.tools.delete_local_file",
+          "tool_config": {}
+        }
+      ],
+      "servers": []
+    }
+  ]
+}
