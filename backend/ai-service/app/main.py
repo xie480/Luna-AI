@@ -38,6 +38,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routers.api_config_preset import router as config_preset_router
 from app.api.routers.error_log import router as error_log_router
+from app.api.routers.gating import router as gating_router
 from app.api.routers.prompt import router as prompt_router
 from app.api.routers.rag import router as rag_router
 from app.api.routers.telemetry import router as telemetry_router
@@ -864,6 +865,43 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning(f"内存守护线程启动失败（将降级运行）: {exc}")
 
+    # ============================================================
+    # Phase 13：Gating 权限治理服务初始化
+    # ============================================================
+    # 做什么：初始化 GatingService，包括审计日志仓储、SSE 推送通道、
+    #         后台超时检测调度器。GatingService 是工具调用权限审批的核心服务。
+    # 为什么这样做：必须在所有 MCP 工具注册完成后初始化，确保 GatingService
+    #              能够在工具调用时正确拦截高危操作。
+    # 边界条件：
+    #   - 依赖 pg_client 提供数据库会话
+    #   - 依赖 sse_manager 提供前端推送通道
+    #   - 依赖 redis_client 提供缓存加速（可选）
+    #   - 初始化失败不阻断主流程（降级为仅记录警告）
+    gating_service = None
+    if pg_client:
+        try:
+            from app.gating.service import GatingService
+            from app.repository.audit_log_pg import AuditLogPGRepo
+            from app.api.sse import sse_manager
+
+            # AuditLogPGRepo 遵循与其他 repo 相同的构造模式，接收 PostgresClient 实例
+            audit_repo = AuditLogPGRepo(pg_client)
+            gating_service = GatingService(
+                audit_repo=audit_repo,
+                redis_client=redis_client,
+                sse_manager=sse_manager,
+                timeout_seconds=300,  # 5 分钟超时
+            )
+
+            # 启动后台超时检测调度器
+            await gating_service.start_timeout_scheduler()
+
+            app.state.gating_service = gating_service
+            logger.info("[Gating] Phase 13 GatingService 初始化完成（5 分钟超时检测已启动）")
+        except Exception as e:
+            app.state.gating_service = None
+            logger.warning(f"[Gating] GatingService 初始化失败（将降级运行）: {e}")
+
     # 标记服务已完全就绪
     app.state.is_ready = True
     logger.info("Luna AI Service 所有核心资源初始化完成，服务已就绪")
@@ -884,6 +922,15 @@ async def lifespan(app: FastAPI):
     # Shutdown: 优雅关闭
     app.state.is_ready = False
     logger.info("正在关闭服务器...")
+
+    # Phase 13：停止 Gating 超时检测调度器
+    gating_svc = getattr(app.state, "gating_service", None)
+    if gating_svc:
+        try:
+            await gating_svc.stop_timeout_scheduler()
+            logger.info("[Gating] Gating 超时检测调度器已停止")
+        except Exception as e:
+            logger.warning(f"[Gating] 停止 Gating 超时检测调度器异常 error={e}")
 
     if rollover_task:
         rollover_task.cancel()
@@ -1027,6 +1074,7 @@ app.include_router(mcp_market_router)
 app.include_router(mcp_local_router)
 app.include_router(mcp_skill_router)
 app.include_router(tool_config_router)
+app.include_router(gating_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router

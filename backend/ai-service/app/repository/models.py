@@ -1,5 +1,5 @@
 """
-Luna AI 数据库模型定义
+Luna AI 数据库模型定义。
 
 做什么：定义 SQLAlchemy ORM 模型，映射 PostgreSQL 数据库表结构。
 为什么这样做：作为数据访问层的基础，确保与 Go 版本的 GORM 模型完全一致。
@@ -10,6 +10,7 @@ Luna AI 数据库模型定义
     - PromptVersion: 提示词模板具体版本内容模型
     - LongTermMemory: 长期记忆模型
     - ApiConfigPreset: API 配置预设模型
+    - AuditLog: 审计日志模型（Phase 13 新增）
 边界条件：
     - 字段名、类型、索引必须与现有数据库完全一致
     - 使用 Mapped 和 mapped_column 进行类型注解
@@ -644,3 +645,116 @@ class UserProfileConflict(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditLog(Base):
+    """
+    对应 PostgreSQL 中的 audit_logs 表（安全审计日志主表）。
+
+    做什么：记录所有需要用户审批的高危工具调用事件。
+            包括调用时间、工具信息、风险等级、审批状态、用户反馈等。
+            是安全审计的 Single Source of Truth。
+    为什么这样做：根据 agent.md 6.4 安全与治理规范，所有关键链路必须可审计。
+                所有高危工具调用必须经过用户审批确认，并记录完整的审批生命周期。
+                Phase 13 权限治理要求所有审计记录可追溯、不可删除。
+    输入输出：
+        - id: 雪花算法生成的唯一标识（String(64)）。
+        - user_id: 用户标识。
+        - tool_id: 工具唯一标识。
+        - tool_name: 工具名称。
+        - risk_level: 风险等级（L0/L1/L2/L3）。
+        - reason: 拦截原因说明。
+        - arguments: 工具调用的完整参数载荷（JSONB）。
+        - goal: 当前 Agent 执行的 Goal。
+        - skill_info: 关联 Skill 的元数据信息（JSONB）。
+        - agent_output: Agent 输出信息。
+        - status: 审批状态（PENDING/APPROVED/REJECTED/TIMEOUT）。
+        - user_feedback: 用户反馈理由。
+        - trace_id: 全链路追踪 ID。
+        - task_id: 关联的 DAG 任务 ID。
+        - responded_at: 用户响应时间戳。
+        - created_at: 记录创建时间。
+        - updated_at: 记录最后更新时间。
+    边界条件：
+        - status 默认 PENDING，不允许直接跳过中间状态。
+        - arguments 和 skill_info 以 JSONB 形式存储。
+        - created_at 和 updated_at 使用带时区的时间戳。
+        - 不支持物理删除操作，保证审计完整性。
+        - responded_at 在用户响应（APPROVE/REJECT）时自动填充。
+    异常行为：数据库约束失败时由审计日志仓储层向上抛出异常。
+    """
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("idx_audit_logs_status", "status"),
+        Index("idx_audit_logs_trace_id", "trace_id"),
+        Index("idx_audit_logs_task_id", "task_id"),
+        Index("idx_audit_logs_created_at", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="雪花算法生成的唯一审计记录 ID。")
+    user_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="local_default_user",
+        comment="用户标识。默认 local_default_user。",
+    )
+    tool_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, index=True,
+        comment="工具唯一标识（如 mcp.local_fs.write_file）。",
+    )
+    tool_name: Mapped[str] = mapped_column(
+        String(256), nullable=False, default="",
+        comment="工具友好显示名称。",
+    )
+    risk_level: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="L2",
+        comment="风险等级：L0（低危）/ L1（中危）/ L2（高危）/ L3（极危）。",
+    )
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="",
+        comment="后端策略引擎生成的拦截原因，向用户解释为何需要审批。",
+    )
+    arguments: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}",
+        comment="工具调用的参数载荷，以 JSONB 格式存储。必须如实记录。",
+    )
+    goal: Mapped[str] = mapped_column(
+        Text, nullable=False, default="",
+        comment="当前 Agent 执行的 Goal 描述。来自 DAG 执行上下文的 goal 字段。",
+    )
+    skill_info: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default="{}",
+        comment="关联 Skill 的元数据信息，以 JSONB 格式存储。"
+                "包含 skill_id、skill_name、skill_version 等。",
+    )
+    agent_output: Mapped[str] = mapped_column(
+        Text, nullable=False, default="",
+        comment="Agent 执行阶段的输出信息。Agent 思考过程的文本。",
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PENDING", index=True,
+        comment="审批状态：PENDING（等待审批）/ APPROVED（已批准）"
+                "/ REJECTED（已拒绝）/ TIMEOUT（已超时）。",
+    )
+    user_feedback: Mapped[str] = mapped_column(
+        Text, nullable=False, default="",
+        comment="用户的反馈理由或修改意见。拒绝时用户可填写原因。",
+    )
+    trace_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", index=True,
+        comment="全链路追踪 ID。用于关联日志、事件和请求链。",
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", index=True,
+        comment="关联的 DAG 任务 ID。用于定位所属的工作流计划。",
+    )
+    responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="用户响应时间。仅当 status 为 APPROVED 或 REJECTED 时非空。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True,
+        comment="记录创建时间戳（带时区）。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+        comment="记录最后更新时间戳（带时区）。状态变更时自动刷新。",
+    )
