@@ -1,5 +1,42 @@
-/* Luna AI 侧边栏样式 */
+/**
+ * Luna AI 侧边栏样式
+ * 支持平滑展开/收起动画、菜单项悬停高亮、子菜单展开动画
+ * 深色模式与赛博朋克主题的无缝适配
+ *
+ * 动画性能约束：
+ * - 侧边栏展开收起使用 transform（GPU 合成），禁用 width/left 动画
+ * - 菜单项悬停只使用 background-color + opacity（合成层友好）
+ * - 子菜单展开使用 max-height + opacity（GPU 合成）
+ * - 所有 transition-duration 控制在 200-350ms 之间
+ * - 缓动曲线统一为 ease-out / cubic-bezier
+ */
 
+/* ========== 基础动画关键帧 ========== */
+
+@keyframes sidebar-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 子菜单展开 */
+@keyframes sidebar-submenu-expand {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 200px;
+    opacity: 1;
+  }
+}
+
+/* 侧边栏容器 */
 .left-sidebar {
   position: fixed;
   left: 0;
@@ -11,7 +48,11 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  transition: transform 0.3s ease-in-out, background-color 0.3s ease, color 0.3s ease;
+  /* 只使用 transform 做展开收起，不要用 width/left */
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 0.3s ease,
+              color 0.3s ease;
+  will-change: transform;
 }
 
 .left-sidebar.open {
@@ -59,7 +100,9 @@
   cursor: pointer;
   text-align: left;
   gap: 12px;
-  transition: background-color 0.2s;
+  /* 仅过渡 color 和 background-color，避免 border/padding 动画导致重排 */
+  transition: background-color 0.2s ease,
+              color 0.2s ease;
 }
 
 .sidebar-menu-item:hover {
@@ -73,11 +116,16 @@
 .menu-arrow {
   font-size: 12px;
   color: var(--text-muted, #a0aec0);
+  /* 箭头旋转使用 transform，避免重排 */
+  transition: transform 0.2s ease;
 }
 
+/* 子菜单 */
 .sidebar-sub-menu {
   background-color: var(--panel-bg, #1a202c);
-  padding: 8px 0;
+  overflow: hidden;
+  animation: sidebar-submenu-expand 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: max-height, opacity;
 }
 
 .sidebar-sub-menu-item {
@@ -90,7 +138,8 @@
   cursor: pointer;
   text-align: left;
   font-size: 14px;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s ease,
+              color 0.2s ease;
 }
 
 .sidebar-sub-menu-item:hover {
@@ -156,7 +205,8 @@
   font-family: var(--cyber-font-mono);
   font-size: 13px;
   border-left: 2px solid transparent;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease,
+              color 0.2s ease;
 }
 
 [data-theme="cyberpunk"] .sidebar-menu-item:hover {
@@ -188,10 +238,12 @@
   font-family: var(--cyber-font-mono);
   font-size: 12px;
   border-left: 2px solid transparent;
+  transition: background-color 0.2s ease,
+              color 0.2s ease;
 }
 
 [data-theme="cyberpunk"] .sidebar-sub-menu-item:hover {
-  background-color: rgba(160, 130, 255, 0.05);
+  background-color: rgba(160, 130, 255, 0.08);
   color: var(--cyber-accent-purple);
   border-left-color: var(--cyber-accent-purple);
 }

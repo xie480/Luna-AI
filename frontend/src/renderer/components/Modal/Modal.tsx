@@ -5,6 +5,12 @@
  * 支持鼠标拖拽移动位置 + 四角四边边框缩放 + 无背景变暗效果
  *
  * 注意：DebugPanel 诊断面板已移至 index.tsx 顶层渲染，与本组件解耦
+ *
+ * 关闭动画说明：
+ * - 当 isModalOpen 变为 false 时，不会立即 return null
+ * - 而是触发内部 closing 状态，播放 250ms 关闭动画
+ * - 动画结束后才真正 unmount 组件
+ * - 所有动画属性严格限制为 transform + opacity，零重排
  */
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { useSystemStore, ModalPanelType } from '../../stores/systemStore';
@@ -39,8 +45,79 @@ const PANEL_TITLES: Record<ModalPanelType, string> = {
 };
 
 /**
+ * 面板内容渲染 — 提取为独立函数，根据 activeModalPanel 渲染对应的子面板
+ */
+const renderPanelContent = (
+  activeModalPanel: ModalPanelType | null,
+  activePlan: any,
+  systemLogs: any[],
+): React.ReactNode => {
+  switch (activeModalPanel) {
+    case 'dag':
+      return activePlan ? (
+        <div className="dag-view">
+          <div className="plan-header">
+            <h3>{activePlan.goal}</h3>
+            <span className="plan-id">ID: {activePlan.planId}</span>
+          </div>
+          <div className="nodes-list">
+            {activePlan.nodes.map((node: any) => (
+              <div key={node.nodeId} className={`node-item ${node.status}`}>
+                <div className="node-header">
+                  <span className="node-name">{node.name}</span>
+                  <span className="node-status">{node.status}</span>
+                </div>
+                <div className="node-description">{node.description}</div>
+                {node.progress > 0 && (
+                  <div className="node-progress">
+                    <div className="progress-bar" style={{ width: `${node.progress}%` }} />
+                  </div>
+                )}
+                {node.errorMsg && <div className="node-error">{node.errorMsg}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="empty-panel">
+          <div className="empty-icon">📊</div>
+          <div className="empty-text">暂无活跃任务</div>
+        </div>
+      );
+    case 'memory':
+      return <MemoryPanel />;
+    case 'userProfile':
+      return <UserProfilePanel />;
+    case 'prompts':
+      return <PromptPanel />;
+    case 'knowledge':
+      return <KnowledgeBasePanel />;
+    case 'settings':
+      return <SettingsPanel />;
+    case 'logs':
+      return (
+        <div className="logs-view">
+          <h3>系统日志</h3>
+          <div className="logs-container">
+            {systemLogs.map((log, index) => (
+              <div key={index} className="log-item">{log}</div>
+            ))}
+          </div>
+        </div>
+      );
+    case 'clothing':
+      return <ClothingPanel />;
+    case 'mcp':
+      return <MCPPanel />;
+    default:
+      return null;
+  }
+};
+
+/**
  * 模态窗口组件
  * 根据当前激活的面板类型渲染对应内容
+ * 支持关闭动画：isModalOpen=false 时先播动画再卸载
  */
 export const Modal: React.FC = () => {
   // 从 Store 获取状态
@@ -53,6 +130,27 @@ export const Modal: React.FC = () => {
   const systemLogs = useSystemStore((state) => state.systemLogs);
 
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // === 关闭动画状态机 ===
+  const [closing, setClosing] = useState(false);
+  const prevIsOpen = useRef(isModalOpen);
+
+  // 当 Store 通知关闭时，先触发关闭动画
+  useEffect(() => {
+    if (prevIsOpen.current && !isModalOpen) {
+      setClosing(true);
+    }
+    prevIsOpen.current = isModalOpen;
+  }, [isModalOpen]);
+
+  // 关闭动画完成后，清理 closing 状态
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => {
+      setClosing(false);
+    }, 280); // 与 CSS 动画时长对齐
+    return () => clearTimeout(timer);
+  }, [closing]);
 
   // === 拖拽状态 ===
   const [isDragging, setIsDragging] = useState(false);
@@ -69,15 +167,10 @@ export const Modal: React.FC = () => {
 
   /**
    * 根据面板类型获取默认尺寸
-   * Prompt 管理面板需要更宽的宽度来展示并排双栏差异对比
    */
   const getDefaultSize = useCallback((panel: ModalPanelType | null): { w: number; h: number } => {
-    if (panel === 'prompts') {
-      return { w: 1300, h: 700 };
-    }
-    if (panel === 'userProfile') {
-      return { w: 860, h: 680 };
-    }
+    if (panel === 'prompts') return { w: 1300, h: 700 };
+    if (panel === 'userProfile') return { w: 860, h: 680 };
     if (panel === 'settings' || panel === 'memory' || panel === 'knowledge' || panel === 'mcp') {
       return { w: 900, h: 600 };
     }
@@ -128,10 +221,10 @@ export const Modal: React.FC = () => {
         top: rect.top,
       };
     },
-    []
+    [],
   );
 
-  /** 统一处理拖拽和缩放中的 mouse-move 与 mouse-up */
+  /** 统一处理拖拽和缩放 */
   useEffect(() => {
     if (!isDragging && !isResizing) return;
 
@@ -154,18 +247,12 @@ export const Modal: React.FC = () => {
         let newLeft = rs.left;
         let newTop = rs.top;
 
-        // 水平方向
-        if (dir.includes('e')) {
-          newW = Math.max(MIN_WIDTH, rs.w + dx);
-        }
+        if (dir.includes('e')) newW = Math.max(MIN_WIDTH, rs.w + dx);
         if (dir.includes('w')) {
           newW = Math.max(MIN_WIDTH, rs.w - dx);
           newLeft = rs.left + (rs.w - newW);
         }
-        // 垂直方向
-        if (dir.includes('s')) {
-          newH = Math.max(MIN_HEIGHT, rs.h + dy);
-        }
+        if (dir.includes('s')) newH = Math.max(MIN_HEIGHT, rs.h + dy);
         if (dir.includes('n')) {
           newH = Math.max(MIN_HEIGHT, rs.h - dy);
           newTop = rs.top + (rs.h - newH);
@@ -217,17 +304,17 @@ export const Modal: React.FC = () => {
     </>
   );
 
-  // 模态窗口未打开时不渲染
-  if (!isModalOpen) {
+  const panelTitle = activeModalPanel ? PANEL_TITLES[activeModalPanel] : '';
+
+  // 完全关闭 + 动画结束 => 不渲染任何内容
+  if (!isModalOpen && !closing) {
     return null;
   }
 
-  const panelTitle = activeModalPanel ? PANEL_TITLES[activeModalPanel] : '';
-
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
+    <div className={`modal-overlay ${closing ? 'modal-overlay-closing' : ''}`} onClick={handleOverlayClick}>
       <div
-        className={`modal-container ${modalPosition ? 'has-position' : ''}`}
+        className={`modal-container ${modalPosition ? 'has-position' : ''} ${closing ? 'modal-container-closing' : ''}`}
         ref={modalRef}
         style={{
           width: modalSize.w,
@@ -239,124 +326,16 @@ export const Modal: React.FC = () => {
         {renderResizeHandles()}
 
         {/* 模态窗口头部 - 可拖拽区域 */}
-        <div
-          className="modal-header modal-drag-handle"
-          onMouseDown={handleHeaderMouseDown}
-        >
+        <div className="modal-header modal-drag-handle" onMouseDown={handleHeaderMouseDown}>
           <h2 className="modal-title">{panelTitle}</h2>
-          <button className="modal-close" onClick={closeModal}>
-            ✕
-          </button>
+          <button className="modal-close" onClick={closeModal}>✕</button>
         </div>
 
         {/* 模态窗口内容区 */}
         <div className="modal-content">
-          {/* DAG 任务树面板 */}
-          {activeModalPanel === 'dag' && (
-            <div className="panel dag-panel">
-              {activePlan ? (
-                <div className="dag-view">
-                  <div className="plan-header">
-                    <h3>{activePlan.goal}</h3>
-                    <span className="plan-id">ID: {activePlan.planId}</span>
-                  </div>
-                  <div className="nodes-list">
-                    {activePlan.nodes.map((node) => (
-                      <div
-                        key={node.nodeId}
-                        className={`node-item ${node.status}`}
-                      >
-                        <div className="node-header">
-                          <span className="node-name">{node.name}</span>
-                          <span className="node-status">{node.status}</span>
-                        </div>
-                        <div className="node-description">{node.description}</div>
-                        {node.progress > 0 && (
-                          <div className="node-progress">
-                            <div
-                              className="progress-bar"
-                              style={{ width: `${node.progress}%` }}
-                            ></div>
-                          </div>
-                        )}
-                        {node.errorMsg && (
-                          <div className="node-error">{node.errorMsg}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="empty-panel">
-                  <div className="empty-icon">📊</div>
-                  <div className="empty-text">暂无活跃任务</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 记忆面板 */}
-          {activeModalPanel === 'memory' && (
-            <div className="panel memory-panel">
-              <MemoryPanel />
-            </div>
-          )}
-
-          {/* 用户画像面板 */}
-          {activeModalPanel === 'userProfile' && (
-            <div className="panel user-profile-modal-panel">
-              <UserProfilePanel />
-            </div>
-          )}
-
-          {/* Prompt 管理面板（独立面板） */}
-          {activeModalPanel === 'prompts' && (
-            <div className="panel prompts-panel">
-              <PromptPanel />
-            </div>
-          )}
-
-          {/* 知识库面板 */}
-          {activeModalPanel === 'knowledge' && (
-            <div className="panel knowledge-panel">
-              <KnowledgeBasePanel />
-            </div>
-          )}
-
-          {/* 设置面板 */}
-          {activeModalPanel === 'settings' && (
-            <div className="panel settings-panel">
-              <SettingsPanel />
-            </div>
-          )}
-
-          {/* 日志面板 */}
-          {activeModalPanel === 'logs' && (
-            <div className="panel logs-panel">
-              <div className="logs-view">
-                <h3>系统日志</h3>
-                <div className="logs-container">
-                  {systemLogs.map((log, index) => (
-                    <div key={index} className="log-item">{log}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 服装配置面板 */}
-          {activeModalPanel === 'clothing' && (
-            <div className="panel clothing-panel">
-              <ClothingPanel />
-            </div>
-          )}
-
-          {/* MCP 统一模块面板：合并市场与已接入 */}
-          {activeModalPanel === 'mcp' && (
-            <div className="panel mcp-panel">
-              <MCPPanel />
-            </div>
-          )}
+          <div className={`panel ${activeModalPanel === 'dag' ? 'dag-panel' : ''}`}>
+            {renderPanelContent(activeModalPanel, activePlan, systemLogs)}
+          </div>
         </div>
       </div>
     </div>

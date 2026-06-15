@@ -4,6 +4,7 @@ import { CHAT_WORKFLOW_NODE_TYPE } from '../../../shared/enum';
 import { HolographicNode } from './HolographicNode';
 import { HolographicConnections } from './HolographicConnections';
 import { HolographicARPanel } from './HolographicARPanel';
+import { PanelTransition } from '../PanelTransition/PanelTransition';
 import './HolographicWorkflowSidebar.css';
 
 const MIN_WIDTH = 260;
@@ -240,23 +241,26 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       </div>
 
       {/* Resize Handle */}
-      <div 
+      <div
         className={`holographic-resize-handle ${isDragging ? 'dragging' : ''}`}
         onMouseDown={handleMouseDown}
       >
         <div className="resize-glow"></div>
       </div>
       
-      {/* AR Projection Panel */}
-      {arPanelData && (
-          <HolographicARPanel
-            nodeType={arPanelData.nodeType}
-            interactionId={interactionId!}
-            targetRect={arPanelData.targetRect}
-            containerRect={containerRef.current?.getBoundingClientRect()}
-            onClose={() => setARPanelData(null)}
-          />
-      )}
+      {/* 工作流节点内容区 — 加载过渡动画 */}
+      <PanelTransition isLoading={!hasPlan}>
+        {/* AR Projection Panel */}
+        {arPanelData && (
+            <HolographicARPanel
+              nodeType={arPanelData.nodeType}
+              interactionId={interactionId!}
+              targetRect={arPanelData.targetRect}
+              containerRect={containerRef.current?.getBoundingClientRect()}
+              onClose={() => setARPanelData(null)}
+            />
+        )}
+      </PanelTransition>
     </div>
     </>
   );
