@@ -689,12 +689,24 @@ class SSEManager {
       const hasRenderableChunk = normalizedChunk.trim().length > 0;
 
       if (hasRenderableChunk) {
-        const duration = Math.max(3000, normalizedChunk.length * 200);
-        window.dispatchEvent(
-          new CustomEvent(BUBBLE_EVENT_NAME.SHOW, {
-            detail: { text: normalizedChunk, duration, batchId: assistantMessageId },
-          })
-        );
+        // 如果后端传来了完整的断句以及可选的 TTS 音频地址，进入 playback 队列处理
+        if (payload.is_sentence_chunk) {
+          import('../stores/playbackStore').then(({ usePlaybackStore }) => {
+            usePlaybackStore.getState().enqueue({
+              text: normalizedChunk,
+              audioUri: payload.audio_uri || null,
+              batchId: assistantMessageId
+            });
+          });
+        } else {
+          // 旧逻辑：直接发送气泡展示事件
+          const duration = Math.max(3000, normalizedChunk.length * 200);
+          window.dispatchEvent(
+            new CustomEvent(BUBBLE_EVENT_NAME.SHOW, {
+              detail: { text: normalizedChunk, duration, batchId: assistantMessageId },
+            })
+          );
+        }
       }
 
       if (currentSessionId) {

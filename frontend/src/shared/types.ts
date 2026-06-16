@@ -186,6 +186,8 @@ export interface ChatStreamPayload {
   current_node_type?: typeof CHAT_WORKFLOW_NODE_TYPE.MAIN_CHAT_LLM;
   citations?: ChatCitationProjection[];
   is_final_chunk?: boolean;
+  audio_uri?: string;
+  is_sentence_chunk?: boolean;
 }
 
 /**

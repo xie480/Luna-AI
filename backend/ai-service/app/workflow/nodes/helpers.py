@@ -1,8 +1,7 @@
-"""Workflow 节点共享辅助函数。"""
-
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from app.logger import logger
 from app.repository.chat_history_redis import Interaction
@@ -99,6 +98,8 @@ async def publish_stream_payload(
     event_publisher: ChatWorkflowEventPublisher | None,
     *,
     error: str = "",
+    audio_uri: str | None = None,
+    is_sentence_chunk: bool = False,
 ) -> None:
     """发布兼容既有 CHAT_STREAM 的流式载荷。"""
     if not event_publisher:
@@ -111,6 +112,8 @@ async def publish_stream_payload(
         is_finished=is_finished,
         node_id=state.generation_state.assistant_message_id,
         error=error,
+        audio_uri=audio_uri,
+        is_sentence_chunk=is_sentence_chunk,
         interaction_id=state.runtime.interaction_id,
         assistant_message_id=state.generation_state.assistant_message_id,
         plan_preset_id=state.runtime.plan_preset_id,

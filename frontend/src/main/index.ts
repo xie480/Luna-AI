@@ -3,9 +3,10 @@
  * 负责：窗口创建、系统托盘、系统能力桥接
  * 注意：主进程禁止直接访问本地 DB、Redis、Python 服务
  */
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, protocol, net } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import url from 'url';
 
 // 主窗口引用
 let mainWindow: BrowserWindow | null = null;
@@ -130,8 +131,36 @@ function registerIpcHandlers(): void {
   });
 }
 
+// 注册自定义协议拦截器，用于读取后端生成的本地 TTS 音频
+function registerCustomProtocols(): void {
+  protocol.handle('luna', (request) => {
+    // request.url 例如: "luna://tts/tts_123.wav"
+    const parsedUrl = new URL(request.url);
+    if (parsedUrl.host === 'tts') {
+      const fileName = parsedUrl.pathname.replace(/^\//, ''); // 去除前导斜杠
+      // Python AI service 将文件存放在 backend/ai-service/data/tts_cache
+      const ttsCacheDir = path.resolve(app.getAppPath(), '../../backend/ai-service/data/tts_cache');
+      const absolutePath = path.join(ttsCacheDir, fileName);
+      
+      // 出于安全考虑，验证解析出的路径是否仍在预期的缓存目录内（防止目录穿越）
+      if (!absolutePath.startsWith(ttsCacheDir)) {
+        return new Response('Access Denied', { status: 403 });
+      }
+      
+      return net.fetch(url.pathToFileURL(absolutePath).toString());
+    }
+    return new Response('Not Found', { status: 404 });
+  });
+}
+
+// 必须在 app ready 之前注册 scheme 为 privileged（允许绕过跨域、媒体等限制）
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'luna', privileges: { bypassCSP: true, stream: true, supportFetchAPI: true, corsEnabled: true } }
+]);
+
 // 当 Electron 完成初始化后创建窗口
 app.whenReady().then(() => {
+  registerCustomProtocols();
   registerIpcHandlers();
   createWindow();
 

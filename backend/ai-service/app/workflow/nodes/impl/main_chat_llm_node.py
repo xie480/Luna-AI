@@ -34,8 +34,10 @@ class MainChatLlmNode(ChatWorkflowNode):
         return await self.run_with_observation(state, self._handle)
 
     async def _handle(self, state: ChatWorkflowState) -> ChatWorkflowState:
+        import asyncio
         from app.llm.client import llm_client
         from app.llm.stream_parser import StreamParser
+        from app.tts import tts_client, map_emotion
 
         started = time.time()
         history_dicts = history_to_model_messages(state.session_state.recent_messages)
@@ -50,9 +52,49 @@ class MainChatLlmNode(ChatWorkflowNode):
         while attempt < max_retries:
             first_chunk = True
             parser = StreamParser(state.runtime.trace_id)
+            sentence_queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+            # 启动 TTS 消费者任务
+            async def tts_consumer():
+                while True:
+                    chunk_text = await sentence_queue.get()
+                    if chunk_text is None:
+                        sentence_queue.task_done()
+                        break
+                    
+                    try:
+                        emotion_tag = map_emotion(state.generation_state.emotion)
+                        audio_path = await tts_client.synthesize_to_file(chunk_text, emotion=emotion_tag)
+                        # 为了绕过前端 CORS 和本地文件限制，我们这里返回特殊的 luna:// 协议 URI (将在 Electron 主进程拦截处理)
+                        audio_uri = f"luna://tts/{audio_path.name}"
+                        
+                        await publish_stream_payload(
+                            state,
+                            CHAT_STREAM_TYPE_REPLY_CHUNK,
+                            chunk_text,
+                            False,
+                            self.dependencies.event_publisher,
+                            audio_uri=audio_uri,
+                            is_sentence_chunk=True,
+                        )
+                    except Exception as e:
+                        from app.logger import logger
+                        logger.error("TTS 合成消费任务发生错误: %s", e)
+                        # 降级：仅下发文本，无音频
+                        await publish_stream_payload(
+                            state,
+                            CHAT_STREAM_TYPE_REPLY_CHUNK,
+                            chunk_text,
+                            False,
+                            self.dependencies.event_publisher,
+                        )
+                    finally:
+                        sentence_queue.task_done()
+
+            consumer_task = asyncio.create_task(tts_consumer())
+
             try:
                 if attempt > 0:
-                    import asyncio
                     from app.logger import logger
 
                     logger.warning(
@@ -100,17 +142,32 @@ class MainChatLlmNode(ChatWorkflowNode):
                         )
 
                     for msg_type, content in parser.feed(chunk_data.get("chunk", "")):
-                        await handle_stream_piece(state, msg_type, content, False, self.dependencies.event_publisher)
+                        if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
+                            # 累加全文
+                            state.generation_state.full_text += content
+                            # 将切分好的断句放入队列等待 TTS 生成音频
+                            await sentence_queue.put(content)
+                        else:
+                            await handle_stream_piece(state, msg_type, content, False, self.dependencies.event_publisher)
+                            
                     if chunk_data.get("is_finished", False):
                         flushed = parser.flush()
                         for msg_type, content in flushed:
-                            await handle_stream_piece(
-                                state,
-                                msg_type,
-                                content,
-                                False,
-                                self.dependencies.event_publisher,
-                            )
+                            if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
+                                state.generation_state.full_text += content
+                                await sentence_queue.put(content)
+                            else:
+                                await handle_stream_piece(
+                                    state,
+                                    msg_type,
+                                    content,
+                                    False,
+                                    self.dependencies.event_publisher,
+                                )
+
+                        # 结束流推送前等待所有队列消费完毕
+                        await sentence_queue.put(None)
+                        await consumer_task
 
                         await publish_stream_payload(
                             state,
@@ -123,6 +180,11 @@ class MainChatLlmNode(ChatWorkflowNode):
                         state.generation_state.finish_reason = chunk_data.get("finish_reason") or "stop"
                         break
                         
+                # 如果退出循环时消费者任务还在跑，尝试中止
+                if not consumer_task.done():
+                    await sentence_queue.put(None)
+                    await consumer_task
+
                 # 如果没有正文且报错，或者有 error 需要外层重试
                 if state.generation_state.error and not state.generation_state.full_text:
                     raise RuntimeError(f"流式生成中收到错误数据块: {state.generation_state.error}")
@@ -134,6 +196,10 @@ class MainChatLlmNode(ChatWorkflowNode):
                 break
 
             except Exception as exc:
+                # 确保发生异常时结束消费者任务
+                if not consumer_task.done():
+                    consumer_task.cancel()
+                    
                 attempt += 1
                 state.generation_state.error = str(exc)
                 if attempt >= max_retries:

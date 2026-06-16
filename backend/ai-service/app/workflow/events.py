@@ -52,6 +52,8 @@ class ChatStreamChunkPayload(BaseModel):
     is_finished: bool
     node_id: str
     error: str = ""
+    audio_uri: str | None = None
+    is_sentence_chunk: bool = False
     schema_version: ChatWorkflowSchemaVersion = ChatWorkflowSchemaVersion.CHAT_WORKFLOW_V1
     interaction_id: str
     assistant_message_id: str
