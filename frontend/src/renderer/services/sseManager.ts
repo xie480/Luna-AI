@@ -830,16 +830,14 @@ class SSEManager {
   private async syncPendingAuths(): Promise<void> {
     const traceId = `web-${generateId()}`;
     try {
-      const resp = await fetch(`${this.backendUrl}/api/gating/sync`, {
+      const resp = await fetch(`${this.backendUrl}/api/gating/sync_init_state`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Trace-ID': traceId,
         },
         body: JSON.stringify({
-          type: WS_MSG_TYPE.CMD_SYNC_PENDING_AUTHS,
-          trace_id: traceId,
-          timestamp: Date.now(),
+          force: true
         }),
       });
       if (!resp.ok) {
