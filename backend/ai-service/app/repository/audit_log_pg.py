@@ -248,7 +248,7 @@ class AuditLogPGRepo:
             async with self.pg_client.session_factory() as session:
                 query = text(
                     "SELECT * FROM audit_logs WHERE status = :status "
-                    "ORDER BY created_at ASC"
+                    "ORDER BY id ASC"
                 )
                 result = await session.execute(
                     query, {"status": AuthStatus.PENDING.value}
