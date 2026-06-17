@@ -247,20 +247,22 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       >
         <div className="resize-glow"></div>
       </div>
-      
-      {/* 工作流节点内容区 — 加载过渡动画 */}
-      <PanelTransition isLoading={!hasPlan}>
-        {/* AR Projection Panel */}
-        {arPanelData && (
-            <HolographicARPanel
-              nodeType={arPanelData.nodeType}
-              interactionId={interactionId!}
-              targetRect={arPanelData.targetRect}
-              containerRect={containerRef.current?.getBoundingClientRect()}
-              onClose={() => setARPanelData(null)}
-            />
-        )}
-      </PanelTransition>
+
+      {/* 全息投影覆盖层 — 绝对定位脱离 Flex 文档流，避免抢占 canvas 高度 */}
+      <div className="holographic-overlay-container">
+        <PanelTransition isLoading={!hasPlan}>
+          {/* AR Projection Panel */}
+          {arPanelData && (
+              <HolographicARPanel
+                nodeType={arPanelData.nodeType}
+                interactionId={interactionId!}
+                targetRect={arPanelData.targetRect}
+                containerRect={containerRef.current?.getBoundingClientRect()}
+                onClose={() => setARPanelData(null)}
+              />
+          )}
+        </PanelTransition>
+      </div>
     </div>
     </>
   );

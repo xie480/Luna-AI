@@ -17,6 +17,8 @@
   transform: translateX(0);
   opacity: 1;
   overflow: hidden;
+  /* 确保所有 flex 子项按比例收缩而非撑大，防止内容隐式撑高导致外层 overflow 误触发 */
+  min-height: 0;
 }
 
 .holographic-sidebar.debug-open {
@@ -106,15 +108,20 @@
   100% { opacity: 0.6; transform: scale(0.9); }
 }
 
-/* Canvas */
+/* Canvas — 滚动裁剪区域 */
 .holographic-canvas {
   flex: 1;
+  /* box-sizing: border-box 确保 padding 不溢出高度计算 */
+  box-sizing: border-box;
+  /* min-height: 0 阻止 flex 子项被内部大内容隐式撑大，
+     保证 overflow-y: auto 在内容撑满时正确触发滚动 */
+  min-height: 0;
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 40px 0;
   /* Hide scrollbar but keep functionality */
-  scrollbar-width: none; 
+  scrollbar-width: none;
 }
 .holographic-canvas::-webkit-scrollbar {
   display: none;
@@ -127,6 +134,19 @@
   gap: 40px; /* Space for connections */
   position: relative;
   z-index: 2;
+  /* 底部安全距离：确保最下方连线曲线和 end 节点不贴底，
+     避免 SVG 贝塞尔曲线溢出触发不必要的滚动计算 */
+  padding-bottom: 60px;
+}
+
+/* 全息投影覆盖层容器 — 绝对定位脱离 Flex 文档流，
+   避免 PanelTransition 和 AR Panel 抢占主画布高度 */
+.holographic-overlay-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  overflow: hidden;
 }
 
 /* Toggle Button Position */
