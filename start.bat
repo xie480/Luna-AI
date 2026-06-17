@@ -7,15 +7,17 @@ echo ==========================================
 echo.
 
 set "TTS_BAT_PATH="
-for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
-    if "%%a"=="TTS_BAT_PATH" set "TTS_BAT_PATH=%%b"
+if exist ".env" (
+    for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
+        if "%%a"=="TTS_BAT_PATH" set "TTS_BAT_PATH=%%b"
+    )
 )
 
-REM 解析 frontend/src/renderer/stores/systemStore.ts 或者干脆通过 localstorage db，
-REM 但由于 localstorage 存在于浏览器中，bat 脚本无法直接读取。
-REM 所以我们将 TTS 开关状态依赖于 TTS_BAT_PATH 是否存在。
-REM 如果用户在前端关闭了 TTS，他们不会收到音频；bat 启动的服务只是在那挂载。
-REM 若要强行通过脚本关闭，用户需修改 .env。这里保持不变，仅在前端关闭调用。
+REM Parse frontend/src/renderer/stores/systemStore.ts or via localstorage db.
+REM However, since localstorage is in the browser, the bat script cannot read it directly.
+REM So we rely on TTS_BAT_PATH existence for TTS toggle.
+REM If the user turned off TTS in frontend, they won't receive audio; the bat service just mounts.
+REM To force disable via script, user should modify .env. Keeping it as is here.
 
 if defined TTS_BAT_PATH (
     echo [1/3] Starting TTS Service...
