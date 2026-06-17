@@ -1,4 +1,18 @@
-"""TTS 客户端模块，用于与 GPT-SoVITS V4 服务通信。"""
+"""
+TTS 客户端模块，用于与 GPT-SoVITS 或 OpenAI-compatible TTS 服务通信。
+
+做什么：封装 TTS API 的 HTTP 调用，支持同步生成音频数据或保存到文件。
+为什么这样做：统一 TTS 调用入口，便于切换底层 TTS 引擎（GPT-SoVITS / OpenAI）。
+输入输出：
+    - synthesize: 输入文本和参数，返回音频字节流 (bytes)
+    - synthesize_to_file: 输入文本和参数，返回音频文件的 Path
+边界条件：
+    - 自动将文本中的 "luna"（大小写不敏感）替换为 "露娜"，使 TTS 发音正确
+    - 缓存目录不存在时自动创建
+异常行为：
+    - HTTP 请求失败时抛出 RuntimeError
+    - TTS 服务不可达时由 httpx 抛出超时/连接异常
+"""
 
 from __future__ import annotations
 
@@ -12,9 +26,23 @@ from app.utils.snowflake import generate_string_id
 
 
 class GSVITTSClient:
-    """GPT-SoVITS V4 TTS 客户端。"""
+    """
+    GPT-SoVITS / OpenAI-compatible TTS 客户端。
+
+    做什么：管理 TTS HTTP 连接，提供文本转语音的核心方法。
+    为什么这样做：封装底层 API 差异，使用方只需调用 synthesize 或 synthesize_to_file。
+    """
     
     def __init__(self, cfg: TTSConfig):
+        """
+        初始化 TTS 客户端。
+
+        输入:
+            cfg: TTSConfig 实例，包含 API 地址、超时、缓存路径等配置
+        边界条件:
+            - 如果 cache_dir 不存在，会自动创建
+            - HTTP 客户端在首次请求时懒加载
+        """
         self.cfg = cfg
         self.cfg.cache_dir.mkdir(parents=True, exist_ok=True)
         # 确保使用 httpx 异步客户端
@@ -91,4 +119,5 @@ class GSVITTSClient:
 
 
 # 全局默认 TTS 客户端实例
-tts_client = GSVITTSClient(TTSConfig())
+# 使用 from_settings() 从 .env / 环境变量读取配置
+tts_client = GSVITTSClient(TTSConfig.from_settings())

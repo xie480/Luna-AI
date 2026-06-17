@@ -188,8 +188,29 @@ class Settings(BaseSettings):
     # ============================================================
     # TTS 服务配置
     # ============================================================
-    # TTS 服务启动脚本路径
+    # TTS 服务启动脚本路径（如配置，主程序启动时将自动拉起）
     tts_bat_path: str = ""
+
+    # TTS API 基础地址（GPT-SoVITS 或 OpenAI-compatible TTS 服务的 HTTP 地址）
+    tts_base_url: str = "http://127.0.0.1:8999"
+    # TTS API 端点路径
+    tts_endpoint: str = "/v1/audio/speech"
+    # TTS 默认模型名称（角色名，如"阿米娅"）
+    tts_default_model: str = "阿米娅"
+    # TTS 默认音色名称
+    tts_default_voice: str = "阿米娅"
+    # TTS 输出音频格式：mp3 / wav / ogg
+    tts_response_format: str = "mp3"
+    # TTS 语速倍率（1.0 为正常语速）
+    tts_speed: float = 1.0
+    # TTS HTTP 请求超时时间（秒）
+    tts_timeout: float = 120.0
+    # TTS 缓存目录（存放生成的音频文件）
+    tts_cache_dir: str = "data/tts_cache"
+    # GPT-SoVITS 服务端输出目录（用于同步备份已生成的音频）
+    tts_service_outputs_dir: str = ""
+    # TTS 缓存文件保留时长（小时），超过此时间的缓存将被清理
+    tts_cleanup_keep_hours: int = 24
 
     # ============================================================
     # Pydantic Settings 配置
