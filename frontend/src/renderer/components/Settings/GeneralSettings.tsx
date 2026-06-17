@@ -12,6 +12,8 @@ export const GeneralSettings: React.FC = () => {
   const setLive2dMaxFPS = useSystemStore((state) => state.setLive2dMaxFPS);
   const theme = useSystemStore((state) => state.theme);
   const setTheme = useSystemStore((state) => state.setTheme);
+  const isTTSEnabled = useSystemStore((state) => state.isTTSEnabled);
+  const setTTSEnabled = useSystemStore((state) => state.setTTSEnabled);
 
   return (
     <div className="settings-content-section">
@@ -62,6 +64,23 @@ export const GeneralSettings: React.FC = () => {
               type="checkbox"
               checked={isLive2dBackgroundSuspensionEnabled}
               onChange={(e) => setLive2dBackgroundSuspensionEnabled(e.target.checked)}
+            />
+            <span className="slider round"></span>
+          </label>
+        </div>
+      </div>
+
+      <div className="settings-item">
+        <div className="settings-item-info">
+          <div className="settings-item-title">本地 TTS 语音服务</div>
+          <div className="settings-item-desc">开启或关闭本地语音合成。需要先在 .env 中正确配置 TTS_BAT_PATH。</div>
+        </div>
+        <div className="settings-item-control">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={isTTSEnabled}
+              onChange={(e) => setTTSEnabled(e.target.checked)}
             />
             <span className="slider round"></span>
           </label>

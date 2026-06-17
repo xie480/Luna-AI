@@ -53,6 +53,7 @@ class ChatInputPayload(BaseModel):
     client_timestamp_ms: int = Field(default=0, ge=0, description="客户端时间戳（毫秒）。")
     locale: str = Field(default="zh-CN", description="本地化设置。")
     timezone: str = Field(default="Asia/Shanghai", description="时区设置。")
+    tts_enabled: bool = True
     attachment_meta_list: list[dict[str, Any]] = Field(default_factory=list)
     extra_context: dict[str, Any] = Field(default_factory=dict)
 

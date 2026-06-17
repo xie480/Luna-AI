@@ -47,6 +47,7 @@ class ChatRequestPayload(BaseModel):
     sessionId: str
     message: str
     msgId: str
+    ttsEnabled: bool = True
 
 
 async def get_trace_id(x_trace_id: Optional[str] = Header(None)) -> str:
@@ -178,7 +179,10 @@ async def chat_request(
         session_id=payload.sessionId,
         message=payload.message,
         frontend_message_id=payload.msgId,
+        # 可以通过 payload 传递给业务，这里为了简单起见，可以考虑在 Graph State 中增加配置，或者通过 Context 传递
     )
+    # 此处传递给工作流服务之前，我们需要改下 start_daily_chat 的签名或者把配置放进 state 里。
+    # 让我们来检查 start_daily_chat
     return APIResponse(
         type=WS_MSG_TYPE_CHAT_STREAM,
         trace_id=trace_id,

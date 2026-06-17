@@ -63,20 +63,35 @@ class MainChatLlmNode(ChatWorkflowNode):
                         break
                     
                     try:
-                        emotion_tag = map_emotion(state.generation_state.emotion)
-                        audio_path = await tts_client.synthesize_to_file(chunk_text, emotion=emotion_tag)
-                        # 为了绕过前端 CORS 和本地文件限制，我们这里返回特殊的 luna:// 协议 URI (将在 Electron 主进程拦截处理)
-                        audio_uri = f"luna://tts/{audio_path.name}"
+                        # 从 state 获取前端传递的 TTS 开关状态
+                        # 注意：需要确保前面在 input_payload 里能拿到或传进 state
+                        tts_enabled = getattr(state.input_payload, "tts_enabled", True)
                         
-                        await publish_stream_payload(
-                            state,
-                            CHAT_STREAM_TYPE_REPLY_CHUNK,
-                            chunk_text,
-                            False,
-                            self.dependencies.event_publisher,
-                            audio_uri=audio_uri,
-                            is_sentence_chunk=True,
-                        )
+                        if tts_enabled:
+                            emotion_tag = map_emotion(state.generation_state.emotion)
+                            audio_path = await tts_client.synthesize_to_file(chunk_text, emotion=emotion_tag)
+                            # 为了绕过前端 CORS 和本地文件限制，我们这里返回特殊的 luna:// 协议 URI
+                            audio_uri = f"luna://tts/{audio_path.name}"
+
+                            await publish_stream_payload(
+                                state,
+                                CHAT_STREAM_TYPE_REPLY_CHUNK,
+                                chunk_text,
+                                False,
+                                self.dependencies.event_publisher,
+                                audio_uri=audio_uri,
+                                is_sentence_chunk=True,
+                            )
+                        else:
+                            # TTS 未开启，直接发送文本
+                            await publish_stream_payload(
+                                state,
+                                CHAT_STREAM_TYPE_REPLY_CHUNK,
+                                chunk_text,
+                                False,
+                                self.dependencies.event_publisher,
+                                is_sentence_chunk=True, # 仍然是句子块，前端可以放入 playbackQueue
+                            )
                     except Exception as e:
                         from app.logger import logger
                         logger.error("TTS 合成消费任务发生错误: %s", e)
@@ -87,6 +102,7 @@ class MainChatLlmNode(ChatWorkflowNode):
                             chunk_text,
                             False,
                             self.dependencies.event_publisher,
+                            is_sentence_chunk=True,
                         )
                     finally:
                         sentence_queue.task_done()

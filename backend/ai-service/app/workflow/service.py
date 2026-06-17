@@ -85,6 +85,7 @@ class ChatWorkflowService:
         session_id: str,
         message: str,
         frontend_message_id: str,
+        tts_enabled: bool = True,
         locale: str = CHAT_WORKFLOW_DEFAULT_LOCALE,
         timezone: str = CHAT_WORKFLOW_DEFAULT_TIMEZONE,
     ) -> dict[str, str]:
@@ -131,6 +132,7 @@ class ChatWorkflowService:
                 client_timestamp_ms=current_time_ms(),
                 locale=locale,
                 timezone=timezone,
+                tts_enabled=tts_enabled,
             ),
             generation_state=ChatGenerationState(assistant_message_id=assistant_message_id),
         )

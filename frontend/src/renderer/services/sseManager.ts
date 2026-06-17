@@ -910,6 +910,7 @@ class SSEManager {
         sessionId,
         message,
         msgId: assistantMsgId,
+        ttsEnabled: systemStore.isTTSEnabled,
       }),
     }).then((resp) => {
       if (!resp.ok) {

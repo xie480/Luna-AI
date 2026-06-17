@@ -65,6 +65,8 @@ interface SystemState {
   clothingConfig: Record<string, boolean>;
   // Live2D 渲染开关
   isLive2dEnabled: boolean;
+  // 本地 TTS 语音开关
+  isTTSEnabled: boolean;
   // Live2D 空闲降频开关
   isLive2dIdleThrottlingEnabled: boolean;
   // Live2D 后台挂起开关
@@ -103,6 +105,8 @@ interface SystemState {
   setClothingConfig: (id: string, enabled: boolean) => void;
   // 设置 Live2D 渲染开关
   setLive2dEnabled: (enabled: boolean) => void;
+  // 设置 本地 TTS 语音开关
+  setTTSEnabled: (enabled: boolean) => void;
   // 设置 Live2D 空闲降频开关
   setLive2dIdleThrottlingEnabled: (enabled: boolean) => void;
   // 设置 Live2D 后台挂起开关
@@ -138,6 +142,18 @@ function loadClothingConfig(): Record<string, boolean> {
 function loadLive2dEnabled(): boolean {
   try {
     const raw = localStorage.getItem('luna:live2dEnabled');
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return true; // 默认开启
+}
+
+function loadTTSEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem('luna:ttsEnabled');
     if (raw !== null) {
       return JSON.parse(raw);
     }
@@ -215,6 +231,7 @@ export const useSystemStore = create<SystemState>((set) => ({
   // 初始化服装配置，从 localStorage 读取或使用空对象
   clothingConfig: loadClothingConfig(),
   isLive2dEnabled: loadLive2dEnabled(),
+  isTTSEnabled: loadTTSEnabled(),
   isLive2dIdleThrottlingEnabled: loadLive2dIdleThrottlingEnabled(),
   isLive2dBackgroundSuspensionEnabled: loadLive2dBackgroundSuspensionEnabled(),
   live2dMaxFPS: loadLive2dMaxFPS(),
@@ -302,6 +319,16 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误
       }
       return { isLive2dEnabled: enabled };
+    }),
+
+  setTTSEnabled: (enabled) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:ttsEnabled', JSON.stringify(enabled));
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { isTTSEnabled: enabled };
     }),
 
   setLive2dIdleThrottlingEnabled: (enabled) =>
