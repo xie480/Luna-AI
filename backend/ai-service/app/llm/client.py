@@ -1041,6 +1041,245 @@ class LLMClient:
         ):
             yield chunk_data
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=1, max=30),
+        stop=stop_after_attempt(3),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
+        before_sleep=lambda retry_state: logger.warning(
+            f"LLM 非流式 API 重试 {retry_state.attempt_number}/3 次，"
+            f"等待 {retry_state.next_action.sleep:.1f}s 后重试，"
+            f"异常类型: {type(retry_state.outcome.exception()).__name__}"
+        ) if retry_state.outcome and retry_state.outcome.failed else None,
+    )
+    async def _call_api_sync_with_retry(
+        self, messages: list[dict[str, str]], trace_id: str, **kwargs: Any
+    ) -> Any:
+        """
+        非流式 Chat Completions API 调用（带 tenacity 重试）。
+
+        做什么：对非流式 LLM API 调用提供与流式调用一致的重试策略。
+        为什么这样做：非流式请求同样可能遭遇 RateLimitError 或网络瞬时故障，
+                     必须复用统一的 3 次指数退避重试机制。
+        输入输出：输入 messages 列表和 API 参数，输出 ChatCompletion 响应对象。
+        边界条件：重试 3 次耗尽后 tenacity 会将最终异常上抛给调用方。
+        异常行为：RateLimitError / APIConnectionError 由 tenacity 自动重试；
+                 其他异常不做重试直接上抛。
+        """
+        # 清理不应透传给 OpenAI API 的内部参数
+        kwargs.pop("trace_id", None)
+        kwargs.pop("session_id", None)
+        kwargs.pop("message_id", None)
+        logger.info(
+            f"[TraceID:{trace_id}] 发起非流式 API 请求, "
+            f"model: {self.model_name}, 消息数: {len(messages)}"
+        )
+        return await self.client.chat.completions.create(
+            model=self.model_name,
+            messages=messages,
+            stream=False,
+            timeout=120.0,
+            **kwargs,
+        )
+
+    async def chat_sync(
+        self,
+        system_prompt: str,
+        history: list[dict[str, str]],
+        current_message: str,
+        trace_id: str,
+        disambiguated_text: str = "",
+        session_id: str = "",
+        message_id: str = "",
+        **kwargs: Any
+    ) -> str:
+        """
+        非流式对话接口——一次性获取 LLM 完整回复文本。
+
+        做什么：组装消息上下文（含 Token 裁剪），通过非流式 API 调用获取完整回复文本。
+                不做 JSON Schema 结构化约束，依赖 Prompt 内嵌的 JSON 格式指令。
+        为什么这样做：统一非流式响应模式下，后端等待完整回复后执行同步 TTS 合成，
+                     再将文本、音频、情绪等打包为单次 JSON 响应下发。
+        输入输出：
+            - 输入：system_prompt 系统提示词、history 上下文历史、
+                    current_message 当前用户消息、trace_id 全链路追踪 ID、
+                    session_id 会话 ID、message_id 消息 ID
+            - 输出：LLM 完整回复文本（str，原始全文不做任何加工）
+        边界条件：
+            - 上下文裁剪失败时降级为原始消息，不阻断主对话链路
+            - 裁剪后的 messages 直接作为 Chat Completions API 的 messages 参数
+        异常行为：
+            - RateLimitError / APIConnectionError：tenacity 自动重试 3 次，耗尽后上抛
+            - APIError / 其他异常：记录日志后上抛，由调用方（MainChatLlmNode）捕获并处理降级
+        """
+        # 1. 消息级 Token 裁剪（复用 stream_chat_with_context 的裁剪逻辑）
+        try:
+            from app.config.settings import global_config_container, settings
+            from app.types.constants import ModelSize
+            from app.llm.context_manager import (
+                measure_truncate_context, format_messages_for_api,
+            )
+            from app.context.compression_audit import (
+                create_compression_audit_payload,
+                record_compression_audit_payload,
+                record_compression_span,
+                CompressionActionEvent,
+                current_timestamp_ms,
+                COMPRESSION_EVENT_TRIGGERED,
+                COMPRESSION_EVENT_INPUT_MEASURED,
+                COMPRESSION_EVENT_COMPLETED,
+                COMPRESSION_EVENT_FAILED,
+                COMPRESSION_STATUS_SUCCESS,
+                COMPRESSION_STATUS_FAILED,
+            )
+            from app.types.constants import (
+                CompressionStage, CompressionTriggerReason, CompressionScope,
+            )
+
+            config = global_config_container.get_model_config(ModelSize.MEDIUM)
+            dynamic_max = config.get("max_context_tokens", 0)
+            max_context_tokens = dynamic_max if dynamic_max > 0 else settings.max_context_tokens
+
+            trim_started_at = current_timestamp_ms()
+            trim_metrics = measure_truncate_context(
+                system_prompt=system_prompt,
+                history=history,
+                current_message=current_message,
+                max_context_tokens=max_context_tokens,
+                model_name=self.model_name,
+            )
+            truncated_messages = format_messages_for_api(
+                system_prompt=system_prompt,
+                history=history,
+                current_message=current_message,
+                max_context_tokens=max_context_tokens,
+                model_name=self.model_name,
+            )
+
+            # 记录压缩审计（仅在发生实际裁剪时）
+            if trim_metrics.removed_history_count > 0 or trim_metrics.is_over_limit_after_trim:
+                def _serialize_messages(messages: list[dict[str, str]]) -> str:
+                    parts: list[str] = []
+                    for msg in messages:
+                        role = msg.get("role", "")
+                        content = msg.get("content", "")
+                        parts.append(f"[{role}]\n{content}")
+                    return "\n\n".join(parts)
+
+                before_text = _serialize_messages(history)
+                after_text = _serialize_messages(truncated_messages[1:-1])
+                failure_reason = "消息级裁剪后仍超出上下文限制" if trim_metrics.is_over_limit_after_trim else ""
+                events = [
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_TRIGGERED,
+                        timestamp_ms=trim_started_at,
+                        detail="最终 Prompt 输入超过上限，触发消息级裁剪（非流式路径）",
+                        payload={"removed_history_count": trim_metrics.removed_history_count},
+                    ),
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_INPUT_MEASURED,
+                        timestamp_ms=current_timestamp_ms(),
+                        detail="已测量消息级裁剪前后 Token",
+                        payload={
+                            "before_tokens": trim_metrics.before_tokens,
+                            "after_tokens": trim_metrics.after_tokens,
+                            "removed_history_count": trim_metrics.removed_history_count,
+                        },
+                    ),
+                    CompressionActionEvent(
+                        event_type=COMPRESSION_EVENT_COMPLETED if not trim_metrics.is_over_limit_after_trim else COMPRESSION_EVENT_FAILED,
+                        timestamp_ms=current_timestamp_ms(),
+                        detail="消息级裁剪完成（非流式路径）" if not trim_metrics.is_over_limit_after_trim else "消息级裁剪后仍超出限制（非流式路径）",
+                        payload={"removed_history_count": trim_metrics.removed_history_count},
+                    ),
+                ]
+                payload = create_compression_audit_payload(
+                    trace_id=trace_id,
+                    session_id=session_id,
+                    message_id=message_id,
+                    stage=CompressionStage.MESSAGE_TRIM,
+                    scope=CompressionScope.SESSION_HISTORY,
+                    trigger_reason=CompressionTriggerReason.FINAL_PROMPT_TOKEN_OVER_LIMIT,
+                    source_keys=["history"],
+                    before_text=before_text,
+                    after_text=after_text,
+                    raw_tokens=trim_metrics.before_tokens,
+                    after_trim_tokens=trim_metrics.after_tokens,
+                    final_tokens=trim_metrics.after_tokens,
+                    is_success=not trim_metrics.is_over_limit_after_trim,
+                    failure_reason=failure_reason,
+                    events=events,
+                    timestamp_ms=trim_started_at,
+                )
+                duration_ms = max(1, current_timestamp_ms() - trim_started_at)
+                record_compression_audit_payload(
+                    payload,
+                    status=COMPRESSION_STATUS_SUCCESS if payload.is_success else COMPRESSION_STATUS_FAILED,
+                )
+                record_compression_span(
+                    payload,
+                    duration_ms=duration_ms,
+                    status=COMPRESSION_STATUS_SUCCESS if payload.is_success else COMPRESSION_STATUS_FAILED,
+                )
+        except Exception as e:
+            logger.error(f"[TraceID:{trace_id}] 非流式对话上下文裁剪失败，使用原始消息: {e}")
+            truncated_messages = [
+                {"role": Role.SYSTEM.value, "content": system_prompt},
+                *history,
+                {"role": Role.USER.value, "content": current_message},
+            ]
+
+        # 2. 应用消歧文本替换最后一条用户消息
+        final_message = disambiguated_text if disambiguated_text else current_message
+        for i in range(len(truncated_messages) - 1, -1, -1):
+            if truncated_messages[i].get("role") == Role.USER.value:
+                truncated_messages[i] = {"role": Role.USER.value, "content": final_message}
+                break
+
+        # 3. 频率控制
+        await self._wait_for_slot(
+            trace_id=trace_id,
+            session_id=session_id,
+            message_id=message_id,
+        )
+
+        # 4. 非流式 API 调用（带 tenacity 重试）
+        logger.info(
+            f"[TraceID:{trace_id}] 开始非流式 LLM 调用, "
+            f"model: {self.model_name}, 消息数: {len(truncated_messages)}"
+        )
+        try:
+            response = await self._call_api_sync_with_retry(
+                messages=truncated_messages,
+                trace_id=trace_id,
+                session_id=session_id,
+                message_id=message_id,
+                **kwargs,
+            )
+            content = response.choices[0].message.content or ""
+            logger.info(
+                f"[TraceID:{trace_id}] 非流式 LLM 调用完成, "
+                f"回复长度: {len(content)} 字符"
+            )
+            return content
+        except (RateLimitError, APIConnectionError) as e:
+            logger.error(
+                f"[TraceID:{trace_id}] 非流式 LLM API 重试耗尽后仍失败: "
+                f"{type(e).__name__}: {e}"
+            )
+            raise
+        except APIError as e:
+            logger.error(
+                f"[TraceID:{trace_id}] 非流式 LLM API 返回错误: "
+                f"status_code={e.status_code}, message={e.message}"
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                f"[TraceID:{trace_id}] 非流式 LLM API 发生未知错误: "
+                f"{type(e).__name__}: {e}"
+            )
+            raise
+
 
 # 全局单例
 llm_client = LLMClient()

@@ -333,6 +333,11 @@ class ChatStatusStage(str, Enum):
     MCP_SKILL_SUMMARY = "mcp_skill_summary"
     # --- LLM 调用频率限制等待阶段 ---
     LLM_RATE_LIMIT_WAIT = "llm_rate_limit_wait"
+    # --- 非流式统一响应模式新增阶段 ---
+    LLM_CALLING = "llm_calling"             # 新增：正在调用 LLM（非流式，等待完整回复）
+    LLM_PARSING = "llm_parsing"             # 新增：正在解析 LLM 结构化输出（提取 thought/emotion/reply）
+    TTS_SYNTHESIZING = "tts_synthesizing"   # 新增：正在合成 TTS 完整音频
+    FINAL_RESPONSE = "final_response"       # 新增：正在组装并发送最终响应包
 
 
 class ChatStatusState(str, Enum):

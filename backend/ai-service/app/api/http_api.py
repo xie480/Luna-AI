@@ -44,10 +44,13 @@ class InitStateRequestPayload(BaseModel):
 
 
 class ChatRequestPayload(BaseModel):
+    """前端 /api/chat POST 请求体。"""
     sessionId: str
     message: str
     msgId: str
     ttsEnabled: bool = True
+    # LLM 响应模式：streaming（流式） / unified（统一非流式），默认可由前端传入
+    llmResponseMode: str = "unified"
 
 
 async def get_trace_id(x_trace_id: Optional[str] = Header(None)) -> str:
@@ -174,15 +177,15 @@ async def chat_request(
         raise HTTPException(status_code=400, detail="message is required")
     if not chat_workflow_service:
         raise HTTPException(status_code=503, detail="ChatWorkflowService 未初始化")
+    # 将前端传入的 LLM 响应模式透传给工作流服务
     result_payload = await chat_workflow_service.start_daily_chat(
         trace_id=trace_id,
         session_id=payload.sessionId,
         message=payload.message,
         frontend_message_id=payload.msgId,
-        # 可以通过 payload 传递给业务，这里为了简单起见，可以考虑在 Graph State 中增加配置，或者通过 Context 传递
+        tts_enabled=payload.ttsEnabled,
+        llm_response_mode=payload.llmResponseMode,
     )
-    # 此处传递给工作流服务之前，我们需要改下 start_daily_chat 的签名或者把配置放进 state 里。
-    # 让我们来检查 start_daily_chat
     return APIResponse(
         type=WS_MSG_TYPE_CHAT_STREAM,
         trace_id=trace_id,

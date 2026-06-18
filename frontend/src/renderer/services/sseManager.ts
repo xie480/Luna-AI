@@ -18,6 +18,7 @@ import {
   ChatPostprocessPayload,
   ChatStatusPayload,
   ChatStreamPayload,
+  ChatUnifiedResponsePayload,
   ChatWorkflowEventEnvelope,
   ChatWorkflowNodeType,
   EmotionUpdatePayload,
@@ -662,13 +663,25 @@ class SSEManager {
 
   /**
    * 处理聊天流式输出（通过 SSE 接收的 ChatStreamPayload）。
+   *
+   * 做什么：根据 payload.type 分流到不同的处理路径——
+   *   - unified_response：新协议，委托给 unifiedResponseHandler 处理整个回复包
+   *   - reply_chunk / emotion_update 等：旧协议，沿用既有流式气泡渲染逻辑
+   * 为什么这样做：过渡期需要同时兼容新旧两种协议，通过类型标识自动分流。
    */
   private handleChatStream(payload: ChatStreamPayload): void {
+    // ---- 新协议分流：统一响应包 ----
+    const rawType = (payload as ChatStreamPayload & { type?: string }).type;
+    if (rawType === 'unified_response') {
+      this.handleUnifiedResponseStream(payload as unknown as ChatUnifiedResponsePayload);
+      return;
+    }
+
     const systemStore = useSystemStore.getState();
     const sessionStore = useSessionStore.getState();
     const currentSessionId = sessionStore.currentSessionId;
     const assistantMessageId = payload.assistant_message_id || payload.node_id;
-    const msgType = payload.type || 'reply_chunk';
+    const msgType = rawType || 'reply_chunk';
     const recentMemoryEntry = this.pendingRecentMemoryMap.get(assistantMessageId);
 
     // ---- 第一步：处理所有消息类型共有的内容更新 ----
@@ -785,6 +798,112 @@ class SSEManager {
         }
       });
     }
+  }
+
+  /**
+   * 处理统一响应流（新协议 unified_response）。
+   *
+   * 做什么：接收后端一次合成的完整回复包，执行两个维度的处理——
+   *   1. 状态维度：更新 sessionStore 消息内容、元数据、状态
+   *   2. 渲染维度：委托 unifiedResponseHandler 驱动 Live2D 表情、气泡队列、TTS 音频
+   * 为什么这样做：统一响应是一次性完整数据，不需要流式逐字拼接，
+   *             但仍然需要正确更新 Store 中的消息状态和近期记忆。
+   * 输入输出：输入 ChatUnifiedResponsePayload，输出为 Store 更新与 UI 副作用。
+   * 边界条件：
+   *   - reply_text 为空时只更新状态不渲染气泡
+   *   - error 非空时标记消息为 error 状态
+   * 异常行为：无。
+   */
+  private handleUnifiedResponseStream(payload: ChatUnifiedResponsePayload): void {
+    const systemStore = useSystemStore.getState();
+    const sessionStore = useSessionStore.getState();
+    const currentSessionId = sessionStore.currentSessionId;
+    const assistantMessageId = payload.assistant_message_id;
+    const recentMemoryEntry = this.pendingRecentMemoryMap.get(assistantMessageId);
+
+    // ---- 更新 sessionStore：完整回复文本 ----
+    if (currentSessionId) {
+      sessionStore.updateMessageChunk(currentSessionId, assistantMessageId, payload.reply_text);
+
+      const streamMetadata: Record<string, unknown> = {};
+      if (payload.schema_version) {
+        streamMetadata.schemaVersion = payload.schema_version;
+      }
+      if (payload.interaction_id) {
+        streamMetadata.interactionId = payload.interaction_id;
+      }
+      if (payload.assistant_message_id) {
+        streamMetadata.assistantMessageId = payload.assistant_message_id;
+      }
+      if (payload.citations) {
+        streamMetadata.citations = payload.citations;
+      }
+      if (payload.e2e_latency_ms !== undefined) {
+        streamMetadata.e2eLatencyMs = payload.e2e_latency_ms;
+      }
+      if (Object.keys(streamMetadata).length > 0) {
+        sessionStore.updateMessageMetadata(currentSessionId, assistantMessageId, streamMetadata);
+      }
+    }
+
+    // ---- 更新近期记忆内容 ----
+    if (recentMemoryEntry) {
+      recentMemoryEntry.assistantContent += payload.reply_text;
+      recentMemoryEntry.hasBubbleContent =
+        recentMemoryEntry.hasBubbleContent || payload.reply_text.trim().length > 0;
+    }
+
+    // ---- 标记消息完成 ----
+    const status = payload.error ? 'error' : 'completed';
+    if (currentSessionId) {
+      sessionStore.updateMessageStatus(currentSessionId, assistantMessageId, status);
+    }
+
+    if (payload.error) {
+      const errMsg = `生成失败: ${payload.error}`;
+      systemStore.addSystemLog(errMsg);
+      window.dispatchEvent(
+        new CustomEvent('luna:notification', {
+          detail: { message: errMsg, type: 'error', source: 'unified_response' },
+        }),
+      );
+    }
+
+    sessionStore.clearAllWaitingStates();
+
+    // ---- 近期记忆提交 ----
+    if (recentMemoryEntry) {
+      recentMemoryEntry.streamFinished = true;
+
+      if (!recentMemoryEntry.hasBubbleContent) {
+        this.flushPendingRecentMemory(assistantMessageId, 'unified-finished-without-bubbles');
+      } else {
+        window.dispatchEvent(
+          new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
+            detail: {
+              batchId: assistantMessageId,
+              finishedAt: Date.now(),
+            },
+          }),
+        );
+      }
+    }
+
+    // ---- 日历记录更新 ----
+    import('../stores/historyStore').then(({ useHistoryStore }) => {
+      const historyState = useHistoryStore.getState();
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      historyState.addCalendarRecord(todayStr);
+      if (historyState.selectedDate === todayStr) {
+        historyState.fetchChatHistory(todayStr);
+      }
+    });
+
+    // ---- 委托 UI 渲染：Live2D 表情 + 语义切分 + 气泡队列 + TTS 音频 ----
+    import('./unifiedResponseHandler').then(({ handleUnifiedResponse }) => {
+      handleUnifiedResponse(payload);
+    });
   }
 
   /**
@@ -911,6 +1030,8 @@ class SSEManager {
         message,
         msgId: assistantMsgId,
         ttsEnabled: systemStore.isTTSEnabled,
+        // LLM 响应模式：unified（统一非流式，默认）/ streaming（传统流式兼容）
+        llmResponseMode: systemStore.llmResponseMode ?? 'unified',
       }),
     }).then((resp) => {
       if (!resp.ok) {

@@ -11,9 +11,10 @@ from app.workflow.constants import (
     CHAT_STREAM_TYPE_REPLY_CHUNK,
     CHAT_STREAM_TYPE_THOUGHT_CONTENT,
     ChatWorkflowNodeType,
+    ChatWorkflowSchemaVersion,
 )
 from app.workflow.context import ChatWorkflowState
-from app.workflow.events import ChatStreamChunkPayload, ChatWorkflowEventPublisher
+from app.workflow.events import ChatStreamChunkPayload, ChatUnifiedResponsePayload, ChatWorkflowEventPublisher
 
 
 def format_recent_history(history: list[dict[str, Any]] | list[Interaction]) -> str:
@@ -134,4 +135,63 @@ async def publish_stream_payload(
         state.runtime.interaction_id,
         msg_type,
         is_finished,
+    )
+
+
+async def publish_unified_response(
+    state: ChatWorkflowState,
+    full_text: str,
+    thought_text: str,
+    emotion: str,
+    audio_uri: str | None,
+    finish_reason: str,
+    event_publisher: ChatWorkflowEventPublisher | None,
+    *,
+    error: str = "",
+) -> None:
+    """推送非流式统一响应包到前端。
+
+    做什么：将 LLM 完整回复、内心独白、情绪、TTS 音频 URI 和元数据打包为单次 SSE 事件下发。
+    为什么这样做：前端收到此事件后，自行负责语义切分、气泡渲染和音画同步。
+    输入输出：
+        - 输入：state 工作流状态、full_text 完整回复、thought_text 内心独白、
+                emotion 情绪、audio_uri 音频地址、finish_reason 结束原因、
+                event_publisher 事件发布器
+        - 输出：通过 SSE 广播给前端
+    边界条件：
+        - audio_uri 为 None 时前端不播放音频（纯文本模式）
+        - thought_text 或 emotion 为空时前端不渲染对应区域
+    异常行为：
+        - event_publisher 为 None 时静默跳过，不抛异常
+    """
+    if not event_publisher:
+        return
+    from app.api.sse import sse_manager
+
+    payload = ChatUnifiedResponsePayload(
+        reply_text=full_text,
+        thought_text=thought_text,
+        emotion=emotion,
+        audio_uri=audio_uri,
+        schema_version=ChatWorkflowSchemaVersion.CHAT_WORKFLOW_V1,
+        interaction_id=state.runtime.interaction_id,
+        assistant_message_id=state.generation_state.assistant_message_id,
+        finish_reason=finish_reason,
+        e2e_latency_ms=state.generation_state.e2e_latency_ms,
+        citations=[item.model_dump(mode="json") for item in state.generation_state.citations],
+        error=error,
+    )
+    await sse_manager.publish(
+        {
+            "type": WS_MSG_TYPE_CHAT_STREAM,
+            "trace_id": state.runtime.trace_id,
+            "payload": payload.model_dump(mode="json"),
+        }
+    )
+    logger.info(
+        "[TraceID:%s] 非流式统一响应已推送 interaction_id=%s e2e_latency_ms=%d audio_uri=%s",
+        state.runtime.trace_id,
+        state.runtime.interaction_id,
+        state.generation_state.e2e_latency_ms,
+        audio_uri or "None",
     )

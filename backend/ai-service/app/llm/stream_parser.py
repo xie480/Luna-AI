@@ -56,9 +56,13 @@ class StreamParser:
     """LLM 流式输出的状态机解析器。
 
     解析顺序：check（跳过）→ thought（捕获并输出）→ emotion（提取）→ reply（切分）。
+
+    当 disable_sentence_split=True 时，reply 字段不做断句切分，作为完整文本返回。
+    此模式用于非流式统一响应场景，后端拿到完整 LLM 回复后只需提取 thought/emotion/reply，
+    reply 的语义切分交由前端执行。
     """
 
-    def __init__(self, trace_id: str) -> None:
+    def __init__(self, trace_id: str, disable_sentence_split: bool = False) -> None:
         self.trace_id = trace_id
         self._state: _ParseState = _ParseState.WAITING_CHECK
         self._emotion_sent: bool = False
@@ -69,6 +73,9 @@ class StreamParser:
         self._intermediate_buffer: str = ""  # 用于缓冲 thought 结束到 reply 开始之间的碎片
         self._search_buffer: str = ""        # 新增：全局搜索缓冲
         self._pending_prefix: str = ""       # 新增：用于暂存省略号等前缀，避免死循环
+        self._disable_sentence_split: bool = disable_sentence_split
+            # 新增：禁用 reply 断句时，reply 文本完整返回不做切分
+            # thought 和 emotion 的提取逻辑不受此参数影响
 
     def _emit_thought(self) -> list[tuple[str, str]]:
         """返回 thought 内容的输出消息（如果尚未发送且有内容）。"""
@@ -127,6 +134,10 @@ class StreamParser:
         """
         从文本中提取 emotion 和切分 reply。
         内部方法，允许多次调用以处理不同文本片段。
+
+        当 self._disable_sentence_split=True 时：
+            reply 文本完整累积到 _reply_buffer，不做断句切分。
+            feed() 调用期间不返回任何 reply_chunk，所有 reply 内容由 flush() 一次性返回。
         """
         msgs: list[tuple[str, str]] = []
         
@@ -148,11 +159,15 @@ class StreamParser:
                 # 将 reply 起始标记之后的内容放入 reply_buffer
                 self._reply_buffer += self._intermediate_buffer[m.end():]
                 self._intermediate_buffer = ""  # 释放缓冲池
-                msgs.extend(self._pop_sentence())
+                # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
+                if not self._disable_sentence_split:
+                    msgs.extend(self._pop_sentence())
         else:
-            # 已经进入 reply 读取阶段，直接追加并切分
+            # 已经进入 reply 读取阶段，直接追加到底
             self._reply_buffer += text
-            msgs.extend(self._pop_sentence())
+            # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
+            if not self._disable_sentence_split:
+                msgs.extend(self._pop_sentence())
             
         return msgs
 
@@ -189,7 +204,12 @@ class StreamParser:
         return msgs
 
     def flush(self) -> list[tuple[str, str]]:
-        """在流结束时调用，返回 thought 和剩余 reply 内容。"""
+        """在流结束时调用，返回 thought 和剩余 reply 内容。
+
+        当 disable_sentence_split=True 时：reply 字段作为完整文本返回，
+        仅移除 JSON 结束符，保留原文标点和格式。
+        当 disable_sentence_split=False 时：保持现有行为，对末尾内容执行标点过滤。
+        """
         if self._state == _ParseState.READING_THOUGHT:
             self._thought_buffer += self._search_buffer
             self._search_buffer = ""
@@ -199,13 +219,20 @@ class StreamParser:
         
         remaining = self._pending_prefix + self._reply_buffer
         if remaining:
-            # 【问题2优化】对末尾剩余内容同样执行标点过滤
-            sentence = remaining.strip()
-            # 移除可能残留的 JSON 结束符
-            sentence = sentence.replace('"}', '').replace('"', '').replace('}', '')
-            sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
-            if sentence:
-                msgs.append(("reply_chunk", sentence))
+            if self._disable_sentence_split:
+                # 取消断句模式：仅移除 JSON 结束符，保留原文标点和格式
+                sentence = remaining.strip()
+                sentence = sentence.replace('"}', '').replace('"', '').replace('}', '')
+                # 不执行标点过滤，保留完整原文供前端语义切分
+                if sentence:
+                    msgs.append(("reply_chunk", sentence))
+            else:
+                # 流式断句模式：保持现有行为，对末尾内容执行标点过滤
+                sentence = remaining.strip()
+                sentence = sentence.replace('"}', '').replace('"', '').replace('}', '')
+                sentence = _TRAILING_PUNCTUATION_RE.sub('', sentence)
+                if sentence:
+                    msgs.append(("reply_chunk", sentence))
             self._reply_buffer = ""
             self._pending_prefix = ""
         return msgs

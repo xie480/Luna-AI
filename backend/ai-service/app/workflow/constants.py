@@ -168,6 +168,8 @@ PROMPT_VARIABLE_EMOTION_TRIGGER: Final[str] = "EMOTION_TRIGGER"
 CHAT_STREAM_TYPE_REPLY_CHUNK: Final[str] = "reply_chunk"
 CHAT_STREAM_TYPE_THOUGHT_CONTENT: Final[str] = "thought_content"
 CHAT_STREAM_TYPE_EMOTION_UPDATE: Final[str] = "emotion_update"
+# 非流式统一响应事件类型
+CHAT_STREAM_TYPE_UNIFIED_RESPONSE: Final[str] = "unified_response"
 CHAT_STREAM_GENERATION_ERROR: Final[str] = "generation_failed"
 CHAT_STREAM_EMPTY_RESPONSE_ERROR: Final[str] = "Assistant returned empty content"
 

@@ -185,6 +185,12 @@ class Settings(BaseSettings):
     # 调用大模型间隔时间(秒)
     llm_call_interval_seconds: float = 0.0
 
+    # LLM 响应模式：streaming（流式） / unified（统一非流式）
+    # unified 模式下后端一次性调用 LLM 获取完整回复，经 StreamParser 解析后，
+    # 通过单个 ChatUnifiedResponsePayload 将所有内容（回复文本、思考、情绪、音频 URI）
+    # 统一推送给前端，前端再按语义切分后逐气泡渲染并同步 TTS 口型
+    llm_response_mode: str = "unified"
+
     # ============================================================
     # TTS 服务配置
     # ============================================================

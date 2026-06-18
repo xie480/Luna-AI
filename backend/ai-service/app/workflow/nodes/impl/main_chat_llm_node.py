@@ -1,4 +1,9 @@
-"""主 Chat LLM 节点。"""
+"""主 Chat LLM 节点。
+
+支持两种回复模式：
+  1. streaming（默认）：流式逐句生成 + TTS 分段合成，边生成边推送给前端
+  2. unified：非流式统一响应，后端等待完整回复 → 解析 → TTS 合成 → 打包一次性下发
+"""
 
 from __future__ import annotations
 
@@ -17,11 +22,15 @@ from app.workflow.constants import (
 from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
 from app.workflow.nodes.dependencies import WorkflowDependencies
-from app.workflow.nodes.helpers import handle_stream_piece, history_to_model_messages, publish_stream_payload
+from app.workflow.nodes.helpers import handle_stream_piece, history_to_model_messages, publish_stream_payload, publish_unified_response
+
+
+# 非流式统一响应模式的标识值
+_UNIFIED_MODE = "unified"
 
 
 class MainChatLlmNode(ChatWorkflowNode):
-    """主 Chat LLM 流式生成节点。"""
+    """主 Chat LLM 生成节点。"""
 
     def __init__(self, dependencies: WorkflowDependencies):
         super().__init__(
@@ -34,6 +43,36 @@ class MainChatLlmNode(ChatWorkflowNode):
         return await self.run_with_observation(state, self._handle)
 
     async def _handle(self, state: ChatWorkflowState) -> ChatWorkflowState:
+        """
+        主 Chat LLM 生成入口。
+
+        做什么：根据 input_payload.llm_response_mode 分流到流式或非流式模式。
+                流式模式保持原有行为不变；非流式模式执行"等待→解析→TTS→打包下发"四阶段流水线。
+        为什么这样做：支持前端按需选择回复模式，同时保持后端控制面不动摇。
+        输入输出：
+            - 输入/输出：ChatWorkflowState
+        边界条件：
+            - llm_response_mode 缺失时默认为 streaming
+            - 非流式模式下 TTS 合成失败降级为纯文本
+        异常行为：
+            - 非流式 LLM 调用失败直接抛出异常，由 run_with_observation 捕获审计
+        """
+        # 读取回复模式（前端传入，默认 streaming）
+        llm_response_mode = getattr(state.input_payload, "llm_response_mode", "streaming")
+
+        if llm_response_mode == _UNIFIED_MODE:
+            await self._handle_unified(state)
+        else:
+            await self._handle_streaming(state)
+
+        return state
+
+    # ================================================================
+    # 流式模式（保持现有行为不变）
+    # ================================================================
+
+    async def _handle_streaming(self, state: ChatWorkflowState) -> None:
+        """流式逐句生成 + TTS 分段合成。"""
         import asyncio
         from app.llm.client import llm_client
         from app.llm.stream_parser import StreamParser
@@ -63,14 +102,11 @@ class MainChatLlmNode(ChatWorkflowNode):
                         break
                     
                     try:
-                        # 从 state 获取前端传递的 TTS 开关状态
-                        # 注意：需要确保前面在 input_payload 里能拿到或传进 state
                         tts_enabled = getattr(state.input_payload, "tts_enabled", True)
                         
                         if tts_enabled:
                             emotion_tag = map_emotion(state.generation_state.emotion)
                             audio_path = await tts_client.synthesize_to_file(chunk_text, emotion=emotion_tag)
-                            # 为了绕过前端 CORS 和本地文件限制，我们这里返回特殊的 luna:// 协议 URI
                             audio_uri = f"luna://tts/{audio_path.name}"
 
                             await publish_stream_payload(
@@ -83,19 +119,17 @@ class MainChatLlmNode(ChatWorkflowNode):
                                 is_sentence_chunk=True,
                             )
                         else:
-                            # TTS 未开启，直接发送文本
                             await publish_stream_payload(
                                 state,
                                 CHAT_STREAM_TYPE_REPLY_CHUNK,
                                 chunk_text,
                                 False,
                                 self.dependencies.event_publisher,
-                                is_sentence_chunk=True, # 仍然是句子块，前端可以放入 playbackQueue
+                                is_sentence_chunk=True,
                             )
                     except Exception as e:
                         from app.logger import logger
                         logger.error("TTS 合成消费任务发生错误: %s", e)
-                        # 降级：仅下发文本，无音频
                         await publish_stream_payload(
                             state,
                             CHAT_STREAM_TYPE_REPLY_CHUNK,
@@ -140,14 +174,6 @@ class MainChatLlmNode(ChatWorkflowNode):
                         state.generation_state.ttft_ms = int((time.time() - started) * 1000)
                         first_chunk = False
 
-                        # 首个正文 chunk 到达时发布 LLM_STREAMING 运行态
-                        # 为什么 is_visible=True, is_terminal=False：
-                        #   之前使用 is_visible=False + is_terminal=True 作为"清理前置状态"的手段，
-                        #   但这会导致前端的 visualStatusQueueStore 在 _popNext 中遇到 isTerminal &&
-                        #   !text 时立即清空队列，使状态栏在 LLM 流式生成期间错误地跳回空闲态。
-                        #   现在改为带有文案的可见状态（is_visible=True, is_terminal=False），
-                        #   确保在整个流式生成期间前端持续保持在"神经连结供能"激活态，
-                        #   直到后续的 COMPLETED / ERROR 或 FinalizeNode 的最终 terminal 到来才退出。
                         await self._publish_chat_status(
                             state=state,
                             stage=ChatStatusStage.LLM_STREAMING,
@@ -159,9 +185,7 @@ class MainChatLlmNode(ChatWorkflowNode):
 
                     for msg_type, content in parser.feed(chunk_data.get("chunk", "")):
                         if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
-                            # 累加全文
                             state.generation_state.full_text += content
-                            # 将切分好的断句放入队列等待 TTS 生成音频
                             await sentence_queue.put(content)
                         else:
                             await handle_stream_piece(state, msg_type, content, False, self.dependencies.event_publisher)
@@ -240,7 +264,239 @@ class MainChatLlmNode(ChatWorkflowNode):
                     )
                     raise RuntimeError(f"主模型生成失败(已重试 {attempt} 次): {exc}") from exc
 
-        return state
+    # ================================================================
+    # 非流式统一响应模式
+    # ================================================================
+
+    async def _handle_unified(self, state: ChatWorkflowState) -> None:
+        """
+        非流式统一响应流水线：等待 LLM → 解析 → TTS → 打包下发。
+
+        做什么：
+            1. 推送 LLM_CALLING 状态 → 调用 llm_client.chat_sync() 获取完整回复
+            2. 推送 LLM_PARSING 状态 → 使用 StreamParser(disable_sentence_split=True) 提取 thought/emotion/reply
+            3. 推送 TTS_SYNTHESIZING 状态 → 对完整 reply 文本调用 TTS 合成
+            4. 推送 FINAL_RESPONSE 状态 → 调用 publish_unified_response() 一次性下发
+        为什么这样做：
+            后端等待完整回复后执行同步 TTS 合成，再将文本、音频、情绪等打包为单次 JSON 响应下发。
+            前端收到后自行负责语义切分、气泡渲染和音画同步。
+        边界条件：
+            - TTS 合成失败时降级为纯文本（audio_uri=None）
+            - LLM 调用失败直接上抛异常
+        """
+        from app.logger import logger
+        from app.llm.client import llm_client
+        from app.llm.stream_parser import StreamParser
+        from app.tts import tts_client, map_emotion
+
+        trace_id = state.runtime.trace_id
+        logger.info("[TraceID:%s] 非流式统一响应模式启动", trace_id)
+
+        # ============================================================
+        # 阶段 1：调用 LLM 获取完整回复
+        # ============================================================
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.LLM_CALLING,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.RUNNING),
+            is_visible=True,
+            is_terminal=False,
+        )
+
+        generation_started_at = time.time()
+        state.generation_state.generation_started_at_ms = int(generation_started_at * 1000)
+        state.generation_state.model_name = llm_client.model_name
+        state.generation_state.provider_name = getattr(llm_client, "base_url", "")
+
+        try:
+            raw_response = await llm_client.chat_sync(
+                system_prompt=state.prompt_state.system_prompt_text,
+                history=history_to_model_messages(state.session_state.recent_messages),
+                current_message=state.input_payload.raw_user_message,
+                trace_id=trace_id,
+                disambiguated_text=state.route_state.disambiguated_text or state.input_payload.raw_user_message,
+                session_id=state.runtime.session_id,
+                message_id=state.generation_state.assistant_message_id,
+            )
+        except Exception:
+            # LLM 调用失败，推送 ERROR 状态后上抛
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.LLM_CALLING,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.ERROR),
+                is_visible=True,
+                is_terminal=True,
+                error="LLM 调用失败",
+            )
+            raise
+
+        state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
+        logger.info(
+            "[TraceID:%s] 非流式 LLM 调用完成 e2e_latency_ms=%d 回复长度=%d",
+            trace_id,
+            state.generation_state.e2e_latency_ms,
+            len(raw_response),
+        )
+
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.LLM_CALLING,
+            status=ChatStatusState.COMPLETED,
+            display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.COMPLETED),
+            is_visible=True,
+            is_terminal=False,
+        )
+
+        # ============================================================
+        # 阶段 2：解析回复（提取 thought / emotion / reply）
+        # ============================================================
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.LLM_PARSING,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.LLM_PARSING, ChatStatusState.RUNNING),
+            is_visible=True,
+            is_terminal=False,
+        )
+
+        # 使用 disable_sentence_split=True 模式：不切句，完整保留 reply 原文
+        parser = StreamParser(trace_id, disable_sentence_split=True)
+
+        # 一次性喂入完整文本
+        for msg_type, content in parser.feed(raw_response):
+            if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
+                state.generation_state.full_text += content
+            elif msg_type == "thought_content":
+                state.generation_state.thought_text += content
+            elif msg_type == "emotion_update":
+                state.generation_state.emotion = content
+
+        # flush 获取剩余内容
+        for msg_type, content in parser.flush():
+            if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
+                state.generation_state.full_text += content
+            elif msg_type == "thought_content":
+                state.generation_state.thought_text += content
+            elif msg_type == "emotion_update":
+                state.generation_state.emotion = content
+
+        state.generation_state.finish_reason = "stop"
+
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.LLM_PARSING,
+            status=ChatStatusState.COMPLETED,
+            display_text=get_chat_status_text(ChatStatusStage.LLM_PARSING, ChatStatusState.COMPLETED),
+            is_visible=True,
+            is_terminal=False,
+        )
+
+        # ============================================================
+        # 阶段 3：TTS 合成完整音频
+        # ============================================================
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.TTS_SYNTHESIZING,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.RUNNING),
+            is_visible=True,
+            is_terminal=False,
+        )
+
+        audio_uri: str | None = None
+        tts_enabled = getattr(state.input_payload, "tts_enabled", True)
+
+        if tts_enabled and state.generation_state.full_text:
+            try:
+                emotion_tag = map_emotion(state.generation_state.emotion)
+                audio_path = await tts_client.synthesize_to_file(
+                    state.generation_state.full_text, emotion=emotion_tag
+                )
+                audio_uri = f"luna://tts/{audio_path.name}"
+                logger.info(
+                    "[TraceID:%s] TTS 合成完成 audio_uri=%s 文本长度=%d",
+                    trace_id,
+                    audio_uri,
+                    len(state.generation_state.full_text),
+                )
+                await self._publish_chat_status(
+                    state=state,
+                    stage=ChatStatusStage.TTS_SYNTHESIZING,
+                    status=ChatStatusState.COMPLETED,
+                    display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.COMPLETED),
+                    is_visible=True,
+                    is_terminal=False,
+                )
+            except Exception as e:
+                # TTS 合成失败不阻断主流程，降级为纯文本
+                logger.warning(
+                    "[TraceID:%s] TTS 合成失败，降级为纯文本: %s",
+                    trace_id,
+                    e,
+                )
+                audio_uri = None
+                await self._publish_chat_status(
+                    state=state,
+                    stage=ChatStatusStage.TTS_SYNTHESIZING,
+                    status=ChatStatusState.SKIPPED,
+                    display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.SKIPPED),
+                    is_visible=True,
+                    is_terminal=False,
+                )
+        else:
+            # TTS 未开启
+            await self._publish_chat_status(
+                state=state,
+                stage=ChatStatusStage.TTS_SYNTHESIZING,
+                status=ChatStatusState.SKIPPED,
+                display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.SKIPPED),
+                is_visible=True,
+                is_terminal=False,
+            )
+
+        # ============================================================
+        # 阶段 4：打包并下发统一响应
+        # ============================================================
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.FINAL_RESPONSE,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.FINAL_RESPONSE, ChatStatusState.RUNNING),
+            is_visible=True,
+            is_terminal=False,
+        )
+
+        await publish_unified_response(
+            state=state,
+            full_text=state.generation_state.full_text,
+            thought_text=state.generation_state.thought_text,
+            emotion=state.generation_state.emotion,
+            audio_uri=audio_uri,
+            finish_reason=state.generation_state.finish_reason,
+            event_publisher=self.dependencies.event_publisher,
+        )
+
+        await self._publish_chat_status(
+            state=state,
+            stage=ChatStatusStage.FINAL_RESPONSE,
+            status=ChatStatusState.COMPLETED,
+            display_text=get_chat_status_text(ChatStatusStage.FINAL_RESPONSE, ChatStatusState.COMPLETED),
+            is_visible=True,
+            is_terminal=True,
+        )
+
+        logger.info(
+            "[TraceID:%s] 非流式统一响应流水线完成 e2e_latency_ms=%d audio_uri=%s",
+            trace_id,
+            state.generation_state.e2e_latency_ms,
+            audio_uri or "None",
+        )
+
+    # ================================================================
+    # 公共辅助
+    # ================================================================
 
     async def _publish_chat_status(
         self,

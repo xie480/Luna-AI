@@ -67,6 +67,8 @@ interface SystemState {
   isLive2dEnabled: boolean;
   // 本地 TTS 语音开关
   isTTSEnabled: boolean;
+  // LLM 响应模式：unified（统一非流式，默认） / streaming（传统流式兼容）
+  llmResponseMode: 'unified' | 'streaming';
   // Live2D 空闲降频开关
   isLive2dIdleThrottlingEnabled: boolean;
   // Live2D 后台挂起开关
@@ -107,6 +109,8 @@ interface SystemState {
   setLive2dEnabled: (enabled: boolean) => void;
   // 设置 本地 TTS 语音开关
   setTTSEnabled: (enabled: boolean) => void;
+  // 设置 LLM 响应模式
+  setLlmResponseMode: (mode: 'unified' | 'streaming') => void;
   // 设置 Live2D 空闲降频开关
   setLive2dIdleThrottlingEnabled: (enabled: boolean) => void;
   // 设置 Live2D 后台挂起开关
@@ -232,6 +236,8 @@ export const useSystemStore = create<SystemState>((set) => ({
   clothingConfig: loadClothingConfig(),
   isLive2dEnabled: loadLive2dEnabled(),
   isTTSEnabled: loadTTSEnabled(),
+  // LLM 响应模式默认使用 unified（统一非流式），可从 localStorage 恢复用户偏好
+  llmResponseMode: (localStorage.getItem('luna:llmResponseMode') as 'unified' | 'streaming') || 'unified',
   isLive2dIdleThrottlingEnabled: loadLive2dIdleThrottlingEnabled(),
   isLive2dBackgroundSuspensionEnabled: loadLive2dBackgroundSuspensionEnabled(),
   live2dMaxFPS: loadLive2dMaxFPS(),
@@ -329,6 +335,17 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误
       }
       return { isTTSEnabled: enabled };
+    }),
+
+  // 设置 LLM 响应模式，同时持久化到 localStorage 以便跨会话保留用户偏好
+  setLlmResponseMode: (mode) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:llmResponseMode', mode);
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { llmResponseMode: mode };
     }),
 
   setLive2dIdleThrottlingEnabled: (enabled) =>

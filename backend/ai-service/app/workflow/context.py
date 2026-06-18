@@ -56,6 +56,10 @@ class ChatInputPayload(BaseModel):
     tts_enabled: bool = True
     attachment_meta_list: list[dict[str, Any]] = Field(default_factory=list)
     extra_context: dict[str, Any] = Field(default_factory=dict)
+    llm_response_mode: str = Field(
+        default="streaming",
+        description="LLM 回复模式：'streaming' 为流式逐句返回，'unified' 为非流式统一响应。",
+    )
 
 
 class ChatSessionState(BaseModel):
@@ -170,6 +174,17 @@ class ChatGenerationState(BaseModel):
         default=0,
         ge=0,
         description="首 Token 到达延迟（TTFT），从请求开始到收到第一个有效生成 Token 的耗时，单位为毫秒。",
+    )
+    # 非流式统一响应模式新增字段
+    e2e_latency_ms: int = Field(
+        default=0,
+        ge=0,
+        description="端到端生成延迟（毫秒），从 LLM 调用开始到完整回复到达的耗时。非流式模式下替代 TTFT。",
+    )
+    generation_started_at_ms: int = Field(
+        default=0,
+        ge=0,
+        description="LLM 调用开始时间戳（毫秒），用于计算 e2e_latency_ms。",
     )
 
 

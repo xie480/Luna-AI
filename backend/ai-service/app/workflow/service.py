@@ -88,6 +88,7 @@ class ChatWorkflowService:
         tts_enabled: bool = True,
         locale: str = CHAT_WORKFLOW_DEFAULT_LOCALE,
         timezone: str = CHAT_WORKFLOW_DEFAULT_TIMEZONE,
+        llm_response_mode: str = "unified",
     ) -> dict[str, str]:
         """
         启动日常聊天工作流
@@ -98,8 +99,10 @@ class ChatWorkflowService:
             session_id: 会话ID，标识用户会话
             message: 用户发送的消息内容
             frontend_message_id: 前端消息ID，用于前端标识消息
+            tts_enabled: 是否启用 TTS 语音合成
             locale: 本地化设置，默认为CHAT_WORKFLOW_DEFAULT_LOCALE
             timezone: 时区设置，默认为CHAT_WORKFLOW_DEFAULT_TIMEZONE
+            llm_response_mode: LLM 响应模式，streaming（流式）或 unified（统一非流式）
 
         返回:
             dict[str, str]: 包含状态信息的字典，包括'status'、'msgId'和'interaction_id'
@@ -133,6 +136,7 @@ class ChatWorkflowService:
                 locale=locale,
                 timezone=timezone,
                 tts_enabled=tts_enabled,
+                llm_response_mode=llm_response_mode,
             ),
             generation_state=ChatGenerationState(assistant_message_id=assistant_message_id),
         )

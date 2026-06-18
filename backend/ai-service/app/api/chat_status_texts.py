@@ -413,6 +413,81 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "好啦好啦，Luna总结完了！",
         "行，Luna搞明白了~",
     ],
+
+    # ================================================================
+    # 21. 非流式统一响应 — LLM 调用中 (LLM_CALLING)
+    #     文案方向：等待 LLM 完整回复，告知用户正在思考
+    #     ================================================================
+    (ChatStatusStage.LLM_CALLING, ChatStatusState.RUNNING): [
+        "让Luna好好想想……",
+        "唔……Luna在思考怎么回答~",
+        "Luna认真琢磨一下……",
+        "给Luna一点时间想想~",
+        "嗯……Luna在组织语言中……",
+    ],
+    (ChatStatusStage.LLM_CALLING, ChatStatusState.COMPLETED): [
+        "Luna想好了！",
+        "嗯嗯，Luna有答案了~",
+        "好嘞，Luna想清楚了！",
+        "OK，Luna知道该怎么说了~",
+        "搞定了，Luna思路清晰！",
+    ],
+    (ChatStatusStage.LLM_CALLING, ChatStatusState.ERROR): [
+        "哎呀，Luna脑子卡住了……",
+        "Luna暂时想不出来……",
+        "唔，Luna的思考被打断了……",
+    ],
+
+    # ================================================================
+    # 22. 非流式统一响应 — 解析中 (LLM_PARSING)
+    #     文案方向：提取回复中的情绪和想法
+    #     ================================================================
+    (ChatStatusStage.LLM_PARSING, ChatStatusState.RUNNING): [
+        "Luna在整理思绪中……",
+        "让Luna理一理刚才的想法~",
+        "Luna在梳理回复内容……",
+        "嗯……Luna整理一下表达~",
+    ],
+    (ChatStatusStage.LLM_PARSING, ChatStatusState.COMPLETED): [
+        "Luna整理好了！",
+        "嗯嗯，Luna梳理清楚了~",
+        "OK，Luna理清思路了！",
+        "搞定，Luna准备好了~",
+    ],
+
+    # ================================================================
+    # 23. 非流式统一响应 — TTS 合成中 (TTS_SYNTHESIZING)
+    #     文案方向：生成语音表达
+    #     ================================================================
+    (ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.RUNNING): [
+        "Luna在酝酿语气中……",
+        "让Luna练一下怎么说~",
+        "Luna在调整说话的语气……",
+        "嗯……Luna想想用什么语气好~",
+    ],
+    (ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.COMPLETED): [
+        "Luna准备好了！",
+        "嗯嗯，Luna想好怎么说了~",
+        "搞定，Luna酝酿好了！",
+    ],
+    (ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.SKIPPED): [
+        "Luna这次就打字说吧~",
+    ],
+
+    # ================================================================
+    # 24. 非流式统一响应 — 发送最终响应 (FINAL_RESPONSE)
+    #     文案方向：最终打包并发送回复
+    #     ================================================================
+    (ChatStatusStage.FINAL_RESPONSE, ChatStatusState.RUNNING): [
+        "Luna要说话了……",
+        "唔，Luna来告诉你~",
+        "Luna把答案给你~",
+    ],
+    (ChatStatusStage.FINAL_RESPONSE, ChatStatusState.COMPLETED): [
+        "Luna说完了！",
+        "好了，Luna讲完啦~",
+        "嗯嗯，Luna说清楚了！",
+    ],
 }
 
 # ================================================================

@@ -191,6 +191,50 @@ export interface ChatStreamPayload {
 }
 
 /**
+ * 非流式统一响应载荷 —— 对应后端 [`ChatUnifiedResponsePayload`](backend/ai-service/app/workflow/events.py)。
+ * 做什么：承载后端非流式一次合成的完整回复包，包括回复文本、内心独白、
+ *         情绪标记、已合成 TTS 音频地址及端到端耗时等元数据。
+ * 为什么这样做：替代原有多段流式 SSE 推送，前端收到后一次完成语义切分、
+ *             气泡队列编排、TTS 播放与 Live2D 表情同步。
+ * 输入输出：由后端 [`publish_unified_response()`](backend/ai-service/app/workflow/nodes/helpers.py) 推送，
+ *           前端 [`unifiedResponseHandler`](frontend/src/renderer/services/unifiedResponseHandler.ts) 消费。
+ * 边界条件：
+ *   - reply_text 可能为空（模型无有效回复）。
+ *   - thought_text 为空时前端不展示内心独白。
+ *   - audio_uri 为 null 时跳过 TTS 播放，前端降级为纯文本模式。
+ *   - error 非空时表示整个统一响应生成失败。
+ * 异常行为：无。
+ */
+export interface ChatUnifiedResponsePayload {
+  /** SSE 事件类型标识，固定为 "unified_response"。 */
+  type: 'unified_response';
+  /** 模型完整回复文本，无流式拆分。 */
+  reply_text: string;
+  /** 模型内心独白 / 思维链文本（可选）。 */
+  thought_text: string;
+  /** 本轮回复对应的情绪标记（如 neutral / happy / sad）。 */
+  emotion: string;
+  /** 已合成 TTS 音频文件路径或 null（TTS 失败/禁用时）。 */
+  audio_uri: string | null;
+  /** 是否为本轮回复的终态包（统一响应始终为 true）。 */
+  is_finished: boolean;
+  /** 协议版本号。 */
+  schema_version: string;
+  /** 本轮交互 ID。 */
+  interaction_id: string;
+  /** assistant 消息 ID。 */
+  assistant_message_id: string;
+  /** 完成原因（stop / length / error）。 */
+  finish_reason: string;
+  /** 端到端生成耗时（毫秒），从 LLM 调用开始到前端可渲染。 */
+  e2e_latency_ms: number;
+  /** 引用列表。 */
+  citations: ChatCitationProjection[];
+  /** 错误信息，空字符串表示无错误。 */
+  error: string;
+}
+
+/**
  * 情绪更新事件 Payload —— 对应 [`WS_MSG_TYPE.EVT_EMOTION_UPDATE`](frontend/src/shared/enum.ts)。
  * 做什么：承载后端推送的 Live2D 情绪名称。
  * 为什么这样做：与流式渲染协议保持一致。
