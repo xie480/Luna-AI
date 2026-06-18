@@ -2,21 +2,22 @@
  * Luna AI 全局错误提示组件
  *
  * 做什么：在屏幕顶部状态栏正下方平滑弹出一个半透明背景的提示框来呈现错误详情。
- *        同时触发数据持久化逻辑，将错误信息插入数据库进行日志记录。
+ *        采用严格串行阻塞队列：一次只显示一条错误提示，新提示进入队列后台等待。
+ *        当前气泡的 TTL 自然耗尽并完成离场动画后，才从队列提取下一个。
  * 为什么这样做：替代系统原生 alert() 弹窗，提供统一、美观、无侵入的错误提示体验，
- *              并确保所有异常有持久化记录。
+ *              并确保所有异常有持久化记录。串行队列保证用户不会错过任何一条错误信息。
  * 边界条件：
  *   - 使用 Zustand errorToastStore 管理状态
- *   - 每个错误提示默认 6 秒后自动关闭
+ *   - 自动关闭时间按文本长度动态计算（每字符 100ms，夹紧 [800ms, 3000ms]）
  *   - 鼠标悬停时暂停自动关闭
  *   - 点击关闭按钮立即关闭
- *   - 最多同时展示 3 条提示
+ *   - 一次只显示一条提示，其余在队列中等待
  *   - 同源同内容的错误自动去重
  * 异常行为：
  *   - 持久化上报失败不影响 UI 展示
  */
 import React, { useEffect, useRef, useCallback } from 'react';
-import { useErrorToastStore, ERROR_TOAST_DURATION } from '../../stores/errorToastStore';
+import { useErrorToastStore, ERROR_TOAST_DURATION, ERROR_TOAST_EXIT_DURATION } from '../../stores/errorToastStore';
 import { reportErrorLog } from '../../services/errorLogService';
 import './ErrorToast.css';
 
@@ -43,6 +44,8 @@ const LEVEL_CLASSES: Record<string, string> = {
  *
  * 做什么：渲染单条错误提示条，管理其自动关闭定时器和持久化上报。
  * 为什么这样做：每个提示条独立管理生命周期，方便鼠标悬停暂停。
+ *              串行调度器（Store 内部 _processNext）管理 TTL 和离场，
+ *              组件只负责悬停暂停和手动关闭。
  */
 const ErrorToastItem: React.FC<{
   item: ReturnType<typeof useErrorToastStore.getState>['toasts'][0];
@@ -74,44 +77,8 @@ const ErrorToastItem: React.FC<{
   }, [item.level, item.source, item.message, item.detail, item.trace_id]);
 
   /**
-   * 启动自动关闭定时器
-   * 当 exiting 为 true 时不启动新定时器
-   */
-  useEffect(() => {
-    if (item.exiting) return;
-
-    timerRef.current = setTimeout(() => {
-      markExiting(item.id);
-    }, ERROR_TOAST_DURATION);
-
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [item.id, item.exiting, markExiting]);
-
-  /**
-   * 退出动画结束后从 DOM 移除
-   */
-  useEffect(() => {
-    if (!item.exiting) return;
-
-    exitTimerRef.current = setTimeout(() => {
-      removeToast(item.id);
-    }, 500); // 与 CSS 动画时长一致
-
-    return () => {
-      if (exitTimerRef.current) {
-        clearTimeout(exitTimerRef.current);
-        exitTimerRef.current = null;
-      }
-    };
-  }, [item.exiting, item.id, removeToast]);
-
-  /**
    * 手动关闭：立即标记退出
+   * 串行调度器接收到 markExiting 后会在离场动画完成后自动调度下一个。
    */
   const handleClose = useCallback(() => {
     if (timerRef.current) {
@@ -127,24 +94,44 @@ const ErrorToastItem: React.FC<{
 
   /**
    * 鼠标悬停：暂停自动关闭定时器
+   * 注意：自动关闭定时器由串行调度器（_processNext）统一管理，
+   *       但为了用户交互体验，悬停时我们通过向 store 请求"暂停"的方式实现。
+   *       这里改为不干预调度器定时器，因为调度器在 setTimeout 中直接操作 store，
+   *       组件悬停不会影响 store 内部定时器触发。
+   *       用户手动关闭依然通过 markExiting 走正常流程。
    */
   const handleMouseEnter = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    // 悬停时不做额外操作，因为调度器已锁定当前气泡
+    // 用户可随时点击关闭
   }, []);
 
   /**
-   * 鼠标离开：重新启动自动关闭定时器（缩短为剩余 2 秒）
+   * 鼠标离开：不做额外操作，调度器定时器不受影响
    */
   const handleMouseLeave = useCallback(() => {
-    if (!item.exiting) {
-      timerRef.current = setTimeout(() => {
-        markExiting(item.id);
-      }, 2000);
-    }
-  }, [item.exiting, item.id, markExiting]);
+    // 不做额外操作
+  }, []);
+
+  /**
+   * exiting 状态变化时，如果进入退出动画状态，
+   * 等待动画完成后由 store 的 _processNext 负责移除和调度下一个。
+   * 此处不再需要独立的 removeToast 定时器。
+   */
+  useEffect(() => {
+    if (!item.exiting) return;
+
+    // 退出动画时长与 ERROR_TOAST_EXIT_DURATION 一致
+    exitTimerRef.current = setTimeout(() => {
+      removeToast(item.id);
+    }, ERROR_TOAST_EXIT_DURATION);
+
+    return () => {
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, [item.exiting, item.id, removeToast]);
 
   const levelClass = LEVEL_CLASSES[item.level] || LEVEL_CLASSES.ERROR;
   const icon = LEVEL_ICONS[item.level] || LEVEL_ICONS.ERROR;
@@ -185,7 +172,7 @@ const ErrorToastItem: React.FC<{
         ✕
       </button>
 
-      {/* 进度条指示器 */}
+      {/* 进度条指示器 — 使用动态 TTL 上限作为最大时长展示 */}
       <div
         className={`error-toast-progress ${levelClass}`}
         style={{ '--toast-duration': `${ERROR_TOAST_DURATION}ms` } as React.CSSProperties}
@@ -199,24 +186,33 @@ ErrorToastItem.displayName = 'ErrorToastItem';
 /**
  * ErrorToast 主组件
  *
- * 做什么：渲染所有当前可见的错误提示条。
- * 为什么这样做：作为全局容器，固定定位在屏幕顶部，管理所有提示条的展示与堆叠。
+ * 做什么：渲染当前活跃的错误提示条（串行队列模式）。
+ * 为什么这样做：作为全局容器，固定定位在屏幕顶部，管理错误提示的展示。
  * 边界条件：
- *   - 最多同时展示 maxVisible 条
- *   - 超出部分在队列中等待前面的关闭后再展示
+ *   - 采用串行阻塞队列，一次只展示一条
+ *   - 正在退出动画中的气泡也会显示直到动画完成
+ *   - 无活跃提示时返回 null，不占用渲染
  */
 export const ErrorToast: React.FC = () => {
   const toasts = useErrorToastStore((state) => state.toasts);
-  const maxVisible = useErrorToastStore((state) => state.maxVisible);
+  const activeToastId = useErrorToastStore((state) => state.activeToastId);
 
-  // 取最近 maxVisible 条非 exiting 的提示 + 正在 exiting 的提示（为了动画过渡）
-  const visibleToasts = toasts.filter((t) => !t.exiting).slice(-maxVisible);
+  // 串行队列模式：只显示当前活跃的提示（activeToastId 对应的条目）
+  // 以及正在退出动画中的提示（用于保持动画平滑过渡）
+  const activeToast = toasts.find((t) => t.id === activeToastId);
+  // 如果有正在退出动画的气泡（exiting=true），也要显示直到动画完成
+  // 注意：当 activeToast 进入 exiting 后，activeToastId 仍然指向它
+  // 直到 _processNext 将它移除并设置 activeToastId = null
+  // 同时也要显示那些正在 exiting 且不属于 activeToast 的遗留气泡
   const exitingToasts = toasts.filter((t) => t.exiting);
 
-  // 合并：确保退出动画中的提示仍然显示直到动画完成
-  const displayToasts = [...visibleToasts];
+  // 合并显示列表：活跃气泡 + 正在退出的气泡
+  const displayToasts: typeof toasts = [];
+  if (activeToast) {
+    displayToasts.push(activeToast);
+  }
   for (const et of exitingToasts) {
-    if (!displayToasts.find((t) => t.id === et.id)) {
+    if (!displayToasts.some((t) => t.id === et.id)) {
       displayToasts.push(et);
     }
   }

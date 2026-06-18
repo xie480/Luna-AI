@@ -28,9 +28,19 @@ const BUBBLE_EVENT_NAME = {
 } as const;
 
 const LEGACY_BUBBLE_BATCH_ID = '__legacy_bubble_batch__';
-const MAX_BUBBLES = 3;
+/** 最大可见气泡数。串行阻塞队列模式下固定为 1，确保一次只显示一个气泡。 */
+const MAX_BUBBLES = 1;
 const MIN_BUBBLE_GAP_MS = 800;
 const BUBBLE_LEAVING_ANIMATION_MS = 300;
+
+/** 每字符基础驻留时间（毫秒），用于按文本长度正比例计算 TTL。 */
+const BASE_TTL_PER_CHAR = 100;
+/** 最小驻留时间（毫秒），确保极短文本也有足够的阅读时间。 */
+const MIN_TTL = 800;
+/** 最大驻留时间（毫秒），保证最多 3 秒。 */
+const MAX_TTL = 3000;
+/** 兜底 TTL（文本为空时）。 */
+const FALLBACK_TTL = 800;
 
 type BubbleLifecycleStage =
   | 'visible'
@@ -701,7 +711,17 @@ export const useBubble = () => {
     const normalizedBatchId = batchId?.trim() || LEGACY_BUBBLE_BATCH_ID;
     const id = bubbleIdCounter.current++;
     const renderIndex = renderIndexCounter.current++;
-    const calcDuration = duration ?? Math.max(2000, text.length * 250);
+    /**
+     * 动态 TTL 计算：严格按文本长度正比例，夹紧 [MIN_TTL, MAX_TTL]。
+     * 公式：clamp(text.length × BASE_TTL_PER_CHAR, MIN_TTL, MAX_TTL)
+     * 每字符 100ms：8 字 → 800ms，20 字 → 2000ms，30 字及以上 → 3000ms（上限）
+     * 外部传入 duration 仍可覆盖，但受 MAX_TTL 上限约束。
+     */
+    const calcDuration = duration !== undefined
+      ? Math.min(duration, MAX_TTL)
+      : text.length > 0
+        ? Math.min(Math.max(text.length * BASE_TTL_PER_CHAR, MIN_TTL), MAX_TTL)
+        : FALLBACK_TTL;
 
     const batch = ensureBatchRuntime(normalizedBatchId);
     batch.totalCreated += 1;

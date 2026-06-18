@@ -274,15 +274,19 @@ class MainChatLlmNode(ChatWorkflowNode):
 
         做什么：
             1. 推送 LLM_CALLING 状态 → 调用 llm_client.chat_sync() 获取完整回复
-            2. 推送 LLM_PARSING 状态 → 使用 StreamParser(disable_sentence_split=True) 提取 thought/emotion/reply
+            2. 推送 LLM_PARSING 状态 → 尝试使用 StreamParser 提取 thought/emotion/reply；
+               若 StreamParser 未能提取有效内容，fallback 将原始响应作为 full_text
             3. 推送 TTS_SYNTHESIZING 状态 → 对完整 reply 文本调用 TTS 合成
             4. 推送 FINAL_RESPONSE 状态 → 调用 publish_unified_response() 一次性下发
         为什么这样做：
             后端等待完整回复后执行同步 TTS 合成，再将文本、音频、情绪等打包为单次 JSON 响应下发。
             前端收到后自行负责语义切分、气泡渲染和音画同步。
+            StreamParser 解析失败时 fallback 为纯文本，保证 LLM 的回复不会丢失。
         边界条件：
             - TTS 合成失败时降级为纯文本（audio_uri=None）
             - LLM 调用失败直接上抛异常
+            - StreamParser 提取不到 full_text 时使用 raw_response 作为纯文本兜底
+            - _publish_chat_status 单点失败不会阻断整个响应流程
         """
         from app.logger import logger
         from app.llm.client import llm_client
@@ -295,13 +299,11 @@ class MainChatLlmNode(ChatWorkflowNode):
         # ============================================================
         # 阶段 1：调用 LLM 获取完整回复
         # ============================================================
-        await self._publish_chat_status(
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.LLM_CALLING,
             status=ChatStatusState.RUNNING,
             display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.RUNNING),
-            is_visible=True,
-            is_terminal=False,
         )
 
         generation_started_at = time.time()
@@ -310,11 +312,10 @@ class MainChatLlmNode(ChatWorkflowNode):
         state.generation_state.provider_name = getattr(llm_client, "base_url", "")
 
         logger.info("[TraceID:{}] LLM 输入参数: {}", trace_id, {
-            "system_prompt": state.prompt_state.system_prompt_text,
-            "history": history_to_model_messages(state.session_state.recent_messages),
-            "current_message": state.input_payload.raw_user_message,
+            "system_prompt_snippet": state.prompt_state.system_prompt_text if state.prompt_state.system_prompt_text else "",
+            "history_count": len(state.session_state.recent_messages),
+            "current_message_snippet": state.input_payload.raw_user_message,
             "trace_id": trace_id,
-            "disambiguated_text": state.route_state.disambiguated_text or state.input_payload.raw_user_message,
         })
 
         try:
@@ -329,45 +330,47 @@ class MainChatLlmNode(ChatWorkflowNode):
             )
         except Exception:
             # LLM 调用失败，推送 ERROR 状态后上抛
-            await self._publish_chat_status(
+            await self._safe_publish_status(
                 state=state,
                 stage=ChatStatusStage.LLM_CALLING,
                 status=ChatStatusState.ERROR,
                 display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.ERROR),
-                is_visible=True,
-                is_terminal=True,
                 error="LLM 调用失败",
+                is_terminal=True,
             )
             raise
 
         state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
-        logger.info("[TraceID:{}] LLM 输出参数: {}", trace_id, raw_response)
+        logger.info(
+            "[TraceID:{}] LLM 调用完成 e2e_latency_ms={} 原始响应长度={}，原始输出：{}",
+            trace_id,
+            state.generation_state.e2e_latency_ms,
+            len(raw_response),
+            raw_response
+        )
 
-        await self._publish_chat_status(
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.LLM_CALLING,
             status=ChatStatusState.COMPLETED,
             display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.COMPLETED),
-            is_visible=True,
-            is_terminal=False,
         )
 
         # ============================================================
         # 阶段 2：解析回复（提取 thought / emotion / reply）
+        #         解析失败时 fallback 将原始响应全文作为 full_text
         # ============================================================
-        await self._publish_chat_status(
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.LLM_PARSING,
             status=ChatStatusState.RUNNING,
             display_text=get_chat_status_text(ChatStatusStage.LLM_PARSING, ChatStatusState.RUNNING),
-            is_visible=True,
-            is_terminal=False,
         )
 
         # 使用 disable_sentence_split=True 模式：不切句，完整保留 reply 原文
         parser = StreamParser(trace_id, disable_sentence_split=True)
 
-        # 一次性喂入完整文本
+        # 一次性喂入完整文本，通过 StreamParser 提取结构化字段
         for msg_type, content in parser.feed(raw_response):
             if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
                 state.generation_state.full_text += content
@@ -385,27 +388,41 @@ class MainChatLlmNode(ChatWorkflowNode):
             elif msg_type == "emotion_update":
                 state.generation_state.emotion = content
 
+        # === Fallback：StreamParser 未能提取 full_text 时，使用原始响应作为纯文本 ===
+        if not state.generation_state.full_text and raw_response.strip():
+            logger.warning(
+                "[TraceID:{}] StreamParser 未能从 LLM 响应中提取结构化字段，"
+                "已降级为纯文本模式（原始响应长度={}）",
+                trace_id,
+                len(raw_response),
+            )
+            state.generation_state.full_text = raw_response.strip()
+
         state.generation_state.finish_reason = "stop"
 
-        await self._publish_chat_status(
+        logger.info(
+            "[TraceID:{}] 解析完成 full_text 长度={} thought_text 长度={} emotion={}",
+            trace_id,
+            len(state.generation_state.full_text),
+            len(state.generation_state.thought_text),
+            state.generation_state.emotion or "(空)",
+        )
+
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.LLM_PARSING,
             status=ChatStatusState.COMPLETED,
             display_text=get_chat_status_text(ChatStatusStage.LLM_PARSING, ChatStatusState.COMPLETED),
-            is_visible=True,
-            is_terminal=False,
         )
 
         # ============================================================
         # 阶段 3：TTS 合成完整音频
         # ============================================================
-        await self._publish_chat_status(
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.TTS_SYNTHESIZING,
             status=ChatStatusState.RUNNING,
             display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.RUNNING),
-            is_visible=True,
-            is_terminal=False,
         )
 
         audio_uri: str | None = None
@@ -424,13 +441,11 @@ class MainChatLlmNode(ChatWorkflowNode):
                     audio_uri,
                     len(state.generation_state.full_text),
                 )
-                await self._publish_chat_status(
+                await self._safe_publish_status(
                     state=state,
                     stage=ChatStatusStage.TTS_SYNTHESIZING,
                     status=ChatStatusState.COMPLETED,
                     display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.COMPLETED),
-                    is_visible=True,
-                    is_terminal=False,
                 )
             except Exception as e:
                 # TTS 合成失败不阻断主流程，降级为纯文本
@@ -440,35 +455,31 @@ class MainChatLlmNode(ChatWorkflowNode):
                     e,
                 )
                 audio_uri = None
-                await self._publish_chat_status(
+                await self._safe_publish_status(
                     state=state,
                     stage=ChatStatusStage.TTS_SYNTHESIZING,
                     status=ChatStatusState.SKIPPED,
                     display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.SKIPPED),
-                    is_visible=True,
-                    is_terminal=False,
                 )
         else:
-            # TTS 未开启
-            await self._publish_chat_status(
+            # TTS 未开启或回复文本为空
+            await self._safe_publish_status(
                 state=state,
                 stage=ChatStatusStage.TTS_SYNTHESIZING,
                 status=ChatStatusState.SKIPPED,
                 display_text=get_chat_status_text(ChatStatusStage.TTS_SYNTHESIZING, ChatStatusState.SKIPPED),
-                is_visible=True,
-                is_terminal=False,
             )
 
         # ============================================================
         # 阶段 4：打包并下发统一响应
         # ============================================================
-        await self._publish_chat_status(
+        # 注意：即使 full_text 为空也要下发 publish_unified_response，
+        #       保证前端收到流结束信号，否则气泡状态机无法正常流转
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.FINAL_RESPONSE,
             status=ChatStatusState.RUNNING,
             display_text=get_chat_status_text(ChatStatusStage.FINAL_RESPONSE, ChatStatusState.RUNNING),
-            is_visible=True,
-            is_terminal=False,
         )
 
         await publish_unified_response(
@@ -481,20 +492,20 @@ class MainChatLlmNode(ChatWorkflowNode):
             event_publisher=self.dependencies.event_publisher,
         )
 
-        await self._publish_chat_status(
+        await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.FINAL_RESPONSE,
             status=ChatStatusState.COMPLETED,
             display_text=get_chat_status_text(ChatStatusStage.FINAL_RESPONSE, ChatStatusState.COMPLETED),
-            is_visible=True,
             is_terminal=True,
         )
 
         logger.info(
-            "[TraceID:{}] 非流式统一响应流水线完成 e2e_latency_ms={} audio_uri={}",
+            "[TraceID:{}] 非流式统一响应流水线完成 e2e_latency_ms={} audio_uri={} full_text 长度={}",
             trace_id,
             state.generation_state.e2e_latency_ms,
             audio_uri or "None",
+            len(state.generation_state.full_text),
         )
 
     # ================================================================
@@ -511,6 +522,18 @@ class MainChatLlmNode(ChatWorkflowNode):
         is_terminal: bool = False,
         error: str = "",
     ) -> None:
+        """
+        发布 Chat 状态通知。
+
+        做什么：通过 ChatStatusPublisher 向前端推送节点执行阶段状态。
+        为什么这样做：前端状态栏需要实时感知后端节点执行进展。
+        输入输出：
+            - 输入：state 工作流状态、stage 阶段、status 状态、display_text 展示文案
+            - 输出：通过 SSE 推送给前端
+        边界条件：
+            - publisher 为 None 时静默跳过
+            - 发布失败由 _safe_publish_status 静默捕获
+        """
         publisher: ChatStatusPublisher | None = self.dependencies.chat_status_publisher
         if publisher is None:
             return
@@ -525,3 +548,45 @@ class MainChatLlmNode(ChatWorkflowNode):
             is_terminal=is_terminal,
             error=error,
         )
+
+    async def _safe_publish_status(
+        self,
+        state: ChatWorkflowState,
+        stage: ChatStatusStage,
+        status: ChatStatusState,
+        display_text: str,
+        is_visible: bool = True,
+        is_terminal: bool = False,
+        error: str = "",
+    ) -> None:
+        """
+        安全的 Chat 状态发布封装，单点失败不阻断主流程。
+
+        做什么：包装 _publish_chat_status，捕获所有异常并记录日志。
+        为什么这样做：ChatStatusPublisher 的 publish 可能因网络或内部异常抛出，
+                     如果未被捕获会中断整个 _handle_unified 流水线，
+                     导致 publish_unified_response 无法执行——这是 LLM 响应丢失的直接原因之一。
+        输入输出：同 _publish_chat_status。
+        边界条件：
+            - 任何失败都会通过 logger.warning 记录，不会抛出异常
+            - 不影响主流程继续执行
+        """
+        try:
+            await self._publish_chat_status(
+                state=state,
+                stage=stage,
+                status=status,
+                display_text=display_text,
+                is_visible=is_visible,
+                is_terminal=is_terminal,
+                error=error,
+            )
+        except Exception as e:
+            from app.logger import logger
+            logger.warning(
+                "[TraceID:{}] Chat 状态发布失败(已安全忽略) stage={} status={} error={}",
+                state.runtime.trace_id,
+                stage.value if hasattr(stage, "value") else stage,
+                status.value if hasattr(status, "value") else status,
+                e,
+            )

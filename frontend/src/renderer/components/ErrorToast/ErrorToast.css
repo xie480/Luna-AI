@@ -178,7 +178,7 @@
   height: 3px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 0 0 10px 10px;
-  animation: errorToastProgress var(--toast-duration, 6s) linear forwards;
+  animation: errorToastProgress var(--toast-duration, 3s) linear forwards;
 }
 
 .error-toast-progress.level-error {
