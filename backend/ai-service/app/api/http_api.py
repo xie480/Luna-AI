@@ -21,6 +21,7 @@ from app.types.constants import (
 )
 from app.user_profile.service import UserProfileService
 from app.utils.snowflake import generate_string_id
+from app.workflow.constants import ChatMode
 from app.workflow.service import ChatWorkflowService
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -51,6 +52,7 @@ class ChatRequestPayload(BaseModel):
     ttsEnabled: bool = True
     # LLM 响应模式：streaming（流式） / unified（统一非流式），默认可由前端传入
     llmResponseMode: str = "unified"
+    chatMode: str = "daily_chat"
 
 
 async def get_trace_id(x_trace_id: Optional[str] = Header(None)) -> str:
@@ -177,6 +179,13 @@ async def chat_request(
         raise HTTPException(status_code=400, detail="message is required")
     if not chat_workflow_service:
         raise HTTPException(status_code=503, detail="ChatWorkflowService 未初始化")
+    # 将前端传入的 chatMode 字符串转换为 ChatMode 枚举
+    try:
+        chat_mode_enum: ChatMode = ChatMode(payload.chatMode)
+    except ValueError:
+        logger.warning(f"无效的 chatMode 值 '{payload.chatMode}'，降级为默认 daily_chat")
+        chat_mode_enum = ChatMode.DAILY_CHAT
+
     # 将前端传入的 LLM 响应模式透传给工作流服务
     result_payload = await chat_workflow_service.start_daily_chat(
         trace_id=trace_id,
@@ -185,6 +194,7 @@ async def chat_request(
         frontend_message_id=payload.msgId,
         tts_enabled=payload.ttsEnabled,
         llm_response_mode=payload.llmResponseMode,
+        chat_mode=chat_mode_enum,
     )
     return APIResponse(
         type=WS_MSG_TYPE_CHAT_STREAM,

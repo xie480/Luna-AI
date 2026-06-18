@@ -16,12 +16,14 @@ class ChatMode(str, Enum):
     """当前支持的聊天模式。"""
 
     DAILY_CHAT = "daily_chat"
+    CASUAL_CHAT = "casual_chat"
 
 
 class ChatPlanPreset(str, Enum):
     """当前启用的内置预设图。"""
 
     DAILY_CHAT_DEFAULT = "daily_chat.default.v1"
+    CASUAL_CHAT_DEFAULT = "casual_chat.default.v1"
 
 
 class ChatWorkflowNodeType(str, Enum):

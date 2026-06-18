@@ -25,6 +25,7 @@ from app.workflow.constants import (
     CHAT_WORKFLOW_CHECKPOINT_TABLE,
     CHAT_WORKFLOW_DEFAULT_LOCALE,
     CHAT_WORKFLOW_DEFAULT_TIMEZONE,
+    ChatMode,
     ChatPlanPreset,
     ChatWorkflowErrorCode,
     ChatWorkflowEventType,
@@ -75,7 +76,9 @@ class ChatWorkflowService:
             # --- Phase 12 新增：透传 RAG 知识库 PG 仓库 ---
             rag_pg_repo=rag_pg_repo,
         )
-        self.graph = ChatGraphFactory(dependencies).build_daily_chat_graph()
+        factory = ChatGraphFactory(dependencies)
+        self.daily_chat_graph = factory.build_daily_chat_graph()
+        self.casual_chat_graph = factory.build_casual_chat_graph()
         self.tasks: set[asyncio.Task[Any]] = set()
 
     async def start_daily_chat(
@@ -89,9 +92,10 @@ class ChatWorkflowService:
         locale: str = CHAT_WORKFLOW_DEFAULT_LOCALE,
         timezone: str = CHAT_WORKFLOW_DEFAULT_TIMEZONE,
         llm_response_mode: str = "unified",
+        chat_mode: ChatMode = ChatMode.DAILY_CHAT,
     ) -> dict[str, str]:
         """
-        启动日常聊天工作流
+        启动聊天工作流（支持普通模式与闲聊模式）。
 
         参数:
             self: 类实例引用
@@ -103,6 +107,7 @@ class ChatWorkflowService:
             locale: 本地化设置，默认为CHAT_WORKFLOW_DEFAULT_LOCALE
             timezone: 时区设置，默认为CHAT_WORKFLOW_DEFAULT_TIMEZONE
             llm_response_mode: LLM 响应模式，streaming（流式）或 unified（统一非流式）
+            chat_mode: ChatMode 枚举值，ChatMode.DAILY_CHAT（普通模式，默认）或 ChatMode.CASUAL_CHAT（闲聊模式）
 
         返回:
             dict[str, str]: 包含状态信息的字典，包括'status'、'msgId'和'interaction_id'
@@ -110,6 +115,14 @@ class ChatWorkflowService:
         异常:
             ValueError: 当session_id或message为空时抛出异常
         """
+        # 解析聊天模式枚举
+        if chat_mode == ChatMode.CASUAL_CHAT:
+            plan_preset = ChatPlanPreset.CASUAL_CHAT_DEFAULT
+            disable_rerank = True
+        else:
+            plan_preset = ChatPlanPreset.DAILY_CHAT_DEFAULT
+            disable_rerank = False
+
         # 清理输入参数
         cleaned_session_id = session_id.strip()
         cleaned_message = message.strip()
@@ -128,6 +141,9 @@ class ChatWorkflowService:
                 interaction_id=interaction_id,
                 session_id=cleaned_session_id,
                 started_at_ms=current_time_ms(),
+                chat_mode=plan_preset,
+                plan_preset_id=plan_preset.value,
+                disable_rerank=disable_rerank,
             ),
             input_payload=ChatInputPayload(
                 raw_user_message=cleaned_message,
@@ -149,8 +165,25 @@ class ChatWorkflowService:
         return {"status": "streaming", "msgId": assistant_message_id, "interaction_id": interaction_id}
 
     async def run_graph(self, state: ChatWorkflowState) -> None:
+        """
+        根据 chat_mode 选择执行对应的 LangGraph 工作流图。
+
+        做什么：如果 chat_mode 为 CASUAL_CHAT_DEFAULT 则执行闲聊最短化链路图，
+                否则执行默认的日常聊天完整链路图。
+        """
         try:
-            graph_state = await self.graph.ainvoke(state.as_graph_state())
+            if state.runtime.chat_mode == ChatPlanPreset.CASUAL_CHAT_DEFAULT:
+                logger.info(
+                    f"闲聊模式图开始执行 trace_id={state.runtime.trace_id} "
+                    f"session_id={state.runtime.session_id}"
+                )
+                graph_state = await self.casual_chat_graph.ainvoke(state.as_graph_state())
+            else:
+                logger.info(
+                    f"日常聊天模式图开始执行 trace_id={state.runtime.trace_id} "
+                    f"session_id={state.runtime.session_id}"
+                )
+                graph_state = await self.daily_chat_graph.ainvoke(state.as_graph_state())
             final_state = ChatWorkflowState.from_graph_state(graph_state)
             await self.write_checkpoint(final_state)
             await self.publish_plan_event(final_state, ChatWorkflowEventType.EVT_CHAT_PLAN_COMPLETED)

@@ -185,5 +185,67 @@ class ChatGraphFactory:
         )
         return compiled
 
+    def build_casual_chat_graph(self):
+        """
+        构建 casual_chat.default.v1 闲聊最短化执行链路图。
+
+        做什么：构建一条最短化执行链路，仅保留必要节点：
+                会话上下文加载 -> 长期记忆 RAG（强制关闭 Rerank）
+                -> 用户画像注入 -> 提示组装 -> 主聊天 LLM
+                -> 响应持久化 -> 最终化。
+                跳过 输入重构、知识库 RAG、MCP 意图判断、MCP Skill 执行 和 上下文治理。
+        为什么这样做：闲聊模式下用户只期望快速反馈，不需要动用重型分析链。
+                     此图为静态链接拓扑，不涉及条件评估分支节点。
+        """
+        graph = StateGraph(ChatWorkflowState)
+        active_nodes = [
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
+            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG,
+            ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE,
+            ChatWorkflowGraphNodeName.FINALIZE,
+        ]
+        for node_name in active_nodes:
+            graph.add_node(node_name.value, self.registry.get_node(node_name))
+
+        # 闲聊图入口点：会话上下文加载
+        graph.set_entry_point(ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value)
+
+        # 静态硬链接，无条件分支
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value,
+            ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
+            ChatWorkflowGraphNodeName.FINALIZE.value,
+        )
+
+        compiled = graph.compile()
+        logger.info(
+            "casual_chat 闲聊图构建完成 | active_nodes=%d | entry_point=%s",
+            len(active_nodes),
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+        )
+        return compiled
+
 
 from app.logger import logger

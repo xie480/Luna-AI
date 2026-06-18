@@ -58,13 +58,28 @@ class LongTermMemoryNode(ChatWorkflowNode):
 
         try:
             temporal_focus = state.route_state.temporal_focus
+
+            # 闲聊模式降级：使用原始用户消息作为查询词，并强制禁用 Rerank
+            if state.runtime.disable_rerank:
+                search_queries = [state.input_payload.raw_user_message]
+                entity_mentions: list[str] = []
+                logger.info(
+                    f"闲聊模式记忆检索：禁用 Rerank，使用原始消息作为查询词 "
+                    f"trace_id={state.runtime.trace_id} "
+                    f"query_text={state.input_payload.raw_user_message!r}"
+                )
+            else:
+                search_queries = state.route_state.search_queries
+                entity_mentions = state.route_state.entity_mentions
+
             text = await self.dependencies.memory_manager.retrieve_and_format_memories(
                 query_text=state.route_state.disambiguated_text or state.input_payload.raw_user_message,
                 query_vector=[],
-                search_queries=state.route_state.search_queries,
+                search_queries=search_queries,
                 reference_time=temporal_focus.get("reference_time"),
                 temporal_deviation=int(temporal_focus.get("temporal_deviation") or 0),
-                entity_mentions=state.route_state.entity_mentions,
+                entity_mentions=entity_mentions,
+                disable_rerank=state.runtime.disable_rerank,
             )
             state.memory_state.prompt_memory_text = text
 

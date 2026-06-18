@@ -571,11 +571,13 @@ class Manager:
         reference_time: Optional[str] = None,
         temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
+        disable_rerank: bool = False,
     ) -> str:
         """
         检索长期记忆并格式化为 'date: ... \\n        content: ...' 文本
 
         做什么：委托 rag/ 模块的 HybridRetriever 完成检索和格式化。
+        参数 disable_rerank: 是否强制禁用 Rerank 重排序。闲聊模式下设为 True。
         返回：多行文本，每行格式为 'date: YYYY-MM-DD\\ncontent: <summary>'
         """
         return await self.retriever.retrieve_and_format(
@@ -585,4 +587,5 @@ class Manager:
             reference_time=reference_time,
             temporal_deviation=temporal_deviation,
             entity_mentions=entity_mentions,
+            disable_rerank=disable_rerank,
         )

@@ -39,6 +39,10 @@ class ChatRuntimeState(BaseModel):
     retry_count: int = Field(default=0, ge=0)
     chat_mode: ChatPlanPreset = ChatPlanPreset.DAILY_CHAT_DEFAULT
     current_node_type: ChatWorkflowNodeType | None = None
+    disable_rerank: bool = Field(
+        default=False,
+        description="是否禁用 Rerank 重排序。闲聊模式下强制设为 True。",
+    )
 
 
 class ChatInputPayload(BaseModel):

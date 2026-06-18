@@ -428,6 +428,7 @@ class HybridRetriever:
         reference_time: Optional[str] = None,
         temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
+        disable_rerank: bool = False,
     ) -> List[Any]:
         """
         执行完整的混合检索流程
@@ -437,7 +438,7 @@ class HybridRetriever:
           2. PG FTS 稀疏检索（PostgreSQL tsvector）：如果提供了 entity_mentions 和 reference_time，
              增强 BM25 查询文本并做时间过滤（temporal_deviation 控制偏差天数）
           3. 合并去重（按 memory_id）
-          4. Rerank 重排
+          4. Rerank 重排（如果 disable_rerank=True 则跳过）
           5. 严格截断至 rerank_top_k 条
 
         :param query_text: 用户查询文本（用于 FTS, Embedding, Rerank）
@@ -446,6 +447,7 @@ class HybridRetriever:
         :param reference_time: BM25 检索时的时间约束（ISO 时间戳字符串或 None）
         :param temporal_deviation: BM25 时间过滤允许的偏差天数（0 表示精确匹配）
         :param entity_mentions: BM25 检索时的实体关键词列表（若提供，将在查询中加入这些关键词）
+        :param disable_rerank: 是否强制禁用 Rerank 重排序。闲聊模式设为 True。
         :return: 经过重排截断后的 LongTermMemory 列表
         """
         if not self.ltm_pg_repo:
@@ -484,12 +486,19 @@ class HybridRetriever:
             return []
 
         # ---- 阶段 3: Rerank 重排 + 截断 ----
-        result = await self._rerank_and_truncate(query_text, all_memories)
-
-        logger.info(
-            f"混合检索完成 merge_count={len(all_memories)} "
-            f"final_count={len(result)} rerank_top_k={self.rerank_top_k}"
-        )
+        if disable_rerank:
+            # 闲聊模式：跳过 Rerank，直接按 rerank_top_k 截断
+            result = all_memories[:self.rerank_top_k]
+            logger.info(
+                f"混合检索完成（跳过 Rerank）merge_count={len(all_memories)} "
+                f"final_count={len(result)} rerank_top_k={self.rerank_top_k}"
+            )
+        else:
+            result = await self._rerank_and_truncate(query_text, all_memories)
+            logger.info(
+                f"混合检索完成 merge_count={len(all_memories)} "
+                f"final_count={len(result)} rerank_top_k={self.rerank_top_k}"
+            )
         return result
 
     async def retrieve_and_format(
@@ -500,6 +509,7 @@ class HybridRetriever:
         reference_time: Optional[str] = None,
         temporal_deviation: int = 0,
         entity_mentions: Optional[List[str]] = None,
+        disable_rerank: bool = False,
     ) -> str:
         """
         检索长期记忆并格式化为 'date: ... \n content: ...' 文本
@@ -513,6 +523,7 @@ class HybridRetriever:
             - reference_time: BM25 时间参考（ISO 8601 格式）
             - temporal_deviation: BM25 时间过滤允许的偏差天数（0 表示精确匹配）
             - entity_mentions: BM25 实体关键词
+            - disable_rerank: 是否强制禁用 Rerank 重排序。闲聊模式设为 True。
             - 返回：多行文本，格式为：
                 date: YYYYMMDD
                 content: <summary>
@@ -527,6 +538,7 @@ class HybridRetriever:
             reference_time=reference_time,
             temporal_deviation=temporal_deviation,
             entity_mentions=entity_mentions,
+            disable_rerank=disable_rerank,
         )
         if not memories:
             return ""
