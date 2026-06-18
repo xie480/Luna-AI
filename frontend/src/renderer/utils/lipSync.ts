@@ -20,11 +20,13 @@ export class LipSyncProcessor {
   private sourcesMap: WeakMap<HTMLAudioElement, MediaElementAudioSourceNode> = new WeakMap();
   private currentSource: MediaElementAudioSourceNode | null = null;
 
-  private animationFrameId: number | null = null;
   private isProcessing = false;
 
   /** 存储最后一次 start() 传入的模型引用，供 stop() 重置嘴部参数使用。 */
   private currentModel: unknown = null;
+  
+  /** 绑定的 PIXI Live2D 事件处理函数引用，用于清理 */
+  private onUpdateHandler: (() => void) | null = null;
 
   /** 上一帧计算出的音量值（0.0 ~ 1.0），用于帧间平滑。 */
   private lastVolume = 0;
@@ -191,56 +193,60 @@ export class LipSyncProcessor {
       setParameterValueById?: (id: string, value: number) => void;
     };
 
-    const processFrame = (): void => {
+    // 核心修复：
+    // 不再使用独立的 requestAnimationFrame。
+    // 在 Pixi Live2D Display 框架中，如果不介入它的更新生命周期，
+    // 我们在这个文件中通过 rAF 强行设置的 ParamMouthOpenY，
+    // 会在同一帧被模型自身的 update() (如呼吸、表情、待机动作) 给覆盖为 0，导致嘴巴不动。
+    //
+    // 正确的做法是：监听 internalModel 的 afterModelUpdate 事件，
+    // 在所有内置动画和表情计算完毕后，强行将 LipSync 的张嘴值覆写上去。
+    
+    this.onUpdateHandler = () => {
       if (!this.isProcessing || !this.analyser || !this.dataArray) return;
 
-      // ---- 第1步：读取频域数据 ----
-      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      this.analyser.getByteFrequencyData(this.dataArray as any); // eslint-disable-line @typescript-eslint/no-explicit-any
 
-      // ---- 第2步：提取人声主要频段能量 ----
-      // 人声基频约在 85Hz ~ 255Hz，泛音能量集中在较低频率范围。
-      // 取前 40% 的频段（低频+中低频），有效避开齿音、咝音等高音高频噪音。
       const vocalRangeEnd = Math.floor(this.dataArray.length * 0.4);
       let sum = 0;
       for (let i = 0; i < vocalRangeEnd; i++) {
         sum += this.dataArray[i];
       }
       const average = sum / vocalRangeEnd;
-      let rawVolume = average / 255.0; // 归一化到 0.0 ~ 1.0
+      let rawVolume = average / 255.0;
 
-      // ---- 第3步：静音阈值过滤（Noise Gate） ----
-      // 当音量低于门限时，说明当前处于发音间隙或换气停顿，
-      // 必须强制置零，防止底噪造成嘴巴微颤。
       if (rawVolume < noiseGateThreshold) {
         rawVolume = 0;
       }
 
-      // ---- 第4步：帧间平滑插值（低通滤波 / Lerp） ----
-      // 使用上一帧音量与当前帧进行加权混合，防止音量跳变导致嘴部抽搐。
-      // 公式：current = (last * smoothing) + (raw * (1 - smoothing))
       const currentVolume = this.lastVolume * smoothing + rawVolume * (1 - smoothing);
       this.lastVolume = currentVolume;
 
-      // ---- 第5步：放大并钳位到有效范围 ----
-      // 原始音量可能偏小，用 multiplier 放大张嘴幅度。
-      // 使用 Math.min 确保不会超过 1.0（Live2D ParamMouthOpenY 通常是 0 ~ 1）。
       const mouthOpenY = Math.min(1.0, currentVolume * multiplier);
 
-      // ---- 第6步：赋值给 Live2D 模型参数 ----
       try {
         if (coreModel.setParameterValueById) {
+          // 这里极为关键：在所有动画之后执行，强行覆盖表情系统可能定死的嘴部状态
           coreModel.setParameterValueById('ParamMouthOpenY', mouthOpenY);
         }
       } catch (e) {
-        // 模型可能在切换或销毁过程中，不要抛出异常打断主循环
-        console.warn('[LipSync] 模型参数赋值失败:', e);
+        // ignore
       }
-
-      // ---- 第7步：请求下一帧 ----
-      this.animationFrameId = requestAnimationFrame(processFrame);
     };
 
-    processFrame();
+    // 尝试绑定事件
+    if (typeof (internalModel as any).on === 'function') { // eslint-disable-line @typescript-eslint/no-explicit-any
+      (internalModel as any).on('afterModelUpdate', this.onUpdateHandler); // eslint-disable-line @typescript-eslint/no-explicit-any
+    } else {
+      console.warn('[LipSync] 当前模型实例不支持事件监听，退级使用 requestAnimationFrame，口型可能失效');
+      // 退级处理（兜底）
+      const fallbackLoop = () => {
+        if (!this.isProcessing) return;
+        if (this.onUpdateHandler) this.onUpdateHandler();
+        requestAnimationFrame(fallbackLoop);
+      };
+      fallbackLoop();
+    }
   }
 
   /**
@@ -257,13 +263,20 @@ export class LipSyncProcessor {
   public stop(): void {
     this.isProcessing = false;
 
-    // 取消下一帧请求
-    if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
-      this.animationFrameId = null;
+    // 解除绑定的 Live2D 事件
+    if (this.currentModel && this.onUpdateHandler) {
+      try {
+        const model = this.currentModel as Record<string, unknown>;
+        const internalModel = model.internalModel as Record<string, unknown> | undefined;
+        if (internalModel && typeof (internalModel as any).off === 'function') { // eslint-disable-line @typescript-eslint/no-explicit-any
+          (internalModel as any).off('afterModelUpdate', this.onUpdateHandler); // eslint-disable-line @typescript-eslint/no-explicit-any
+        }
+      } catch (e) {
+        // ignore
+      }
     }
-
-    // 重置平滑状态
+    
+    this.onUpdateHandler = null;
     this.lastVolume = 0;
 
     // 将模型嘴部参数强制重置为闭合
@@ -275,6 +288,8 @@ export class LipSyncProcessor {
           const coreModel = internalModel.coreModel as {
             setParameterValueById?: (id: string, value: number) => void;
           };
+          // 注意：如果只是调用 setParameterValueById，可能马上被下一帧清理。
+          // 但由于我们这里是停止状态，如果是短暂重置闭嘴是安全的。
           if (coreModel.setParameterValueById) {
             coreModel.setParameterValueById('ParamMouthOpenY', 0);
           }
