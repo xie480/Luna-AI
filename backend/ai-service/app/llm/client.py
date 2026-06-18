@@ -1122,17 +1122,19 @@ class LLMClient:
                 create_compression_audit_payload,
                 record_compression_audit_payload,
                 record_compression_span,
-                CompressionActionEvent,
                 current_timestamp_ms,
+            )
+            from app.context.compression_types import CompressionActionEvent
+            from app.types.constants import (
+                CompressionStage,
+                CompressionTriggerReason,
+                CompressionScope,
                 COMPRESSION_EVENT_TRIGGERED,
                 COMPRESSION_EVENT_INPUT_MEASURED,
                 COMPRESSION_EVENT_COMPLETED,
                 COMPRESSION_EVENT_FAILED,
                 COMPRESSION_STATUS_SUCCESS,
                 COMPRESSION_STATUS_FAILED,
-            )
-            from app.types.constants import (
-                CompressionStage, CompressionTriggerReason, CompressionScope,
             )
 
             config = global_config_container.get_model_config(ModelSize.MEDIUM)

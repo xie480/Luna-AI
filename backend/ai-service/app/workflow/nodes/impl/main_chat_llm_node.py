@@ -309,6 +309,14 @@ class MainChatLlmNode(ChatWorkflowNode):
         state.generation_state.model_name = llm_client.model_name
         state.generation_state.provider_name = getattr(llm_client, "base_url", "")
 
+        logger.info("[TraceID:%s] LLM 输入参数: %s", trace_id, {
+            "system_prompt": state.prompt_state.system_prompt_text,
+            "history": history_to_model_messages(state.session_state.recent_messages),
+            "current_message": state.input_payload.raw_user_message,
+            "trace_id": trace_id,
+            "disambiguated_text": state.route_state.disambiguated_text or state.input_payload.raw_user_message,
+        })
+
         try:
             raw_response = await llm_client.chat_sync(
                 system_prompt=state.prompt_state.system_prompt_text,
@@ -333,12 +341,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             raise
 
         state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
-        logger.info(
-            "[TraceID:%s] 非流式 LLM 调用完成 e2e_latency_ms=%d 回复长度=%d",
-            trace_id,
-            state.generation_state.e2e_latency_ms,
-            len(raw_response),
-        )
+        logger.info("[TraceID:%s] LLM 输出参数: %s", trace_id, raw_response)
 
         await self._publish_chat_status(
             state=state,
