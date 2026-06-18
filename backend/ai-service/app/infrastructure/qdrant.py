@@ -152,6 +152,13 @@ class QdrantClientWrapper:
     ) -> List[Any]:
         """
         执行向量相似度分组搜索
+        
+        做什么：使用 Qdrant query_points_groups API 按分组字段折叠去重，确保同一条 PostgreSQL
+        记录的多个 Chunk 不会同时挤占 Top-K 检索名额。
+        
+        注意：在 qdrant_client >= 1.10.0 中，search_groups 已废弃，统一使用 query_points_groups 替代。
+        query_points_groups 的参数 query 兼容传入原始向量列表，不再使用 query_vector 参数名。
+        
         :param collection_name: 集合名称
         :param query_vector: 查询向量
         :param group_by: 分组字段名（必须在 payload 中）
@@ -162,9 +169,11 @@ class QdrantClientWrapper:
         await self._ensure_client()
         
         try:
-            results = await self.client.search_groups(
+            # 使用 query_points_groups 替代已废弃的 search_groups
+            # qdrant_client >= 1.10.0 中统一使用 query 参数接收向量
+            results = await self.client.query_points_groups(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 group_by=group_by,
                 limit=limit,
                 group_size=group_size,
