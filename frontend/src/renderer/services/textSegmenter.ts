@@ -10,22 +10,46 @@
  * 边界条件：
  *    - 空字符串或仅空白字符返回空数组
  *    - 超长无标点文本（> 50 字符）强制在 50 字符处切分
- *    - 标点符号保留在片段末尾（不放到下一个片段开头）
+ *    - 表达性标点（～…—·"。！？!?）保留在片段末尾
+ *    - 分隔性标点（，、；：）作为切分边界，不保留在片段末尾
  *    - 过短片段（< 4 字符）合并到前一个片段
  * 异常行为：无异常抛出，所有边界情况均安全处理。
  */
 
-/** 语义句子终止标点正则（保留标点在片段末尾）。 */
-const SENTENCE_END_RE = /([。！？!?\n]+)/;
+/** 语义句子终止标点正则（保留标点在片段末尾）。
+ *  包含：中文逗号、顿号、分号、冒号、波浪号、省略号、中划线/破折号、间隔号、
+ *        中文句号、中文问号/感叹号、英文问号/感叹号、换行符。
+ *  注意：split 时捕获组中的标点会作为独立元素出现在结果数组中。
+ *  为什么这样做：中文文本的语义边界不仅是句号，还有逗号、波浪号等。
+ *              缺少这些会导致文本累积到 MAX_SEGMENT_LENGTH 后被强制截断，
+ *              造成"可就没这么/好说话咯"这种跨词断裂。
+ */
+const SENTENCE_END_RE = /([，、；：～…—·"。！？!?\n]+)/;
 
 /** 连续换行正则（段落分隔符）。 */
 const PARAGRAPH_BREAK_RE = /\n{2,}/;
+
+/**
+ * 尾部分隔性标点清除正则。
+ * 做什么：片段末尾的分隔性标点（逗号、顿号、分号、冒号）不保留。
+ * 为什么这样做：这些标点只是语气停顿标记，气泡末尾展示它们会显得突兀。
+ *              表达性标点（～…—·"。！？!?）保留，因为它们承载情感语气。
+ * 边界条件：仅匹配片段末尾的连续分隔性标点。
+ */
+const TRAILING_SEPARATOR_RE = /[，、；：]+$/;
 
 /** 单个片段最大字符数（无标点长文本时强制截断）。 */
 const MAX_SEGMENT_LENGTH = 50;
 
 /** 单句最小字符数（太短的句子合并到前一句）。 */
 const MIN_SEGMENT_LENGTH = 4;
+
+/**
+ * 清理片段末尾的分隔性标点。
+ */
+function cleanTrailingSeparators(segment: string): string {
+  return segment.replace(TRAILING_SEPARATOR_RE, '');
+}
 
 /**
  * 将完整回复文本按语义边界切分为片段数组。
@@ -35,6 +59,7 @@ const MIN_SEGMENT_LENGTH = 4;
  *   2. 每个段落内部按句子终止标点切分
  *   3. 最终校验：超长片段强制截断，过短片段合并
  * 为什么这样做：气泡分段需要稳定、可预期的文本粒度，每段在 4~50 字符之间。
+ *             分隔性标点（，、；：）不保留在片段末尾，表达性标点（～…）保留。
  * 输入输出：输入原始文本字符串，输出切分后的片段数组。
  * 边界条件：
  *   - 空文本返回空数组
@@ -66,11 +91,18 @@ export function splitReplyIntoSegments(text: string): string[] {
       if (SENTENCE_END_RE.test(part) || currentSegment.length >= MAX_SEGMENT_LENGTH) {
         const trimmed = currentSegment.trim();
         if (trimmed.length > 0) {
-          if (trimmed.length < MIN_SEGMENT_LENGTH && segments.length > 0) {
+          // 清理片段末尾的分隔性标点（，、；：），保留表达性标点（～…—·"。！？!?）
+          const cleaned = cleanTrailingSeparators(trimmed);
+          if (cleaned.length === 0) {
+            // 如果清理后为空（片段只有分隔性标点），则丢弃
+            currentSegment = '';
+            continue;
+          }
+          if (cleaned.length < MIN_SEGMENT_LENGTH && segments.length > 0) {
             // 太短的片段合并到前一个片段末尾
-            segments[segments.length - 1] += trimmed;
+            segments[segments.length - 1] += cleaned;
           } else {
-            segments.push(trimmed);
+            segments.push(cleaned);
           }
         }
         currentSegment = '';
@@ -80,10 +112,13 @@ export function splitReplyIntoSegments(text: string): string[] {
     // 处理段落末尾可能的残留文本（没有遇到句子终止标点的情况）
     if (currentSegment.trim().length > 0) {
       const trimmed = currentSegment.trim();
-      if (trimmed.length < MIN_SEGMENT_LENGTH && segments.length > 0) {
-        segments[segments.length - 1] += trimmed;
-      } else {
-        segments.push(trimmed);
+      const cleaned = cleanTrailingSeparators(trimmed);
+      if (cleaned.length > 0) {
+        if (cleaned.length < MIN_SEGMENT_LENGTH && segments.length > 0) {
+          segments[segments.length - 1] += cleaned;
+        } else {
+          segments.push(cleaned);
+        }
       }
     }
   }
