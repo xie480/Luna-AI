@@ -61,8 +61,21 @@ function updateLive2DEmotion(emotion: string): void {
  *    - 播放失败静默降级
  * 异常行为：播放异常不影响气泡渲染流程。
  */
+let sharedUnifiedAudioElement: HTMLAudioElement | null = null;
+function getSharedUnifiedAudioElement() {
+  if (!sharedUnifiedAudioElement) {
+    sharedUnifiedAudioElement = document.createElement('audio');
+    sharedUnifiedAudioElement.id = 'luna-unified-tts-audio';
+    sharedUnifiedAudioElement.style.display = 'none';
+    // 必须设置 crossOrigin，否则 Web Audio API 出于跨域安全限制，提取到的频域数据全是 0
+    sharedUnifiedAudioElement.crossOrigin = 'anonymous';
+    document.body.appendChild(sharedUnifiedAudioElement);
+  }
+  return sharedUnifiedAudioElement;
+}
+
 function playTtsAudio(audioUri: string, assistantMessageId: string): void {
-  const audioEl = new Audio();
+  const audioEl = getSharedUnifiedAudioElement();
   audioEl.src = audioUri;
 
   const live2dModel = getLive2dModel();
