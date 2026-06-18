@@ -291,6 +291,29 @@ async def lifespan(app: FastAPI):
             from sqlalchemy import inspect
             from sqlalchemy import text as from_sqlalchemy_text
             
+            # 自增计数器，用于生成唯一 savepoint 名称
+            _sp_counter = [0]
+
+            def ddl_execute(sql: str, error_ctx: str) -> None:
+                """使用 savepoint 安全执行 DDL，单个 DDL 失败不回滚整个事务。
+                
+                为什么这样做：PostgreSQL 在 DDL 失败后会将整个事务标记为 aborted，
+                后续所有 SQL 都会报 InFailedSQLTransactionError。SAVEPOINT 允许
+                我们在单个 DDL 失败时只回滚到该点，不影响事务中其他成功 DDL。
+                """
+                _sp_counter[0] += 1
+                sp_name = f"sp_ddl_{_sp_counter[0]}"
+                try:
+                    sync_conn.exec_driver_sql(f"SAVEPOINT {sp_name}")
+                    sync_conn.execute(from_sqlalchemy_text(sql))
+                    sync_conn.exec_driver_sql(f"RELEASE SAVEPOINT {sp_name}")
+                except Exception as e:
+                    logger.error(f"[Schema Sync] {error_ctx} 失败: {e}")
+                    try:
+                        sync_conn.exec_driver_sql(f"ROLLBACK TO SAVEPOINT {sp_name}")
+                    except Exception:
+                        pass
+            
             inspector = inspect(sync_conn)
             existing_tables = set(inspector.get_table_names())
 
@@ -313,11 +336,8 @@ async def lifespan(app: FastAPI):
             for db_table in existing_tables:
                 if db_table not in local_tables_map and db_table not in whitelist_tables:
                     drop_stmt = f"DROP TABLE IF EXISTS {db_table} CASCADE"
-                    try:
-                        logger.info(f"[Schema Sync] 检测到废弃表，执行删除: {drop_stmt}")
-                        sync_conn.execute(from_sqlalchemy_text(drop_stmt))
-                    except Exception as e:
-                        logger.error(f"[Schema Sync] 删除表 {db_table} 失败: {e}")
+                    logger.info(f"[Schema Sync] 检测到废弃表，执行删除: {drop_stmt}")
+                    ddl_execute(drop_stmt, f"删除表 {db_table}")
 
             existing_tables = set(inspector.get_table_names())
 
@@ -334,16 +354,14 @@ async def lifespan(app: FastAPI):
                         if db_col_name not in local_col_names:
                             drop_col_stmt = f'ALTER TABLE {table_name} DROP COLUMN "{db_col_name}" CASCADE'
                             logger.info(f"[Schema Sync] 表 {table_name} 检测到废弃字段，执行删除: {drop_col_stmt}")
-                            try:
-                                sync_conn.execute(from_sqlalchemy_text(drop_col_stmt))
-                            except Exception as e:
-                                logger.error(f"[Schema Sync] 表 {table_name} 删除字段 {db_col_name} 失败: {e}")
+                            ddl_execute(drop_col_stmt, f"表 {table_name} 删除字段 {db_col_name}")
 
                     # b. 新增字段或修改字段属性
                     for col in table.columns:  # 遍历本地定义的列
                         col_name = col.name
                         if col_name not in db_columns:  # 检查数据库中是否缺少该字段
-                            col_type = str(col.type)
+                            # 使用 dialect 编译类型，确保 PostgreSQL 兼容（DateTime -> TIMESTAMP WITH TIME ZONE）
+                            col_type = str(col.type.compile(sync_conn.dialect))
                             nullable_str = "" if col.nullable else " NOT NULL"
                             
                             # 构建默认值子句，防止 NOT NULL 且无默认导致错误
@@ -356,20 +374,14 @@ async def lifespan(app: FastAPI):
                                     default_clause = " DEFAULT ''"
                             alter_stmt = f'ALTER TABLE {table_name} ADD COLUMN "{col_name}" {col_type} {nullable_str}{default_clause}'
                             logger.info(f"[Schema Sync] 表 {table_name} 检测到缺失字段，执行: {alter_stmt}")
-                            try:
-                                sync_conn.execute(from_sqlalchemy_text(alter_stmt))
-                            except Exception as alter_err:
-                                logger.error(f"[Schema Sync] 表 {table_name} 添加列 {col_name} 失败: {alter_err}")
+                            ddl_execute(alter_stmt, f"表 {table_name} 添加列 {col_name}")
 
                             # 添加新字段对应的索引
                             if getattr(col, 'index', False):
                                 index_name = f"ix_{table_name}_{col_name}"
                                 index_stmt = f'CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ("{col_name}")'
                                 logger.info(f"[Schema Sync] 为新字段创建索引: {index_stmt}")
-                                try:
-                                    sync_conn.execute(from_sqlalchemy_text(index_stmt))
-                                except Exception as idx_err:
-                                    logger.error(f"[Schema Sync] 创建索引失败: {idx_err}")
+                                ddl_execute(index_stmt, f"创建索引 ix_{table_name}_{col_name}")
                         else:
                             # 字段属性与类型差异比对
                             db_col = db_columns[col_name]
@@ -377,10 +389,7 @@ async def lifespan(app: FastAPI):
                             if col.nullable != db_nullable:
                                 alter_null_stmt = f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" {"DROP" if col.nullable else "SET"} NOT NULL'
                                 logger.info(f"[Schema Sync] 表 {table_name} 字段 {col_name} Nullable 变更，执行: {alter_null_stmt}")
-                                try:
-                                    sync_conn.execute(from_sqlalchemy_text(alter_null_stmt))
-                                except Exception as e:
-                                    logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 修改 Nullable 失败: {e}")
+                                ddl_execute(alter_null_stmt, f"表 {table_name} 字段 {col_name} 修改 Nullable")
                             
                             # 类型比对
                             expected_type_str = str(col.type.compile(sync_conn.dialect)).lower()
@@ -412,10 +421,7 @@ async def lifespan(app: FastAPI):
                                     f"（当前: {db_type_str}，期望: {expected_type_str}），"
                                     f"执行转换: {fix_tz_stmt}"
                                 )
-                                try:
-                                    sync_conn.execute(from_sqlalchemy_text(fix_tz_stmt))
-                                except Exception as e:
-                                    logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 时区转换失败: {e}")
+                                ddl_execute(fix_tz_stmt, f"表 {table_name} 字段 {col_name} 时区转换")
                                 # 跳过下方的通用 ALTER（类型已匹配，无需二次转换）
                                 continue
 
@@ -423,10 +429,7 @@ async def lifespan(app: FastAPI):
                             if exp_base_type != db_base_type and "json" not in exp_base_type and "json" not in db_base_type:
                                 alter_type_stmt = f'ALTER TABLE {table_name} ALTER COLUMN "{col_name}" TYPE {expected_type_str} USING "{col_name}"::{expected_type_str}'
                                 logger.info(f"[Schema Sync] 表 {table_name} 字段 {col_name} 类型变更 ({db_type_str} -> {expected_type_str})，执行: {alter_type_stmt}")
-                                try:
-                                    sync_conn.execute(from_sqlalchemy_text(alter_type_stmt))
-                                except Exception as e:
-                                    logger.error(f"[Schema Sync] 表 {table_name} 字段 {col_name} 修改类型失败: {e}")
+                                ddl_execute(alter_type_stmt, f"表 {table_name} 字段 {col_name} 修改类型")
 
         from sqlalchemy import text as from_sqlalchemy_text
 
