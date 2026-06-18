@@ -53,6 +53,34 @@ class GSVITTSClient:
             self._client = httpx.AsyncClient(timeout=self.cfg.timeout)
         return self._client
 
+    def _map_text_lang(self, lang: str) -> str:
+        """
+        将语言代码映射为 GPT-SoVITS 服务端支持的中文全称。
+
+        做什么：GPT-SoVITS 服务端期望 text_lang 为中文全称（如"中文"、"英语"），
+                而非 ISO 语言代码（如"zh"、"en"）。此方法将常见 ISO 代码或缩写
+                映射为服务端接受的格式。
+        为什么这样做：避免因语言参数格式不合法导致服务端 index() 越界错误。
+        输入：
+            lang: 语言标识（ISO 代码或缩写）
+        输出：
+            映射后的中文全称，未知语言默认为"中文"
+        """
+        lang_map = {
+            "zh": "中文",
+            "zh-cn": "中文",
+            "zh-chs": "中文",
+            "en": "英语",
+            "en-us": "英语",
+            "ja": "日语",
+            "jp": "日语",
+            "ko": "韩语",
+            "kr": "韩语",
+            "yue": "粤语",
+            "cantonese": "粤语",
+        }
+        return lang_map.get(lang.lower(), "中文")
+
     async def synthesize(
         self,
         text: str,
@@ -70,15 +98,21 @@ class GSVITTSClient:
         # 将各种大小写形式的 luna 替换为“露娜”，使 TTS 发音正确
         processed_text = re.sub(r'(?i)luna', '露娜', text)
         
+        # model 格式: GPT-SoVITS 期望 "GSVI-{version}"（如 "GSVI-v4"）
+        # voice 格式: 说话人名称（如 "阿米娅"）
+        model_name = model or f"GSVI-{self.cfg.model_version}"
+        voice_name = voice or self.cfg.default_voice
+        text_lang_cn = self._map_text_lang(text_language)
+        
         payload = {
-            "model": model or self.cfg.default_model,
+            "model": model_name,
             "input": processed_text,
-            "voice": voice or self.cfg.default_voice,
+            "voice": voice_name,
             "response_format": response_format or self.cfg.response_format,
             "speed": speed if speed is not None else self.cfg.speed,
             "other_params": {
                 "emotion": emotion,
-                "text_lang": text_language,
+                "text_lang": text_lang_cn,
             },
         }
         if extra_params:

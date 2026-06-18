@@ -28,6 +28,7 @@ class TTSConfig:
     属性：
         - base_url: TTS 服务 HTTP 基础地址
         - endpoint: API 端点路径
+        - model_version: GPT-SoVITS 模型版本号（如 "v4"），用于构建 "GSVI-{version}" 格式的 model 参数
         - default_model / default_voice: 默认模型/音色名称
         - response_format: 输出音频格式
         - speed: 语速倍率
@@ -41,6 +42,9 @@ class TTSConfig:
     base_url: str = "http://127.0.0.1:8999"
     # TTS API 端点路径，例如 /v1/audio/speech（OpenAI-compatible）或 /tts
     endpoint: str = "/v1/audio/speech"
+    # GPT-SoVITS 模型版本号，用于构建 model="GSVI-{version}" 格式
+    # GPT-SoVITS 服务端通过 model.split("-")[1] 解析版本号，错误格式会导致 IndexError
+    model_version: str = "v4"
     # 默认模型/角色名称，如"阿米娅"
     default_model: str = "阿米娅"
     # 默认音色名称
@@ -66,11 +70,12 @@ class TTSConfig:
         做什么：读取 app.config.settings.settings 单例中所有 tts_* 前缀的配置项，
                 将字符串路径自动转换为 Path 对象，并返回完整的 TTSConfig 实例。
         为什么这样做：全局 Settings 已从 .env 和环境变量加载配置，
-                    避免 TTSConfig 重复实现配置加载逻辑，保持单一配置入口。
+                     避免 TTSConfig 重复实现配置加载逻辑，保持单一配置入口。
         输入输出：
             - 返回: TTSConfig 实例，所有字段已从 Settings 赋值
         边界条件：
             - tts_service_outputs_dir 为空字符串时，service_outputs_dir 设为 None
+            - tts_model_version 未配置时默认为 "v4"
         """
         # 延迟导入，避免循环依赖
         from app.config.settings import settings
@@ -82,6 +87,7 @@ class TTSConfig:
         return cls(
             base_url=settings.tts_base_url,
             endpoint=settings.tts_endpoint,
+            model_version=settings.tts_model_version,
             default_model=settings.tts_default_model,
             default_voice=settings.tts_default_voice,
             response_format=settings.tts_response_format,

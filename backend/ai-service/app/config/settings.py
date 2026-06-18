@@ -201,6 +201,9 @@ class Settings(BaseSettings):
     tts_base_url: str = "http://127.0.0.1:8999"
     # TTS API 端点路径
     tts_endpoint: str = "/v1/audio/speech"
+    # GPT-SoVITS 模型版本号（如 "v4"），用于构建 "GSVI-{version}" 格式的 model 请求参数
+    # GPT-SoVITS 服务端通过 model.split("-")[1] 解析版本号，错误格式会导致 IndexError
+    tts_model_version: str = "v4"
     # TTS 默认模型名称（角色名，如"阿米娅"）
     tts_default_model: str = "阿米娅"
     # TTS 默认音色名称
