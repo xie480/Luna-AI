@@ -54,6 +54,7 @@ from app.api.chat_status_texts import (
     get_chat_status_text,
 )
 from app.prompt.types import PromptCategory, render_template
+from app.tts import tts_client, map_emotion
 from app.logger import logger
 from app.mcp.executor import execute_tool
 from app.mcp.skill_registry import SkillRegistry
@@ -74,7 +75,7 @@ from app.workflow.constants import (
 from app.workflow.context import ChatWorkflowState
 from app.workflow.nodes.base import ChatWorkflowNode
 from app.workflow.nodes.dependencies import WorkflowDependencies
-from app.workflow.nodes.helpers import first_reason
+from app.workflow.nodes.helpers import first_reason, publish_unified_response
 
 
 class MCPSkillExecutionNode(ChatWorkflowNode):
@@ -453,6 +454,25 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         f"tool_results={tool_results} "
                         f"eval_result={eval_result}"
                     )
+
+                    # ============================================================
+                    # 推送评估回复：将 eval_result 中的 reply 和 emotion 通过 TTS 合成
+                    # 后以统一响应包推送到前端，实现 Live2D 嘴型同步、表情切换和气泡渲染。
+                    # 为什么这样做：MCP Evaluation 节点执行完成后，让 Luna 可以同步
+                    # 当前进度状态的面部表情和语音回复，增强陪伴感。
+                    # 边界条件：
+                    #   - reply 为空时跳过推送
+                    #   - TTS 合成失败时降级为纯文本推送
+                    #   - emotion 为空时使用 "default" 作为默认情绪
+                    # ============================================================
+                    eval_reply = eval_result.get("reply", "")
+                    eval_emotion = eval_result.get("emotion", "")
+                    if eval_reply:
+                        await self._push_evaluation_reply(
+                            state=state,
+                            reply=eval_reply,
+                            emotion=eval_emotion,
+                        )
 
                     if eval_result.get("is_met", False):
                         await self._publish_chat_status(
@@ -879,4 +899,71 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
             is_visible=is_visible,
             is_terminal=is_terminal,
             error=error,
+        )
+
+    async def _push_evaluation_reply(
+        self,
+        state: ChatWorkflowState,
+        reply: str,
+        emotion: str,
+    ) -> None:
+        """
+        推送 MCP Evaluation 的 reply 到前端：TTS 合成 + 统一响应包下发。
+
+        做什么：将 MCP Evaluation Agent 输出的 reply 文本和 emotion 情绪，
+                通过 TTS 合成音频后，以统一响应包（ChatUnifiedResponsePayload）
+                推送到前端。前端收到后自行负责气泡渲染、TTS 音频播放和 Live2D 表情切换。
+        为什么这样做：让 Luna 在 MCP 工具执行评估阶段也能同步输出语音和表情，
+                    避免纯静默等待，提升陪伴感。
+        输入输出：
+            - 输入：reply 回复文本、emotion 情绪标签
+            - 输出：通过 SSE 推送统一响应事件到前端
+        边界条件：
+            - reply 为空时直接跳过（调用前已判断）
+            - TTS 合成失败时降级为纯文本推送（audio_uri=None）
+            - emotion 为空时前端使用默认表情
+        异常行为：
+            - TTS 异常被捕获并记录日志，不阻断主流程
+            - publish_unified_response 异常由 publish_unified_response 内部静默处理
+        """
+        from app.logger import logger
+
+        trace_id = state.runtime.trace_id
+        logger.info(
+            "[TraceID:{}] 推送 MCP Evaluation 回复 reply 长度={} emotion={}",
+            trace_id,
+            len(reply),
+            emotion or "(空)",
+        )
+
+        # --- TTS 合成（失败降级） ---
+        audio_uri: str | None = None
+        tts_enabled = getattr(state.input_payload, "tts_enabled", True)
+        if tts_enabled:
+            try:
+                emotion_tag = map_emotion(emotion)
+                audio_path = await tts_client.synthesize_to_file(reply, emotion=emotion_tag)
+                audio_uri = f"luna://tts/{audio_path.name}"
+                logger.info(
+                    "[TraceID:{}] MCP Evaluation TTS 合成完成 audio_uri={}",
+                    trace_id,
+                    audio_uri,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[TraceID:{}] MCP Evaluation TTS 合成失败，降级为纯文本: {}",
+                    trace_id,
+                    e,
+                )
+                audio_uri = None
+
+        # --- 推送到前端 ---
+        await publish_unified_response(
+            state=state,
+            full_text=reply,
+            thought_text="",
+            emotion=emotion,
+            audio_uri=audio_uri,
+            finish_reason="stop",
+            event_publisher=self.dependencies.event_publisher,
         )

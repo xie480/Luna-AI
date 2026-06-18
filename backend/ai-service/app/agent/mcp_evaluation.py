@@ -18,6 +18,16 @@ class EvaluationResult(BaseModel):
         default="",
         description="如果未达成，给出针对下一轮参数调整的自然语言建议。如果达成，可以为空。",
     )
+    reply: str = Field(
+        default="",
+        description="Luna 面向主人的简短回应文本。用于同步当前步骤执行状态、表达看法或情绪。"
+                    "不得回答用户问题，不得总结任务结果，不得复述工具结果。",
+    )
+    emotion: str = Field(
+        default="",
+        description="Luna 当前情绪状态。必须从情绪枚举中选择一个最符合当前 reply 的情绪。"
+                    "情绪应与执行结果和上下文保持一致，不得随机选择。",
+    )
 
 
 class MCPEvaluationAgent:
@@ -49,7 +59,7 @@ class MCPEvaluationAgent:
             step_goal: 当前步骤目标。
             tool_results: 已执行的工具结果列表。
         返回:
-            dict: is_met (bool), suggestion (str), latency_ms (int)。
+            dict: is_met (bool), suggestion (str), reply (str), emotion (str), latency_ms (int)。
         """
         started_at = time.monotonic()
 
@@ -106,6 +116,8 @@ class MCPEvaluationAgent:
             return {
                 "is_met": response.is_met,
                 "suggestion": response.suggestion,
+                "reply": response.reply,
+                "emotion": response.emotion,
                 "latency_ms": elapsed_ms,
             }
         except Exception as exc:
@@ -115,5 +127,7 @@ class MCPEvaluationAgent:
             return {
                 "is_met": False,
                 "suggestion": f"评估失败：{exc!s}。请尝试调整策略重新执行。",
+                "reply": "",
+                "emotion": "",
                 "latency_ms": max(0, int((time.monotonic() - started_at) * 1000)),
             }
