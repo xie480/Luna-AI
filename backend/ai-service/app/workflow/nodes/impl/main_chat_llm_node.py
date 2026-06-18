@@ -129,7 +129,7 @@ class MainChatLlmNode(ChatWorkflowNode):
                             )
                     except Exception as e:
                         from app.logger import logger
-                        logger.error("TTS 合成消费任务发生错误: %s", e)
+                        logger.error("TTS 合成消费任务发生错误: {}", e)
                         await publish_stream_payload(
                             state,
                             CHAT_STREAM_TYPE_REPLY_CHUNK,
@@ -148,7 +148,7 @@ class MainChatLlmNode(ChatWorkflowNode):
                     from app.logger import logger
 
                     logger.warning(
-                        "主模型生成发生异常，准备进行第 %d 次重试... trace_id=%s",
+                        "主模型生成发生异常，准备进行第 {} 次重试... trace_id={}",
                         attempt,
                         state.runtime.trace_id,
                     )
@@ -290,7 +290,7 @@ class MainChatLlmNode(ChatWorkflowNode):
         from app.tts import tts_client, map_emotion
 
         trace_id = state.runtime.trace_id
-        logger.info("[TraceID:%s] 非流式统一响应模式启动", trace_id)
+        logger.info("[TraceID:{}] 非流式统一响应模式启动", trace_id)
 
         # ============================================================
         # 阶段 1：调用 LLM 获取完整回复
@@ -309,7 +309,7 @@ class MainChatLlmNode(ChatWorkflowNode):
         state.generation_state.model_name = llm_client.model_name
         state.generation_state.provider_name = getattr(llm_client, "base_url", "")
 
-        logger.info("[TraceID:%s] LLM 输入参数: %s", trace_id, {
+        logger.info("[TraceID:{}] LLM 输入参数: {}", trace_id, {
             "system_prompt": state.prompt_state.system_prompt_text,
             "history": history_to_model_messages(state.session_state.recent_messages),
             "current_message": state.input_payload.raw_user_message,
@@ -341,7 +341,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             raise
 
         state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
-        logger.info("[TraceID:%s] LLM 输出参数: %s", trace_id, raw_response)
+        logger.info("[TraceID:{}] LLM 输出参数: {}", trace_id, raw_response)
 
         await self._publish_chat_status(
             state=state,
@@ -419,7 +419,7 @@ class MainChatLlmNode(ChatWorkflowNode):
                 )
                 audio_uri = f"luna://tts/{audio_path.name}"
                 logger.info(
-                    "[TraceID:%s] TTS 合成完成 audio_uri=%s 文本长度=%d",
+                    "[TraceID:{}] TTS 合成完成 audio_uri={} 文本长度={}",
                     trace_id,
                     audio_uri,
                     len(state.generation_state.full_text),
@@ -435,7 +435,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             except Exception as e:
                 # TTS 合成失败不阻断主流程，降级为纯文本
                 logger.warning(
-                    "[TraceID:%s] TTS 合成失败，降级为纯文本: %s",
+                    "[TraceID:{}] TTS 合成失败，降级为纯文本: {}",
                     trace_id,
                     e,
                 )
@@ -491,7 +491,7 @@ class MainChatLlmNode(ChatWorkflowNode):
         )
 
         logger.info(
-            "[TraceID:%s] 非流式统一响应流水线完成 e2e_latency_ms=%d audio_uri=%s",
+            "[TraceID:{}] 非流式统一响应流水线完成 e2e_latency_ms={} audio_uri={}",
             trace_id,
             state.generation_state.e2e_latency_ms,
             audio_uri or "None",

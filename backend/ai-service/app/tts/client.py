@@ -126,7 +126,7 @@ class GSVITTSClient:
             resp.raise_for_status()
             return resp.content
         except httpx.HTTPError as e:
-            logger.error("TTS 服务调用失败: %s (URL: %s)", e, url)
+            logger.error("TTS 服务调用失败: {} (URL: {})", e, url)
             raise RuntimeError(f"TTS 合成失败: {e}") from e
 
     async def synthesize_to_file(self, text: str, emotion: str = "default", **kwargs) -> Path:
@@ -140,10 +140,10 @@ class GSVITTSClient:
             data = await self.synthesize(text=text, emotion=emotion, **kwargs)
             out_path = self.cfg.cache_dir / out_name
             out_path.write_bytes(data)
-            logger.debug("TTS 生成成功，保存至: %s", out_path)
+            logger.debug("TTS 生成成功，保存至: {}", out_path)
             return out_path
         except Exception as e:
-            logger.error("TTS 生成到文件失败: %s", e)
+            logger.error("TTS 生成到文件失败: {}", e)
             raise
 
     async def close(self):

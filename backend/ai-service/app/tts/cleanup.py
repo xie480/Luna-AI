@@ -26,10 +26,10 @@ def cleanup_dir(root: str | Path, keep_hours: int = 24, suffixes: tuple[str, ...
             if p.stat().st_mtime < cutoff:
                 p.unlink()
                 removed += 1
-                logger.debug("已清理过期 TTS 缓存: %s", p)
+                logger.debug("已清理过期 TTS 缓存: {}", p)
         except FileNotFoundError:
             pass
         except Exception as e:
-            logger.warning("清理 TTS 缓存失败 %s: %s", p, e)
+            logger.warning("清理 TTS 缓存失败 {}: {}", p, e)
             
     return removed

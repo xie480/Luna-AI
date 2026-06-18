@@ -130,7 +130,7 @@ async def publish_stream_payload(
         }
     )
     logger.debug(
-        "Chat Workflow 流式载荷已推送 trace_id=%s interaction_id=%s type=%s is_finished=%s",
+        "Chat Workflow 流式载荷已推送 trace_id={} interaction_id={} type={} is_finished={}",
         state.runtime.trace_id,
         state.runtime.interaction_id,
         msg_type,
@@ -189,7 +189,7 @@ async def publish_unified_response(
         }
     )
     logger.info(
-        "[TraceID:%s] 非流式统一响应已推送 interaction_id=%s e2e_latency_ms=%d audio_uri=%s",
+        "[TraceID:{}] 非流式统一响应已推送 interaction_id={} e2e_latency_ms={} audio_uri={}",
         state.runtime.trace_id,
         state.runtime.interaction_id,
         state.generation_state.e2e_latency_ms,

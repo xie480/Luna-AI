@@ -767,7 +767,7 @@ async def lifespan(app: FastAPI):
             ),
             handler=handle_searxng_search,
         )
-        logger.info("MCP 内置工具注册完成（web_search concurrent_requests=%d）", 3)
+        logger.info("MCP 内置工具注册完成（web_search concurrent_requests={}）", 3)
 
         # 从 PG 加载已注册的工具（如果在 PG 中有额外的动态注册工具）
         if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:
