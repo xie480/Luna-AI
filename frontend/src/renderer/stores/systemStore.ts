@@ -3,6 +3,8 @@
  * 管理连接状态、左侧边栏状态、模态窗口状态等系统级配置
  */
 import { create } from 'zustand';
+import { CHAT_MODE } from '../../shared/enum';
+import type { ChatMode } from '../../shared/types';
 import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 
 /**
@@ -77,6 +79,14 @@ interface SystemState {
   live2dMaxFPS: 30 | 60 | 90 | 120;
   // 主题设置
   theme: 'dark' | 'light' | 'cyberpunk';
+  /**
+   * 当前聊天模式。
+   * 做什么：控制输入框左侧胶囊切换器的模式状态。
+   * 为什么这样做：聊天模式影响后端 Prompt 装配与工作流行为，前端需持久化用户偏好。
+   * 边界条件：默认 DAILY_CHAT（深度日常助理），切换后持久化到 localStorage。
+   */
+  chatMode: ChatMode;
+
 
   // === 可观测性相关增强 ===
   // 前端异常缓冲区（环形缓冲，最多保留 100 条）
@@ -119,6 +129,12 @@ interface SystemState {
   setLive2dMaxFPS: (fps: 30 | 60 | 90 | 120) => void;
   // 设置主题
   setTheme: (theme: 'dark' | 'light' | 'cyberpunk') => void;
+  /**
+   * 设置聊天模式。
+   * 做什么：切换日常助理/极速闲聊模式，并持久化到 localStorage。
+   */
+  setChatMode: (mode: ChatMode) => void;
+
   // 可观测性 Actions
   addFrontendError: (entry: FrontendErrorEntry) => void;
   clearFrontendErrors: () => void;
@@ -219,6 +235,22 @@ function loadTheme(): 'dark' | 'light' | 'cyberpunk' {
 }
 
 /**
+ * 从 localStorage 读取聊天模式，不存在时返回默认深度日常助理模式。
+ * 为什么这样做：用户偏好应跨会话持久化，避免每次启动都重置为默认值。
+ */
+function loadChatMode(): ChatMode {
+  try {
+    const raw = localStorage.getItem('luna:chatMode');
+    if (raw === CHAT_MODE.DAILY_CHAT || raw === CHAT_MODE.CASUAL_CHAT) {
+      return raw as ChatMode;
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return CHAT_MODE.DAILY_CHAT;
+}
+
+/**
  * 创建系统状态 Store
  */
 export const useSystemStore = create<SystemState>((set) => ({
@@ -242,6 +274,8 @@ export const useSystemStore = create<SystemState>((set) => ({
   isLive2dBackgroundSuspensionEnabled: loadLive2dBackgroundSuspensionEnabled(),
   live2dMaxFPS: loadLive2dMaxFPS(),
   theme: loadTheme(),
+  // 聊天模式，从 localStorage 恢复用户偏好，默认深度日常助理
+  chatMode: loadChatMode(),
   // 可观测性初始状态
   frontendErrors: [],
   isDiagnosticOpen: false,
@@ -388,6 +422,21 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误
       }
       return { theme };
+    }),
+
+  /**
+   * 设置聊天模式并持久化到 localStorage。
+   * 做什么：切换日常助理/极速闲聊模式，用户偏好跨会话保留。
+   * 为什么这样做：用户对模式的选择应当持久化，避免每次重启重置。
+   */
+  setChatMode: (mode) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:chatMode', mode);
+      } catch (e) {
+        // 忽略存储错误（如 localStorage 满）
+      }
+      return { chatMode: mode };
     }),
 
   // 添加前端异常（环形缓冲，最多 100 条）

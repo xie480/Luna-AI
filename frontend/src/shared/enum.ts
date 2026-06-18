@@ -256,11 +256,18 @@ export const CHAT_WORKFLOW_SCHEMA_VERSION = {
  * 做什么：定义当前前后端共享的聊天模式标识。
  * 为什么这样做：Plan 投影视图、调试事件和消息元数据都需要稳定模式枚举。
  * 输入输出：无。
- * 边界条件：Phase 8.5 仅支持 daily_chat。
+ * 边界条件：Phase 2 增强后支持 daily_chat（深度日常助理）与 casual_chat（极速轻松闲聊）。
  * 异常行为：无。
  */
 export const CHAT_MODE = {
+  /**
+   * 深度日常助理模式：完整工作流、RAG、记忆写入。
+   */
   DAILY_CHAT: 'daily_chat',
+  /**
+   * 极速闲聊模式：跳过 RAG 与记忆写入，仅保留基础对话能力，响应更快。
+   */
+  CASUAL_CHAT: 'casual_chat',
 } as const;
 
 /**

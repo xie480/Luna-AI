@@ -1032,6 +1032,8 @@ class SSEManager {
         ttsEnabled: systemStore.isTTSEnabled,
         // LLM 响应模式：unified（统一非流式，默认）/ streaming（传统流式兼容）
         llmResponseMode: systemStore.llmResponseMode ?? 'unified',
+        // 聊天模式：daily_chat（深度日常助理）/ casual_chat（极速闲聊）
+        chatMode: systemStore.chatMode,
       }),
     }).then((resp) => {
       if (!resp.ok) {

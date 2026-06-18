@@ -51,9 +51,10 @@ export type ChatWorkflowEventType = typeof CHAT_WORKFLOW_EVENT_TYPE[keyof typeof
 /**
  * Chat 模式类型。
  * 做什么：描述当前聊天模式枚举。
- * 为什么这样做：Plan 投影视图和消息元数据都需要持有模式信息。
+ * 为什么这样做：Plan 投影视图、消息元数据和输入框模式切换都需要持有模式信息。
  * 输入输出：无。
- * 边界条件：Phase 8.5 仅支持 [`CHAT_MODE.DAILY_CHAT`](frontend/src/shared/enum.ts)。
+ * 边界条件：Phase 2 增强后支持 [`CHAT_MODE.DAILY_CHAT`](frontend/src/shared/enum.ts)（深度日常助理）
+ *           与 [`CHAT_MODE.CASUAL_CHAT`](frontend/src/shared/enum.ts)（极速闲聊）。
  * 异常行为：无。
  */
 export type ChatMode = typeof CHAT_MODE[keyof typeof CHAT_MODE];

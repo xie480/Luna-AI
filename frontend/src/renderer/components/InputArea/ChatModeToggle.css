@@ -1,0 +1,483 @@
+/* =========================================
+   ChatModeToggle 赛博朋克胶囊指示器样式
+   方案一变体：胶囊按钮 + Portal 弹出选择抽屉
+   设计语言：霓虹蓝（陪伴模式）、亮紫（应答模式）
+   胶囊作为 .input-area 的 flex 子项内联排列
+   ========================================= */
+
+/* 外层容器（作为 .input-area 的 flex 子项） */
+.chat-mode-toggle-container {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 2;
+  margin-left: 10px;
+}
+
+/* =========================================
+   胶囊按钮基础样式
+   ========================================= */
+.chat-mode-capsule {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 7px 4px 5px;
+  border: 1px solid;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+  height: 26px;
+  min-width: 52px;
+  justify-content: center;
+}
+
+/* 胶囊背景光效扫描线 */
+.chat-mode-capsule::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.chat-mode-capsule:hover::before,
+.chat-mode-capsule.capsule-active::before {
+  opacity: 1;
+}
+
+/* =========================================
+   输入框失焦时胶囊效仿磨砂玻璃降级样式
+   胶囊在 .input-area 内部，使用嵌套选择器。
+   ========================================= */
+.input-area:not(:focus-within) .chat-mode-capsule {
+  opacity: 0.55;
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.input-area:not(:focus-within) .chat-mode-capsule:hover {
+  opacity: 0.85;
+}
+
+/* =========================================
+   普通日常助理模式（霓虹蓝 Neon Blue）
+   当前为"普通"模式，非深度模式
+   ========================================= */
+.chat-mode-capsule.mode-daily {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.35);
+  color: rgba(0, 240, 255, 0.9);
+  text-shadow: 0 0 6px rgba(0, 240, 255, 0.3);
+}
+
+.chat-mode-capsule.mode-daily:hover,
+.chat-mode-capsule.mode-daily.capsule-active {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2), inset 0 0 10px rgba(0, 240, 255, 0.05);
+}
+
+.chat-mode-capsule.mode-daily:focus-visible {
+  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.5);
+}
+
+.chat-mode-capsule.mode-daily::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 240, 255, 0.12) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scanlineMove 2s infinite linear;
+}
+
+/* 输入框失焦时覆盖 .mode-daily 的边框 */
+.input-area:not(:focus-within) .chat-mode-capsule.mode-daily {
+  border-color: rgba(0, 240, 255, 0.12);
+}
+
+/* =========================================
+   极速闲聊模式（亮紫 Magenta/Pink）
+   ========================================= */
+.chat-mode-capsule.mode-casual {
+  background: rgba(200, 80, 255, 0.08);
+  border-color: rgba(200, 80, 255, 0.35);
+  color: rgba(200, 80, 255, 0.9);
+  text-shadow: 0 0 6px rgba(200, 80, 255, 0.3);
+}
+
+.chat-mode-capsule.mode-casual:hover,
+.chat-mode-capsule.mode-casual.capsule-active {
+  background: rgba(200, 80, 255, 0.15);
+  border-color: rgba(200, 80, 255, 0.6);
+  box-shadow: 0 0 14px rgba(200, 80, 255, 0.2), inset 0 0 10px rgba(200, 80, 255, 0.05);
+}
+
+.chat-mode-capsule.mode-casual:focus-visible {
+  box-shadow: 0 0 0 2px rgba(200, 80, 255, 0.5);
+}
+
+.chat-mode-capsule.mode-casual::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(200, 80, 255, 0.12) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scanlineMove 2s infinite linear;
+}
+
+/* 输入框失焦时覆盖 .mode-casual 的边框 */
+.input-area:not(:focus-within) .chat-mode-capsule.mode-casual {
+  border-color: rgba(200, 80, 255, 0.12);
+}
+
+@keyframes scanlineMove {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* =========================================
+   胶囊内部元素
+   ========================================= */
+
+/* 胶囊 SVG 图标 */
+.capsule-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.chat-mode-capsule:hover .capsule-icon {
+  transform: scale(1.1);
+}
+
+/* 胶囊标签文字 */
+.capsule-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}
+
+/* 切换指示箭头 */
+.capsule-arrow {
+  display: flex;
+  align-items: center;
+  opacity: 0.6;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  margin-left: 1px;
+}
+
+.chat-mode-capsule:hover .capsule-arrow,
+.chat-mode-capsule.capsule-active .capsule-arrow {
+  opacity: 1;
+}
+
+/* =========================================
+   固定定位弹出抽屉面板样式
+   使用 position:fixed + JS 坐标计算，避开任何父容器 overflow/backdrop 影响
+   ========================================= */
+
+.chat-mode-drawer {
+  width: 320px;
+  max-height: 400px;
+  background: rgba(8, 8, 16, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(160, 130, 255, 0.25);
+  border-radius: 12px;
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.6),
+    0 0 30px rgba(160, 130, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  z-index: 9999;
+  overflow: hidden;
+  animation: drawerFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes drawerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================
+   抽屉标题栏
+   ========================================= */
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid rgba(160, 130, 255, 0.12);
+}
+
+.drawer-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.drawer-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.drawer-close-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* =========================================
+   模式列表
+   ========================================= */
+
+.drawer-mode-list {
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 340px;
+}
+
+/* =========================================
+   单个模式选项按钮
+   ========================================= */
+
+.drawer-mode-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+/* 悬停态 */
+.drawer-mode-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(160, 130, 255, 0.15);
+}
+
+/* 选中态：使用 --mode-accent 变量动态着色 */
+.drawer-mode-item.mode-item-selected {
+  background: rgba(160, 130, 255, 0.06);
+  border-color: var(--mode-accent, rgba(160, 130, 255, 0.3));
+}
+
+.drawer-mode-item.mode-item-selected:hover {
+  background: rgba(160, 130, 255, 0.1);
+}
+
+/* 禁用态（未来深度模式占位） */
+.drawer-mode-item.mode-item-disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.drawer-mode-item.mode-item-disabled:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* 左侧图标区 */
+.mode-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--mode-accent, rgba(255, 255, 255, 0.6));
+  transition: all 0.2s ease;
+}
+
+.drawer-mode-item:hover .mode-item-icon {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--mode-accent, rgba(255, 255, 255, 0.15));
+}
+
+.drawer-mode-item.mode-item-selected .mode-item-icon {
+  background: color-mix(in srgb, var(--mode-accent, #a082ff) 12%, transparent);
+  border-color: var(--mode-accent, rgba(160, 130, 255, 0.3));
+  color: var(--mode-accent, #a082ff);
+}
+
+/* 中间文字区 */
+.mode-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mode-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-item-desc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.2px;
+}
+
+/* "即将推出" 徽章 */
+.mode-item-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  border-radius: 4px;
+  background: rgba(255, 107, 53, 0.15);
+  color: #ff6b35;
+  border: 1px solid rgba(255, 107, 53, 0.3);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* 右侧选中勾号 */
+.mode-item-check {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--mode-accent, #a082ff);
+  margin-top: 8px;
+  animation: checkPopIn 0.2s ease-out;
+}
+
+@keyframes checkPopIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* =========================================
+   暗色主题适配
+   ========================================= */
+[data-theme="dark"] .chat-mode-capsule.mode-daily {
+  background: rgba(0, 240, 255, 0.06);
+  border-color: rgba(0, 240, 255, 0.25);
+  color: rgba(0, 240, 255, 0.8);
+}
+
+[data-theme="dark"] .chat-mode-capsule.mode-casual {
+  background: rgba(200, 80, 255, 0.06);
+  border-color: rgba(200, 80, 255, 0.25);
+  color: rgba(200, 80, 255, 0.8);
+}
+
+/* =========================================
+   响应式适配
+   ========================================= */
+@media (max-width: 768px) {
+  .chat-mode-toggle-container {
+    left: 10px;
+  }
+
+  .chat-mode-capsule {
+    padding: 3px 5px 3px 4px;
+    font-size: 10px;
+    height: 24px;
+    min-width: 46px;
+  }
+
+  .capsule-icon {
+    width: 12px;
+    height: 12px;
+  }
+
+  .capsule-label {
+    font-size: 10px;
+  }
+
+  .chat-mode-drawer {
+    width: 280px;
+  }
+
+  .drawer-header {
+    padding: 10px 12px 6px;
+  }
+
+  .drawer-mode-item {
+    padding: 8px 8px;
+  }
+
+  .mode-item-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .mode-item-title {
+    font-size: 12px;
+  }
+
+  .mode-item-desc {
+    font-size: 10px;
+  }
+}

@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { sseManager } from '../../services/sseManager';
+import { ChatModeToggle } from './ChatModeToggle';
 import './InputArea.css';
+import './ChatModeToggle.css';
 
 /**
  * 高级文本输入框组件
@@ -245,6 +247,9 @@ export const InputArea: React.FC = () => {
       {/* 主输入区域 */}
       <div className="input-area-wrapper">
         <div className={`input-area ${showFullscreenButton ? 'has-fullscreen-btn' : ''} ${isWaiting ? 'waiting' : ''}`}>
+          
+          {/* 赛博朋克模式切换胶囊（抽屉通过 Portal 渲染到 body，不受 overflow 裁剪） */}
+          <ChatModeToggle />
           
           {/* 炫酷的 Cyber-Neural 加载动画 (仅在等待响应时显示) */}
           <div className={`cyber-loader ${isWaiting ? 'active' : ''}`}>
