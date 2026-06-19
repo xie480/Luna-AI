@@ -60,6 +60,7 @@ class AuthResponseRequest(BaseModel):
 
     做什么：前端在用户点击"同意/拒绝"后发送的 HTTP 请求体。
     为什么这样做：使用 Pydantic 模型确保请求参数的类型安全和枚举约束。
+                  Phase 13 新增 session_id 字段用于审批结果持久化。
     """
     audit_log_id: str = Field(
         ..., min_length=1, description="审计日志记录 ID。"
@@ -76,6 +77,10 @@ class AuthResponseRequest(BaseModel):
     )
     task_id: str = Field(
         default="", description="关联的 DAG 任务 ID。"
+    )
+    session_id: str = Field(
+        default="", description="关联的会话 ID。用于审批结果持久化到 Redis"
+                    "时的 Key 组织，供下一次工作流执行时消费。",
     )
 
 
@@ -163,6 +168,7 @@ async def handle_auth_response(
         user_feedback=request_body.user_feedback,
         trace_id=trace_id,
         task_id=request_body.task_id,
+        session_id=request_body.session_id,
     )
 
     # 根据 action 分发处理

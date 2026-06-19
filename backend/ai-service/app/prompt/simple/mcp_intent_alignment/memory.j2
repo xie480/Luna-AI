@@ -7,9 +7,17 @@
 【调用的工具】
 工具名称：{{ TOOL_NAME }}
 
+{% if TOOL_RAW_OUTPUT %}
 【工具执行原始结果】
 {{ TOOL_RAW_OUTPUT }}
 
 【工具执行元数据】
 执行耗时：{{ TOOL_LATENCY_MS }}ms
 数据来源风险等级：{{ TOOL_RISK_LEVEL }}
+{% endif %}
+
+{% if GATING_REJECTION_INFO %}
+【⚠️ 用户已拒绝工具调用】
+由于用户拒绝审批，本阶段执行失败，需要寻找其他方案。
+{{ GATING_REJECTION_INFO }}
+{% endif %}

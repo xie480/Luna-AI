@@ -177,6 +177,7 @@ class AuthResponsePayload(BaseModel):
     做什么：前端将用户审批结果通过 WebSocket/SSE 发送给后端时使用的模型。
     为什么这样做：后端收到此响应后，根据 action 决定放行或阻断工具调用，
                  并更新审计日志状态。
+                 新增 session_id 字段用于审批结果持久化，供下一次工作流执行时消费。
     边界条件：
         - audit_log_id 必须对应一个存在的 PENDING 状态请求。
         - action 只能是 APPROVE 或 REJECT（由 AuthAction 枚举约束）。
@@ -205,6 +206,11 @@ class AuthResponsePayload(BaseModel):
     )
     timestamp: int = Field(
         default=0, ge=0, description="响应时间戳（毫秒）。"
+    )
+    session_id: str = Field(
+        default="",
+        description="关联的会话 ID。用于审批结果持久化到 Redis 时的 Key 组织。"
+                    "同上一次工作流执行的 session_id。",
     )
 
 

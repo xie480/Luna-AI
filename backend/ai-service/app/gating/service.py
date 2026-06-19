@@ -45,6 +45,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.gating.scheduler import GatingTimeoutScheduler
+from app.gating.snapshot import GatingSnapshotManager
 from app.gating.types import (
     AuthAction,
     AuthRequestPayload,
@@ -94,6 +95,7 @@ class GatingService:
         redis_client=None,
         sse_manager=None,
         timeout_seconds: int = 300,
+        snapshot_manager: GatingSnapshotManager | None = None,
     ) -> None:
         """初始化 GatingService。
 
@@ -102,11 +104,14 @@ class GatingService:
             - redis_client: Redis 客户端实例（可选），用于快速状态缓存。
             - sse_manager: SSE 管理器实例（可选），用于向前端推送事件。
             - timeout_seconds: 超时阈值秒数。默认 300 秒（5 分钟）。
+            - snapshot_manager: GatingSnapshotManager 实例（可选，Phase 13）。
+                               用于保存审批结果到 Redis，供下一次工作流执行时消费。
         为什么这样做：通过依赖注入解耦，允许在单元测试中 Mock 仓储层和网络层。
         """
         self._audit_repo: AuditLogPGRepo = audit_repo
         self._redis_client = redis_client
         self._sse_manager = sse_manager
+        self._snapshot_manager = snapshot_manager or GatingSnapshotManager(redis_client)
 
         # 回调注册表
         self._approve_callbacks: list[Callable] = []
@@ -255,13 +260,11 @@ class GatingService:
         """处理用户批准请求。
 
         做什么：用户点击"同意"后更新审计日志状态为 APPROVED，
-                从 Redis 中移除请求，触发审批成功回调。
+                从 Redis 中移除请求，写入审批决策供 execute_single_tool 轮询。
+                _execute_single_tool 轮询到决策后，从快照恢复参数重新执行工具，
+                执行结果继续在 MCP Skill 节点内流转，不跳转到 Chat LLM。
         输入：response - 前端发来的审批响应载荷。
         输出：bool - 处理成功返回 True，失败返回 False。
-        边界条件：
-            - 已 APPROVED/REJECTED/TIMEOUT 的请求不可重复批准（幂等）。
-            - 回调失败不阻断主流程，但记录错误日志。
-        异常行为：数据库更新失败时返回 False。
         """
         audit_log_id = response.audit_log_id
         trace_id = response.trace_id
@@ -272,30 +275,66 @@ class GatingService:
             new_status=AuthStatus.APPROVED,
             user_feedback=response.user_feedback,
         )
-
         if not success:
-            logger.warning(
-                f"[GatingService] 批准请求失败（状态非 PENDING 或记录不存在）"
-                f" audit_log_id={audit_log_id}"
-            )
             return False
 
         # 2. 从 Redis 缓存中移除
         await self._remove_cached_request(audit_log_id)
 
-        # 3. 触发审批成功回调
+        # 3. 写入审批决策（供 _execute_single_tool 轮询）
+        await self._snapshot_manager.save_decision(
+            audit_log_id=audit_log_id,
+            decision="approved",
+            user_feedback=response.user_feedback,
+        )
+
+        # 4. 触发回调
         for callback in self._approve_callbacks:
             try:
                 callback(audit_log_id, response.tool_id, response.task_id)
             except Exception as e:
-                logger.error(
-                    f"[GatingService] 审批成功回调异常 audit_log_id={audit_log_id} error={e}"
-                )
+                logger.error(f"[GatingService] 审批成功回调异常 audit_log_id={audit_log_id} error={e}")
 
-        logger.info(
-            f"[GatingService] 审批通过 audit_log_id={audit_log_id} trace_id={trace_id}"
-        )
+        logger.info(f"[GatingService] 审批通过 audit_log_id={audit_log_id} trace_id={trace_id}")
         return True
+
+    async def _execute_approved_tool(
+        self,
+        tool_name: str,
+        tool_parameters: dict[str, Any],
+        trace_id: str,
+    ) -> str:
+        """执行审批通过后的工具。
+
+        做什么：用户批准后直接执行工具。使用已有的 MCPToolRegistry 注册信息。
+        输入：
+            - tool_name: 工具名称。
+            - tool_parameters: 工具参数。
+            - trace_id: 链路追踪 ID。
+        返回：str - 工具执行输出文本。
+        边界条件：执行失败时返回错误信息，不抛出异常。
+        """
+        try:
+            from app.mcp.registry import MCPToolRegistry
+            registry = MCPToolRegistry()
+            registered = registry.get_tool(tool_name)
+            if registered is None:
+                return f"工具 '{tool_name}' 不存在或已禁用"
+
+            # 检查风险等级，如果是 L2/L3 但审批已通过，直接放行
+            import asyncio
+            output_text = await asyncio.wait_for(
+                registered.handler(parameters=tool_parameters, trace_id=trace_id),
+                timeout=30.0,
+            )
+            return output_text
+
+        except Exception as e:
+            logger.warning(
+                f"[GatingService] 执行审批通过的工具失败"
+                f" tool_name={tool_name} error={e}"
+            )
+            return f"工具执行失败: {e!s}"
 
     async def reject_request(
         self, response: AuthResponsePayload
@@ -303,13 +342,11 @@ class GatingService:
         """处理用户拒绝请求。
 
         做什么：用户点击"拒绝"后更新审计日志状态为 REJECTED，
-                从 Redis 中移除请求，触发拒绝回调。
+                从 Redis 中移除请求，写入"rejected"决策。
+                _execute_single_tool 轮询到 reject 后，从快照加载上下文，
+                将工具结果标记为"用户拒绝"，后续评估节点寻找替代方案。
         输入：response - 前端发来的审批响应载荷。
         输出：bool - 处理成功返回 True，失败返回 False。
-        边界条件：
-            - 已 APPROVED/REJECTED/TIMEOUT 的请求不可重复拒绝（幂等）。
-            - 无论 user_feedback 是否为空，都会传递给回调。
-        异常行为：数据库更新失败时返回 False。
         """
         audit_log_id = response.audit_log_id
         trace_id = response.trace_id
@@ -320,34 +357,27 @@ class GatingService:
             new_status=AuthStatus.REJECTED,
             user_feedback=response.user_feedback,
         )
-
         if not success:
-            logger.warning(
-                f"[GatingService] 拒绝请求失败（状态非 PENDING 或记录不存在）"
-                f" audit_log_id={audit_log_id}"
-            )
             return False
 
         # 2. 从 Redis 缓存中移除
         await self._remove_cached_request(audit_log_id)
 
-        # 3. 触发拒绝回调
+        # 3. 写入审批决策（供 _execute_single_tool 轮询）
+        await self._snapshot_manager.save_decision(
+            audit_log_id=audit_log_id,
+            decision="rejected",
+            user_feedback=response.user_feedback,
+        )
+
+        # 4. 触发拒绝回调
         for callback in self._reject_callbacks:
             try:
-                callback(
-                    audit_log_id,
-                    response.tool_id,
-                    response.task_id,
-                    response.user_feedback,
-                )
+                callback(audit_log_id, response.tool_id, response.task_id, response.user_feedback)
             except Exception as e:
-                logger.error(
-                    f"[GatingService] 拒绝回调异常 audit_log_id={audit_log_id} error={e}"
-                )
+                logger.error(f"[GatingService] 拒绝回调异常 audit_log_id={audit_log_id} error={e}")
 
-        logger.info(
-            f"[GatingService] 审批拒绝 audit_log_id={audit_log_id} trace_id={trace_id}"
-        )
+        logger.info(f"[GatingService] 审批拒绝 audit_log_id={audit_log_id} trace_id={trace_id}")
         return True
 
     # ============================================================

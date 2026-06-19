@@ -200,9 +200,10 @@ class ChatObservabilityState(BaseModel):
 
 
 class ChatMCPToolState(BaseModel):
-    """MCP 工具执行状态（含 Skill 执行状态）。
+    """MCP 工具执行状态（含 Skill 执行状态与 Gating 审批状态）。
     为什么这样做：MCP Tool 和 Skill 共用 mcp_tool_state 字段，
                  避免新增字段导致其他依赖该字段的节点（如 base.py 的降级检测）大范围修改。
+                 Phase 13 新增 Gating 审批相关字段，用于保存审批挂起时的上下文。
     """
 
     entered_by_condition: bool = False
@@ -284,6 +285,59 @@ class ChatMCPToolState(BaseModel):
         description="Skill 执行结果摘要。由 MCP Skill 执行节点在完成后调用 LLM 压缩生成，"
                     "作为 SKILL_EXECUTION_SUMMARY 变量注入到 chat/memory.j2 模板中。"
                     "内容包含本次调用的 Skill 列表、每个 Skill 执行的操作与最终执行结果。",
+    )
+
+    # --- Phase 13 Gating 审批状态（新增） ---
+    gating_pending: bool = Field(
+        default=False,
+        description="Phase 13：是否有 L2/L3 工具正在等待用户审批。"
+                    "True 表示当前有审批请求已发送但未收到用户响应。",
+    )
+    gating_audit_log_id: str = Field(
+        default="",
+        description="Phase 13：当前 Gating 审批请求的审计日志 ID。"
+                    "用于断线重连时恢复审批状态。",
+    )
+    gating_tool_name: str = Field(
+        default="",
+        description="Phase 13：正在等待审批的工具名称。"
+                    "用于审批拒绝时向 chat/memory.j2 注入拒绝信息。",
+    )
+    gating_tool_parameters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Phase 13：正在等待审批的工具参数。"
+                    "用于审批拒绝时向 chat/memory.j2 注入详细拒绝信息。",
+    )
+    gating_risk_level: str = Field(
+        default="",
+        description="Phase 13：正在等待审批的工具风险等级。",
+    )
+    gating_goal: str = Field(
+        default="",
+        description="Phase 13：正在等待审批的 Agent 执行目标描述。",
+    )
+    gating_agent_output: str = Field(
+        default="",
+        description="Phase 13：正在等待审批的 Agent 输出信息。",
+    )
+    gating_mcp_intent: str = Field(
+        default="",
+        description="Phase 13：正在等待审批的 MCP 意图文本。",
+    )
+    gating_user_feedback: str = Field(
+        default="",
+        description="Phase 13：用户拒绝时的反馈理由。"
+                    "用于向主 Chat LLM 注入用户拒绝的上下文。",
+    )
+    gating_rejected: bool = Field(
+        default=False,
+        description="Phase 13：用户是否拒绝了工具调用。"
+                    "True 表示用户已拒绝，下游主 Chat LLM 应根据拒绝信息生成回复。",
+    )
+    gating_rejected_tool_info: str = Field(
+        default="",
+        description="Phase 13：用户拒绝的工具调用信息摘要。"
+                    "格式化为自然语言后注入到 chat/memory.j2 模板。",
     )
 
     # --- 降级状态 ---

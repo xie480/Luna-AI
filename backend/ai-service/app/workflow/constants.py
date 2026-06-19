@@ -152,6 +152,16 @@ PROMPT_VARIABLE_MCP_TOOL_OUTPUT: Final[str] = "MCP_TOOL_OUTPUT"
 # Phase 12（v3.1）新增：Skill 执行结果摘要变量名，用于向 chat/memory.j2 注入 LLM 压缩后的技能执行摘要。
 PROMPT_VARIABLE_SKILL_EXECUTION_SUMMARY: Final[str] = "SKILL_EXECUTION_SUMMARY"
 
+# Phase 13 新增：Gating 审批结果注入变量
+# 当用户拒绝了 L2/L3 工具调用时，此变量包含拒绝信息和工具调用上下文，
+# 注入到 chat/memory.j2 供主 Chat LLM 生成合适的回复。
+PROMPT_VARIABLE_GATING_REJECTION_INFO: Final[str] = "GATING_REJECTION_INFO"
+
+# Phase 13 新增：Gating 审批通过后的工具执行结果
+# 当用户批准了 L2/L3 工具调用且工具执行完毕后，此变量包含执行结果，
+# 注入到 chat/memory.j2 供主 Chat LLM 知道工具已执行完成。
+PROMPT_VARIABLE_GATING_APPROVAL_RESULT: Final[str] = "GATING_APPROVAL_RESULT"
+
 PROMPT_VARIABLE_CURRENT_TIME: Final[str] = "CURRENT_TIME"
 PROMPT_VARIABLE_CURRENT_MESSAGE: Final[str] = "CURRENT_MESSAGE"
 PROMPT_VARIABLE_CORE_SUMMARY: Final[str] = "CORE_SUMMARY"

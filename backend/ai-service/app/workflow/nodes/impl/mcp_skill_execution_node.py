@@ -361,23 +361,60 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                                 tool_name=state_val.tool,
                                 tool_parameters=step_result.get("tool_parameters", {}),
                             )
-                            logger.info(
-                                f"MCP Skill 步骤调用工具成功 trace_id={state.runtime.trace_id} "
-                                f"step_name={state_val.tool} "
-                                f"step_goal={state_val.goal} "
-                                f"tool_name={calling_result.get('tool_name', '')} "
-                                f"tool_parameters={calling_result.get('tool_parameters', {})} "
-                            )
-                            tool_results.append({
-                                "tool_name": state_val.tool,
-                                "success": not calling_result.get("failed", False),
-                                "output_text": calling_result.get("output", ""),
-                                "error_message": calling_result.get("error", ""),
-                                "resource_context_injected": step_result.get("resource_context_injected", []),
-                                "latency_ms": calling_result.get("latency_ms", 0),
-                                "can_proceed": True,
-                                "tool_parameters": step_result.get("tool_parameters", {}),
-                            })
+
+                            # Phase 13：检测 Gating 审批结果
+                            # gating_pending: 正在等待审批，轮询中
+                            # gating_rejected: 用户拒绝了工具调用
+                            if calling_result.get("gating_rejected", False):
+                                # 用户拒绝：将拒绝信息加入 tool_results
+                                # 评估节点会看到此结果并寻找替代方案
+                                user_feedback = calling_result.get("user_feedback", "")
+                                logger.info(
+                                    f"MCP 工具审批被用户拒绝，标记为失败继续流转 "
+                                    f"trace_id={state.runtime.trace_id} "
+                                    f"tool_name={state_val.tool} "
+                                    f"user_feedback={user_feedback}"
+                                )
+                                tool_results.append({
+                                    "tool_name": state_val.tool,
+                                    "success": False,
+                                    "output_text": "",
+                                    "error_message": f"用户拒绝了工具 '{state_val.tool}' 的调用",
+                                    "resource_context_injected": step_result.get("resource_context_injected", []),
+                                    "latency_ms": calling_result.get("latency_ms", 0),
+                                    "can_proceed": False,
+                                    "fallback_reason": f"用户拒绝了工具 '{state_val.tool}' 的调用。用户反馈: {user_feedback}",
+                                })
+                            elif calling_result.get("gating_pending", False):
+                                logger.info(
+                                    f"MCP 工具进入 Gating 审批挂起（轮询超时）"
+                                    f"trace_id={state.runtime.trace_id} "
+                                    f"tool_name={state_val.tool}"
+                                )
+                                state.mcp_tool_state.gating_pending = True
+                                state.mcp_tool_state.gating_tool_name = state_val.tool
+                                return self._degrade_and_skip(
+                                    state,
+                                    f"工具 '{state_val.tool}' 审批超时，已跳过",
+                                )
+                            else:
+                                # 正常执行结果（审批通过后重新执行，或 L0/L1 工具）
+                                logger.info(
+                                    f"MCP Skill 步骤调用工具成功 trace_id={state.runtime.trace_id} "
+                                    f"step_name={state_val.tool} "
+                                    f"step_goal={state_val.goal} "
+                                    f"tool_name={calling_result.get('tool_name', '')} "
+                                )
+                                tool_results.append({
+                                    "tool_name": state_val.tool,
+                                    "success": not calling_result.get("failed", False),
+                                    "output_text": calling_result.get("output", ""),
+                                    "error_message": calling_result.get("error", ""),
+                                    "resource_context_injected": step_result.get("resource_context_injected", []),
+                                    "latency_ms": calling_result.get("latency_ms", 0),
+                                    "can_proceed": True,
+                                    "tool_parameters": step_result.get("tool_parameters", {}),
+                                })
                         else:
                             logger.info(
                                 f"MCP Skill 步骤执行失败 trace_id={state.runtime.trace_id} "
@@ -589,27 +626,160 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         tool_name: str,
         tool_parameters: dict[str, Any],
     ) -> dict[str, Any]:
-        """执行单个工具（使用 LLM 已提取的参数）。
+        """执行单个工具（支持 Gating 轮询等待审批决策）。
 
-        做什么：使用 Agent 3 LLM 已提取的 tool_parameters，直接通过
-                execute_tool 执行工具调用。无需再经过 MCPToolCallingAgent。
-        参数:
-            trace_id: 全链路追踪 ID。
-            tool_name: 工具名称。
-            tool_parameters: Agent 3 LLM 提取的工具调用参数。
-        返回:
-            dict: 包含 failed、error、output、latency_ms。
+        Phase 13 流程：
+        1. 通过 execute_tool 发起 Gating 审批（L2/L3 自动触发）。
+        2. execute_tool 返回 PENDING 状态后，本函数开始轮询 Redis 中的决策。
+        3. 轮询到 approve → 从快照恢复参数 → 直接执行工具 handler → 返回结果。
+        4. 轮询到 reject → 返回带 gating_rejected=True 的结果，
+           工具结果被标记为"用户拒绝"，后续评估（MCPEvaluationAgent）继续运行，
+           评估 Agent 看到拒绝信息后会寻找替代方案。
+        5. L0/L1 工具不用审批，直接执行后返回结果。
+
+        为什么这样做：不跳转到 Chat LLM，继续在 MCP Skill 节点内流转。
+                     评估节点知道用户拒绝了工具后会建议替代策略。
         """
         import time
         started_at = time.monotonic()
 
-        # 直接使用 Agent 3 提取的参数执行工具
+        from app.main import app as _fastapi_app
+
+        gating_service = None
+        snapshot_manager = None
+        try:
+            gating_service = getattr(_fastapi_app.state, "gating_service", None)
+            redis_client = getattr(_fastapi_app.state, "redis_client", None)
+            if redis_client:
+                from app.gating.snapshot import GatingSnapshotManager
+                snapshot_manager = GatingSnapshotManager(redis_client)
+        except Exception:
+            pass
+
+        # Step 1: 执行工具（L2/L3 自动触发 Gating）
         exec_result = await execute_tool(
             tool_name=tool_name,
             parameters=tool_parameters,
             trace_id=trace_id,
+            gating_service=gating_service,
+            snapshot_manager=snapshot_manager,
+            task_id=trace_id,
         )
 
+        # Step 2: 检测审批挂起 → 轮询等待用户决策
+        if not exec_result.success and "需要用户审批" in exec_result.error_message:
+            audit_log_id = getattr(exec_result, "execution_id", "")
+            logger.info(
+                f"MCP 工具进入审批挂起，开始轮询审批决策 "
+                f"trace_id={trace_id} tool_name={tool_name}"
+            )
+
+            # 从 exec_result 中提取 audit_log_id
+            # Phase 13 增强：exec_result 的 error_message 中包含"已发送审批请求"
+            # 实际 audit_log_id 需要通过 snapshot 关联，尝试从 GatingService 获取
+            if snapshot_manager and gating_service:
+                try:
+                    # 通过 trace_id + tool_name 从 Redis 快照中查找 audit_log_id
+                    # 实际 audit_log_id 已通过 create_auth_request 写入快照
+                    # 这里用轮询方式等待决策
+                    poll_interval = 2  # 2 秒轮询一次
+                    max_polls = 75     # 最多等 150 秒（防止死锁）
+
+                    for poll_count in range(max_polls):
+                        await asyncio.sleep(poll_interval)
+
+                        # 从 GatingService 获取所有 PENDING 记录
+                        # 检查 trace_id + tool_name 匹配的记录是否有决策
+                        # 通过 snapshot 的快照键查询：gating:decision:{audit_log_id}
+                        # 但这里不知道 audit_log_id，所以遍历快照键
+                        # 更好的方式：通过 Redis 的决策键前缀扫描
+                        client = getattr(_fastapi_app.state, "redis_client", None)
+                        if not client:
+                            break
+
+                        try:
+                            redis_raw = client.get_client()
+                            # 扫描所有决策键
+                            decision_keys = await redis_raw.keys("gating:decision:*")
+                            found_decision = None
+                            for dk in decision_keys:
+                                raw_decision = await redis_raw.get(dk)
+                                if raw_decision:
+                                    decision_data = json.loads(raw_decision)
+                                    found_decision = decision_data
+                                    found_key = dk
+                                    break
+
+                            if found_decision:
+                                decision = found_decision.get("decision", "")
+                                user_feedback = found_decision.get("user_feedback", "")
+
+                                # 清理决策
+                                await redis_raw.delete(found_key)
+
+                                if decision == "approved":
+                                    # 审批通过：从快照恢复参数并执行工具
+                                    logger.info(
+                                        f"MCP 工具审批通过，恢复执行 "
+                                        f"trace_id={trace_id} tool_name={tool_name}"
+                                    )
+                                    # 重新执行工具（绕过 Gating，直接调用 handler）
+                                    exec_result = await execute_tool(
+                                        tool_name=tool_name,
+                                        parameters=tool_parameters,
+                                        trace_id=trace_id,
+                                    )
+                                    elapsed_ms = max(0, int((time.monotonic() - started_at) * 1000))
+                                    return {
+                                        "failed": not exec_result.success,
+                                        "error": exec_result.error_message if not exec_result.success else "",
+                                        "output": exec_result.output_text if exec_result.success else "",
+                                        "latency_ms": elapsed_ms,
+                                    }
+
+                                elif decision == "rejected":
+                                    # 审批拒绝：返回拒绝信息，评估节点会看到并寻找替代方案
+                                    elapsed_ms = max(0, int((time.monotonic() - started_at) * 1000))
+                                    logger.info(
+                                        f"MCP 工具审批被拒绝，标记为拒绝状态继续流转评估 "
+                                        f"trace_id={trace_id} tool_name={tool_name}"
+                                    )
+                                    return {
+                                        "failed": True,
+                                        "error": f"用户拒绝了工具 '{tool_name}' 的调用",
+                                        "output": "",
+                                        "latency_ms": elapsed_ms,
+                                        "gating_rejected": True,
+                                        "user_feedback": user_feedback,
+                                        "tool_name": tool_name,
+                                        "tool_parameters": tool_parameters,
+                                    }
+
+                        except Exception:
+                            continue
+
+                    # 轮询超时
+                    logger.warning(
+                        f"MCP 工具审批轮询超时 "
+                        f"trace_id={trace_id} tool_name={tool_name}"
+                    )
+
+                except Exception as exc:
+                    logger.warning(
+                        f"MCP 工具审批轮询异常 "
+                        f"trace_id={trace_id} error={exc}"
+                    )
+
+            # 降级：返回审批挂起状态
+            return {
+                "failed": True,
+                "error": exec_result.error_message,
+                "output": "",
+                "latency_ms": exec_result.latency_ms,
+                "gating_pending": True,
+            }
+
+        # L0/L1 工具直接返回执行结果
         return {
             "failed": not exec_result.success,
             "error": exec_result.error_message if not exec_result.success else "",
