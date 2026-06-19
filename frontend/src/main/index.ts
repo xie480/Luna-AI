@@ -58,11 +58,12 @@ function createWindow(): void {
 function registerIpcHandlers(): void {
   ipcMain.handle('read-env-file', async () => {
     // .env 文件路径: 项目根目录 / 可执行文件同级目录
-    // 开发环境: __dirname 为 out/main，向上两级到 frontend 根，再向上到项目根
+    // 开发环境: __dirname 为 out/main，向上三级到项目根目录（f:/YilenaCode/Luna-AI）
+    //    out/main -> out -> frontend -> 项目根目录
     // 生产环境: 可执行文件同级目录
     let envPath: string;
     if (process.env.NODE_ENV === 'development') {
-      envPath = path.resolve(__dirname, '../../.env');
+      envPath = path.resolve(__dirname, '../../../.env');
     } else {
       envPath = path.join(process.resourcesPath, '.env');
     }
@@ -78,7 +79,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('write-env-file', async (_, content: string) => {
     let envPath: string;
     if (process.env.NODE_ENV === 'development') {
-      envPath = path.resolve(__dirname, '../../.env');
+      envPath = path.resolve(__dirname, '../../../.env');
     } else {
       envPath = path.join(process.resourcesPath, '.env');
     }

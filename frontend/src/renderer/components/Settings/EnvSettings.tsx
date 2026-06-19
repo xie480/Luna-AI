@@ -14,10 +14,16 @@ export const EnvSettings: React.FC = () => {
     setError(null);
     try {
       const content = await window.electronAPI.readEnvFile();
-      setOriginalContent(content);
-      setCurrentContent(content);
+      if (content === null) {
+        setError('未找到 .env 文件，请确认项目根目录下存在 .env 文件。');
+        setOriginalContent('');
+        setCurrentContent('');
+      } else {
+        setOriginalContent(content);
+        setCurrentContent(content);
+      }
     } catch (err) {
-      console.error('Failed to read .env file:', err);
+      console.error('读取 .env 文件失败:', err);
       setError('读取 .env 文件失败，请检查文件是否存在或权限是否正确。');
     } finally {
       setIsLoading(false);
