@@ -17,6 +17,27 @@ os.environ["HF_HUB_OFFLINE"] = "1"
 os.environ["HF_DATASETS_OFFLINE"] = "1"
 
 # ============================================================================
+# 植入 torchcodec 桩模块，防止因 FFmpeg 缺失导致 sentence_transformers 导入崩溃
+#
+# 做什么：torchcodec（voxcpm 的间接依赖）在模块加载阶段会尝试加载 FFmpeg DLL。
+#         如果系统未安装 FFmpeg，会抛出 RuntimeError。而 sentence_transformers 的
+#         base/modality_types.py 在导入时 try/except 仅捕获 (ImportError, OSError)，
+#         不捕获 RuntimeError，导致整个 Embedding 模型加载链崩溃。
+# 为什么这样做：在 sentence_transformers 导入前预先向 sys.modules 注入 torchcodec 存根，
+#             使其找到存根后不会触发实际的 native library 加载流程，降低到安静降级。
+# 边界条件：仅当 torchcodec 尚未被导入时生效；如果环境中正常安装了 FFmpeg，则不影响。
+# ============================================================================
+import types as _sys_types
+if "torchcodec" not in sys.modules:
+    _torchcodec_stub = _sys_types.ModuleType("torchcodec")
+    _torchcodec_stub.__path__ = []
+    _torchcodec_stub.decoders = _sys_types.ModuleType("torchcodec.decoders")
+    _torchcodec_stub.decoders.AudioDecoder = None  # type: ignore[attr-defined]
+    _torchcodec_stub.decoders.VideoDecoder = None  # type: ignore[attr-defined]
+    sys.modules["torchcodec"] = _torchcodec_stub
+    sys.modules["torchcodec.decoders"] = _torchcodec_stub.decoders
+
+# ============================================================================
 # 并发调度改造 (维度四)：硬件资源调度与 CPU 算力硬限制边界
 # 为什么这样做：限制 PyTorch / OpenMP 的底层衍生线程数量，防止其默认的 CPU 抢占策略锁死宿主机，
 # 为 UI 交互流（Electron/React）保留至少 2 个独立的逻辑物理核算力。
