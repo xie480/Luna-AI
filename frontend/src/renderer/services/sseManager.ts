@@ -528,7 +528,7 @@ class SSEManager {
 
       case WS_MSG_TYPE.EVT_REPLY_CHUNK: {
         const replyPayload = msg.payload as ReplyChunkPayload;
-        if (replyPayload.chunk && replyPayload.chunk.trim()) {
+        if (replyPayload.chunk && replyPayload.chunk.trim() && systemStore.showBubbleRender) {
           const duration = Math.max(3000, replyPayload.chunk.length * 200);
           window.dispatchEvent(
             new CustomEvent('luna:show-bubble', {
@@ -711,8 +711,8 @@ class SSEManager {
               batchId: assistantMessageId
             });
           });
-        } else {
-          // 旧逻辑：直接发送气泡展示事件
+        } else if (systemStore.showBubbleRender) {
+          // 仅当气泡渲染开启时，旧逻辑才直接发送气泡展示事件
           const duration = Math.max(3000, normalizedChunk.length * 200);
           window.dispatchEvent(
             new CustomEvent(BUBBLE_EVENT_NAME.SHOW, {

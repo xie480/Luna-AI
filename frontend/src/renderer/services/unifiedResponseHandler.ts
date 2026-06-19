@@ -122,8 +122,11 @@ function enqueueBubbleBatch(params: {
 }): void {
   const { segments, audioUri, interactionId, assistantMessageId } = params;
 
-  // 无有效回复文本时不渲染气泡，但仍需派发流结束信号让批次状态机正常流转
-  if (segments.length === 0) {
+  // 如果气泡渲染被关闭，不展示气泡但仍需派发流结束信号让批次状态机正常流转
+  const showBubbleRender = useSystemStore.getState().showBubbleRender;
+
+  // 无有效回复文本或气泡渲染关闭时不渲染气泡，但仍需派发流结束信号让批次状态机正常流转
+  if (segments.length === 0 || !showBubbleRender) {
     window.dispatchEvent(
       new CustomEvent('luna:bubble-stream-finished', {
         detail: { batchId: assistantMessageId, finishedAt: Date.now() },

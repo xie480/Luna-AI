@@ -77,6 +77,8 @@ interface SystemState {
   isLive2dBackgroundSuspensionEnabled: boolean;
   // Live2D 最大帧率
   live2dMaxFPS: 30 | 60 | 90 | 120;
+  // 是否展示气泡渲染（默认开启）
+  showBubbleRender: boolean;
   // 主题设置
   theme: 'dark' | 'light' | 'cyberpunk';
   /**
@@ -127,6 +129,8 @@ interface SystemState {
   setLive2dBackgroundSuspensionEnabled: (enabled: boolean) => void;
   // 设置 Live2D 最大帧率
   setLive2dMaxFPS: (fps: 30 | 60 | 90 | 120) => void;
+  // 设置气泡渲染开关
+  setShowBubbleRender: (enabled: boolean) => void;
   // 设置主题
   setTheme: (theme: 'dark' | 'light' | 'cyberpunk') => void;
   /**
@@ -222,6 +226,18 @@ function loadLive2dMaxFPS(): 30 | 60 | 90 | 120 {
   return 60; // 默认 60 FPS
 }
 
+function loadShowBubbleRender(): boolean {
+  try {
+    const raw = localStorage.getItem('luna:showBubbleRender');
+    if (raw !== null) {
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return true; // 默认开启
+}
+
 function loadTheme(): 'dark' | 'light' | 'cyberpunk' {
   try {
     const raw = localStorage.getItem('luna:theme');
@@ -273,6 +289,7 @@ export const useSystemStore = create<SystemState>((set) => ({
   isLive2dIdleThrottlingEnabled: loadLive2dIdleThrottlingEnabled(),
   isLive2dBackgroundSuspensionEnabled: loadLive2dBackgroundSuspensionEnabled(),
   live2dMaxFPS: loadLive2dMaxFPS(),
+  showBubbleRender: loadShowBubbleRender(),
   theme: loadTheme(),
   // 聊天模式，从 localStorage 恢复用户偏好，默认深度日常助理
   chatMode: loadChatMode(),
@@ -410,6 +427,16 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误
       }
       return { live2dMaxFPS: fps };
+    }),
+
+  setShowBubbleRender: (enabled) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:showBubbleRender', JSON.stringify(enabled));
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { showBubbleRender: enabled };
     }),
 
   setTheme: (theme) =>

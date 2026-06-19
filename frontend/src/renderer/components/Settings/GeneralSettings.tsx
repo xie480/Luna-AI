@@ -1,7 +1,10 @@
 import React from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 
+
 export const GeneralSettings: React.FC = () => {
+  const showBubbleRender = useSystemStore((state) => state.showBubbleRender);
+  const setShowBubbleRender = useSystemStore((state) => state.setShowBubbleRender);
   const isLive2dEnabled = useSystemStore((state) => state.isLive2dEnabled);
   const setLive2dEnabled = useSystemStore((state) => state.setLive2dEnabled);
   const isLive2dIdleThrottlingEnabled = useSystemStore((state) => state.isLive2dIdleThrottlingEnabled);
@@ -64,6 +67,23 @@ export const GeneralSettings: React.FC = () => {
               type="checkbox"
               checked={isLive2dBackgroundSuspensionEnabled}
               onChange={(e) => setLive2dBackgroundSuspensionEnabled(e.target.checked)}
+            />
+            <span className="slider round"></span>
+          </label>
+        </div>
+      </div>
+
+      <div className="settings-item">
+        <div className="settings-item-info">
+          <div className="settings-item-title">展示气泡渲染</div>
+          <div className="settings-item-desc">开启或关闭聊天气泡的展示。关闭后对话仍正常进行，但不再显示气泡动画。</div>
+        </div>
+        <div className="settings-item-control">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={showBubbleRender}
+              onChange={(e) => setShowBubbleRender(e.target.checked)}
             />
             <span className="slider round"></span>
           </label>

@@ -10,13 +10,18 @@
  */
 import React from 'react';
 import { useBubble } from '../../hooks/useBubble';
+import { useSystemStore } from '../../stores/systemStore';
 import './BubbleStack.css';
 
 export const BubbleStack: React.FC = () => {
   const { bubbles, registerBubble } = useBubble();
+  const showBubbleRender = useSystemStore((state) => state.showBubbleRender);
 
   return (
-    <div className="bubble-stack">
+    <div
+      className="bubble-stack"
+      style={{ display: showBubbleRender ? undefined : 'none' }}
+    >
       {bubbles.map((bubble) => (
         <div
           key={bubble.id}

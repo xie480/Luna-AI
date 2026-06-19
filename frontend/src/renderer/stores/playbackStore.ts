@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { lipSyncProcessor } from '../utils/lipSync';
 import { getLive2dModel } from './live2dRef';
+import { useSystemStore } from './systemStore';
 
 /**
  * LipSync 调优参数。
@@ -190,6 +191,19 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
 
     set({ isBatchMode: true });
 
+    // 检查气泡渲染是否开启
+    const showBubbleRender = useSystemStore.getState().showBubbleRender;
+    // 如果气泡渲染关闭，只触发流结束信号，不展示任何气泡
+    if (!showBubbleRender) {
+      window.dispatchEvent(
+        new CustomEvent('luna:bubble-stream-finished', {
+          detail: { batchId, finishedAt: Date.now() },
+        }),
+      );
+      set({ isBatchMode: false });
+      return;
+    }
+
     // ---- 内心独白：如有则在气泡流开始前单独展示 ----
     if (thoughtText && thoughtText.trim().length > 0) {
       window.dispatchEvent(
@@ -269,8 +283,11 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
     set({ isPlaying: true });
     const item = playbackQueue[0];
 
-    // 分发事件通知显示气泡文本
-    if (item.text.trim().length > 0) {
+    // 检查气泡渲染是否开启
+    const showBubbleRender = useSystemStore.getState().showBubbleRender;
+
+    // 仅当气泡渲染开启时，才分发气泡展示事件
+    if (showBubbleRender && item.text.trim().length > 0) {
       const duration = Math.max(3000, item.text.length * 200);
       window.dispatchEvent(
         new CustomEvent('luna:show-bubble', {
