@@ -122,8 +122,14 @@ function enqueueBubbleBatch(params: {
 }): void {
   const { segments, audioUri, interactionId, assistantMessageId } = params;
 
-  // 如果气泡渲染被关闭，不展示气泡但仍需派发流结束信号让批次状态机正常流转
   const showBubbleRender = useSystemStore.getState().showBubbleRender;
+
+  // TTS 音频播放独立于气泡渲染：即使气泡渲染关闭或无有效回复文本，仍需播放 TTS 音频
+  if (audioUri) {
+    setTimeout(() => {
+      playTtsAudio(audioUri, assistantMessageId);
+    }, 0);
+  }
 
   // 无有效回复文本或气泡渲染关闭时不渲染气泡，但仍需派发流结束信号让批次状态机正常流转
   if (segments.length === 0 || !showBubbleRender) {
@@ -134,8 +140,6 @@ function enqueueBubbleBatch(params: {
     );
     return;
   }
-
-  let isFirstBubble = true;
 
   for (const segment of segments) {
     const duration = calculateSegmentDuration(segment);
@@ -151,17 +155,6 @@ function enqueueBubbleBatch(params: {
         },
       }),
     );
-
-    // 首个气泡渲染后立即触发 TTS 音频播放（音画同步的关键时刻）
-    if (isFirstBubble) {
-      isFirstBubble = false;
-      if (audioUri) {
-        // 使用 setTimeout(0) 确保气泡 DOM 已经挂载到页面上
-        setTimeout(() => {
-          playTtsAudio(audioUri, assistantMessageId);
-        }, 0);
-      }
-    }
   }
 
   // 所有片段入队后，派发流结束信号

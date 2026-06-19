@@ -106,7 +106,11 @@ class MainChatLlmNode(ChatWorkflowNode):
                         
                         if tts_enabled:
                             emotion_tag = map_emotion(state.generation_state.emotion)
-                            audio_path = await tts_client.synthesize_to_file(chunk_text, emotion=emotion_tag)
+                            # 传递用户选择的 TTS 语言，默认 zh（中文）
+                            tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
+                            audio_path = await tts_client.synthesize_to_file(
+                                chunk_text, emotion=emotion_tag, text_language=tts_lang
+                            )
                             audio_uri = f"luna://tts/{audio_path.name}"
 
                             await publish_stream_payload(
@@ -431,8 +435,10 @@ class MainChatLlmNode(ChatWorkflowNode):
         if tts_enabled and state.generation_state.full_text:
             try:
                 emotion_tag = map_emotion(state.generation_state.emotion)
+                # 传递用户选择的 TTS 语言，默认 zh（中文）
+                tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
                 audio_path = await tts_client.synthesize_to_file(
-                    state.generation_state.full_text, emotion=emotion_tag
+                    state.generation_state.full_text, emotion=emotion_tag, text_language=tts_lang
                 )
                 audio_uri = f"luna://tts/{audio_path.name}"
                 logger.info(

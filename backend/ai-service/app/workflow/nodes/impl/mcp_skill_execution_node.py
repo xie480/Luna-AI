@@ -1112,7 +1112,11 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         if tts_enabled:
             try:
                 emotion_tag = map_emotion(emotion)
-                audio_path = await tts_client.synthesize_to_file(reply, emotion=emotion_tag)
+                # 传递用户选择的 TTS 语言，默认 zh（中文）
+                tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
+                audio_path = await tts_client.synthesize_to_file(
+                    reply, emotion=emotion_tag, text_language=tts_lang
+                )
                 audio_uri = f"luna://tts/{audio_path.name}"
                 logger.info(
                     "[TraceID:{}] MCP Evaluation TTS 合成完成 audio_uri={}",
