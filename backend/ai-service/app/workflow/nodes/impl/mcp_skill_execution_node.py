@@ -399,21 +399,30 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                                 )
                             else:
                                 # 正常执行结果（审批通过后重新执行，或 L0/L1 工具）
+                                # 检测参数校验错误（如参数类型/格式不符合 JSON Schema）
+                                # 这类错误属于参数格式问题，不应触发机械退回，
+                                # 而应留在内层循环中通过 inner_suggestion 回传给 Agent 3 修正参数。
+                                failed = calling_result.get("failed", False)
+                                error_msg = calling_result.get("error", "")
+                                is_parameter_error = failed and "参数校验失败" in error_msg
+
                                 logger.info(
                                     f"MCP Skill 步骤调用工具成功 trace_id={state.runtime.trace_id} "
                                     f"step_name={state_val.tool} "
                                     f"step_goal={state_val.goal} "
                                     f"tool_name={calling_result.get('tool_name', '')} "
+                                    f"is_parameter_error={is_parameter_error}"
                                 )
                                 tool_results.append({
                                     "tool_name": state_val.tool,
-                                    "success": not calling_result.get("failed", False),
+                                    "success": not failed,
                                     "output_text": calling_result.get("output", ""),
-                                    "error_message": calling_result.get("error", ""),
+                                    "error_message": error_msg,
                                     "resource_context_injected": step_result.get("resource_context_injected", []),
                                     "latency_ms": calling_result.get("latency_ms", 0),
                                     "can_proceed": True,
                                     "tool_parameters": step_result.get("tool_parameters", {}),
+                                    "is_parameter_error": is_parameter_error,
                                 })
                         else:
                             logger.info(
@@ -796,12 +805,28 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
 
         做什么：检查当前 Skill 计划执行后是否仍有未满足的需求。
                 如果所有工具的 can_proceed 都为 true 且执行成功，认为不需要退回。
+                如果所有工具都因参数校验失败（即工具未能执行），
+                则也不触发机械退回，而是让 MCPEvaluationAgent 生成 suggestion，
+                通过 inner_suggestion → MCPSkillMemoryAgent → 内层重试 修正参数格式。
+        为什么这样做：参数格式错误是 LLM 输出格式问题，不是工具逻辑问题。
+                     触发外层退回意味着丢弃整个执行计划再重新规划，成本太高；
+                     而留在内层循环中，MCPEvaluationAgent 会产出 suggestion，
+                     下一轮内层重试时 MCPSkillMemoryAgent 会读取 suggestion
+                     并生成修正后的参数，实现快速自愈。
         参数:
             tool_results: 已执行的工具结果列表。
             resource_results: 已加载的资源结果列表。
         返回:
             bool: True 表示需要退回，False 表示无需退回。
         """
+        # 检查是否所有工具都是参数校验失败（参数格式错误，不触发机械退回）
+        # 让评估 Agent 通过 inner_suggestion 回传修正建议，内层重试快速自愈。
+        all_parameter_errors = all(
+            r.get("is_parameter_error", False) for r in tool_results if r.get("tool_name")
+        )
+        if all_parameter_errors and tool_results:
+            return False
+
         # 检查是否有工具返回 can_proceed=false
         for r in tool_results:
             if not r.get("can_proceed", True):
