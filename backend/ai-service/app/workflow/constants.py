@@ -176,6 +176,9 @@ PROMPT_VARIABLE_EMOTION_INTENSITY: Final[str] = "EMOTION_INTENSITY"
 PROMPT_VARIABLE_EMOTION_VALENCE: Final[str] = "EMOTION_VALENCE"
 PROMPT_VARIABLE_EMOTION_AROUSAL: Final[str] = "EMOTION_AROUSAL"
 PROMPT_VARIABLE_EMOTION_TRIGGER: Final[str] = "EMOTION_TRIGGER"
+# 重试错误信息变量：当 LLM 输出不符合 JSON 格式时，将解析错误信息注入此变量，
+# 在 runtime.j2 中渲染为修正指令，指导模型在重试时修正输出格式。
+PROMPT_VARIABLE_RETRY_ERROR_INFO: Final[str] = "RETRY_ERROR_INFO"
 # TTS 语音语言选项：zh（中文）/ ja（日语），用于 runtime.j2 模板判断是否需要输出 replay_translation。
 PROMPT_VARIABLE_TTS_LANGUAGE: Final[str] = "TTS_LANGUAGE"
 

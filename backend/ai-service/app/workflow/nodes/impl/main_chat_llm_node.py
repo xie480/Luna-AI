@@ -13,9 +13,11 @@ from typing import Any
 from app.api.chat_status import ChatStatusPublisher
 from app.api.chat_status_texts import get_chat_status_text
 from app.types.constants import ChatStatusStage, ChatStatusState
+from app.prompt.types import PromptCategory
 from app.workflow.constants import (
     CHAT_STREAM_EMPTY_RESPONSE_ERROR,
     CHAT_STREAM_TYPE_REPLY_CHUNK,
+    PROMPT_VARIABLE_RETRY_ERROR_INFO,
     ChatWorkflowErrorCode,
     ChatWorkflowNodeType,
 )
@@ -274,24 +276,27 @@ class MainChatLlmNode(ChatWorkflowNode):
 
     async def _handle_unified(self, state: ChatWorkflowState) -> None:
         """
-        非流式统一响应流水线：等待 LLM → 解析 → TTS → 打包下发。
+        非流式统一响应流水线：等待 LLM → 解析（含 JSON 格式重试）→ TTS → 打包下发。
 
         做什么：
             1. 推送 LLM_CALLING 状态 → 调用 llm_client.chat_sync() 获取完整回复
-            2. 推送 LLM_PARSING 状态 → 尝试使用 StreamParser 提取 thought/emotion/reply；
-               若 StreamParser 未能提取有效内容，fallback 将原始响应作为 full_text
+            2. 使用 StreamParser 解析 JSON 结构化字段；
+               若 StreamParser 未能提取有效结构化字段，构造错误信息注入
+               RETRY_ERROR_INFO 变量，重新渲染 system_prompt 后重试（最多 2 次重试）
             3. 推送 TTS_SYNTHESIZING 状态 → 对完整 reply 文本调用 TTS 合成
             4. 推送 FINAL_RESPONSE 状态 → 调用 publish_unified_response() 一次性下发
         为什么这样做：
             后端等待完整回复后执行同步 TTS 合成，再将文本、音频、情绪等打包为单次 JSON 响应下发。
             前端收到后自行负责语义切分、气泡渲染和音画同步。
-            StreamParser 解析失败时 fallback 为纯文本，保证 LLM 的回复不会丢失。
+            当 LLM 输出不符合 JSON 格式时进行重试，将错误信息注入 runtime.j2 的 RETRY_ERROR_INFO
+            变量，指导 LLM 修正输出格式。所有重试耗尽后才降级为纯文本兜底。
         边界条件：
             - TTS 合成失败时降级为纯文本（audio_uri=None）
-            - LLM 调用失败直接上抛异常
-            - StreamParser 提取不到 full_text 时使用 raw_response 作为纯文本兜底
+            - LLM 调用失败在重试耗尽后直接上抛异常
+            - StreamParser 所有重试均未能提取 full_text 时使用 raw_response 作为纯文本兜底
             - _publish_chat_status 单点失败不会阻断整个响应流程
         """
+        import asyncio
         from app.logger import logger
         from app.llm.client import llm_client
         from app.llm.stream_parser import StreamParser
@@ -301,58 +306,169 @@ class MainChatLlmNode(ChatWorkflowNode):
         logger.info("[TraceID:{}] 非流式统一响应模式启动", trace_id)
 
         # ============================================================
-        # 阶段 1：调用 LLM 获取完整回复
+        # 阶段 1 + 2（带重试）：LLM 调用与 JSON 结构化解析
         # ============================================================
-        await self._safe_publish_status(
-            state=state,
-            stage=ChatStatusStage.LLM_CALLING,
-            status=ChatStatusState.RUNNING,
-            display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.RUNNING),
-        )
+        # 最大尝试次数：初始调用 1 次 + 2 次重试 = 3 次
+        max_retries = 3
+        retry_delay = 2.0
+        raw_response = ""
 
-        generation_started_at = time.time()
-        state.generation_state.generation_started_at_ms = int(generation_started_at * 1000)
-        state.generation_state.model_name = llm_client.model_name
-        state.generation_state.provider_name = getattr(llm_client, "base_url", "")
+        for attempt in range(max_retries):
+            # 清理上一次重试的生成状态
+            if attempt > 0:
+                state.generation_state.full_text = ""
+                state.generation_state.thought_text = ""
+                state.generation_state.emotion = ""
+                state.generation_state.replay_translation_text = ""
+                state.generation_state.error = ""
 
-        logger.info("[TraceID:{}] LLM 输入参数: {}", trace_id, {
-            "system_prompt_snippet": state.prompt_state.system_prompt_text if state.prompt_state.system_prompt_text else "",
-            "history_count": len(state.session_state.recent_messages),
-            "current_message_snippet": state.input_payload.raw_user_message,
-            "trace_id": trace_id,
-        })
+                # 重试：延迟后，将 RETRY_ERROR_INFO 注入 prompt_variables 并重新渲染 Prompt
+                await asyncio.sleep(retry_delay * attempt)
+                state.prompt_state.prompt_variables[PROMPT_VARIABLE_RETRY_ERROR_INFO] = state.prompt_state.retry_error_info
+                state.prompt_state.system_prompt_text = await self.dependencies.prompt_manager.assemble_prompt(
+                    PromptCategory.CHAT,
+                    state.prompt_state.prompt_variables,
+                )
+                logger.warning(
+                    "[TraceID:{}] JSON 格式重试第 {} 次，已注入修正指令",
+                    trace_id, attempt,
+                )
 
-        try:
-            raw_response = await llm_client.chat_sync(
-                system_prompt=state.prompt_state.system_prompt_text,
-                history=history_to_model_messages(state.session_state.recent_messages),
-                current_message=state.input_payload.raw_user_message,
-                trace_id=trace_id,
-                disambiguated_text=state.route_state.disambiguated_text or state.input_payload.raw_user_message,
-                session_id=state.runtime.session_id,
-                message_id=state.generation_state.assistant_message_id,
-            )
-        except Exception:
-            # LLM 调用失败，推送 ERROR 状态后上抛
+            # --- 推送 LLM_CALLING 状态 ---
             await self._safe_publish_status(
                 state=state,
                 stage=ChatStatusStage.LLM_CALLING,
-                status=ChatStatusState.ERROR,
-                display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.ERROR),
-                error="LLM 调用失败",
-                is_terminal=True,
+                status=ChatStatusState.RUNNING,
+                display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.RUNNING),
             )
-            raise
 
-        state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
-        logger.info(
-            "[TraceID:{}] LLM 调用完成 e2e_latency_ms={} 原始响应长度={}，原始输出：{}",
-            trace_id,
-            state.generation_state.e2e_latency_ms,
-            len(raw_response),
-            raw_response
-        )
+            generation_started_at = time.time()
+            state.generation_state.generation_started_at_ms = int(generation_started_at * 1000)
+            state.generation_state.model_name = llm_client.model_name
+            state.generation_state.provider_name = getattr(llm_client, "base_url", "")
 
+            logger.info("[TraceID:{}] LLM 输入参数 (attempt={}): {}", trace_id, attempt + 1, {
+                "system_prompt_snippet": state.prompt_state.system_prompt_text[:200] if state.prompt_state.system_prompt_text else "",
+                "history_count": len(state.session_state.recent_messages),
+                "current_message_snippet": state.input_payload.raw_user_message,
+                "trace_id": trace_id,
+            })
+
+            # --- 调用 LLM 获取完整回复 ---
+            try:
+                raw_response = await llm_client.chat_sync(
+                    system_prompt=state.prompt_state.system_prompt_text,
+                    history=history_to_model_messages(state.session_state.recent_messages),
+                    current_message=state.input_payload.raw_user_message,
+                    trace_id=trace_id,
+                    disambiguated_text=state.route_state.disambiguated_text or state.input_payload.raw_user_message,
+                    session_id=state.runtime.session_id,
+                    message_id=state.generation_state.assistant_message_id,
+                )
+            except Exception:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "[TraceID:{}] 第 {} 次 LLM 调用异常，准备重试",
+                        trace_id, attempt + 1,
+                    )
+                    continue
+                else:
+                    # 最后一次重试仍然失败，推送 ERROR 状态后上抛
+                    await self._safe_publish_status(
+                        state=state,
+                        stage=ChatStatusStage.LLM_CALLING,
+                        status=ChatStatusState.ERROR,
+                        display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.ERROR),
+                        error="LLM 调用失败",
+                        is_terminal=True,
+                    )
+                    raise
+
+            state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
+            logger.info(
+                "[TraceID:{}] LLM 调用完成 (attempt={}) e2e_latency_ms={} 原始响应长度={}",
+                trace_id, attempt + 1,
+                state.generation_state.e2e_latency_ms,
+                len(raw_response),
+            )
+
+            # --- 使用 StreamParser 解析结构化 JSON 字段 ---
+            parser = StreamParser(trace_id, disable_sentence_split=True)
+
+            for msg_type, content in parser.feed(raw_response):
+                if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
+                    state.generation_state.full_text += content
+                elif msg_type == "thought_content":
+                    state.generation_state.thought_text += content
+                elif msg_type == "emotion_update":
+                    state.generation_state.emotion = content
+
+            for msg_type, content in parser.flush():
+                if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
+                    state.generation_state.full_text += content
+                elif msg_type == "thought_content":
+                    state.generation_state.thought_text += content
+                elif msg_type == "emotion_update":
+                    state.generation_state.emotion = content
+                elif msg_type == "replay_translation":
+                    state.generation_state.replay_translation_text += content
+
+            # --- 判断本次解析是否成功 ---
+            # 成功条件：StreamParser 至少提取到了 reply 文本
+            has_valid_reply = bool(state.generation_state.full_text)
+
+            if has_valid_reply:
+                # 成功提取到结构化字段，退出重试循环
+                logger.info(
+                    "[TraceID:{}] 第 {} 次尝试解析成功 full_text 长度={} thought_text 长度={} emotion={}",
+                    trace_id, attempt + 1,
+                    len(state.generation_state.full_text),
+                    len(state.generation_state.thought_text),
+                    state.generation_state.emotion or "(空)",
+                )
+                break
+            else:
+                # 解析失败：StreamParser 未提取到 reply 文本
+                # 构造错误信息，供下一次重试的 RETRY_ERROR_INFO 变量使用
+                error_detail = "上一轮输出不符合要求的 JSON 格式。"
+                if not raw_response.strip():
+                    error_detail += " 模型返回了空内容，请确保输出完整 JSON 对象。"
+                else:
+                    # 根据原始响应的特征分析具体问题
+                    if '"reply"' not in raw_response and '"emotion"' not in raw_response:
+                        error_detail += " 输出的 JSON 中缺少必需的'emotion'和'reply'字段。"
+                    elif '"reply"' not in raw_response:
+                        error_detail += " 输出的 JSON 中缺少必需的'reply'字段。"
+                    elif '"emotion"' not in raw_response:
+                        error_detail += " 输出的 JSON 中缺少必需的'emotion'字段。"
+                    else:
+                        error_detail += " 输出的 JSON 格式有误（如字符串未正确引号包围、字段名拼写错误等）。"
+                    error_detail += " 原始输出片段：" + raw_response.strip()[:500]
+
+                state.prompt_state.retry_error_info = (
+                    "## 上一轮输出的格式错误\n"
+                    f"{error_detail}\n\n"
+                    "## 修正要求\n"
+                    "请严格遵循第三章输出格式宪法，仅输出一个合法的单行 JSON 对象。"
+                    " 字段必须精确拼写为：check、thought、emotion、reply。"
+                )
+
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "[TraceID:{}] 第 {} 次尝试解析失败，将重试注入修正指令。错误：{}",
+                        trace_id, attempt + 1, error_detail,
+                    )
+                else:
+                    # 所有重试耗尽，使用原始响应作为纯文本兜底
+                    logger.warning(
+                        "[TraceID:{}] 所有 {} 次尝试均解析失败，降级为纯文本模式（原始响应长度={}）",
+                        trace_id, max_retries, len(raw_response),
+                    )
+                    if raw_response.strip():
+                        state.generation_state.full_text = raw_response.strip()
+                    break
+
+        # LLM Calling 阶段完成
         await self._safe_publish_status(
             state=state,
             stage=ChatStatusStage.LLM_CALLING,
@@ -360,66 +476,8 @@ class MainChatLlmNode(ChatWorkflowNode):
             display_text=get_chat_status_text(ChatStatusStage.LLM_CALLING, ChatStatusState.COMPLETED),
         )
 
-        # ============================================================
-        # 阶段 2：解析回复（提取 thought / emotion / reply）
-        #         解析失败时 fallback 将原始响应全文作为 full_text
-        # ============================================================
-        await self._safe_publish_status(
-            state=state,
-            stage=ChatStatusStage.LLM_PARSING,
-            status=ChatStatusState.RUNNING,
-            display_text=get_chat_status_text(ChatStatusStage.LLM_PARSING, ChatStatusState.RUNNING),
-        )
-
-        # 使用 disable_sentence_split=True 模式：不切句，完整保留 reply 原文
-        parser = StreamParser(trace_id, disable_sentence_split=True)
-
-        # 一次性喂入完整文本，通过 StreamParser 提取结构化字段
-        for msg_type, content in parser.feed(raw_response):
-            if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
-                state.generation_state.full_text += content
-            elif msg_type == "thought_content":
-                state.generation_state.thought_text += content
-            elif msg_type == "emotion_update":
-                state.generation_state.emotion = content
-
-        # flush 获取剩余内容及 replay_translation（日语翻译文本）
-        for msg_type, content in parser.flush():
-            if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
-                state.generation_state.full_text += content
-            elif msg_type == "thought_content":
-                state.generation_state.thought_text += content
-            elif msg_type == "emotion_update":
-                state.generation_state.emotion = content
-            elif msg_type == "replay_translation":
-                state.generation_state.replay_translation_text += content
-
-        # === Fallback：StreamParser 未能提取 full_text 时，使用原始响应作为纯文本 ===
-        if not state.generation_state.full_text and raw_response.strip():
-            logger.warning(
-                "[TraceID:{}] StreamParser 未能从 LLM 响应中提取结构化字段，"
-                "已降级为纯文本模式（原始响应长度={}）",
-                trace_id,
-                len(raw_response),
-            )
-            state.generation_state.full_text = raw_response.strip()
-
+        # 设置 finish_reason
         state.generation_state.finish_reason = "stop"
-
-        logger.info(
-            "[TraceID:{}] 解析完成 full_text 长度={} thought_text 长度={} emotion={}",
-            trace_id,
-            len(state.generation_state.full_text),
-            len(state.generation_state.thought_text),
-            state.generation_state.emotion or "(空)",
-        )
-
-        await self._safe_publish_status(
-            state=state,
-            stage=ChatStatusStage.LLM_PARSING,
-            status=ChatStatusState.COMPLETED,
-            display_text=get_chat_status_text(ChatStatusStage.LLM_PARSING, ChatStatusState.COMPLETED),
-        )
 
         # ============================================================
         # 阶段 3：TTS 合成完整音频

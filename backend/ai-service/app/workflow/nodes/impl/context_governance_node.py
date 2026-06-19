@@ -28,6 +28,7 @@ from app.workflow.constants import (
     PROMPT_VARIABLE_GATING_APPROVAL_RESULT,
     PROMPT_VARIABLE_GATING_REJECTION_INFO,
     PROMPT_VARIABLE_KEY_FACTS,
+    PROMPT_VARIABLE_RETRY_ERROR_INFO,
     PROMPT_VARIABLE_LONG_TERM_MEMORY,
     PROMPT_VARIABLE_MEMORY_SNIPPETS,
     PROMPT_VARIABLE_SKILL_EXECUTION_SUMMARY,
@@ -146,6 +147,8 @@ class ContextGovernanceNode(ChatWorkflowNode):
             PROMPT_VARIABLE_GATING_APPROVAL_RESULT: gating_approval_result,
             # TTS 语音语言选项
             PROMPT_VARIABLE_TTS_LANGUAGE: state.input_payload.tts_language,
+            # JSON 格式重试错误信息：首次调用为空，重试时由 MainChatLlmNode 设置
+            PROMPT_VARIABLE_RETRY_ERROR_INFO: state.prompt_state.retry_error_info,
         }
 
         try:

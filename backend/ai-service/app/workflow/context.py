@@ -160,6 +160,11 @@ class ChatPromptState(BaseModel):
 
     system_prompt_text: str = ""
     prompt_variables: dict[str, str] = Field(default_factory=dict)
+    # 重试错误信息：记录上一次 LLM 输出中 JSON 解析失败的错误详情。
+    # 当 LLM 输出不符合 JSON 格式时，此字段存储错误信息，
+    # 在重试时注入到 runtime.j2 的 {{ RETRY_ERROR_INFO }} 变量中，
+    # 指导 LLM 修正输出格式。正常首次调用时为 ""。
+    retry_error_info: str = ""
 
 
 class ChatGenerationState(BaseModel):
