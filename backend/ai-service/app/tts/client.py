@@ -7,7 +7,7 @@ TTS 客户端模块，用于与 GPT-SoVITS 或 OpenAI-compatible TTS 服务通�
     - synthesize: 输入文本和参数，返回音频字节流 (bytes)
     - synthesize_to_file: 输入文本和参数，返回音频文件的 Path
 边界条件：
-    - 自动将文本中的 "luna"（大小写不敏感）替换为 "露娜"，使 TTS 发音正确
+    - 自动将文本中的 "luna"（大小写不敏感）按语言替换：日语替换为 "ルナ"，其他语言替换为 "露娜"，使 TTS 发音正确
     - 缓存目录不存在时自动创建
 异常行为：
     - HTTP 请求失败时抛出 RuntimeError
@@ -95,8 +95,11 @@ class GSVITTSClient:
         """调用 TTS 服务生成音频流。"""
         import re
         
-        # 将各种大小写形式的 luna 替换为“露娜”，使 TTS 发音正确
-        processed_text = re.sub(r'(?i)luna', '露娜', text)
+        # 根据语言替换 "Luna" 以确保 TTS 发音正确：
+        # - 日语 (ja)：替换为片假名 "ルナ"
+        # - 其他语言：替换为中文 "露娜"
+        luna_replacement = 'ルナ' if text_language.lower() in ('ja', 'jp') else '露娜'
+        processed_text = re.sub(r'(?i)luna', luna_replacement, text)
         
         # model 格式: GPT-SoVITS 期望 "GSVI-{version}"（如 "GSVI-v4"）
         # voice 格式: 说话人名称（如 "阿米娅"）

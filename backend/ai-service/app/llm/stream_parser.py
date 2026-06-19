@@ -33,6 +33,10 @@ _THOUGHT_START_RE = re.compile(r'"thought"\s*:\s*"')
 # 正则：用于识别 thought 结束位置（下一个字段起始）
 # 增加 reply 作为兜底，防止 emotion 缺失
 _THOUGHT_END_RE = re.compile(r'"\s*,\s*"(?:emotion|thought|reply)"')
+# 正则：用于识别 reply 字段结束位置（下一个字段起始）
+# 在 reply 内容后出现 ","<字段名>":" 模式时，表示 reply 字段已结束，后续文本不应再混入 reply_buffer
+# 覆盖 replay_translation 等 reply 之后可能的字段名
+_REPLY_END_RE = re.compile(r'"\s*,\s*"\w+"\s*:\s*"')
 # 正则：用于一次性捕获 emotion 值（仅第一次出现时返回）
 _EMOTION_RE = re.compile(r'"emotion"\s*:\s*"([^"]+)"')
 # reply 字段起始标记
@@ -67,6 +71,7 @@ class StreamParser:
         self._state: _ParseState = _ParseState.WAITING_CHECK
         self._emotion_sent: bool = False
         self._reply_started: bool = False
+        self._reply_finished: bool = False  # 是否已检测到 reply 字段结束标记（如 ","replay_translation":"），之后的内容不再混入 reply_buffer
         self._reply_buffer: str = ""
         self._thought_buffer: str = ""
         self._thought_sent: bool = False
@@ -138,9 +143,13 @@ class StreamParser:
         当 self._disable_sentence_split=True 时：
             reply 文本完整累积到 _reply_buffer，不做断句切分。
             feed() 调用期间不返回任何 reply_chunk，所有 reply 内容由 flush() 一次性返回。
+
+        注意：LLM 返回的 JSON 中 reply 字段之后可能还有 replay_translation 等字段，
+            本方法通过 _REPLY_END_RE 检测 reply 字段的结束边界，
+            确保 replay_translation 等后续字段的内容不会混入 reply_buffer。
         """
         msgs: list[tuple[str, str]] = []
-        
+
         if not self._reply_started:
             # 将碎片追加到缓冲池中，防止 JSON 键值对被 chunk 截断
             self._intermediate_buffer += text
@@ -157,17 +166,37 @@ class StreamParser:
             if m:
                 self._reply_started = True
                 # 将 reply 起始标记之后的内容放入 reply_buffer
-                self._reply_buffer += self._intermediate_buffer[m.end():]
+                reply_tail = self._intermediate_buffer[m.end():]
+                # 检查 reply 内容中是否已包含结束标记（非流式场景下完整 JSON 中 reply 后紧跟其他字段）
+                end_m = _REPLY_END_RE.search(reply_tail)
+                if end_m:
+                    # reply 结束标记已出现在当前片段中，截断
+                    self._reply_buffer += reply_tail[:end_m.start()]
+                    self._reply_finished = True
+                else:
+                    self._reply_buffer += reply_tail
                 self._intermediate_buffer = ""  # 释放缓冲池
                 # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
                 if not self._disable_sentence_split:
                     msgs.extend(self._pop_sentence())
-        else:
-            # 已经进入 reply 读取阶段，直接追加到底
-            self._reply_buffer += text
-            # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
-            if not self._disable_sentence_split:
-                msgs.extend(self._pop_sentence())
+        elif not self._reply_finished:
+            # 已经进入 reply 读取阶段，且尚未检测到 reply 结束标记
+            # 先检查当前文本中是否包含 reply 结束标记（下一个 JSON 字段起始）
+            end_m = _REPLY_END_RE.search(text)
+            if end_m:
+                # 发现 reply 结束标记，截断并标记为 finished
+                self._reply_buffer += text[:end_m.start()]
+                self._reply_finished = True
+                # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
+                if not self._disable_sentence_split:
+                    msgs.extend(self._pop_sentence())
+            else:
+                # 未检测到结束标记，正常追加
+                self._reply_buffer += text
+                # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
+                if not self._disable_sentence_split:
+                    msgs.extend(self._pop_sentence())
+        # 已检测到 reply 结束标记（_reply_finished = True），跳过后续文本不再追加到 reply_buffer
             
         return msgs
 
@@ -241,6 +270,7 @@ class StreamParser:
         self._state = _ParseState.WAITING_CHECK
         self._emotion_sent = False
         self._reply_started = False
+        self._reply_finished = False
         self._reply_buffer = ""
         self._thought_buffer = ""
         self._thought_sent = False

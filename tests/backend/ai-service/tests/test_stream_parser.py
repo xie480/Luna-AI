@@ -296,5 +296,93 @@ class TestStreamParserMultiChunk:
         assert "标点" in reply_chunks[0]
 
 
+class TestStreamParserReplayTranslation:
+    """replay_translation 字段隔离测试：确保 reply 之后的其他字段不会混入 reply_buffer"""
+
+    REPLAY_JSON = (
+        '{"check":"[感知] 意图识别：直球表白。","thought":"（内心独白）",'
+        '"emotion":"Flustered","reply":"你、你突然说这个干嘛……Luna才不是因为你夸了就开心呢！",'
+        '"replay_translation":"急にそんなこと言わないでよ……Luna、褒められて嬉しいわけじゃないんだからね！"}'
+    )
+
+    def test_replay_translation_not_in_reply_feed(self):
+        """测试 feed 阶段 reply 内容不包含 replay_translation"""
+        parser = StreamParser(trace_id="test-replay-001")
+        msgs = parser.feed(self.REPLAY_JSON)
+        reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
+        # reply 内容应该只包含中文回复，不包含日文翻译
+        for chunk in reply_chunks:
+            assert "急に" not in chunk, f"reply_chunk 不应包含 replay_translation 内容: {chunk}"
+            assert "褒められて" not in chunk, f"reply_chunk 不应包含 replay_translation 内容: {chunk}"
+
+    def test_replay_translation_not_in_reply_flush(self):
+        """测试 flush 阶段 reply 内容不包含 replay_translation"""
+        parser = StreamParser(trace_id="test-replay-002")
+        parser.feed(self.REPLAY_JSON)
+        flush_msgs = parser.flush()
+        flush_reply = [c for t, c in flush_msgs if t == "reply_chunk"]
+        for chunk in flush_reply:
+            assert "replay_translation" not in chunk
+            assert "急に" not in chunk, f"flush reply 不应包含 replay_translation 内容: {chunk}"
+
+    def test_replay_translation_disable_split(self):
+        """测试 disable_sentence_split=True 模式下 reply 也不包含 replay_translation"""
+        parser = StreamParser(trace_id="test-replay-003", disable_sentence_split=True)
+        msgs = parser.feed(self.REPLAY_JSON)
+        # 禁用断句模式下，feed 不返回 reply_chunk
+        feed_reply = [c for t, c in msgs if t == "reply_chunk"]
+        assert len(feed_reply) == 0
+
+        flush_msgs = parser.flush()
+        flush_reply = [c for t, c in flush_msgs if t == "reply_chunk"]
+        assert len(flush_reply) == 1
+        # 确认 flush 返回的完整 reply 不包含 replay_translation 内容
+        full_reply = flush_reply[0]
+        assert "急に" not in full_reply, f"disable_split 模式下 reply 不应包含 replay_translation: {full_reply}"
+        assert "Luna、褒められて" not in full_reply
+        # 确认正常的 reply 内容被保留
+        assert "Luna" in full_reply
+        assert "突然" in full_reply
+
+    def test_replay_translation_no_emotion_field(self):
+        """测试 reply 后接 replay_translation 但没有 emotion 字段时依然正确截断"""
+        parser = StreamParser(trace_id="test-replay-004")
+        chunk = '{"check":"c","thought":"t","reply":"你好。","replay_translation":"こんにちは。"}'
+        msgs = parser.feed(chunk)
+        reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
+        flush_msgs = parser.flush()
+        flush_reply = [c for t, c in flush_msgs if t == "reply_chunk"]
+        all_reply = reply_chunks + flush_reply
+        for chunk in all_reply:
+            assert "replay_translation" not in chunk
+            assert "こんにちは" not in chunk, f"reply 不应包含 replay_translation 内容: {chunk}"
+
+    def test_replay_translation_streaming_chunks(self):
+        """模拟流式场景下 reply 和 replay_translation 在不同 chunk 中到达"""
+        parser = StreamParser(trace_id="test-replay-005")
+        # chunk1: 包含 check、thought、emotion 和 reply 内容
+        chunk1 = '{"check":"c","thought":"t","emotion":"Happy","reply":"今天天气真好啊。'
+        msgs1 = parser.feed(chunk1)
+        reply_chunks1 = [c for t, c in msgs1 if t == "reply_chunk"]
+        assert len(reply_chunks1) >= 1
+        assert all("replay_translation" not in c for c in reply_chunks1)
+
+        # chunk2: 包含 reply 剩余部分 + replay_translation
+        chunk2 = '明天也要出去玩。","replay_translation":"今日はいい天気ですね。明日も遊びに行こう。"}'
+        msgs2 = parser.feed(chunk2)
+        reply_chunks2 = [c for t, c in msgs2 if t == "reply_chunk"]
+        for c in reply_chunks2:
+            assert "replay_translation" not in c
+            assert "今日は" not in c, f"reply_chunk 不应包含 replay_translation: {c}"
+            assert "明日も" not in c
+
+        # flush 后确认
+        flush_msgs = parser.flush()
+        flush_reply = [c for t, c in flush_msgs if t == "reply_chunk"]
+        for c in flush_reply:
+            assert "replay_translation" not in c
+            assert "今日は" not in c
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
