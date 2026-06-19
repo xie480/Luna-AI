@@ -1030,6 +1030,8 @@ class SSEManager {
         message,
         msgId: assistantMsgId,
         ttsEnabled: systemStore.isTTSEnabled,
+        // TTS 语音语言选项：zh（中文）/ ja（日语）
+        ttsLanguage: systemStore.ttsLanguage,
         // LLM 响应模式：unified（统一非流式，默认）/ streaming（传统流式兼容）
         llmResponseMode: systemStore.llmResponseMode ?? 'unified',
         // 聊天模式：daily_chat（深度日常助理）/ casual_chat（极速闲聊）

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSystemStore } from '../../stores/systemStore';
+import { TTS_LANGUAGE, TTS_LANGUAGE_LABEL } from '../../../shared/enum';
 
 
 export const GeneralSettings: React.FC = () => {
@@ -17,6 +18,8 @@ export const GeneralSettings: React.FC = () => {
   const setTheme = useSystemStore((state) => state.setTheme);
   const isTTSEnabled = useSystemStore((state) => state.isTTSEnabled);
   const setTTSEnabled = useSystemStore((state) => state.setTTSEnabled);
+  const ttsLanguage = useSystemStore((state) => state.ttsLanguage);
+  const setTTSLanguage = useSystemStore((state) => state.setTTSLanguage);
 
   return (
     <div className="settings-content-section">
@@ -104,6 +107,24 @@ export const GeneralSettings: React.FC = () => {
             />
             <span className="slider round"></span>
           </label>
+        </div>
+      </div>
+
+      {/* TTS 语言选择 */}
+      <div className="settings-item">
+        <div className="settings-item-info">
+          <div className="settings-item-title">TTS 语音语言</div>
+          <div className="settings-item-desc">选择 TTS 语音合成的语言。选择日语时，Luna 的回复将附带自然口语化的日语翻译。</div>
+        </div>
+        <div className="settings-item-control">
+          <select
+            className="theme-select"
+            value={ttsLanguage}
+            onChange={(e) => setTTSLanguage(e.target.value)}
+          >
+            <option value={TTS_LANGUAGE.ZH}>{TTS_LANGUAGE_LABEL[TTS_LANGUAGE.ZH]}</option>
+            <option value={TTS_LANGUAGE.JA}>{TTS_LANGUAGE_LABEL[TTS_LANGUAGE.JA]}</option>
+          </select>
         </div>
       </div>
 

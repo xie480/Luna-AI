@@ -634,3 +634,24 @@ export const MCP_AUTH_TYPE_LABEL: Record<string, string> = {
   [MCP_AUTH_TYPE.API_KEY]: 'API Key',
   [MCP_AUTH_TYPE.BASIC]: '用户名密码',
 };
+
+/**
+ * TTS 语言选项常量。
+ * 做什么：定义 TTS 语音合成的语言选项。
+ * 为什么这样做：前端设置面板和后端 Prompt 模板需要共享同一个语言枚举。
+ * 输入输出：无。
+ * 边界条件：zh 为默认中文模式，ja 为日语模式。
+ * 异常行为：无。
+ */
+export const TTS_LANGUAGE = {
+  /** 中文（默认） */
+  ZH: 'zh',
+  /** 日语 */
+  JA: 'ja',
+} as const;
+
+/** TTS 语言选项中文标签。 */
+export const TTS_LANGUAGE_LABEL: Record<string, string> = {
+  [TTS_LANGUAGE.ZH]: '中文',
+  [TTS_LANGUAGE.JA]: '日语',
+};

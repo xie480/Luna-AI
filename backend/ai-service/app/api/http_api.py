@@ -50,6 +50,8 @@ class ChatRequestPayload(BaseModel):
     message: str
     msgId: str
     ttsEnabled: bool = True
+    # TTS 语音语言：zh（中文）/ ja（日语），默认为中文
+    ttsLanguage: str = "zh"
     # LLM 响应模式：streaming（流式） / unified（统一非流式），默认可由前端传入
     llmResponseMode: str = "unified"
     chatMode: str = "daily_chat"
@@ -193,6 +195,7 @@ async def chat_request(
         message=payload.message,
         frontend_message_id=payload.msgId,
         tts_enabled=payload.ttsEnabled,
+        tts_language=payload.ttsLanguage,
         llm_response_mode=payload.llmResponseMode,
         chat_mode=chat_mode_enum,
     )

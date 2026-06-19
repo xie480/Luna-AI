@@ -31,6 +31,7 @@ from app.workflow.constants import (
     PROMPT_VARIABLE_LONG_TERM_MEMORY,
     PROMPT_VARIABLE_MEMORY_SNIPPETS,
     PROMPT_VARIABLE_SKILL_EXECUTION_SUMMARY,
+    PROMPT_VARIABLE_TTS_LANGUAGE,
     PROMPT_VARIABLE_USER_PROFILE,
     ChatWorkflowNodeType,
 )
@@ -143,6 +144,8 @@ class ContextGovernanceNode(ChatWorkflowNode):
             # Phase 13：Gating 审批结果注入
             PROMPT_VARIABLE_GATING_REJECTION_INFO: gating_rejection_info,
             PROMPT_VARIABLE_GATING_APPROVAL_RESULT: gating_approval_result,
+            # TTS 语音语言选项
+            PROMPT_VARIABLE_TTS_LANGUAGE: state.input_payload.tts_language,
         }
 
         try:

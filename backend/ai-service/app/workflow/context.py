@@ -58,6 +58,7 @@ class ChatInputPayload(BaseModel):
     locale: str = Field(default="zh-CN", description="本地化设置。")
     timezone: str = Field(default="Asia/Shanghai", description="时区设置。")
     tts_enabled: bool = True
+    tts_language: str = Field(default="zh", description="TTS 语音语言：zh（中文）/ ja（日语）。")
     attachment_meta_list: list[dict[str, Any]] = Field(default_factory=list)
     extra_context: dict[str, Any] = Field(default_factory=dict)
     llm_response_mode: str = Field(

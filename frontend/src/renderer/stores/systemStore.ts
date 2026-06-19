@@ -3,7 +3,7 @@
  * 管理连接状态、左侧边栏状态、模态窗口状态等系统级配置
  */
 import { create } from 'zustand';
-import { CHAT_MODE } from '../../shared/enum';
+import { CHAT_MODE, TTS_LANGUAGE } from '../../shared/enum';
 import type { ChatMode } from '../../shared/types';
 import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 
@@ -79,6 +79,8 @@ interface SystemState {
   live2dMaxFPS: 30 | 60 | 90 | 120;
   // 是否展示气泡渲染（默认开启）
   showBubbleRender: boolean;
+  // TTS 语言选项
+  ttsLanguage: string;
   // 主题设置
   theme: 'dark' | 'light' | 'cyberpunk';
   /**
@@ -121,6 +123,8 @@ interface SystemState {
   setLive2dEnabled: (enabled: boolean) => void;
   // 设置 本地 TTS 语音开关
   setTTSEnabled: (enabled: boolean) => void;
+  // 设置 TTS 语言选项
+  setTTSLanguage: (lang: string) => void;
   // 设置 LLM 响应模式
   setLlmResponseMode: (mode: 'unified' | 'streaming') => void;
   // 设置 Live2D 空闲降频开关
@@ -238,6 +242,18 @@ function loadShowBubbleRender(): boolean {
   return true; // 默认开启
 }
 
+function loadTTSLanguage(): string {
+  try {
+    const raw = localStorage.getItem('luna:ttsLanguage');
+    if (raw === TTS_LANGUAGE.ZH || raw === TTS_LANGUAGE.JA) {
+      return raw;
+    }
+  } catch (e) {
+    // 解析失败时返回默认值
+  }
+  return TTS_LANGUAGE.ZH; // 默认中文
+}
+
 function loadTheme(): 'dark' | 'light' | 'cyberpunk' {
   try {
     const raw = localStorage.getItem('luna:theme');
@@ -290,6 +306,7 @@ export const useSystemStore = create<SystemState>((set) => ({
   isLive2dBackgroundSuspensionEnabled: loadLive2dBackgroundSuspensionEnabled(),
   live2dMaxFPS: loadLive2dMaxFPS(),
   showBubbleRender: loadShowBubbleRender(),
+  ttsLanguage: loadTTSLanguage(),
   theme: loadTheme(),
   // 聊天模式，从 localStorage 恢复用户偏好，默认深度日常助理
   chatMode: loadChatMode(),
@@ -437,6 +454,16 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误
       }
       return { showBubbleRender: enabled };
+    }),
+
+  setTTSLanguage: (lang) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:ttsLanguage', lang);
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { ttsLanguage: lang };
     }),
 
   setTheme: (theme) =>
