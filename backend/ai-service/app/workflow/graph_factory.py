@@ -191,17 +191,22 @@ class ChatGraphFactory:
 
         做什么：构建一条最短化执行链路，仅保留必要节点：
                 会话上下文加载 -> 长期记忆 RAG（强制关闭 Rerank）
-                -> 用户画像注入 -> 提示组装 -> 主聊天 LLM
+                -> 用户画像注入 -> 上下文治理 -> 提示组装 -> 主聊天 LLM
                 -> 响应持久化 -> 最终化。
-                跳过 输入重构、知识库 RAG、MCP 意图判断、MCP Skill 执行 和 上下文治理。
+                跳过 输入重构、知识库 RAG、MCP 意图判断、MCP Skill 执行。
         为什么这样做：闲聊模式下用户只期望快速反馈，不需要动用重型分析链。
                      此图为静态链接拓扑，不涉及条件评估分支节点。
+        注意：必须包含上下文治理节点，因为它是唯一填充 prompt_variables
+             （含 TTS_LANGUAGE、CURRENT_TIME 等运行时变量）的地方。
+             缺少该节点会导致 runtime.j2 模板中的 `{% if %}` 条件分支
+             因变量缺失而无法正确渲染（如 TTS 日语分支不生效）。
         """
         graph = StateGraph(ChatWorkflowState)
         active_nodes = [
             ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
             ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG,
             ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE,
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM,
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE,
@@ -224,6 +229,10 @@ class ChatGraphFactory:
         )
         graph.add_edge(
             ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
             ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
         )
         graph.add_edge(
