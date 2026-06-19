@@ -355,9 +355,20 @@ class RagPGRepository:
         logger.info(f"RAG 文档已删除 document_id={document_id} chunks_count={len(chunk_ids)}")
         return chunk_ids
 
-    async def list_documents(self, limit: int = 100) -> list[RagDocument]:
-        """列出最近知识库文档。"""
+    async def list_documents(self, limit: int = 100, status: str | None = None) -> list[RagDocument]:
+        """
+        列出知识库文档。
+
+        做什么：按状态过滤并返回知识库文档列表。
+        为什么这样做：InputReconstructionNode 需要只展示 ACTIVE 状态文档给 LLM，
+                     API 路由需要列出所有文档给前端管理面板。
+        输入输出：status 为 None 时返回所有文档（API 管理用）；指定 status 时只返回匹配状态的文档。
+        边界条件：limit 必须为正整数；status 不合法时返回空结果而非抛异常。
+        """
         async with self.pg_client.session_factory() as session:
-            stmt = select(RagDocument).order_by(RagDocument.created_at.desc()).limit(limit)
+            stmt = select(RagDocument).order_by(RagDocument.created_at.desc())
+            if status is not None:
+                stmt = stmt.where(RagDocument.status == status)
+            stmt = stmt.limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())

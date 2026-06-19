@@ -16,6 +16,7 @@ from app.types.constants import (
     DagRouteHint,
     IntentCategory,
     PrimaryIntent,
+    RagDocumentStatus,
     RagRetrievalRoute,
     RetrievalType,
 )
@@ -70,7 +71,8 @@ class InputReconstructionNode(ChatWorkflowNode):
             return ""
 
         try:
-            documents = await rag_pg_repo.list_documents(limit=200)
+            # 只查询 ACTIVE 状态的文档，确保 LLM 只感知到已完成摄入的有效文档。
+            documents = await rag_pg_repo.list_documents(limit=200, status=RagDocumentStatus.ACTIVE.value)
         except Exception as e:
             logger.warning(f"加载知识库文档列表失败 error={e}")
             return ""
