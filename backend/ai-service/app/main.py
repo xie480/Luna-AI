@@ -46,6 +46,85 @@ if "torchcodec" not in sys.modules:
     sys.modules["torchcodec.decoders"] = _torchcodec_stub.decoders
 
 # ============================================================================
+# 植入 transformers / optimum 兼容垫片组，防止旧版 optimum 在新版 transformers 上导入崩溃
+#
+# 做什么：optimum 2.1.0 依赖 transformers 的一些内部 API，这些 API 在
+#         transformers 5.x 中被移除或改名。本区块在 optimum 被实际导入前，将缺失的
+#         API 注入到对应的 transformers 子模块命名空间中，使旧版本 optimum 能正常加载。
+#
+# 已知缺失及其来源：
+#   1. is_offline_mode         -> transformers.utils (在 5.x 中仅在 utils.hub 中)
+#   2. get_parameter_dtype     -> transformers.modeling_utils (5.x 中已移除)
+#   3. _CAN_RECORD_REGISTRY    -> transformers.utils.generic (5.x 中已移除)
+#   4. OutputRecorder          -> transformers.utils.generic (5.x 中已移除)
+#
+# 为什么这样做：在 optimum 被实际导入前，向 transformers 子模块注入必要的兼容垫片，
+#              使旧版本 optimum 兼容新版 transformers，避免 ONNX 模型加载链整体降级回退。
+# 边界条件：仅当对应属性不存在时注入，不覆盖 transformers 原生实现。
+# ============================================================================
+import transformers.utils as _transformers_utils
+import transformers.utils.hub as _transformers_utils_hub
+
+# 补丁 1：is_offline_mode
+if not hasattr(_transformers_utils, "is_offline_mode"):
+    _transformers_utils.is_offline_mode = _transformers_utils_hub.is_offline_mode
+
+import transformers.modeling_utils as _transformers_modeling_utils
+import torch as _torch
+
+# 补丁 2：get_parameter_dtype
+if not hasattr(_transformers_modeling_utils, "get_parameter_dtype"):
+    def _get_parameter_dtype(module: _torch.nn.Module) -> _torch.dtype:
+        """从模块中推断参数数据类型，等价于旧版 transformers 的 get_parameter_dtype"""
+        for param in module.parameters():
+            return param.dtype
+        for buf in module.buffers():
+            return buf.dtype
+        return _torch.float32
+    _transformers_modeling_utils.get_parameter_dtype = _get_parameter_dtype
+
+import transformers.utils.generic as _transformers_utils_generic
+
+# 补丁 3 & 4：_CAN_RECORD_REGISTRY + OutputRecorder
+if not hasattr(_transformers_utils_generic, "_CAN_RECORD_REGISTRY"):
+    class _MockRegistry(dict):
+        """空操作注册表，替代旧版 transformers 中已移除的 _CAN_RECORD_REGISTRY"""
+        def add(self, obj: object, name: str | None = None) -> None:
+            pass
+    _transformers_utils_generic._CAN_RECORD_REGISTRY = _MockRegistry()
+
+if not hasattr(_transformers_utils_generic, "OutputRecorder"):
+    class _MockOutputRecorder:
+        """空操作输出记录器，替代旧版 transformers 中已移除的 OutputRecorder"""
+        def __init__(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    _transformers_utils_generic.OutputRecorder = _MockOutputRecorder
+
+# ============================================================================
+# 补丁 5：强制阻断 ONNX Runtime 使用 CUDA 执行提供程序
+#
+# 做什么：optimum.onnxruntime 内部 validate_provider_availability() 会检查
+#         providers 列表中每个 provider 是否可用。尽管 from_pretrained 传了
+#         provider="CPUExecutionProvider"，但某些导出/回退路径可能覆盖该参数。
+#         本补丁在 onnxruntime 层面过滤掉 CUDA/TensorRT 等不可用的 GPU provider，
+#         并从 optimum 的验证函数中移除它们，确保模型始终使用 CPU 加载。
+# 为什么这样做：三重保障——环境变量层 + onnxruntime 层 + optimum 验证函数层。
+# ============================================================================
+import os as _os
+_os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+import onnxruntime as _ort
+# 替换 get_available_providers，只保留 CPU 可用的 provider
+_orig_get_available_providers = _ort.get_available_providers
+def _patched_get_available_providers():
+    """返回仅含 CPU 可用 provider 的列表，过滤掉任何 GPU provider"""
+    all_providers = _orig_get_available_providers()
+    _gpu_keywords = ["cuda", "tensorrt", "rocm", "openvino"]
+    return [p for p in all_providers if not any(kw in p.lower() for kw in _gpu_keywords)]
+_ort.get_available_providers = _patched_get_available_providers
+
+# ============================================================================
 # 并发调度改造 (维度四)：硬件资源调度与 CPU 算力硬限制边界
 # 为什么这样做：限制 PyTorch / OpenMP 的底层衍生线程数量，防止其默认的 CPU 抢占策略锁死宿主机，
 # 为 UI 交互流（Electron/React）保留至少 2 个独立的逻辑物理核算力。
@@ -177,7 +256,8 @@ def load_embedding_model() -> object | None:
             model = ORTModelForFeatureExtraction.from_pretrained(
                 onnx_path,
                 local_files_only=True,
-                session_options=sess_options
+                session_options=sess_options,
+                provider="CPUExecutionProvider"
             )
             # 使用 transformers pipeline 简化特征提取调用
             pipe = pipeline("feature-extraction", model=model, tokenizer=tokenizer)
@@ -235,7 +315,8 @@ def load_rerank_model() -> object | None:
             model = ORTModelForSequenceClassification.from_pretrained(
                 onnx_path,
                 local_files_only=True,
-                session_options=sess_options
+                session_options=sess_options,
+                provider="CPUExecutionProvider"
             )
             pipe = pipeline("text-classification", model=model, tokenizer=tokenizer)
             logger.info("ONNX Rerank 模型加载完成")
