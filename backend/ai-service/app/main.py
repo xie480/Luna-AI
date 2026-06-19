@@ -28,10 +28,18 @@ os.environ["HF_DATASETS_OFFLINE"] = "1"
 # 边界条件：仅当 torchcodec 尚未被导入时生效；如果环境中正常安装了 FFmpeg，则不影响。
 # ============================================================================
 import types as _sys_types
+import importlib.machinery as _importlib_machinery
 if "torchcodec" not in sys.modules:
     _torchcodec_stub = _sys_types.ModuleType("torchcodec")
+    # 设置 __spec__ 防止 sentence_transformers 导入链因 __spec__ is None 而崩溃
+    _torchcodec_stub.__spec__ = _importlib_machinery.ModuleSpec(
+        "torchcodec", None, is_package=True
+    )
     _torchcodec_stub.__path__ = []
     _torchcodec_stub.decoders = _sys_types.ModuleType("torchcodec.decoders")
+    _torchcodec_stub.decoders.__spec__ = _importlib_machinery.ModuleSpec(
+        "torchcodec.decoders", None
+    )
     _torchcodec_stub.decoders.AudioDecoder = None  # type: ignore[attr-defined]
     _torchcodec_stub.decoders.VideoDecoder = None  # type: ignore[attr-defined]
     sys.modules["torchcodec"] = _torchcodec_stub
