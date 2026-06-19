@@ -361,7 +361,7 @@ async def batch_register_skills(
                             phase=p.get("phase", "execution"),
                             content_path=content_path,
                             variables=p.get("variables", []),
-                            version_num=p.get("version_num", 1)
+                            version_num=p.get("version_num", 1),
                         ))
 
                 # Process Servers

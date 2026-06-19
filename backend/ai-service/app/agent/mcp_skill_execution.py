@@ -122,20 +122,57 @@ class MCPSkillExecutionAgent:
         ]
 
         # 组装通用状态的 memory prompt（使用框架层的 memory.j2）
+        # 注意：MCP Skill 执行 Agent 的 Prompt 装配方式有别于其他 Agent。
+        # 其他 Agent 使用 assemble_prompt 将 PG 中 system/memory/runtime 三槽位拼接为完整 Prompt。
+        # 而 Skill 执行 Agent 的 Prompt 需要特殊装配：
+        #   1. 从 skill 定义的 execution 阶段 content_path 加载工具专属 Prompt 文件（Jinja2 模板），
+        #      该模板已包含完整的角色定义、系统指令和输出格式约束。
+        #   2. 只从 PG 的 mcp_skill_execution 分类中提取 memory 槽位（包含当前步骤上下文、
+        #      所需资源、已加载资源内容、前序工具执行结果、MCP 意图等运行时信息）。
+        #   3. 将 memory 槽位内容注入到工具专属 Prompt 的 {{ system_context }} 变量中。
+        # 为什么这样做：工具专属 Prompt 已经包含了完整的系统指令和输出格式约束，
+        #             不需要再注入 PG 中 mcp_skill_execution 的 system/runtime 槽位内容。
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
-        system_context_str = await prompt_manager.assemble_prompt(
-            PromptCategory.MCP_SKILL_EXECUTION,
-            {
-                "CURRENT_TIME": current_time,
-                "STEP_TOOL": step_name,
-                "STEP_GOAL": step_goal,
-                "REQUIRED_RESOURCES": json.dumps(required_resources, ensure_ascii=False),
-                "DEPENDS_ON_TOOLS": json.dumps(depends_on_tools, ensure_ascii=False),
-                "RESOURCE_CONTEXT": full_context,
-                "PREVIOUS_TOOL_RESULTS": previous_tool_results,
-                "MCP_INTENT": mcp_intent,
-            },
-        )
+
+        # 使用 render_prompt 仅获取 memory 槽位的渲染内容
+        # 为什么这样做：render_prompt 按三槽位分别渲染后返回 PromptPayload，
+        #             调用方可以只取 memory 槽位内容注入到工具 Prompt 的 {{ system_context }}。
+        #             而 assemble_prompt 将三槽位拼接为一个字符串，无法分离 memory 槽位内容。
+        try:
+            prompt_payload = await prompt_manager.render_prompt(
+                PromptCategory.MCP_SKILL_EXECUTION,
+                {
+                    "CURRENT_TIME": current_time,
+                    "STEP_TOOL": step_name,
+                    "STEP_GOAL": step_goal,
+                    "REQUIRED_RESOURCES": json.dumps(required_resources, ensure_ascii=False),
+                    "DEPENDS_ON_TOOLS": json.dumps(depends_on_tools, ensure_ascii=False),
+                    "RESOURCE_CONTEXT": full_context,
+                    "PREVIOUS_TOOL_RESULTS": previous_tool_results,
+                    "MCP_INTENT": mcp_intent,
+                },
+            )
+            system_context_str = prompt_payload.memory  # 仅使用 memory 槽位
+        except Exception:
+            # 降级：如果 render_prompt 失败（如缓存管理器不可用），回退到 assemble_prompt
+            # 保持与之前一致的行为，避免因 prompt 渲染失败导致整个执行步骤中断。
+            logger.warning(
+                f"render_prompt 失败，降级使用 assemble_prompt "
+                f"trace_id={trace_id} step_name={step_name}"
+            )
+            system_context_str = await prompt_manager.assemble_prompt(
+                PromptCategory.MCP_SKILL_EXECUTION,
+                {
+                    "CURRENT_TIME": current_time,
+                    "STEP_TOOL": step_name,
+                    "STEP_GOAL": step_goal,
+                    "REQUIRED_RESOURCES": json.dumps(required_resources, ensure_ascii=False),
+                    "DEPENDS_ON_TOOLS": json.dumps(depends_on_tools, ensure_ascii=False),
+                    "RESOURCE_CONTEXT": full_context,
+                    "PREVIOUS_TOOL_RESULTS": previous_tool_results,
+                    "MCP_INTENT": mcp_intent,
+                },
+            )
 
         skill_name = current_state.skill if current_state else ""
         full_prompt = ""
@@ -148,22 +185,33 @@ class MCPSkillExecutionAgent:
 
             # 通过 SkillRegistry 查找 tool_id
             registry = SkillRegistry()
-            tool_id = None
+            tool_id = ""
             detail = None
             for sid, det in registry._skills.items():
                 if det.name == skill_name:
                     detail = det
                     for t in det.tools:
                         if t.get("name") == step_name:
+                            logger.debug(f"找到工具 {step_name} 对应的 Skill {skill_name}")
                             tool_id = t.get("tool_id", "")
                             break
                     break
 
             # 只要有 detail（Skill 定义），就从 skill 定义的 execution 阶段 content_path 加载工具专属 Prompt
             if detail is not None:
-                # 从 skill 定义的 prompts 中获取 execution 阶段的 content_path
-                exec_prompt = detail.prompts.get("execution", {})
-                content_path = exec_prompt.get("content_path", "") if isinstance(exec_prompt, dict) else ""
+                logger.debug(f"正在加载工具 {step_name} 的专属 Prompt，tool_id={tool_id}")
+                # 从 skill 定义的 prompts 中获取 execution 阶段的 Prompt 定义。
+                # prompts 数据结构：{phase: {tool_id_or_empty: {content_path, variables}}}
+                # 查找优先级：先按 tool_id 查找工具专属 prompt，未找到则降级到空字符串 key（skill 级通用 prompt）。
+                exec_prompts_by_tool = detail.prompts.get("execution", {})
+                if not isinstance(exec_prompts_by_tool, dict):
+                    exec_prompts_by_tool = {}
+                # 优先查找工具专属 prompt
+                exec_prompt_def = exec_prompts_by_tool.get(tool_id, {})
+                # 如果没找到工具专属的，降级到 skill 级通用 prompt
+                if not exec_prompt_def:
+                    exec_prompt_def = exec_prompts_by_tool.get("", {})
+                content_path = exec_prompt_def.get("content_path", "") if isinstance(exec_prompt_def, dict) else ""
 
                 tool_template = ""
                 if content_path:
@@ -195,6 +243,7 @@ class MCPSkillExecutionAgent:
         # 内容完整。之前错误地额外调用两次 assemble_prompt（仅传入 CURRENT_TIME）并与 system_context_str 拼接，
         # 导致 memory.j2 被渲染三次注入到最终 prompt 中，造成内容重复且部分变量缺失。
         if not full_prompt:
+            logger.debug(f"正在加载通用步骤上下文 Prompt")
             full_prompt = system_context_str
 
         # 记录完整 prompt 日志

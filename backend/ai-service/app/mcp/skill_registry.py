@@ -60,6 +60,11 @@ class SkillDetail:
             Agent 2 加载阶段使用此信息进行工具和资源的选拔规划。
     为什么这样做：将 Skill 的完整展开信息与元数据分离，避免
                 Agent 1 收到过多冗余信息。
+    prompts 数据结构：
+        {phase: {tool_id_or_empty: {content_path, variables}}}
+        其中 tool_id_or_empty 为 tool_id（工具专属 prompt）或空字符串（skill 级 prompt）。
+        为什么这样做：一个 skill 下可以有多个 tool，每个 tool 可能有各自的 execution prompt，
+                    通过 tool_id 区分。skill 级 prompt（screening/loading）用空字符串作为 key。
     """
 
     def __init__(
@@ -143,6 +148,7 @@ class SkillRegistry:
                 tool_rows = tools_result.scalars().all()
                 tools = [
                     {
+                        "tool_id": t.id,
                         "name": t.name,
                         "description": t.description,
                         "core_purpose": t.core_purpose,
@@ -173,16 +179,25 @@ class SkillRegistry:
                 ]
 
                 # 查询关联的 Prompt
+                # 注意：不使用 status 字段过滤，直接按 skill_id 查询所有 Prompt 记录。
+                # 为什么这样做：skill 的 execution 阶段 prompt 是工具专属的，
+                # 必须通过 skill_id（和可选的 tool_id）查找，确保工具专属 Prompt（如 search_tool_prompt.j2）能被正确加载。
                 prompts_result = await pg_session.execute(
                     select(PromptModel).where(
                         PromptModel.skill_id == skill_row.id,
-                        PromptModel.status == "published",
                     )
                 )
                 prompt_rows = prompts_result.scalars().all()
-                prompts_by_phase: dict[str, dict[str, str]] = {}
+                # prompts_by_phase 数据结构：
+                #   {phase: {tool_id_or_empty: {content_path, variables}}}
+                #   tool_id_or_empty：工具专属 prompt 使用 tool_id，skill 级 prompt 使用空字符串
+                prompts_by_phase: dict[str, dict[str, dict[str, str]]] = {}
                 for p in prompt_rows:
-                    prompts_by_phase[p.phase] = {
+                    phase = p.phase
+                    tool_key = p.tool_id or ""  # 空字符串表示 skill 级 prompt（无 tool 绑定）
+                    if phase not in prompts_by_phase:
+                        prompts_by_phase[phase] = {}
+                    prompts_by_phase[phase][tool_key] = {
                         "content_path": p.content_path,
                         "variables": p.variables,
                     }
