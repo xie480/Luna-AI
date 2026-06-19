@@ -81,6 +81,37 @@ class GSVITTSClient:
         }
         return lang_map.get(lang.lower(), "中文")
 
+    async def synthesize_speech(
+        self,
+        text: str,
+        emotion: str = "default",
+        model: Optional[str] = None,
+        voice: Optional[str] = None,
+        text_language: str = "zh",
+        response_format: Optional[str] = None,
+        speed: Optional[float] = None,
+        extra_params: Optional[dict] = None,
+    ) -> Path:
+        """生成 TTS 音频并返回文件路径（兼容旧调用方接口）。
+
+        做什么：`synthesize_speech` 是 `synthesize_to_file` 的兼容别名。
+                有些调用方（如 Gating 推送流程）使用此方法名调用 TTS，
+                将其委托给 `synthesize_to_file`，保证接口兼容。
+        为什么这样做：避免因方法名不匹配导致 AttributeError，同时保持
+                      `synthesize_to_file` 作为统一入口。
+        输入输出：同 `synthesize_to_file`。
+        """
+        return await self.synthesize_to_file(
+            text=text,
+            emotion=emotion,
+            model=model,
+            voice=voice,
+            text_language=text_language,
+            response_format=response_format,
+            speed=speed,
+            extra_params=extra_params,
+        )
+
     async def synthesize(
         self,
         text: str,
