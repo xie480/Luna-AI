@@ -1035,39 +1035,66 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
         reply: str,
         emotion: str,
     ):
-        """推送评估回复到前端，通过 TTS 合成实现 Live2D 嘴型同步、表情切换和气泡渲染。"""
-        try:
-            # 使用默认情绪如果未指定
-            emotion = emotion or "default"
-            
-            # 通过 TTS 客户端合成语音
-            audio_data = await tts_client.synthesize_speech(
-                text=reply,
-                voice_params={"emotion": emotion}
-            )
-            
-            # 映射情绪到 Live2D 表情
-            live2d_emotion = map_emotion(emotion)
-            
-            # 发布统一响应包
-            await publish_unified_response(
-                state=state,
-                content=reply,
-                audio_data=audio_data,
-                emotion=live2d_emotion,
-            )
-        except Exception as exc:
-            logger.warning(
-                f"MCP 评估回复推送失败，降级为纯文本推送 "
-                f"trace_id={state.runtime.trace_id} error={exc!s}"
-            )
-            # 降级：仅推送文本内容
-            await publish_unified_response(
-                state=state,
-                content=reply,
-                audio_data=None,
-                emotion="default",
-            )
+        """
+        推送 MCP Evaluation 的 reply 到前端：TTS 合成 + 统一响应包下发。
+
+        做什么：将 MCP Evaluation Agent 输出的 reply 文本和 emotion 情绪，
+                通过 TTS 合成音频后，以统一响应包（ChatUnifiedResponsePayload）
+                推送到前端。前端收到后自行负责气泡渲染、TTS 音频播放和 Live2D 表情切换。
+                注意：skip_persistence=True，此回复不持久化到聊天记录和近期记忆，
+                仅用于 UI 渲染（气泡、TTS、Live2D 表情）。
+        为什么这样做：让 Luna 在 MCP 工具执行评估阶段也能同步输出语音和表情，
+                    避免纯静默等待，提升陪伴感。
+        输入输出：
+            - 输入：reply 回复文本、emotion 情绪标签
+            - 输出：通过 SSE 推送统一响应事件到前端
+        边界条件：
+            - reply 为空时直接跳过（调用前已判断）
+            - TTS 合成失败时降级为纯文本推送（audio_uri=None）
+            - emotion 为空时前端使用默认表情
+        异常行为：
+            - TTS 异常被捕获并记录日志，不阻断主流程
+        """
+        # --- TTS 合成（失败降级） ---
+        audio_uri: str | None = None
+        tts_enabled = getattr(state.input_payload, "tts_enabled", True)
+        if tts_enabled:
+            try:
+                emotion_tag = map_emotion(emotion)
+                # 传递用户选择的 TTS 语言，默认 zh（中文）
+                tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
+                audio_path = await tts_client.synthesize_to_file(
+                    reply, emotion=emotion_tag, text_language=tts_lang
+                )
+                audio_uri = f"luna://tts/{audio_path.name}"
+                logger.info(
+                    "[TraceID:{}] MCP Evaluation TTS 合成完成 audio_uri={}",
+                    state.runtime.trace_id,
+                    audio_uri,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[TraceID:{}] MCP Evaluation TTS 合成失败，降级为纯文本: {}",
+                    state.runtime.trace_id,
+                    e,
+                )
+                audio_uri = None
+
+        # --- 推送到前端（skip_persistence=True） ---
+        # 为什么这样做：MCP Evaluation 的 reply 仅用于气泡渲染、TTS 音频播放
+        # 和 Live2D emotion 渲染，不需要持久化到聊天记录或近期记忆。
+        # 前端收到 skip_persistence=True 后会跳过 Store 更新和记忆写入，
+        # 仅执行 UI 渲染相关的副作用。
+        await publish_unified_response(
+            state=state,
+            full_text=reply,
+            thought_text="",
+            emotion=emotion,
+            audio_uri=audio_uri,
+            finish_reason="stop",
+            event_publisher=self.dependencies.event_publisher,
+            skip_persistence=True,
+        )
 
     def _degrade_and_skip(
         self, state: ChatWorkflowState, reason: str
