@@ -206,7 +206,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                 # 内层循环：微观策略调整 (Micro-Loop)
                 # 在固定的执行计划下，通过 MCPSkillMemoryAgent 动态调参
                 # ============================================================
-                while inner_retry_count <= 3:
+                while inner_retry_count <= 2:
                     state_count = len(execution_plan.states)
                     step_count += state_count
 
@@ -580,7 +580,7 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                     )
                     # 继续内层循环
 
-                # [内层循环结束] 如果执行到这里，说明内层 3 次调参重试耗尽，或者发生了机械故障
+                # [内层循环结束] 如果执行到这里，说明内层 2 次调参重试耗尽，或者发生了机械故障
                 # 准备触发外层宏观 Fallback
                 outer_retry_count += 1
                 state.mcp_tool_state.agent_phase = SkillAgentPhase.SKILL_FALLBACK.value
