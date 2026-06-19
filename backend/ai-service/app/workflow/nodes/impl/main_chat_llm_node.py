@@ -383,7 +383,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             elif msg_type == "emotion_update":
                 state.generation_state.emotion = content
 
-        # flush 获取剩余内容
+        # flush 获取剩余内容及 replay_translation（日语翻译文本）
         for msg_type, content in parser.flush():
             if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
                 state.generation_state.full_text += content
@@ -391,6 +391,8 @@ class MainChatLlmNode(ChatWorkflowNode):
                 state.generation_state.thought_text += content
             elif msg_type == "emotion_update":
                 state.generation_state.emotion = content
+            elif msg_type == "replay_translation":
+                state.generation_state.replay_translation_text += content
 
         # === Fallback：StreamParser 未能提取 full_text 时，使用原始响应作为纯文本 ===
         if not state.generation_state.full_text and raw_response.strip():
@@ -432,13 +434,25 @@ class MainChatLlmNode(ChatWorkflowNode):
         audio_uri: str | None = None
         tts_enabled = getattr(state.input_payload, "tts_enabled", True)
 
-        if tts_enabled and state.generation_state.full_text:
+        # 决定 TTS 合成的源文本：
+        # - 当 tts_language 为 "ja" 且存在 replay_translation 时，使用日语翻译文本进行 TTS 合成
+        # - 否则使用默认的 full_text（即 reply 字段的中文文本）
+        tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
+        tts_text = state.generation_state.full_text
+        if tts_lang == "ja" and state.generation_state.replay_translation_text:
+            tts_text = state.generation_state.replay_translation_text
+            logger.info(
+                "[TraceID:{}] TTS 使用日语翻译文本（replay_translation）长度={}，原 reply 长度={}",
+                trace_id,
+                len(tts_text),
+                len(state.generation_state.full_text),
+            )
+
+        if tts_enabled and tts_text:
             try:
                 emotion_tag = map_emotion(state.generation_state.emotion)
-                # 传递用户选择的 TTS 语言，默认 zh（中文）
-                tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
                 audio_path = await tts_client.synthesize_to_file(
-                    state.generation_state.full_text, emotion=emotion_tag, text_language=tts_lang
+                    tts_text, emotion=emotion_tag, text_language=tts_lang
                 )
                 audio_uri = f"luna://tts/{audio_path.name}"
                 logger.info(

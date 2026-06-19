@@ -12,13 +12,14 @@ StreamParser 用于解析 LLM 流式输出的 JSON 结构化文本。
 ```
 
 模型的输出是逐字符/逐 Token 的，直接转发会导致前端无法解析。
-本类负责在服务端聚合这些碎片，按 `check` -> `thought` -> `emotion` -> `reply` 的顺序依次解析：
+本类负责在服务端聚合这些碎片，按 `check` -> `thought` -> `emotion` -> `reply` -> `replay_translation` 的顺序依次解析：
 - `check` 字段（系统校验推理）被跳过，不作为输出
 - `thought` 字段（角色内心独白）被捕获并作为 `"thought_content"` 消息类型输出（用于持久化）
 - `emotion` 字段被提取并立即下发（仅首次出现时）
 - `reply` 字段被基于标点的语义断句，将完整的句子作为独立的 `reply_chunk` 发送
+- `replay_translation` 字段（日语模式下 reply 的日语翻译）被捕获，用于 TTS 日语语音合成
 
-【问题2优化】在输出文本分块时增加标点过滤逻辑：
+在输出文本分块时增加标点过滤逻辑：
 精准去除文本末尾的逗号和句号（包括全角/半角），但必须保留感叹号、省略号、波浪号等表达语气的标点。
 """
 
@@ -41,6 +42,8 @@ _REPLY_END_RE = re.compile(r'"\s*,\s*"\w+"\s*:\s*"')
 _EMOTION_RE = re.compile(r'"emotion"\s*:\s*"([^"]+)"')
 # reply 字段起始标记
 _REPLY_START_RE = re.compile(r'"reply"\s*:\s*"')
+# replay_translation 字段起始标记（日语模式下 TTS 使用此字段的日语翻译文本）
+_REPLAY_TRANSLATION_START_RE = re.compile(r'"replay_translation"\s*:\s*"')
 # 句子结束标点：匹配主标点（及其可能的闭合符号），或者连续的逗号/换行，或者省略号
 _SENTENCE_BOUNDARY_RE = re.compile(r'([。！？!?]+[”’"\'\)）\]】》]?|(?<!\.)\.(?!\.)[”’"\'\)）\]】》]?|[，,\n]+[”’"\'\)）\]】》]?|……+|…+|\.{2,})')
 # 【问题2优化】末尾标点过滤：精准剔除末尾的逗号和句号，保留！、？、～、……
@@ -59,10 +62,10 @@ class _ParseState(Enum):
 class StreamParser:
     """LLM 流式输出的状态机解析器。
 
-    解析顺序：check（跳过）→ thought（捕获并输出）→ emotion（提取）→ reply（切分）。
+    解析顺序：check（跳过）→ thought（捕获并输出）→ emotion（提取）→ reply（切分）→ replay_translation（捕获）。
 
     当 disable_sentence_split=True 时，reply 字段不做断句切分，作为完整文本返回。
-    此模式用于非流式统一响应场景，后端拿到完整 LLM 回复后只需提取 thought/emotion/reply，
+    此模式用于非流式统一响应场景，后端拿到完整 LLM 回复后只需提取 thought/emotion/reply/replay_translation，
     reply 的语义切分交由前端执行。
     """
 
@@ -76,11 +79,15 @@ class StreamParser:
         self._thought_buffer: str = ""
         self._thought_sent: bool = False
         self._intermediate_buffer: str = ""  # 用于缓冲 thought 结束到 reply 开始之间的碎片
-        self._search_buffer: str = ""        # 新增：全局搜索缓冲
-        self._pending_prefix: str = ""       # 新增：用于暂存省略号等前缀，避免死循环
+        self._search_buffer: str = ""        # 全局搜索缓冲
+        self._pending_prefix: str = ""       # 用于暂存省略号等前缀，避免死循环
         self._disable_sentence_split: bool = disable_sentence_split
-            # 新增：禁用 reply 断句时，reply 文本完整返回不做切分
-            # thought 和 emotion 的提取逻辑不受此参数影响
+            # 禁用 reply 断句时，reply 文本完整返回不做切分
+            # thought、emotion 和 replay_translation 的提取逻辑不受此参数影响
+        # --- replay_translation 字段提取（日语模式 TTS 用） ---
+        self._replay_translation_buffer: str = ""  # 累积 replay_translation 内容
+        self._replay_translation_started: bool = False  # 是否已检测到 replay_translation 起始标记
+        self._replay_translation_finished: bool = False  # 是否已完成 replay_translation 提取
 
     def _emit_thought(self) -> list[tuple[str, str]]:
         """返回 thought 内容的输出消息（如果尚未发送且有内容）。"""
@@ -137,7 +144,8 @@ class StreamParser:
 
     def _process_emotion_reply(self, text: str) -> list[tuple[str, str]]:
         """
-        从文本中提取 emotion 和切分 reply。
+        从文本中提取 emotion 和切分 reply，以及 replay_translation（日语翻译文本）。
+
         内部方法，允许多次调用以处理不同文本片段。
 
         当 self._disable_sentence_split=True 时：
@@ -147,9 +155,37 @@ class StreamParser:
         注意：LLM 返回的 JSON 中 reply 字段之后可能还有 replay_translation 等字段，
             本方法通过 _REPLY_END_RE 检测 reply 字段的结束边界，
             确保 replay_translation 等后续字段的内容不会混入 reply_buffer。
+            同时独立提取 replay_translation 内容，供 TTS 日语合成使用。
         """
         msgs: list[tuple[str, str]] = []
 
+        # ---- replay_translation 提取阶段（reply 结束后） ----
+        if self._reply_finished and not self._replay_translation_finished:
+            # 尚未检测到 replay_translation 起始，尝试在当前文本中定位
+            if not self._replay_translation_started:
+                m = _REPLAY_TRANSLATION_START_RE.search(text)
+                if m:
+                    self._replay_translation_started = True
+                    # 将起始标记后的内容累积
+                    trans_tail = text[m.end():]
+                    # 检查是否包含下一个字段的结束标记
+                    end_m = _REPLY_END_RE.search(trans_tail)
+                    if end_m:
+                        self._replay_translation_buffer += trans_tail[:end_m.start()]
+                        self._replay_translation_finished = True
+                    else:
+                        self._replay_translation_buffer += trans_tail
+            else:
+                # 已进入 replay_translation 内容读取阶段
+                end_m = _REPLY_END_RE.search(text)
+                if end_m:
+                    self._replay_translation_buffer += text[:end_m.start()]
+                    self._replay_translation_finished = True
+                else:
+                    self._replay_translation_buffer += text
+            return msgs
+
+        # ---- reply 提取阶段 ----
         if not self._reply_started:
             # 将碎片追加到缓冲池中，防止 JSON 键值对被 chunk 截断
             self._intermediate_buffer += text
@@ -196,7 +232,8 @@ class StreamParser:
                 # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
                 if not self._disable_sentence_split:
                     msgs.extend(self._pop_sentence())
-        # 已检测到 reply 结束标记（_reply_finished = True），跳过后续文本不再追加到 reply_buffer
+        # 已检测到 reply 结束标记（_reply_finished = True），
+        # 剩余文本交由下一轮处理（replay_translation 提取）
             
         return msgs
 
@@ -233,7 +270,7 @@ class StreamParser:
         return msgs
 
     def flush(self) -> list[tuple[str, str]]:
-        """在流结束时调用，返回 thought 和剩余 reply 内容。
+        """在流结束时调用，返回 thought、剩余 reply 内容和 replay_translation（日语翻译文本）。
 
         当 disable_sentence_split=True 时：reply 字段作为完整文本返回，
         仅移除 JSON 结束符，保留原文标点和格式。
@@ -246,6 +283,15 @@ class StreamParser:
         msgs: list[tuple[str, str]] = []
         msgs.extend(self._emit_thought())
         
+        # ---- 提取 replay_translation（日语翻译，供 TTS 日语合成使用） ----
+        if self._replay_translation_buffer:
+            trans = self._replay_translation_buffer.strip()
+            # 移除可能的 JSON 结束符
+            trans = trans.replace('"}', '').replace('"', '').replace('}', '').strip()
+            if trans:
+                msgs.append(("replay_translation", trans))
+        
+        # ---- 提取剩余 reply 内容 ----
         remaining = self._pending_prefix + self._reply_buffer
         if remaining:
             if self._disable_sentence_split:
@@ -277,3 +323,6 @@ class StreamParser:
         self._intermediate_buffer = ""
         self._search_buffer = ""
         self._pending_prefix = ""
+        self._replay_translation_buffer = ""
+        self._replay_translation_started = False
+        self._replay_translation_finished = False

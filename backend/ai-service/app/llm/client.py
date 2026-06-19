@@ -309,6 +309,8 @@ class LLMClient:
         from app.config.settings import settings
         interval = settings.llm_call_interval_seconds
         if interval <= 0:
+            # 重置 _next_allowed_time，防止之前设置的非零间隔值残留导致虚假频率限制
+            self._next_allowed_time = 0.0
             return
 
         import time as _time
@@ -376,6 +378,8 @@ class LLMClient:
         from app.config.settings import settings
         interval = settings.llm_call_interval_seconds
         if interval <= 0:
+            # 重置 _next_allowed_time，防止之前设置的非零间隔值残留导致虚假频率限制
+            self._next_allowed_time = 0.0
             return 0.0
 
         import time as _time

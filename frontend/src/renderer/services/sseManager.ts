@@ -777,14 +777,21 @@ class SSEManager {
         if (!recentMemoryEntry.hasBubbleContent) {
           this.flushPendingRecentMemory(assistantMessageId, 'stream-finished-without-bubbles');
         } else {
-          window.dispatchEvent(
-            new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
-              detail: {
-                batchId: assistantMessageId,
-                finishedAt: Date.now(),
-              },
-            })
-          );
+          // 气泡渲染关闭时，BATCH_SETTLED 事件永远不会触发（useBubble hook 不活跃），
+          // 因此直接提交近期记忆，避免只有用户输入无 Luna 输出的问题。
+          const showBubbleRender = useSystemStore.getState().showBubbleRender;
+          if (!showBubbleRender) {
+            this.flushPendingRecentMemory(assistantMessageId, 'stream-finished-no-bubbles');
+          } else {
+            window.dispatchEvent(
+              new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
+                detail: {
+                  batchId: assistantMessageId,
+                  finishedAt: Date.now(),
+                },
+              })
+            );
+          }
         }
       }
 
@@ -884,14 +891,21 @@ class SSEManager {
         if (!recentMemoryEntry.hasBubbleContent) {
           this.flushPendingRecentMemory(assistantMessageId, 'unified-finished-without-bubbles');
         } else {
-          window.dispatchEvent(
-            new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
-              detail: {
-                batchId: assistantMessageId,
-                finishedAt: Date.now(),
-              },
-            }),
-          );
+          // 气泡渲染关闭时，BATCH_SETTLED 事件永远不会触发（useBubble hook 不活跃），
+          // 因此直接提交近期记忆，避免只有用户输入无 Luna 输出的问题。
+          const showBubbleRender = useSystemStore.getState().showBubbleRender;
+          if (!showBubbleRender) {
+            this.flushPendingRecentMemory(assistantMessageId, 'unified-finished-no-bubbles');
+          } else {
+            window.dispatchEvent(
+              new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
+                detail: {
+                  batchId: assistantMessageId,
+                  finishedAt: Date.now(),
+                },
+              }),
+            );
+          }
         }
       }
 

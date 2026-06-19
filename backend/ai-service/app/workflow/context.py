@@ -168,6 +168,9 @@ class ChatGenerationState(BaseModel):
     full_text: str = ""
     thought_text: str = ""
     emotion: str = ""
+    # replay_translation：日语模式下 LLM 返回的 reply 的日语翻译文本，
+    # 当 tts_language="ja" 时，TTS 合成应使用此字段而非 full_text。
+    replay_translation_text: str = ""
     citations: list[KnowledgeCitation] = Field(default_factory=list)
     assistant_message_id: str = ""
     error: str = ""
