@@ -159,54 +159,35 @@ class MCPSkillExecutionAgent:
                             break
                     break
 
-            # 如果传入了专属的 skill_memory_context（包含了动态提取的变量），尝试渲染该工具专属的 Prompt
-            if skill_memory_context is not None:
-                # 先尝试从文件系统加载（旧路径）
-                prompt_dir = os.path.join(
-                    os.path.dirname(__file__), "..", "skills", skill_name, "prompts"
-                )
-                prompt_file = os.path.join(prompt_dir, f"{step_name}_prompt.j2")
+            # 只要有 detail（Skill 定义），就从 skill 定义的 execution 阶段 content_path 加载工具专属 Prompt
+            if detail is not None:
+                # 从 skill 定义的 prompts 中获取 execution 阶段的 content_path
+                exec_prompt = detail.prompts.get("execution", {})
+                content_path = exec_prompt.get("content_path", "") if isinstance(exec_prompt, dict) else ""
 
                 tool_template = ""
-                if os.path.exists(prompt_file):
-                    with open(prompt_file, encoding="utf-8") as f:
-                        tool_template = f.read()
-                elif prompt_manager and prompt_manager.cache_mgr:
-                    # 尝试从数据库加载该工具的 Prompt
-                    try:
-                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
-                        db_prompt = await prompt_manager.assemble_prompt(
-                            PromptCategory.MCP_SKILL_EXECUTION,
-                            {"CURRENT_TIME": current_time, "STEP_TOOL": step_name, "STEP_GOAL": step_goal},
-                        )
-                        if db_prompt and len(db_prompt) > 10:
-                            # 注意：assemble_prompt 返回的是已渲染的字符串，不可再次作为 Jinja2 模板渲染。
-                            # 此处用于兜底，效果有限但不会导致崩溃。
-                            tool_template = db_prompt
-                            logger.info(f"从 DB 加载 Prompt 成功: tool={step_name}")
-                    except Exception:
-                        pass
-
-                if not tool_template and skill_name and prompt_manager and prompt_manager.cache_mgr:
-                    # 如果仍然没有获取到 tool_template，尝试读取文件系统（旧路径 / 新路径结构）
-                    # 新路径：app/skills/{skill_name}/prompts/
+                if content_path:
+                    # 基于项目根目录解析 content_path 加载工具专属 Prompt 文件
                     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    skill_prompt_dir = os.path.join(base_dir, "app", "skills", skill_name, "prompts")
-                    skill_prompt_file = os.path.join(skill_prompt_dir, f"{step_name}_prompt.j2")
-                    if os.path.exists(skill_prompt_file):
-                        with open(skill_prompt_file, encoding="utf-8") as f:
+                    full_path = os.path.join(base_dir, content_path)
+                    if os.path.exists(full_path):
+                        with open(full_path, encoding="utf-8") as f:
                             tool_template = f.read()
-
+                            logger.info(f"从 content_path 加载工具专属 Prompt 成功: content_path={content_path}")
+                    else:
+                        logger.warning(f"从 content_path 加载工具专属 Prompt 失败: content_path={content_path}")
                 if tool_template:
-                    # 合并变量：将通用上下文注入到 system_context 字段
-                    merged_context = {
+                    # 合并变量：将通用上下文（由 memory.j2 渲染得到）注入到 system_context 字段
+                    # search_tool_prompt.j2 中通过 {{ system_context }} 接收 memory.j2 的渲染内容
+                    merged_context: dict[str, Any] = {
                         "system_context": system_context_str,
                         "user_input": mcp_intent,
                     }
-                    merged_context.update(skill_memory_context or {})
+                    # 如果传入了专属的 skill_memory_context（如动态提取的多轮搜索上下文变量），也一并注入
+                    if skill_memory_context is not None:
+                        merged_context.update(skill_memory_context)
 
                     full_prompt = render_template(tool_template, merged_context)
-                    logger.info(f"成功渲染专属 Prompt: DB Prompt 或文件 Prompt")
 
         # 如果没有渲染出专属 Prompt，则回退到通用步骤上下文 Prompt。
         # 修复：system_context_str 已通过 memory.j2 模板一次性注入所有步骤变量（CURRENT_TIME / STEP_TOOL / STEP_GOAL

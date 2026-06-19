@@ -104,6 +104,11 @@ class ChatUnifiedResponsePayload(BaseModel):
     e2e_latency_ms: int = Field(default=0, ge=0)
     citations: list[dict[str, Any]] = Field(default_factory=list)
     error: str = ""
+    skip_persistence: bool = Field(
+        default=False,
+        description="是否跳过前端持久化（聊天记录、近期记忆的存储）。"
+                    "用于 MCP Evaluation reply 等无需加入聊天历史的临时性回复。",
+    )
 
 
 class ChatWorkflowEvent(BaseModel):

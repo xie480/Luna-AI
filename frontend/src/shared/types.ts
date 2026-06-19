@@ -233,6 +233,12 @@ export interface ChatUnifiedResponsePayload {
   citations: ChatCitationProjection[];
   /** 错误信息，空字符串表示无错误。 */
   error: string;
+  /**
+   * 是否跳过前端持久化（聊天记录、近期记忆的存储）。
+   * 为 true 时表示此回复仅用于气泡渲染、TTS 音频播放和 Live2D emotion 渲染，
+   * 不加入聊天历史记录和近期记忆。
+   */
+  skip_persistence: boolean;
 }
 
 /**

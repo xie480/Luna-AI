@@ -148,6 +148,7 @@ async def publish_unified_response(
     event_publisher: ChatWorkflowEventPublisher | None,
     *,
     error: str = "",
+    skip_persistence: bool = False,
 ) -> None:
     """推送非流式统一响应包到前端。
 
@@ -180,6 +181,7 @@ async def publish_unified_response(
         e2e_latency_ms=state.generation_state.e2e_latency_ms,
         citations=[item.model_dump(mode="json") for item in state.generation_state.citations],
         error=error,
+        skip_persistence=skip_persistence,
     )
     await sse_manager.publish(
         {

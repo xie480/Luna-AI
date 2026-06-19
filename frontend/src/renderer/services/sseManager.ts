@@ -821,86 +821,94 @@ class SSEManager {
     const assistantMessageId = payload.assistant_message_id;
     const recentMemoryEntry = this.pendingRecentMemoryMap.get(assistantMessageId);
 
-    // ---- 更新 sessionStore：完整回复文本 ----
-    if (currentSessionId) {
-      sessionStore.updateMessageChunk(currentSessionId, assistantMessageId, payload.reply_text);
+    // ---- 判断是否跳过持久化（如 MCP Evaluation reply） ----
+    // 当 skip_persistence=true 时，跳过聊天记录、近期记忆的写入，
+    // 仅执行 UI 渲染（Live2D 表情、气泡、TTS 音频）。
+    const skipPersistence = payload.skip_persistence === true;
 
-      const streamMetadata: Record<string, unknown> = {};
-      if (payload.schema_version) {
-        streamMetadata.schemaVersion = payload.schema_version;
+    if (!skipPersistence) {
+      // ---- 更新 sessionStore：完整回复文本 ----
+      if (currentSessionId) {
+        sessionStore.updateMessageChunk(currentSessionId, assistantMessageId, payload.reply_text);
+
+        const streamMetadata: Record<string, unknown> = {};
+        if (payload.schema_version) {
+          streamMetadata.schemaVersion = payload.schema_version;
+        }
+        if (payload.interaction_id) {
+          streamMetadata.interactionId = payload.interaction_id;
+        }
+        if (payload.assistant_message_id) {
+          streamMetadata.assistantMessageId = payload.assistant_message_id;
+        }
+        if (payload.citations) {
+          streamMetadata.citations = payload.citations;
+        }
+        if (payload.e2e_latency_ms !== undefined) {
+          streamMetadata.e2eLatencyMs = payload.e2e_latency_ms;
+        }
+        if (Object.keys(streamMetadata).length > 0) {
+          sessionStore.updateMessageMetadata(currentSessionId, assistantMessageId, streamMetadata);
+        }
       }
-      if (payload.interaction_id) {
-        streamMetadata.interactionId = payload.interaction_id;
+
+      // ---- 更新近期记忆内容 ----
+      if (recentMemoryEntry) {
+        recentMemoryEntry.assistantContent += payload.reply_text;
+        recentMemoryEntry.hasBubbleContent =
+          recentMemoryEntry.hasBubbleContent || payload.reply_text.trim().length > 0;
       }
-      if (payload.assistant_message_id) {
-        streamMetadata.assistantMessageId = payload.assistant_message_id;
+
+      // ---- 标记消息完成 ----
+      const status = payload.error ? 'error' : 'completed';
+      if (currentSessionId) {
+        sessionStore.updateMessageStatus(currentSessionId, assistantMessageId, status);
       }
-      if (payload.citations) {
-        streamMetadata.citations = payload.citations;
-      }
-      if (payload.e2e_latency_ms !== undefined) {
-        streamMetadata.e2eLatencyMs = payload.e2e_latency_ms;
-      }
-      if (Object.keys(streamMetadata).length > 0) {
-        sessionStore.updateMessageMetadata(currentSessionId, assistantMessageId, streamMetadata);
-      }
-    }
 
-    // ---- 更新近期记忆内容 ----
-    if (recentMemoryEntry) {
-      recentMemoryEntry.assistantContent += payload.reply_text;
-      recentMemoryEntry.hasBubbleContent =
-        recentMemoryEntry.hasBubbleContent || payload.reply_text.trim().length > 0;
-    }
-
-    // ---- 标记消息完成 ----
-    const status = payload.error ? 'error' : 'completed';
-    if (currentSessionId) {
-      sessionStore.updateMessageStatus(currentSessionId, assistantMessageId, status);
-    }
-
-    if (payload.error) {
-      const errMsg = `生成失败: ${payload.error}`;
-      systemStore.addSystemLog(errMsg);
-      window.dispatchEvent(
-        new CustomEvent('luna:notification', {
-          detail: { message: errMsg, type: 'error', source: 'unified_response' },
-        }),
-      );
-    }
-
-    sessionStore.clearAllWaitingStates();
-
-    // ---- 近期记忆提交 ----
-    if (recentMemoryEntry) {
-      recentMemoryEntry.streamFinished = true;
-
-      if (!recentMemoryEntry.hasBubbleContent) {
-        this.flushPendingRecentMemory(assistantMessageId, 'unified-finished-without-bubbles');
-      } else {
+      if (payload.error) {
+        const errMsg = `生成失败: ${payload.error}`;
+        systemStore.addSystemLog(errMsg);
         window.dispatchEvent(
-          new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
-            detail: {
-              batchId: assistantMessageId,
-              finishedAt: Date.now(),
-            },
+          new CustomEvent('luna:notification', {
+            detail: { message: errMsg, type: 'error', source: 'unified_response' },
           }),
         );
       }
+
+      sessionStore.clearAllWaitingStates();
+
+      // ---- 近期记忆提交 ----
+      if (recentMemoryEntry) {
+        recentMemoryEntry.streamFinished = true;
+
+        if (!recentMemoryEntry.hasBubbleContent) {
+          this.flushPendingRecentMemory(assistantMessageId, 'unified-finished-without-bubbles');
+        } else {
+          window.dispatchEvent(
+            new CustomEvent(BUBBLE_EVENT_NAME.STREAM_FINISHED, {
+              detail: {
+                batchId: assistantMessageId,
+                finishedAt: Date.now(),
+              },
+            }),
+          );
+        }
+      }
+
+      // ---- 日历记录更新 ----
+      import('../stores/historyStore').then(({ useHistoryStore }) => {
+        const historyState = useHistoryStore.getState();
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        historyState.addCalendarRecord(todayStr);
+        if (historyState.selectedDate === todayStr) {
+          historyState.fetchChatHistory(todayStr);
+        }
+      });
     }
 
-    // ---- 日历记录更新 ----
-    import('../stores/historyStore').then(({ useHistoryStore }) => {
-      const historyState = useHistoryStore.getState();
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      historyState.addCalendarRecord(todayStr);
-      if (historyState.selectedDate === todayStr) {
-        historyState.fetchChatHistory(todayStr);
-      }
-    });
-
     // ---- 委托 UI 渲染：Live2D 表情 + 语义切分 + 气泡队列 + TTS 音频 ----
+    // 无论 skipPersistence 为何值，UI 渲染都必须执行。
     import('./unifiedResponseHandler').then(({ handleUnifiedResponse }) => {
       handleUnifiedResponse(payload);
     });
