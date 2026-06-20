@@ -92,7 +92,7 @@ class AuditLogPGRepo:
                         status, trace_id, task_id, created_at, updated_at
                     ) VALUES (
                         :id, :user_id, :tool_id, :tool_name, :risk_level,
-                        :reason, :arguments::jsonb, :goal, :agent_output,
+                        :reason, CAST(:arguments AS jsonb), :goal, :agent_output,
                         :status, :trace_id, :task_id, :created_at, :updated_at
                     )
                 """
