@@ -68,6 +68,7 @@ class PromptCategory(str, Enum):
     DAG_PLAN_REPLAN = "dag_plan_replan"
     DAG_RESULT_COMPRESSION = "dag_result_compression"
     DAG_PLAN_SUMMARY = "dag_plan_summary"
+    DAG_TOOL_MEMORY = "dag_tool_memory"
 
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。

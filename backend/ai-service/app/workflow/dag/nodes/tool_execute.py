@@ -261,8 +261,14 @@ class ToolExecuteNode:
 
         做什么：仿照 MCPSkillExecutionAgent 的 Prompt 装配方式：
         1. 从 skill 定义的 execution 阶段 content_path 加载工具专属 Prompt 文件
-        2. 渲染 mcp_skill_execution 的 memory 槽位作为 system_context
+        2. 使用 DAG 专用的 dag_tool_memory Prompt 分类渲染 memory 槽位作为 system_context
         3. 将 system_context + skill_memory_context 注入到工具专属 Prompt
+
+        为什么不使用 MCP_SKILL_EXECUTION：
+            MCP_SKILL_EXECUTION 是 Phase 12 Skill 三阶段 Agent 专用的 Prompt 分类，
+            其 memory.j2 包含 MCP 意图、执行计划等 Phase 12 特有变量，
+            与 Phase 9 DAG 引擎的上下文结构不兼容。
+            因此使用独立的 dag_tool_memory 分类，适配 DAG 引擎的上下文注入方式。
         """
         if not self.prompt_manager or not node_def.skill_name:
             return ""
@@ -322,68 +328,48 @@ class ToolExecuteNode:
             with open(full_path, encoding="utf-8") as f:
                 tool_template = f.read()
 
-            # 渲染 mcp_skill_execution 的 memory 槽位作为 system_context
+            # 使用 DAG 专用的 dag_tool_memory Prompt 分类渲染 memory 槽位
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
 
             # 收集前序节点结果
             partitioned_outputs = state_context.get("partitioned_outputs", {})
-            previous_results = []
-            for dep_id in node_def.depends_on:
-                dep_output = partitioned_outputs.get(dep_id, {})
-                previous_results.append({
-                    "node_id": dep_id,
-                    "success": dep_output.get("success", True),
-                    "output_text": (
-                        dep_output.get("tool_output", "")
-                        or dep_output.get("resource_content", "")
-                        or dep_output.get("transformed_data", "")
-                        or ""
-                    ),
-                    "error_message": dep_output.get("error_message", ""),
-                })
+            previous_results = self._collect_previous_results(node_def, state_context)
+
+            # 构建资源上下文
+            resource_context_map = {}
+            if resource_context:
+                resource_context_map["resource"] = resource_context
+
+            # 收集当前步骤上下文
+            step_context = state_context.get("current_step_context", {})
+            state_context_str = json.dumps(step_context, ensure_ascii=False) if step_context else "{}"
 
             # 使用 render_prompt 仅获取 memory 槽位
+            dag_memory_variables = {
+                "CURRENT_TIME": current_time,
+                "STEP_TOOL": node_def.tool_name or "",
+                "STEP_GOAL": node_def.parameter_hint,
+                "PARAMETER_HINT": node_def.parameter_hint,
+                "RESOURCE_CONTEXT": resource_context_map,
+                "PREVIOUS_NODE_RESULTS": previous_results,
+                "STATE_CONTEXT": state_context_str,
+                "RETRY_CONTEXT": state_context.get("_step_retry_context", ""),
+            }
+
             try:
                 prompt_payload = await self.prompt_manager.render_prompt(
-                    PromptCategory.MCP_SKILL_EXECUTION,
-                    {
-                        "CURRENT_TIME": current_time,
-                        "STEP_TOOL": node_def.tool_name or "",
-                        "STEP_GOAL": node_def.parameter_hint,
-                        "REQUIRED_RESOURCES": json.dumps(
-                            [node_def.resource_name] if node_def.resource_name else [],
-                            ensure_ascii=False,
-                        ),
-                        "DEPENDS_ON_TOOLS": json.dumps(
-                            [d for d in node_def.depends_on],
-                            ensure_ascii=False,
-                        ),
-                        "RESOURCE_CONTEXT": {"resource": resource_context} if resource_context else {},
-                        "PREVIOUS_TOOL_RESULTS": previous_results,
-                        "MCP_INTENT": node_def.parameter_hint,
-                    },
+                    PromptCategory.DAG_TOOL_MEMORY,
+                    dag_memory_variables,
                 )
                 system_context_str = prompt_payload.memory
             except Exception:
                 # 降级：使用 assemble_prompt
+                logger.warning(
+                    f"[TraceID:{trace_id}] render_prompt 失败，降级使用 assemble_prompt"
+                )
                 system_context_str = await self.prompt_manager.assemble_prompt(
-                    PromptCategory.MCP_SKILL_EXECUTION,
-                    {
-                        "CURRENT_TIME": current_time,
-                        "STEP_TOOL": node_def.tool_name or "",
-                        "STEP_GOAL": node_def.parameter_hint,
-                        "REQUIRED_RESOURCES": json.dumps(
-                            [node_def.resource_name] if node_def.resource_name else [],
-                            ensure_ascii=False,
-                        ),
-                        "DEPENDS_ON_TOOLS": json.dumps(
-                            [d for d in node_def.depends_on],
-                            ensure_ascii=False,
-                        ),
-                        "RESOURCE_CONTEXT": {"resource": resource_context} if resource_context else {},
-                        "PREVIOUS_TOOL_RESULTS": previous_results,
-                        "MCP_INTENT": node_def.parameter_hint,
-                    },
+                    PromptCategory.DAG_TOOL_MEMORY,
+                    dag_memory_variables,
                 )
 
             # 合并变量注入到工具专属 Prompt
