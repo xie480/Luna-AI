@@ -122,6 +122,8 @@ class ChatWorkflowGraphNodeName(str, Enum):
     MCP_INTENT_BYPASS = "mcp_intent_bypass"
     # --- Phase 9 新增：DAG 引擎节点 ---
     DAG_ENGINE = "dag_engine"
+    # --- Phase 9 新增：简化输入重构节点 ---
+    INPUT_RECONSTRUCTION_SIMPLIFIED = "input_reconstruction_simplified"
 
 
 CHAT_WORKFLOW_CHECKPOINT_TABLE: Final[str] = "langgraph_chat_checkpoints"

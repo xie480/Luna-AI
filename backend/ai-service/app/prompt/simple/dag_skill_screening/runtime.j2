@@ -4,12 +4,19 @@
 - 目标：{{ state_goal }}
 - 完成标准：{{ completion_criteria }}
 
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
 ## 输出要求
 请输出 JSON：
 {
   "selected_skills": [
-    {"skill_name": "技能名", "relevance_reason": "选择原因"}
+    {
+      "skill_name": "技能名称（必须与可用技能列表中的名称完全一致）",
+      "relevance_reason": "选择该技能的原因（说明与当前任务目标的关联）"
+    }
   ],
-  "screening_reason": "筛选理由"
+  "screening_reason": "整体筛选理由（为什么选这些技能，为什么不选其他技能）"
 }
-只选择与当前任务目标直接相关的技能，不要选择无关技能。
+如果当前任务不需要任何外部技能（纯推理/分析任务），返回空的 selected_skills 数组。

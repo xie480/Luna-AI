@@ -1,8 +1,38 @@
 {# Phase 9：工具参数提取 Prompt — 记忆槽位 #}
-## 工具 Schema
-{{ tool_schema }}
+### 当前执行步骤
 
-{% if resource_context %}
-## 资源上下文
-{{ resource_context }}
+**工具名称**：{{ STEP_TOOL }}
+
+**执行目标**：{{ STEP_GOAL }}
+
+**参数提取提示**：{{ PARAMETER_HINT }}
+
+---
+
+### 已加载的资源上下文
+{% if RESOURCE_CONTEXT %}
+{{ RESOURCE_CONTEXT }}
+{% else %}
+（无可用资源上下文）
 {% endif %}
+
+### 前序节点执行结果
+{% if PREVIOUS_NODE_RESULTS %}
+{% for prev in PREVIOUS_NODE_RESULTS %}
+[节点 {{ prev.node_id }}]
+成功：{{ prev.success }}
+输出：{{ prev.output_text | default(prev.output, true) | default("（无输出）", true) }}
+{% if prev.error_message %}
+错误：{{ prev.error_message }}
+{% endif %}
+{% endfor %}
+{% else %}
+（无前序节点结果）
+{% endif %}
+
+### 当前任务上下文
+{{ STATE_CONTEXT }}
+
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-

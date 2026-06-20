@@ -101,6 +101,7 @@ class DagEngine:
         self.state_compressor = StateResultCompressor(
             prompt_manager=prompt_manager,
             llm_client=llm_client,
+            chat_status_publisher=self.chat_status_publisher,
         )
         self.plan_replan = PlanReplanNode(
             prompt_manager=prompt_manager,
@@ -350,6 +351,7 @@ class DagEngine:
                         # 首次不通过：压缩结果 + 重构 Plan
                         compressed_result = await self.state_compressor.compress(
                             trace_id=trace_id,
+                            session_id=session_id,
                             state_runtime=state_runtime.model_dump(),
                             evaluation_result=eval_result.model_dump(),
                         )

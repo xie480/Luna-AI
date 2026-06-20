@@ -52,6 +52,8 @@ class ChatWorkflowNodeRegistry:
             ChatWorkflowGraphNodeName.FINALIZE.value: FinalizeNode(dependencies),
             # --- Phase 9 新增：DAG 引擎节点 ---
             ChatWorkflowGraphNodeName.DAG_ENGINE.value: self._build_dag_engine_node(dependencies),
+            # --- Phase 9 新增：简化输入重构节点 ---
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED.value: self._build_simplified_input_reconstruction_node(dependencies),
         }
 
     def _build_dag_engine_node(self, dependencies: WorkflowDependencies):
@@ -77,6 +79,21 @@ class ChatWorkflowNodeRegistry:
             event_publisher=dependencies.event_publisher,
             chat_status_publisher=dependencies.chat_status_publisher,
         )
+
+    def _build_simplified_input_reconstruction_node(self, dependencies: WorkflowDependencies):
+        """构建简化输入重构节点。
+
+        做什么：创建 SimplifiedInputReconstructionNode 的 LangGraph 适配节点。
+        为什么这样做：Phase 9 路径使用简化版输入重构，只做代词消歧不做路由决策。
+        """
+        from app.workflow.dag.nodes.input_reconstruction_simplified import (
+            SimplifiedInputReconstructionNode,
+        )
+        from app.workflow.nodes.impl.simplified_input_reconstruction_impl import (
+            SimplifiedInputReconstructionImpl,
+        )
+
+        return SimplifiedInputReconstructionImpl(dependencies)
 
     def get_node(self, name: ChatWorkflowGraphNodeName):
         return self.nodes[name.value]

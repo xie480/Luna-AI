@@ -1,3 +1,14 @@
 {# Phase 9：Skill 初筛 Prompt — 记忆槽位 #}
 ## 可用技能列表
-{{ skill_briefs }}
+{% for skill in skill_briefs %}
+### {{ skill.skill_name }}
+- 描述：{{ skill.description }}
+- 可用工具：{{ skill.tool_names | join(', ') }}
+- 能力标签：{{ skill.capability_tags | join(', ') }}
+{% if skill.risk_levels %}
+- 风险等级：
+{% for tool_name, risk in skill.risk_levels.items() %}
+  * {{ tool_name }}: {{ risk }}
+{% endfor %}
+{% endif %}
+{% endfor %}

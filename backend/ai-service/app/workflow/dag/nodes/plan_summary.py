@@ -112,6 +112,9 @@ class PlanResultSummaryNode:
             )
 
             # 构建汇总结果
+            # 解析 LLM 输出为结构化结果
+            highlights, issues = self._parse_summary_json(overall_result, state_summaries)
+
             result = PlanSummaryResult(
                 plan_id=dag_state.plan.plan_id,
                 total_states=len(dag_state.plan.states),
@@ -119,9 +122,9 @@ class PlanResultSummaryNode:
                 degraded_states=degraded,
                 failed_states=failed,
                 state_summaries=state_summaries,
-                overall_result=overall_result,
-                execution_highlights=self._extract_highlights(state_summaries),
-                execution_issues=self._extract_issues(state_summaries),
+                overall_result=self._extract_overall_text(overall_result),
+                execution_highlights=highlights if highlights else self._extract_highlights(state_summaries),
+                execution_issues=issues if issues else self._extract_issues(state_summaries),
             )
 
             logger.info(
@@ -247,6 +250,55 @@ class PlanResultSummaryNode:
             f"任务目标：{goal}\n"
             f"执行结果：{succeeded}/{total} 个阶段成功完成。\n"
         )
+
+    def _parse_summary_json(
+        self,
+        llm_output: str,
+        state_summaries: list[StateSummary],
+    ) -> tuple[list[str], list[str]]:
+        """解析 LLM 输出的 JSON 格式汇总结果。
+
+        做什么：从 LLM 输出中提取 execution_highlights 和 execution_issues。
+        返回:
+            (highlights, issues)
+        """
+        try:
+            cleaned = llm_output.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+            data = json.loads(cleaned)
+            highlights = data.get("execution_highlights", [])
+            issues = data.get("execution_issues", [])
+            return highlights, issues
+        except (json.JSONDecodeError, AttributeError):
+            return [], []
+
+    def _extract_overall_text(self, llm_output: str) -> str:
+        """从 LLM 输出中提取 overall_result 文本。
+
+        做什么：如果 LLM 输出是 JSON 格式，提取 overall_result 字段；
+               如果是纯文本，直接返回。
+        """
+        try:
+            cleaned = llm_output.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+            data = json.loads(cleaned)
+            return data.get("overall_result", llm_output)
+        except (json.JSONDecodeError, AttributeError):
+            return llm_output
 
     def _extract_highlights(
         self, state_summaries: list[StateSummary]

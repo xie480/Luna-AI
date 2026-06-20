@@ -65,20 +65,21 @@ class SimplifiedInputReconstructionNode:
         )
 
         try:
-            # 渲染简化输入重构 Prompt
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+
+            # 渲染简化输入重构 Prompt（使用标准变量名）
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.INPUT_RECONSTRUCTION_SIMPLIFIED,
                 variables={
-                    "raw_user_message": raw_user_message,
-                    "memory_snippets": session_context.get("memory_snippets", ""),
-                    "key_facts": json.dumps(
+                    "CURRENT_MESSAGE": raw_user_message,
+                    "CORE_SUMMARY": session_context.get("short_summary", ""),
+                    "KEY_FACTS": json.dumps(
                         session_context.get("key_facts", []),
                         ensure_ascii=False,
                     ),
-                    "recent_messages": json.dumps(
-                        session_context.get("recent_messages", [])[-5:],
-                        ensure_ascii=False,
-                    ),
+                    "MEMORY_SNIPPETS": session_context.get("memory_snippets", ""),
+                    "CURRENT_TIME": current_time,
                 },
             )
 

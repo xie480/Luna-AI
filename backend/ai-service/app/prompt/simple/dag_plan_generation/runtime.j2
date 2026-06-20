@@ -10,20 +10,18 @@
 请在规划时考虑这些信息缺失，必要时先搜索确认。
 {% endif %}
 
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
 ## 输出要求
-请输出 JSON：
+请输出 JSON，只包含 states 和 planning_reason 字段：
 {
-  "global_objective": {
-    "overall_goal": "...",
-    "success_criteria": "...",
-    "output_format": "...",
-    "constraints": [...]
-  },
   "states": [
     {
       "order_index": 0,
-      "intent": "该阶段的核心意图",
-      "goal": "该阶段期望达成的具体目标",
+      "intent": "该阶段的核心意图（简短描述）",
+      "goal": "该阶段期望达成的具体目标（详细描述）",
       "completion_criteria": [
         {"field": "字段名", "operator": ">=", "value": 1}
       ],
@@ -33,3 +31,8 @@
   ],
   "planning_reason": "为什么这样拆分 State 的理由"
 }
+
+注意：
+- depends_on 中填写的是依赖的 State 的 order_index（整数）。
+- required_skill_names 中填写的是从可用能力列表中选择的 skill_name。
+- 如果用户请求简单，只需生成 1 个 State。

@@ -6,26 +6,43 @@
 ## 可用节点类型
 {{ available_node_types }}
 
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
 ## 输出要求
 请输出 JSON：
 {
   "steps": [
     {
-      "description": "步骤描述",
+      "description": "步骤描述（简要说明这个步骤做什么）",
       "nodes": [
         {
           "node_type": "resource_loading|tool_execute|data_transform|long_term_memory|knowledge_rag",
-          "skill_name": "技能名（resource_loading/tool_execute 时必填）",
-          "tool_name": "工具名（tool_execute 时必填）",
-          "resource_name": "资源名（resource_loading 时必填）",
-          "parameter_hint": "参数提取提示（tool_execute 时使用）",
-          "transform_instruction": "转换指令（data_transform 时使用）",
-          "query_text": "查询文本（long_term_memory/knowledge_rag 时使用）",
-          "depends_on": [],
-          "gating_required": false
+
+          "skill_name": "所属技能名称（resource_loading 和 tool_execute 时必填，填写已筛选技能中的 skill_name）",
+
+          "tool_name": "工具名称（tool_execute 时必填，填写已筛选技能工具列表中的工具 name）",
+
+          "resource_name": "资源名称（resource_loading 时必填，填写已筛选技能资源列表中的资源 name）",
+
+          "parameter_hint": "参数提取提示（tool_execute 时使用，描述如何从上下文中提取工具参数，包括参数含义、取值范围、格式要求等）",
+
+          "transform_instruction": "转换指令（data_transform 时使用，详细描述需要做什么数据转换，如：从搜索结果中提取表格数据、将 JSON 转为 Markdown 等）",
+
+          "query_text": ["查询文本1", "查询文本2"],
+          "注释": "query_text 是数组类型（long_term_memory 和 knowledge_rag 时使用），可以包含多个查询文本，用于多角度检索",
+
+          "depends_on": [0, 1],
+          "注释": "depends_on 是整数数组，填写同一 Step 内依赖节点的索引。例如 [0, 1] 表示依赖当前 Step 中第 0 和第 1 个节点的输出"
         }
       ]
     }
   ]
 }
-同一 Step 内的节点可以并行执行，不同 Step 按顺序执行。
+
+注意事项：
+1. 同一 Step 内的节点可以并行执行，不同 Step 按顺序执行。
+2. depends_on 只引用同一 Step 内的节点索引，不要跨 Step 引用。
+3. query_text 必须是数组，即使只有一个查询也要用数组格式。
+4. 参数描述要具体明确，让参数提取器能准确提取。

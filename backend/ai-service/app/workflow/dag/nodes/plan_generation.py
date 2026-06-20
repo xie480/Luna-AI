@@ -84,16 +84,22 @@ class PlanGenerationNode:
         )
 
         try:
-            # 渲染 Plan 生成 Prompt
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+
+            # 渲染 Plan 生成 Prompt（使用标准变量名）
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_PLAN_GENERATION,
                 variables={
                     "disambiguated_text": dag_state.disambiguated_text,
                     "unresolved_pronouns": dag_state.unresolved_pronouns,
                     "skill_briefs": dag_state.skill_briefs,
-                    "session_context": json.dumps(
-                        dag_state.session_context, ensure_ascii=False
+                    "CORE_SUMMARY": dag_state.session_context.get("short_summary", ""),
+                    "KEY_FACTS": json.dumps(
+                        dag_state.session_context.get("key_facts", []),
+                        ensure_ascii=False,
                     ),
+                    "MEMORY_SNIPPETS": dag_state.session_context.get("memory_snippets", ""),
                     "memory_context": dag_state.memory_context,
                     "global_objective": {
                         "overall_goal": dag_state.global_objective.overall_goal,
@@ -101,6 +107,7 @@ class PlanGenerationNode:
                         "output_format": dag_state.global_objective.output_format,
                         "constraints": dag_state.global_objective.constraints,
                     },
+                    "CURRENT_TIME": current_time,
                 },
             )
 
@@ -119,6 +126,7 @@ class PlanGenerationNode:
                 plan_data=plan_data,
                 session_id=session_id,
                 trace_id=trace_id,
+                existing_global_objective=dag_state.global_objective,
             )
 
             # 更新 DAG 状态
@@ -176,19 +184,6 @@ class PlanGenerationNode:
         return {
             "type": "object",
             "properties": {
-                "global_objective": {
-                    "type": "object",
-                    "properties": {
-                        "overall_goal": {"type": "string"},
-                        "success_criteria": {"type": "string"},
-                        "output_format": {"type": "string"},
-                        "constraints": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                    },
-                    "required": ["overall_goal", "success_criteria"],
-                },
                 "states": {
                     "type": "array",
                     "items": {
@@ -223,7 +218,7 @@ class PlanGenerationNode:
                 },
                 "planning_reason": {"type": "string"},
             },
-            "required": ["global_objective", "states"],
+            "required": ["states"],
         }
 
     def _parse_plan_response(self, llm_response: str) -> dict[str, Any]:
@@ -249,19 +244,30 @@ class PlanGenerationNode:
         plan_data: dict[str, Any],
         session_id: str,
         trace_id: str,
+        existing_global_objective: GlobalObjective | None = None,
     ) -> PlanDefinition:
         """从 LLM 输出构建 PlanDefinition。
 
         做什么：将 LLM 输出的 JSON 结构转换为类型安全的 PlanDefinition。
         """
         # 构建 GlobalObjective
+        # 优先从 LLM 输出的 global_objective 字段读取
+        # 如果 LLM 输出中没有（按新 Prompt 规范），则使用已有的值
         obj_data = plan_data.get("global_objective", {})
-        global_objective = GlobalObjective(
-            overall_goal=obj_data.get("overall_goal", ""),
-            success_criteria=obj_data.get("success_criteria", ""),
-            output_format=obj_data.get("output_format", ""),
-            constraints=obj_data.get("constraints", []),
-        )
+        if obj_data and obj_data.get("overall_goal"):
+            global_objective = GlobalObjective(
+                overall_goal=obj_data.get("overall_goal", ""),
+                success_criteria=obj_data.get("success_criteria", ""),
+                output_format=obj_data.get("output_format", ""),
+                constraints=obj_data.get("constraints", []),
+            )
+        elif existing_global_objective:
+            global_objective = existing_global_objective
+        else:
+            global_objective = GlobalObjective(
+                overall_goal="",
+                success_criteria="",
+            )
 
         # 构建 State 列表
         states = []

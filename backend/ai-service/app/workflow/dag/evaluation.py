@@ -1,4 +1,4 @@
-"""Phase 9 DAG 引擎 — State 结果压缩器。
+"""Phase 9 DAG 引擎 — 结果压缩节点。
 
 做什么：将 State 的完整执行结果压缩为精简摘要，
         保留关键事实、错误信息、已获取的资源摘要。
@@ -7,34 +7,46 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
+from app.api.chat_status import ChatStatusPublisher
+from app.api.chat_status_texts import get_chat_status_text
 from app.logger import logger
 from app.prompt.types import PromptCategory
+from app.types.constants import ChatStatusStage, ChatStatusState
 from app.workflow.dag.types import StateEvaluationResult, StateRuntimeState
 
 
 class StateResultCompressor:
-    """State 结果压缩器。
+    """State 结果压缩节点。
 
     做什么：将 State 的完整执行结果压缩为精简摘要。
     为什么这样做：Plan 重构时需要参考当前 State 的执行结果，
                   但完整结果可能包含大量冗余数据，需要压缩。
     """
 
-    def __init__(self, prompt_manager: Any, llm_client: Any):
-        """初始化压缩器。
+    def __init__(
+        self,
+        prompt_manager: Any,
+        llm_client: Any,
+        chat_status_publisher: ChatStatusPublisher | None = None,
+    ):
+        """初始化压缩节点。
 
         参数:
             prompt_manager: Prompt 管理器，用于渲染压缩 Prompt。
             llm_client: LLM 客户端，用于调用模型做压缩。
+            chat_status_publisher: Chat 状态发布器。
         """
         self.prompt_manager = prompt_manager
         self.llm_client = llm_client
+        self.chat_status_publisher = chat_status_publisher or ChatStatusPublisher()
 
     async def compress(
         self,
         trace_id: str,
+        session_id: str,
         state_runtime: dict[str, Any],
         evaluation_result: dict[str, Any],
     ) -> str:
@@ -43,11 +55,26 @@ class StateResultCompressor:
         做什么：将 State 的完整执行结果压缩为精简摘要。
         参数:
             trace_id: 追踪 ID。
+            session_id: 会话 ID。
             state_runtime: StateRuntimeState 序列化字典。
             evaluation_result: StateEvaluationResult 序列化字典。
         返回:
             str: 压缩后的结果摘要文本。
         """
+        # 发布 RUNNING 状态
+        await self.chat_status_publisher.publish(
+            trace_id=trace_id,
+            session_id=session_id,
+            message_id="",
+            stage=ChatStatusStage.DAG_RESULT_COMPRESSION,
+            state=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(
+                ChatStatusStage.DAG_RESULT_COMPRESSION, ChatStatusState.RUNNING
+            ),
+            is_visible=True,
+            is_terminal=False,
+        )
+
         try:
             # 构建压缩 Prompt 变量
             variables = {
@@ -81,6 +108,21 @@ class StateResultCompressor:
                 f"state_goal={state_runtime.get('goal', '')[:50]}"
             )
 
+            # 发布 SUCCEEDED 状态
+            await self.chat_status_publisher.publish(
+                trace_id=trace_id,
+                session_id=session_id,
+                message_id="",
+                stage=ChatStatusStage.DAG_RESULT_COMPRESSION,
+                state=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_RESULT_COMPRESSION,
+                    ChatStatusState.COMPLETED,
+                ),
+                is_visible=True,
+                is_terminal=True,
+            )
+
             return result
 
         except Exception as e:
@@ -88,7 +130,24 @@ class StateResultCompressor:
                 f"[TraceID:{trace_id}] State 结果压缩失败: {e}"
             )
             # 压缩失败时返回基础摘要
-            return self._build_fallback_summary(state_runtime, evaluation_result)
+            fallback = self._build_fallback_summary(state_runtime, evaluation_result)
+
+            # 发布 SUCCEEDED 状态（降级兜底不视为失败）
+            await self.chat_status_publisher.publish(
+                trace_id=trace_id,
+                session_id=session_id,
+                message_id="",
+                stage=ChatStatusStage.DAG_RESULT_COMPRESSION,
+                state=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_RESULT_COMPRESSION,
+                    ChatStatusState.COMPLETED,
+                ),
+                is_visible=True,
+                is_terminal=True,
+            )
+
+            return fallback
 
     def _format_merged_output(self, merged_output: dict[str, Any]) -> str:
         """格式化 State 的合并输出为可读文本。"""

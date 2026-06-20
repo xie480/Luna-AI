@@ -1,6 +1,20 @@
 {# Phase 9：Step Plan 生成 Prompt — 记忆槽位 #}
-## 已筛选的技能
-{{ selected_skills }}
+## 已筛选技能的工具与资源列表
+{% for skill in selected_skills %}
+### {{ skill.skill_name }}
+{% if skill.tools %}
+- 可用工具：
+{% for tool in skill.tools %}
+  * {{ tool.name }}：{{ tool.description }}（风险等级：{{ tool.risk_level }}）
+{% endfor %}
+{% endif %}
+{% if skill.resources %}
+- 可用资源：
+{% for res in skill.resources %}
+  * {{ res.name }}（类型：{{ res.resource_type }}）
+{% endfor %}
+{% endif %}
+{% endfor %}
 
 ## 当前上下文
 {{ state_context }}

@@ -73,21 +73,26 @@ class StepPlanNode:
         )
 
         try:
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+
+            # 构建包含 tool/resource 详情的 skill 信息
+            skill_details = self._build_skill_details(selected_skills, state_context)
+
             # 渲染 Step Plan 生成 Prompt
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STEP_PLAN_GENERATION,
                 variables={
                     "state_goal": state_goal,
                     "state_intent": state_intent,
-                    "selected_skills": json.dumps(
-                        selected_skills, ensure_ascii=False
-                    ),
+                    "selected_skills": skill_details,
                     "state_context": json.dumps(
                         state_context, ensure_ascii=False
                     ),
                     "available_node_types": json.dumps(
                         [t.value for t in DagNodeType], ensure_ascii=False
                     ),
+                    "CURRENT_TIME": current_time,
                 },
             )
 
@@ -200,6 +205,56 @@ class StepPlanNode:
             if json_match:
                 return json.loads(json_match.group())
             return {"steps": []}
+
+    def _build_skill_details(
+        self,
+        selected_skills: list[dict[str, Any]],
+        state_context: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """构建包含 tool/resource 详情的技能信息。
+
+        做什么：从 MCPToolRegistry 和 SkillRegistry 中获取
+               已筛选技能的工具列表和资源列表详情。
+        为什么这样做：Step Plan 生成需要知道每个技能具体有哪些工具和资源可用。
+        """
+        from app.mcp.skill_registry import SkillRegistry
+
+        skill_registry = SkillRegistry()
+        details = []
+
+        for skill_brief in selected_skills:
+            skill_name = skill_brief.get("skill_name", "")
+            detail_info = {
+                "skill_name": skill_name,
+                "description": skill_brief.get("description", skill_brief.get("relevance_reason", "")),
+                "tools": [],
+                "resources": [],
+            }
+
+            # 从 SkillRegistry 获取技能详情
+            try:
+                for sid, det in skill_registry._skills.items():
+                    if det.name == skill_name:
+                        # 填充工具列表
+                        for tool in det.tools:
+                            detail_info["tools"].append({
+                                "name": tool.get("name", ""),
+                                "description": tool.get("description", ""),
+                                "risk_level": tool.get("risk_level", "L0"),
+                            })
+                        # 填充资源列表
+                        for res in det.resources:
+                            detail_info["resources"].append({
+                                "name": res.get("name", ""),
+                                "resource_type": res.get("resource_type", "file"),
+                            })
+                        break
+            except Exception as e:
+                logger.warning(f"获取技能详情失败: skill={skill_name}, error={e}")
+
+            details.append(detail_info)
+
+        return details
 
     def _build_step_definitions(
         self, step_plan_data: dict[str, Any]
