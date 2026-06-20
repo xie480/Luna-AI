@@ -87,13 +87,42 @@ class MCPToolRegistry:
                 source=source,
                 endpoint_url=tool_dict.get("endpoint_url", ""),
                 remote_instance_id=tool_dict.get("remote_instance_id", ""),
+                module_path=tool_dict.get("module_path", ""),
             )
             
             handler = None
             if source == "remote":
                 handler = self._create_remote_handler(schema.endpoint_url)
+            elif source == "local":
+                # 对 source=local 且 module_path 非空的工具，动态导入 handler
+                # 做什么：根据 module_path 动态导入工具模块，查找 handle_ 开头的异步函数，
+                #         绑定为 handler。若导入或查找失败，handler 保持为 None。
+                # 为什么这样做：local_file_manager 等 Skill 的工具通过 JSON 注册到 PG，
+                #              启动时需从 PG 加载并绑定 Python handler 才能执行。
+                module_path = tool_dict.get("module_path", "")
+                if module_path:
+                    try:
+                        import importlib
+                        module = importlib.import_module(module_path)
+                        # 从模块中查找 handle_ 开头的异步函数（约定命名规范）
+                        handler_func = None
+                        for attr_name in dir(module):
+                            if attr_name.startswith("handle_") and callable(getattr(module, attr_name)):
+                                handler_func = getattr(module, attr_name)
+                                break
+                        if handler_func is not None:
+                            handler = handler_func
+                        else:
+                            logger.warning(
+                                f"MCP 工具 PG 加载未找到 handler 函数 "
+                                f"name={name} module_path={module_path}"
+                            )
+                    except Exception as exc:
+                        logger.warning(
+                            f"MCP 工具 PG 加载动态导入 handler 失败 "
+                            f"name={name} module_path={module_path} error={exc!s}"
+                        )
             
-            # PG 加载的工具 handler 为空，注册后仅可检索不可执行
             target_pool[name] = RegisteredTool(schema=schema, handler=handler)
             loaded_count += 1
         logger.info(f"MCP 工具 PG 加载完成 count={loaded_count}")
@@ -117,6 +146,7 @@ class MCPToolRegistry:
                 source=schema.source,
                 endpoint_url=schema.endpoint_url,
                 remote_instance_id=schema.remote_instance_id,
+                module_path=schema.module_path or "",
             )
             if success:
                 saved_count += 1
@@ -137,6 +167,7 @@ class MCPToolRegistry:
                 source=schema.source,
                 endpoint_url=schema.endpoint_url,
                 remote_instance_id=schema.remote_instance_id,
+                module_path=schema.module_path or "",
             )
             if success:
                 saved_count += 1

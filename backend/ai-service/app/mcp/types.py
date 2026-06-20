@@ -124,6 +124,11 @@ class MCPToolSchema(BaseModel):
         description="鉴权类型：none / bearer / api_key / basic。"
                     "仅 source=remote 时有效。",
     )
+    module_path: str = Field(
+        default="",
+        description="本地工具的 Python 模块导入路径（如 app.skills.local_file_manager.tools.list_directory）。"
+                    "仅 source=local 时有效，用于启动时从 PG 动态导入 handler 函数。",
+    )
     memory_schema: dict[str, Any] | None = Field(
         default=None,
         description="该工具所属技能的专属多轮记忆 Schema。"

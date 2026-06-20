@@ -74,6 +74,7 @@ class MCPToolPGRepo:
                     "source": row.source or "local",
                     "endpoint_url": row.endpoint_url or "",
                     "remote_instance_id": row.remote_instance_id or "",
+                    "module_path": row.module_path or "",
                 })
             logger.info(f"MCP 工具 PG 加载完成 count={len(tools)}")
             return tools
@@ -167,6 +168,7 @@ class MCPToolPGRepo:
         source: str = "local",
         endpoint_url: str = "",
         remote_instance_id: str = "",
+        module_path: str = "",
     ) -> bool:
         """
         保存工具注册信息到 PG（插入或更新）。
@@ -200,6 +202,7 @@ class MCPToolPGRepo:
                 existing.source = source
                 existing.endpoint_url = endpoint_url
                 existing.remote_instance_id = remote_instance_id
+                existing.module_path = module_path or existing.module_path
                 existing.updated_at = datetime.now(timezone.utc)
             else:
                 # 插入新记录
@@ -218,6 +221,7 @@ class MCPToolPGRepo:
                     source=source,
                     endpoint_url=endpoint_url,
                     remote_instance_id=remote_instance_id,
+                    module_path=module_path or None,
                 )
                 self._session.add(new_tool)
 

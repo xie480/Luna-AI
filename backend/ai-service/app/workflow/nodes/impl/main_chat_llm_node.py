@@ -348,7 +348,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             state.generation_state.provider_name = getattr(llm_client, "base_url", "")
 
             logger.info("[TraceID:{}] LLM 输入参数 (attempt={}): {}", trace_id, attempt + 1, {
-                "system_prompt_snippet": state.prompt_state.system_prompt_text[:200] if state.prompt_state.system_prompt_text else "",
+                "system_prompt_snippet": state.prompt_state.system_prompt_text if state.prompt_state.system_prompt_text else "",
                 "history_count": len(state.session_state.recent_messages),
                 "current_message_snippet": state.input_payload.raw_user_message,
                 "trace_id": trace_id,
@@ -386,10 +386,11 @@ class MainChatLlmNode(ChatWorkflowNode):
 
             state.generation_state.e2e_latency_ms = int((time.time() - generation_started_at) * 1000)
             logger.info(
-                "[TraceID:{}] LLM 调用完成 (attempt={}) e2e_latency_ms={} 原始响应长度={}",
+                "[TraceID:{}] LLM 调用完成 (attempt={}) e2e_latency_ms={} 原始响应长度={} 响应内容：{}",
                 trace_id, attempt + 1,
                 state.generation_state.e2e_latency_ms,
                 len(raw_response),
+                raw_response
             )
 
             # --- 使用 StreamParser 解析结构化 JSON 字段 ---
