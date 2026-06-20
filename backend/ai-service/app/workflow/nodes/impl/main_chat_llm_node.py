@@ -202,6 +202,15 @@ class MainChatLlmNode(ChatWorkflowNode):
                             if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
                                 state.generation_state.full_text += content
                                 await sentence_queue.put(content)
+                            elif msg_type == "replay_translation":
+                                state.generation_state.replay_translation_text += content
+                                await handle_stream_piece(
+                                    state,
+                                    msg_type,
+                                    content,
+                                    False,
+                                    self.dependencies.event_publisher,
+                                )
                             else:
                                 await handle_stream_piece(
                                     state,
@@ -494,14 +503,15 @@ class MainChatLlmNode(ChatWorkflowNode):
         tts_enabled = getattr(state.input_payload, "tts_enabled", True)
 
         # 决定 TTS 合成的源文本：
-        # - 当 tts_language 为 "ja" 且存在 replay_translation 时，使用日语翻译文本进行 TTS 合成
-        # - 否则使用默认的 full_text（即 reply 字段的中文文本）
+        # - 当 LLM 返回了 replay_translation 字段时，优先使用该字段作为 TTS 口播文本
+        #   （replay_translation 是 LLM 专为语音合成输出的优化文本，如日语翻译等）
+        # - 否则使用默认的 full_text（即 reply 字段的原始文本）
         tts_lang = getattr(state.input_payload, "tts_language", "zh") or "zh"
         tts_text = state.generation_state.full_text
-        if tts_lang == "ja" and state.generation_state.replay_translation_text:
+        if state.generation_state.replay_translation_text:
             tts_text = state.generation_state.replay_translation_text
             logger.info(
-                "[TraceID:{}] TTS 使用日语翻译文本（replay_translation）长度={}，原 reply 长度={}",
+                "[TraceID:{}] TTS 使用 replay_translation 字段长度={}，原 reply 长度={}",
                 trace_id,
                 len(tts_text),
                 len(state.generation_state.full_text),
