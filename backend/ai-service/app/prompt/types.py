@@ -57,6 +57,18 @@ class PromptCategory(str, Enum):
     MCP_SKILL_MEMORY = "mcp_skill_memory"
     MCP_EVALUATION = "mcp_evaluation"
 
+    # --- Phase 9 新增：DAG 引擎 Prompt 分类 ---
+    INPUT_RECONSTRUCTION_SIMPLIFIED = "input_reconstruction_simplified"
+    DAG_PLAN_GENERATION = "dag_plan_generation"
+    DAG_SKILL_SCREENING = "dag_skill_screening"
+    DAG_STEP_PLAN_GENERATION = "dag_step_plan_generation"
+    DAG_TOOL_PARAMETER_EXTRACTION = "dag_tool_parameter_extraction"
+    DAG_DATA_TRANSFORM = "dag_data_transform"
+    DAG_STATE_EVALUATION = "dag_state_evaluation"
+    DAG_PLAN_REPLAN = "dag_plan_replan"
+    DAG_RESULT_COMPRESSION = "dag_result_compression"
+    DAG_PLAN_SUMMARY = "dag_plan_summary"
+
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。
 # 做什么：约束已纳入 Prompt 管理面板的业务 Prompt 只以 PG 版本为准。

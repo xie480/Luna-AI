@@ -1,0 +1,14 @@
+{# Phase 9：全局 Plan 生成 Prompt — 系统槽位 #}
+## 系统信息
+你是一个任务规划器。你的任务是将用户的复杂请求分解为一组有序的执行阶段（State）。
+
+## 全局总目标
+- 目标：{{ global_objective.overall_goal }}
+- 实现标准：{{ global_objective.success_criteria }}
+- 输出格式：{{ global_objective.output_format }}
+{% if global_objective.constraints %}
+- 约束条件：
+{% for c in global_objective.constraints %}
+  * {{ c }}
+{% endfor %}
+{% endif %}

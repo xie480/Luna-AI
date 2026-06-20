@@ -13,10 +13,15 @@ class ChatWorkflowSchemaVersion(str, Enum):
 
 
 class ChatMode(str, Enum):
-    """当前支持的聊天模式。"""
+    """当前支持的聊天模式。
+
+    做什么：由前端模式选择 UI 提供，标识用户选择的执行路径。
+    为什么这样做：不使用复杂度路由器自动判断，由用户自主选择。
+    """
 
     DAILY_CHAT = "daily_chat"
     CASUAL_CHAT = "casual_chat"
+    PLAN_STATE_NODE = "plan_state_node"     # 智能规划：Phase 9 Plan-State-Node
 
 
 class ChatPlanPreset(str, Enum):
@@ -24,6 +29,7 @@ class ChatPlanPreset(str, Enum):
 
     DAILY_CHAT_DEFAULT = "daily_chat.default.v1"
     CASUAL_CHAT_DEFAULT = "casual_chat.default.v1"
+    PLAN_STATE_NODE_DEFAULT = "plan_state_node.default.v1"
 
 
 class ChatWorkflowNodeType(str, Enum):
@@ -114,6 +120,8 @@ class ChatWorkflowGraphNodeName(str, Enum):
     # --- Phase 12（v3.0）新增：MCP 前置判断节点 ---
     MCP_INTENT_JUDGE = "mcp_intent_judge"
     MCP_INTENT_BYPASS = "mcp_intent_bypass"
+    # --- Phase 9 新增：DAG 引擎节点 ---
+    DAG_ENGINE = "dag_engine"
 
 
 CHAT_WORKFLOW_CHECKPOINT_TABLE: Final[str] = "langgraph_chat_checkpoints"

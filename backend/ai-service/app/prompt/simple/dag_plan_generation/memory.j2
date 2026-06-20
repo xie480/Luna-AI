@@ -1,0 +1,16 @@
+{# Phase 9：全局 Plan 生成 Prompt — 记忆槽位 #}
+## 短期会话上下文
+{{ session_context }}
+
+{% if memory_context %}
+## 长期记忆
+{{ memory_context }}
+{% endif %}
+
+## 可用能力列表
+{% for skill in skill_briefs %}
+### {{ skill.skill_name }}
+- 描述：{{ skill.description }}
+- 可用工具：{{ skill.tool_names | join(', ') }}
+- 能力标签：{{ skill.capability_tags | join(', ') }}
+{% endfor %}

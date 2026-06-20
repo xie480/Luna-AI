@@ -1,0 +1,26 @@
+{# Phase 9：State 评估 Prompt — 运行时槽位 #}
+## 任务阶段目标
+- 意图：{{ state_intent }}
+- 目标：{{ state_goal }}
+
+## 完成标准
+{{ completion_criteria }}
+
+## 执行结果
+成功节点数：{{ nodes_succeeded }}
+失败节点数：{{ nodes_failed }}
+
+### 合并输出
+{{ merged_output }}
+
+## 输出要求
+请输出 JSON：
+{
+  "state_satisfied": true/false,
+  "evaluation_reason": "评估理由",
+  "gap_analysis": "差距分析（satisfied=false 时填写）",
+  "suggestion": "改进建议（satisfied=false 时填写）",
+  "criteria_checklist": [
+    {"field": "字段名", "expected": "期望值", "actual": "实际值", "met": true/false}
+  ]
+}

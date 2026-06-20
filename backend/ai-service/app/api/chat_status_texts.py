@@ -488,6 +488,231 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "好了，Luna讲完啦~",
         "嗯嗯，Luna说清楚了！",
     ],
+
+    # ================================================================
+    # Phase 9：DAG 引擎节点 — State 循环外
+    # ================================================================
+
+    # DAG 引擎入口
+    (ChatStatusStage.DAG_ENGINE_ENTRY, ChatStatusState.RUNNING): [
+        "Luna启动智能规划引擎……",
+        "嗯……Luna开始进入规划模式了~",
+        "让Luna切换到规划引擎……",
+        "Luna准备好执行复杂任务了！",
+        "等等，Luna启动一下规划系统~",
+    ],
+    (ChatStatusStage.DAG_ENGINE_ENTRY, ChatStatusState.COMPLETED): [
+        "智能规划引擎启动完成！",
+        "好啦，Luna的规划系统准备好了~",
+        "嗯嗯，引擎就绪！",
+    ],
+
+    # 全局 Plan 生成
+    (ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.RUNNING): [
+        "让Luna好好规划一下这个任务……",
+        "嗯……Luna在分析主人的任务~",
+        "让Luna拆分一下执行计划……",
+        "唔……Luna在想怎么分步完成这个",
+        "Luna开始制定作战计划了！",
+    ],
+    (ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.COMPLETED): [
+        "好啦，Luna的计划制定完成了！",
+        "嗯嗯，Luna规划好了~",
+        "行，Luna列好执行清单了！",
+        "搞定！Luna的作战计划出炉~",
+        "好啦好啦，Luna规划完毕！",
+    ],
+    (ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.ERROR): [
+        "唔……Luna的规划出了点问题……",
+        "哎……Luna没法制定计划……",
+        "规划失败了……Luna换个方式试试",
+    ],
+
+    # State 执行
+    (ChatStatusStage.DAG_STATE_EXECUTION, ChatStatusState.RUNNING): [
+        "Luna开始执行任务阶段了……",
+        "嗯……Luna正在执行当前步骤~",
+        "让Luna处理一下这个阶段……",
+        "Luna动起来了……",
+        "嗯嗯，Luna正在干活呢~",
+    ],
+    (ChatStatusStage.DAG_STATE_EXECUTION, ChatStatusState.COMPLETED): [
+        "这个阶段Luna搞定了！",
+        "好啦，当前阶段完成~",
+        "嗯嗯，Luna执行完毕！",
+    ],
+    (ChatStatusStage.DAG_STATE_EXECUTION, ChatStatusState.ERROR): [
+        "唔……这个阶段出了点问题……",
+        "哎……Luna执行失败了……",
+    ],
+
+    # State 评估
+    (ChatStatusStage.DAG_STATE_EVALUATION, ChatStatusState.RUNNING): [
+        "让Luna检查一下搞定了没有……",
+        "嗯……Luna评估一下当前进度~",
+        "等等，Luna看看结果对不对",
+        "让Luna验证一下执行结果……",
+        "唔……Luna检查一下目标达成了没~",
+    ],
+    (ChatStatusStage.DAG_STATE_EVALUATION, ChatStatusState.COMPLETED): [
+        "Luna确认过了，没问题！",
+        "好啦，评估通过~",
+        "嗯嗯，Luna检查完毕！",
+    ],
+    (ChatStatusStage.DAG_STATE_EVALUATION, ChatStatusState.ERROR): [
+        "唔……评估没通过，Luna想想办法……",
+        "评估结果不太理想……Luna调整一下",
+    ],
+
+    # Plan 重构
+    (ChatStatusStage.DAG_PLAN_REPLAN, ChatStatusState.RUNNING): [
+        "让Luna调整一下后面的计划……",
+        "嗯……Luna换个思路重新规划~",
+        "等等，Luna修一下执行计划",
+        "唔……Luna觉得需要调整策略",
+        "让Luna重新想想怎么做~",
+    ],
+    (ChatStatusStage.DAG_PLAN_REPLAN, ChatStatusState.COMPLETED): [
+        "好啦，Luna调整完毕！",
+        "嗯嗯，新计划出炉~",
+        "行，Luna重新规划好了！",
+    ],
+    (ChatStatusStage.DAG_PLAN_REPLAN, ChatStatusState.ERROR): [
+        "唔……计划调整也失败了……",
+        "哎……Luna没法重新规划……",
+    ],
+
+    # Plan 结果汇总
+    (ChatStatusStage.DAG_PLAN_SUMMARY, ChatStatusState.RUNNING): [
+        "让Luna把结果理一理……",
+        "嗯……Luna在汇总执行结果~",
+        "等等，Luna整理一下最终成果",
+        "让Luna把所有阶段的结果汇总起来……",
+        "唔……Luna在做最后的汇总~",
+    ],
+    (ChatStatusStage.DAG_PLAN_SUMMARY, ChatStatusState.COMPLETED): [
+        "好啦，Luna整理好了！",
+        "嗯嗯，汇总完毕~",
+        "搞定！Luna把结果都理清了！",
+    ],
+    (ChatStatusStage.DAG_PLAN_SUMMARY, ChatStatusState.ERROR): [
+        "唔……结果汇总出了点问题……",
+    ],
+
+    # 结果压缩
+    (ChatStatusStage.DAG_RESULT_COMPRESSION, ChatStatusState.RUNNING): [
+        "让Luna精简一下结果……",
+        "嗯……Luna在压缩数据~",
+    ],
+    (ChatStatusStage.DAG_RESULT_COMPRESSION, ChatStatusState.COMPLETED): [
+        "好啦，Luna压缩完毕~",
+    ],
+
+    # ================================================================
+    # Phase 9：DAG 引擎节点 — State 循环内
+    # ================================================================
+
+    # Skill 初筛
+    (ChatStatusStage.DAG_SKILL_SCREENING, ChatStatusState.RUNNING): [
+        "让Luna找找哪个技能最合适……",
+        "嗯……Luna翻翻技能库~",
+        "让Luna挑挑看哪个技能最好使……",
+        "唔……Luna看看有什么技能可用~",
+        "让Luna选个最顺手的技能……",
+    ],
+    (ChatStatusStage.DAG_SKILL_SCREENING, ChatStatusState.COMPLETED): [
+        "Luna选好技能了！",
+        "好啦，技能筛选完毕~",
+        "嗯嗯，Luna找到合适的技能了！",
+    ],
+    (ChatStatusStage.DAG_SKILL_SCREENING, ChatStatusState.ERROR): [
+        "唔……Luna没找到合适的技能……",
+    ],
+
+    # Step Plan 生成
+    (ChatStatusStage.DAG_STEP_PLAN_GENERATION, ChatStatusState.RUNNING): [
+        "让Luna规划一下具体步骤……",
+        "嗯……Luna在制定执行方案~",
+        "让Luna想想分几步做……",
+        "唔……Luna在规划执行细节~",
+        "Luna开始列出具体步骤了~",
+    ],
+    (ChatStatusStage.DAG_STEP_PLAN_GENERATION, ChatStatusState.COMPLETED): [
+        "好啦，步骤规划完毕！",
+        "嗯嗯，Luna列出执行步骤了~",
+        "行，Luna的步骤清单准备好了！",
+    ],
+    (ChatStatusStage.DAG_STEP_PLAN_GENERATION, ChatStatusState.ERROR): [
+        "唔……步骤规划出了问题……",
+    ],
+
+    # Step 执行
+    (ChatStatusStage.DAG_STEP_EXECUTION, ChatStatusState.RUNNING): [
+        "Luna开始执行步骤了……",
+        "嗯……Luna正在干活~",
+        "让Luna操作一下……",
+        "唔……Luna正在执行中~",
+        "Luna动起来了！",
+    ],
+    (ChatStatusStage.DAG_STEP_EXECUTION, ChatStatusState.COMPLETED): [
+        "步骤执行完毕！",
+        "好啦，Luna搞定了~",
+        "嗯嗯，这步完成了！",
+    ],
+    (ChatStatusStage.DAG_STEP_EXECUTION, ChatStatusState.ERROR): [
+        "唔……执行出了点问题……",
+    ],
+
+    # Step 合并
+    (ChatStatusStage.DAG_STEP_MERGE, ChatStatusState.RUNNING): [
+        "让Luna合并一下结果……",
+        "嗯……Luna在整理执行成果~",
+    ],
+    (ChatStatusStage.DAG_STEP_MERGE, ChatStatusState.COMPLETED): [
+        "结果合并完毕！",
+        "好啦，Luna整理好了~",
+    ],
+
+    # 资源加载
+    (ChatStatusStage.DAG_RESOURCE_LOADING, ChatStatusState.RUNNING): [
+        "Luna在读文件资料……",
+        "让Luna翻翻相关的文件……",
+        "嗯……Luna看看这些文件里有什么~",
+        "Luna正在读取资料……稍等一下",
+        "让Luna从文件里找找主人需要的信息……",
+    ],
+    (ChatStatusStage.DAG_RESOURCE_LOADING, ChatStatusState.COMPLETED): [
+        "资料读取完毕！",
+        "好啦，Luna读完了~",
+        "嗯嗯，文件内容拿到了！",
+    ],
+
+    # 工具执行
+    (ChatStatusStage.DAG_TOOL_EXECUTE, ChatStatusState.RUNNING): [
+        "Luna开始调用工具了……",
+        "嗯……Luna正在使用工具~",
+        "让Luna操作一下工具……",
+        "唔……Luna在调用技能工具~",
+        "Luna动手操作了！",
+    ],
+    (ChatStatusStage.DAG_TOOL_EXECUTE, ChatStatusState.COMPLETED): [
+        "工具调用完毕！",
+        "好啦，工具用完了~",
+        "嗯嗯，工具执行成功！",
+    ],
+
+    # 数据转换
+    (ChatStatusStage.DAG_DATA_TRANSFORM, ChatStatusState.RUNNING): [
+        "让Luna处理一下数据……",
+        "嗯……Luna在分析数据~",
+        "让Luna转换一下格式……",
+        "唔……Luna在处理这些信息~",
+    ],
+    (ChatStatusStage.DAG_DATA_TRANSFORM, ChatStatusState.COMPLETED): [
+        "数据处理完毕！",
+        "好啦，Luna转换好了~",
+        "嗯嗯，数据处理完成！",
+    ],
 }
 
 # ================================================================

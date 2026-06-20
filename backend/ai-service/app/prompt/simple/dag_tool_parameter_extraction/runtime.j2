@@ -1,0 +1,23 @@
+{# Phase 9：工具参数提取 Prompt — 运行时槽位 #}
+## 工具名称
+{{ tool_name }}
+
+## 参数提取提示
+{{ parameter_hint }}
+
+## 当前上下文
+{{ state_context }}
+
+{% if retry_context %}
+## 重试修正指令
+{{ retry_context }}
+{% endif %}
+
+## 输出要求
+请输出 JSON：
+{
+  "parameters": {
+    "参数名": "参数值"
+  }
+}
+参数必须严格遵循工具 Schema 的类型定义。

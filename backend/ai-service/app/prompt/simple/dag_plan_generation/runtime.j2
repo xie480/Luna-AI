@@ -1,0 +1,35 @@
+{# Phase 9：全局 Plan 生成 Prompt — 运行时槽位 #}
+## 用户输入
+{{ disambiguated_text }}
+
+{% if unresolved_pronouns %}
+## 注意：以下代词未能消歧
+{% for p in unresolved_pronouns %}
+- {{ p.original }}: {{ p.reason }}
+{% endfor %}
+请在规划时考虑这些信息缺失，必要时先搜索确认。
+{% endif %}
+
+## 输出要求
+请输出 JSON：
+{
+  "global_objective": {
+    "overall_goal": "...",
+    "success_criteria": "...",
+    "output_format": "...",
+    "constraints": [...]
+  },
+  "states": [
+    {
+      "order_index": 0,
+      "intent": "该阶段的核心意图",
+      "goal": "该阶段期望达成的具体目标",
+      "completion_criteria": [
+        {"field": "字段名", "operator": ">=", "value": 1}
+      ],
+      "depends_on": [],
+      "required_skill_names": ["skill_name_1"]
+    }
+  ],
+  "planning_reason": "为什么这样拆分 State 的理由"
+}

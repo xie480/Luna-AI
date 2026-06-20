@@ -365,6 +365,45 @@ class ChatMCPToolState(BaseModel):
 # ===========================================================================
 
 
+class ChatDagState(BaseModel):
+    """Phase 9 DAG 引擎状态。
+
+    做什么：承载 Plan-State-Node 路径中 DAG 引擎的运行时数据。
+    为什么这样做：DAG 引擎的状态与传统工作流状态隔离，
+                  避免污染 Phase 8.5 的现有字段。
+    """
+
+    # === DAG 引擎核心状态 ===
+    dag_engine_state: dict[str, Any] = Field(
+        default_factory=dict,
+        description="DagEngineState 的序列化副本。"
+                    "包含 plan、cursor、terminated 等核心数据。",
+    )
+
+    # === 简化输入重构结果 ===
+    disambiguated_text: str = ""
+    unresolved_pronouns: list[dict[str, Any]] = Field(default_factory=list)
+    emotion_state: dict[str, Any] = Field(default_factory=dict)
+
+    # === Plan 汇总结果 ===
+    plan_summary_text: str = Field(
+        default="",
+        description="PlanResultSummaryResult 的汇总文本，注入到主 Chat LLM。",
+    )
+
+    # === 终止上下文 ===
+    terminated: bool = False
+    termination_reason: str = ""
+    partial_results: str = ""
+
+    # === DAG 引擎是否激活 ===
+    is_dag_active: bool = Field(
+        default=False,
+        description="当前请求是否走 Plan-State-Node 路径。"
+                    "True 时主 Chat LLM 需要参考 DAG 引擎结果。",
+    )
+
+
 class ChatWorkflowState(BaseModel):
     """Chat Workflow 完整状态。"""
 
@@ -379,6 +418,10 @@ class ChatWorkflowState(BaseModel):
     mcp_tool_state: ChatMCPToolState = Field(
         default_factory=ChatMCPToolState,
         description="MCP 工具/Skill 执行状态。",
+    )
+    dag_state: ChatDagState = Field(
+        default_factory=ChatDagState,
+        description="Phase 9：DAG 引擎状态（Plan-State-Node 路径专用）。",
     )
     prompt_state: ChatPromptState = Field(default_factory=ChatPromptState)
     generation_state: ChatGenerationState = Field(default_factory=ChatGenerationState)

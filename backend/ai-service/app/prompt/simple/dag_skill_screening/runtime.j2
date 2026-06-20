@@ -1,0 +1,15 @@
+{# Phase 9：Skill 初筛 Prompt — 运行时槽位 #}
+## 当前任务阶段
+- 意图：{{ state_intent }}
+- 目标：{{ state_goal }}
+- 完成标准：{{ completion_criteria }}
+
+## 输出要求
+请输出 JSON：
+{
+  "selected_skills": [
+    {"skill_name": "技能名", "relevance_reason": "选择原因"}
+  ],
+  "screening_reason": "筛选理由"
+}
+只选择与当前任务目标直接相关的技能，不要选择无关技能。

@@ -339,6 +339,24 @@ class ChatStatusStage(str, Enum):
     TTS_SYNTHESIZING = "tts_synthesizing"   # 新增：正在合成 TTS 完整音频
     FINAL_RESPONSE = "final_response"       # 新增：正在组装并发送最终响应包
 
+    # --- Phase 9 新增：State 循环外的引擎节点阶段 ---
+    DAG_ENGINE_ENTRY = "dag_engine_entry"                   # DAG 引擎入口
+    DAG_PLAN_GENERATION = "dag_plan_generation"             # 全局 Plan 生成
+    DAG_STATE_EXECUTION = "dag_state_execution"             # State 执行器
+    DAG_STATE_EVALUATION = "dag_state_evaluation"           # State 评估
+    DAG_PLAN_REPLAN = "dag_plan_replan"                     # Plan 重构
+    DAG_PLAN_SUMMARY = "dag_plan_summary"                   # Plan 结果汇总
+    DAG_RESULT_COMPRESSION = "dag_result_compression"       # 结果压缩
+
+    # --- Phase 9 新增：State 循环内的执行节点阶段 ---
+    DAG_SKILL_SCREENING = "dag_skill_screening"             # Skill 初筛
+    DAG_STEP_PLAN_GENERATION = "dag_step_plan_generation"   # Step Plan 生成
+    DAG_STEP_EXECUTION = "dag_step_execution"               # Step 执行
+    DAG_STEP_MERGE = "dag_step_merge"                       # Step 合并
+    DAG_RESOURCE_LOADING = "dag_resource_loading"           # 资源加载
+    DAG_TOOL_EXECUTE = "dag_tool_execute"                   # 工具执行
+    DAG_DATA_TRANSFORM = "dag_data_transform"               # 数据转换
+
 
 class ChatStatusState(str, Enum):
     """Chat 主链路状态枚举，标识当前阶段的执行状态。

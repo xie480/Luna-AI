@@ -1,0 +1,14 @@
+{# Phase 9：Plan 汇总 Prompt — 运行时槽位 #}
+## 执行概况
+- 总阶段数：{{ total_states }}
+{% if terminated %}
+- 状态：异常终止
+- 终止原因：{{ termination_reason }}
+{% else %}
+- 状态：全部完成
+{% endif %}
+
+## 各阶段执行结果
+{{ state_summaries }}
+
+请生成一份简洁的执行结果汇总，面向用户说明完成了什么、哪些成功、哪些失败。

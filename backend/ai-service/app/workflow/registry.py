@@ -50,7 +50,33 @@ class ChatWorkflowNodeRegistry:
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value: MainChatLlmNode(dependencies),
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value: ResponsePersistenceNode(dependencies),
             ChatWorkflowGraphNodeName.FINALIZE.value: FinalizeNode(dependencies),
+            # --- Phase 9 新增：DAG 引擎节点 ---
+            ChatWorkflowGraphNodeName.DAG_ENGINE.value: self._build_dag_engine_node(dependencies),
         }
+
+    def _build_dag_engine_node(self, dependencies: WorkflowDependencies):
+        """构建 DAG 引擎节点。
+
+        做什么：创建 DagEngine 实例并包装为 LangGraph 节点。
+        为什么这样做：DAG 引擎需要多个依赖注入，通过工厂方法集中构建。
+        """
+        from app.workflow.dag.engine import DagEngine
+        from app.workflow.nodes.impl.dag_engine_node import DagEngineNode
+
+        dag_engine = DagEngine(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=dependencies.prompt_manager.llm_client if dependencies.prompt_manager else None,
+            mcp_tool_registry=dependencies.mcp_tool_registry,
+            memory_manager=dependencies.memory_manager,
+            rag_orchestrator=dependencies.rag_orchestrator,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+
+        return DagEngineNode(
+            dag_engine=dag_engine,
+            event_publisher=dependencies.event_publisher,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
 
     def get_node(self, name: ChatWorkflowGraphNodeName):
         return self.nodes[name.value]

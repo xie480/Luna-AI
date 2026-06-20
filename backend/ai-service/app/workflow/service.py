@@ -79,6 +79,7 @@ class ChatWorkflowService:
         factory = ChatGraphFactory(dependencies)
         self.daily_chat_graph = factory.build_daily_chat_graph()
         self.casual_chat_graph = factory.build_casual_chat_graph()
+        self.plan_state_node_graph = factory.build_plan_state_node_graph()
         self.tasks: set[asyncio.Task[Any]] = set()
 
     async def start_daily_chat(
@@ -120,6 +121,9 @@ class ChatWorkflowService:
         if chat_mode == ChatMode.CASUAL_CHAT:
             plan_preset = ChatPlanPreset.CASUAL_CHAT_DEFAULT
             disable_rerank = True
+        elif chat_mode == ChatMode.PLAN_STATE_NODE:
+            plan_preset = ChatPlanPreset.PLAN_STATE_NODE_DEFAULT
+            disable_rerank = False
         else:
             plan_preset = ChatPlanPreset.DAILY_CHAT_DEFAULT
             disable_rerank = False
@@ -170,8 +174,10 @@ class ChatWorkflowService:
         """
         根据 chat_mode 选择执行对应的 LangGraph 工作流图。
 
-        做什么：如果 chat_mode 为 CASUAL_CHAT_DEFAULT 则执行闲聊最短化链路图，
-                否则执行默认的日常聊天完整链路图。
+        做什么：根据 chat_mode 路由到对应的图：
+                - CASUAL_CHAT_DEFAULT: 闲聊最短化链路图
+                - PLAN_STATE_NODE_DEFAULT: Phase 9 智能规划链路图
+                - 其他: 日常聊天完整链路图
         """
         try:
             if state.runtime.chat_mode == ChatPlanPreset.CASUAL_CHAT_DEFAULT:
@@ -180,6 +186,12 @@ class ChatWorkflowService:
                     f"session_id={state.runtime.session_id}"
                 )
                 graph_state = await self.casual_chat_graph.ainvoke(state.as_graph_state())
+            elif state.runtime.chat_mode == ChatPlanPreset.PLAN_STATE_NODE_DEFAULT:
+                logger.info(
+                    f"智能规划模式图开始执行 trace_id={state.runtime.trace_id} "
+                    f"session_id={state.runtime.session_id}"
+                )
+                graph_state = await self.plan_state_node_graph.ainvoke(state.as_graph_state())
             else:
                 logger.info(
                     f"日常聊天模式图开始执行 trace_id={state.runtime.trace_id} "

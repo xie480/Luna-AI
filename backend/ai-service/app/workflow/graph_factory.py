@@ -256,5 +256,74 @@ class ChatGraphFactory:
         )
         return compiled
 
+    def build_plan_state_node_graph(self):
+        """
+        构建 plan_state_node.default.v1 Phase 9 智能规划链路图。
+
+        做什么：构建 Phase 9 Plan-State-Node 完整路径图。
+                流程：会话上下文加载 -> 简化输入重构 -> 全局 Plan 生成
+                      -> DAG 引擎（Plan + Cursor 循环）-> Plan 结果汇总
+                      -> 上下文治理 -> Prompt 装配 -> 主 Chat LLM
+                      -> 响应持久化 -> 最终化。
+        为什么这样做：Phase 9 的 DAG 引擎是一个独立的调度系统，
+                     需要嵌入到 LangGraph 主图中作为节点执行。
+        """
+        graph = StateGraph(ChatWorkflowState)
+
+        # 定义 Phase 9 专用活动节点
+        active_nodes = [
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
+            # DAG 引擎入口节点（包含简化输入重构 + Plan 生成 + DAG 循环 + 汇总）
+            ChatWorkflowGraphNodeName.DAG_ENGINE,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE,
+            ChatWorkflowGraphNodeName.FINALIZE,
+        ]
+        for node_name in active_nodes:
+            graph.add_node(node_name.value, self.registry.get_node(node_name))
+
+        # Phase 9 图入口点：会话上下文加载
+        graph.set_entry_point(ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value)
+
+        # 会话上下文加载 -> DAG 引擎
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            ChatWorkflowGraphNodeName.DAG_ENGINE.value,
+        )
+
+        # DAG 引擎 -> 上下文治理
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.DAG_ENGINE.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+
+        # 以下与 daily_chat 共享相同的后半段链路
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
+            ChatWorkflowGraphNodeName.FINALIZE.value,
+        )
+
+        compiled = graph.compile()
+        logger.info(
+            "plan_state_node 智能规划图构建完成 | active_nodes=%d | entry_point=%s",
+            len(active_nodes),
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+        )
+        return compiled
+
 
 from app.logger import logger

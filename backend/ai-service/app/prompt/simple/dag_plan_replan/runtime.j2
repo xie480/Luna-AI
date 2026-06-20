@@ -1,0 +1,37 @@
+{# Phase 9：Plan 重构 Prompt — 运行时槽位 #}
+## 失败的阶段
+- ID: {{ failed_state_id }}
+- 目标: {{ failed_state_goal }}
+
+## 失败阶段的执行结果（压缩后）
+{{ failed_state_result }}
+
+## 评估不通过原因
+{{ evaluation_reason }}
+
+## 差距分析
+{{ gap_analysis }}
+
+## 改进建议
+{{ suggestion }}
+
+## 待修改的后续阶段
+{{ remaining_states }}
+
+## 输出要求
+请输出 JSON：
+{
+  "revised_states": [
+    {
+      "order_index": 0,
+      "intent": "调整后的意图",
+      "goal": "调整后的目标",
+      "completion_criteria": [
+        {"field": "字段名", "operator": ">=", "value": 1}
+      ],
+      "required_skill_names": ["skill_name"]
+    }
+  ],
+  "replan_reason": "调整理由"
+}
+请保持调整后的阶段数量合理，确保最终仍能达成全局目标。

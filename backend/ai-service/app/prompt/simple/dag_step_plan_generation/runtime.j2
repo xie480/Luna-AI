@@ -1,0 +1,31 @@
+{# Phase 9：Step Plan 生成 Prompt — 运行时槽位 #}
+## 当前任务阶段
+- 意图：{{ state_intent }}
+- 目标：{{ state_goal }}
+
+## 可用节点类型
+{{ available_node_types }}
+
+## 输出要求
+请输出 JSON：
+{
+  "steps": [
+    {
+      "description": "步骤描述",
+      "nodes": [
+        {
+          "node_type": "resource_loading|tool_execute|data_transform|long_term_memory|knowledge_rag",
+          "skill_name": "技能名（resource_loading/tool_execute 时必填）",
+          "tool_name": "工具名（tool_execute 时必填）",
+          "resource_name": "资源名（resource_loading 时必填）",
+          "parameter_hint": "参数提取提示（tool_execute 时使用）",
+          "transform_instruction": "转换指令（data_transform 时使用）",
+          "query_text": "查询文本（long_term_memory/knowledge_rag 时使用）",
+          "depends_on": [],
+          "gating_required": false
+        }
+      ]
+    }
+  ]
+}
+同一 Step 内的节点可以并行执行，不同 Step 按顺序执行。
