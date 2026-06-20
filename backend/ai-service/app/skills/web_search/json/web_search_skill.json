@@ -7,25 +7,7 @@
       "enabled": true,
       "metadata": {
         "author": "Luna-AI",
-        "tags": ["search", "information-retrieval", "web", "searxng"],
-        "memory_schema": {
-          "type": "object",
-          "properties": {
-            "search_goal": { "type": "string", "description": "本次总的搜索目的" },
-            "previous_query": { "type": "string", "description": "刚尝试搜索的关键词" },
-            "previous_categories": { "type": "string", "description": "上一轮使用的分类" },
-            "previous_time_range": { "type": "string", "description": "上一轮使用的时间范围" },
-            "previous_results_summary": { "type": "string", "description": "上一轮搜索得到的核心结果或没找到的原因" },
-            "attempted_queries": { "type": "string", "description": "历史已经尝试过的所有搜索词列表，格式如 ['词1', '词2']" },
-            "gathered_information": { "type": "string", "description": "至今累积搜集到的有效关键信息" },
-            "need_continue_search": { "type": "string", "enum": ["是", "否"] },
-            "continue_reason": { "type": "string", "description": "为什么要继续搜索/改变策略的原因" },
-            "this_round_goal": { "type": "string", "description": "下一轮想要搜什么" },
-            "this_query": { "type": "string", "description": "下一轮建议使用的搜索词" },
-            "category_adjust_reason": { "type": "string" },
-            "time_range_adjust_reason": { "type": "string" }
-          }
-        }
+        "tags": ["search", "information-retrieval", "web", "searxng"]
       },
       "prompts": [
         {
@@ -64,6 +46,24 @@
         {
           "name": "web_search",
           "description": "通过 SearXNG 执行网络搜索",
+          "memory_schema": {
+            "type": "object",
+            "properties": {
+              "search_goal": { "type": "string", "description": "本次总的搜索目的" },
+              "previous_query": { "type": "string", "description": "刚尝试搜索的关键词" },
+              "previous_categories": { "type": "string", "description": "上一轮使用的分类" },
+              "previous_time_range": { "type": "string", "description": "上一轮使用的时间范围" },
+              "previous_results_summary": { "type": "string", "description": "上一轮搜索得到的核心结果或没找到的原因" },
+              "attempted_queries": { "type": "string", "description": "历史已经尝试过的所有搜索词列表，格式如 ['词1', '词2']" },
+              "gathered_information": { "type": "string", "description": "至今累积搜集到的有效关键信息" },
+              "need_continue_search": { "type": "string", "enum": ["是", "否"] },
+              "continue_reason": { "type": "string", "description": "为什么要继续搜索/改变策略的原因" },
+              "this_round_goal": { "type": "string", "description": "下一轮想要搜什么" },
+              "this_query": { "type": "string", "description": "下一轮建议使用的搜索词" },
+              "category_adjust_reason": { "type": "string" },
+              "time_range_adjust_reason": { "type": "string" }
+            }
+          },
           "parameters_schema": {
             "type": "object",
             "properties": {

@@ -326,6 +326,14 @@ class MCPToolRegistration(Base):
         index=True,
         comment="关联的技能 ID。当工具属于某个 Skill 时非空；独立工具时为空。",
     )
+    # --- 工具专属多轮记忆 Schema。用于填充 tool 专属 Prompt 模板中的变量。 ---
+    # 为 None 时表示该工具不需要多轮记忆上下文注入。
+    memory_schema: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=None,
+        comment="工具专属多轮记忆 Schema（JSON Schema 格式）。用于在多轮执行中提取历史策略状态，并注入到 tool 专属 Prompt 模板。",
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

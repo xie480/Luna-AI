@@ -75,6 +75,7 @@ class MCPToolPGRepo:
                     "endpoint_url": row.endpoint_url or "",
                     "remote_instance_id": row.remote_instance_id or "",
                     "module_path": row.module_path or "",
+                    "memory_schema": row.memory_schema or None,
                 })
             logger.info(f"MCP 工具 PG 加载完成 count={len(tools)}")
             return tools
@@ -169,6 +170,7 @@ class MCPToolPGRepo:
         endpoint_url: str = "",
         remote_instance_id: str = "",
         module_path: str = "",
+        memory_schema: dict[str, Any] | None = None,
     ) -> bool:
         """
         保存工具注册信息到 PG（插入或更新）。
@@ -176,6 +178,8 @@ class MCPToolPGRepo:
         做什么：如果 name 已存在则更新记录，否则插入新记录。
         为什么这样做：工具注册可以是新增或修改（如更新 use_case_examples），
                       upsert 语义避免调用方区分 insert/update。
+        参数:
+            memory_schema: 工具专属多轮记忆 Schema（JSON Schema 格式）。可选，默认 None。
         返回:
             bool: 保存成功返回 True，失败返回 False。
         """
@@ -203,6 +207,7 @@ class MCPToolPGRepo:
                 existing.endpoint_url = endpoint_url
                 existing.remote_instance_id = remote_instance_id
                 existing.module_path = module_path or existing.module_path
+                existing.memory_schema = memory_schema
                 existing.updated_at = datetime.now(timezone.utc)
             else:
                 # 插入新记录
@@ -222,6 +227,7 @@ class MCPToolPGRepo:
                     endpoint_url=endpoint_url,
                     remote_instance_id=remote_instance_id,
                     module_path=module_path or None,
+                    memory_schema=memory_schema,
                 )
                 self._session.add(new_tool)
 

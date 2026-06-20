@@ -76,7 +76,6 @@ class SkillDetail:
         resources: list[dict[str, Any]],
         prompts: dict[str, Any],
         version: str = "1.0.0",
-        memory_schema: dict[str, Any] | None = None,
     ) -> None:
         self.skill_id = skill_id
         self.name = name
@@ -88,8 +87,6 @@ class SkillDetail:
         # prompts 字典包含三个阶段的提示词模板
         self.prompts = prompts
         self.version = version
-        # 专属技能的动态多轮记忆上下文 Schema
-        self.memory_schema = memory_schema
 
 
 class SkillRegistry:
@@ -202,10 +199,7 @@ class SkillRegistry:
                         "variables": p.variables,
                     }
 
-                # 提取 memory_schema 字段（从 metadata_ 中提取，如果在注册时预留了该字段）
-                memory_schema = skill_row.metadata_.get("memory_schema") if skill_row.metadata_ else None
-
-                # 构建 SkillDetail
+                # 构建 SkillDetail（memory_schema 已移至 tool 级别，不再从 skill metadata 提取）
                 detail = SkillDetail(
                     skill_id=skill_row.id,
                     name=skill_row.name,
@@ -214,7 +208,6 @@ class SkillRegistry:
                     resources=resources,
                     prompts=prompts_by_phase,
                     version=skill_row.version,
-                    memory_schema=memory_schema,
                 )
                 self._skills[skill_row.id] = detail
 
@@ -312,10 +305,7 @@ class SkillRegistry:
         pg_session.add(new_skill)
         await pg_session.flush()
 
-        # 提取 memory_schema 字段
-        memory_schema = metadata.get("memory_schema") if metadata else None
-
-        # 同步缓存
+        # 同步缓存（memory_schema 已移至 tool 级别，不再从 skill metadata 提取）
         self._skills[skill_id] = SkillDetail(
             skill_id=skill_id,
             name=name,
@@ -324,7 +314,6 @@ class SkillRegistry:
             resources=[],
             prompts={},
             version=version,
-            memory_schema=memory_schema,
         )
 
         logger.info(f"Skill 创建完成 name={name} skill_id={skill_id}")

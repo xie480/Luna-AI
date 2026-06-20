@@ -88,6 +88,7 @@ class MCPToolRegistry:
                 endpoint_url=tool_dict.get("endpoint_url", ""),
                 remote_instance_id=tool_dict.get("remote_instance_id", ""),
                 module_path=tool_dict.get("module_path", ""),
+                memory_schema=tool_dict.get("memory_schema"),
             )
             
             handler = None
@@ -147,6 +148,7 @@ class MCPToolRegistry:
                 endpoint_url=schema.endpoint_url,
                 remote_instance_id=schema.remote_instance_id,
                 module_path=schema.module_path or "",
+                memory_schema=schema.memory_schema,
             )
             if success:
                 saved_count += 1
@@ -168,6 +170,7 @@ class MCPToolRegistry:
                 endpoint_url=schema.endpoint_url,
                 remote_instance_id=schema.remote_instance_id,
                 module_path=schema.module_path or "",
+                memory_schema=schema.memory_schema,
             )
             if success:
                 saved_count += 1
@@ -285,6 +288,7 @@ class MCPToolRegistry:
             "core_purpose": tool.schema.core_purpose,
             "final_deliverable": tool.schema.final_deliverable,
             "tags": tool.schema.tags,
+            "memory_schema": tool.schema.memory_schema,
         }
 
     # ---- 混合检索（BM25 + 向量） ----

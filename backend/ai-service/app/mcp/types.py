@@ -131,8 +131,9 @@ class MCPToolSchema(BaseModel):
     )
     memory_schema: dict[str, Any] | None = Field(
         default=None,
-        description="该工具所属技能的专属多轮记忆 Schema。"
-                    "用于多轮执行中提取历史策略状态，并在专属 Prompt 中渲染。",
+        description="工具的专属多轮记忆 Schema（JSON Schema 格式）。"
+                    "用于在多轮执行中提取历史策略状态，并注入到 tool 专属 Prompt 模板中填充变量。"
+                    "该字段已从 skill 级别移至 tool 级别，每个 tool 可独立声明自己的 memory_schema。",
     )
 
 

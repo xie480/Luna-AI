@@ -7,49 +7,7 @@
       "enabled": true,
       "metadata": {
         "author": "Luna-AI",
-        "tags": ["file-management", "local-filesystem", "utility", "productivity"],
-        "memory_schema": {
-          "type": "object",
-          "properties": {
-            "operation_type": {
-              "type": "string",
-              "description": "本次文件操作的类型"
-            },
-            "target_path": {
-              "type": "string",
-              "description": "操作的目标路径或已确认的路径"
-            },
-            "operation_purpose": {
-              "type": "string",
-              "description": "用户要求本次操作的原因或目的"
-            },
-            "previous_search_pattern": {
-              "type": "string",
-              "description": "上一轮搜索使用的文件模式"
-            },
-            "previous_search_drive": {
-              "type": "string",
-              "description": "上一轮搜索指定的盘符"
-            },
-            "previous_search_results_summary": {
-              "type": "string",
-              "description": "上一轮搜索得到的结果摘要或没找到的原因"
-            },
-            "confirmed_files": {
-              "type": "string",
-              "description": "已经过用户或系统确认的文件路径列表"
-            },
-            "pending_dangerous_operation": {
-              "type": "string",
-              "description": "等待用户授权的高危操作详情"
-            },
-            "operation_status": {
-              "type": "string",
-              "enum": ["pending", "in_progress", "completed", "failed", "cancelled_by_user"],
-              "description": "当前文件操作的整体状态"
-            }
-          }
-        }
+        "tags": ["file-management", "local-filesystem", "utility", "productivity"]
       },
       "prompts": [
         {

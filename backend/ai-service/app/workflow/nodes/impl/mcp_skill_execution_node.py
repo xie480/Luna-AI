@@ -57,6 +57,7 @@ from app.prompt.types import PromptCategory, render_template
 from app.tts import tts_client, map_emotion
 from app.logger import logger
 from app.mcp.executor import execute_tool
+from app.mcp.registry import MCPToolRegistry
 from app.mcp.skill_registry import SkillRegistry
 from app.mcp.skill_types import (
     ExecutionPlan,
@@ -219,34 +220,41 @@ class MCPSkillExecutionNode(ChatWorkflowNode):
                         break
 
                     # Step 3.0: 动态提取专属技能记忆 (如果有)
-                    # 我们只需要检查当前执行计划中涉及的第一个有效技能的 memory_schema
+                    # memory_schema 已移至 tool 级别，从 MCPToolRegistry 获取第一个 tool 的 memory_schema
                     skill_memory_context = None
                     first_skill_name = next(
                         (s.skill for s in execution_plan.states.values() if s.skill), ""
                     )
                     if first_skill_name:
-                        skill_id = registry.get_skill_id_by_name(first_skill_name)
-                        if skill_id:
-                            skill_detail = registry.get_skill_detail(skill_id)
-                            # 如果该技能在注册时声明了 memory_schema
-                            if skill_detail and hasattr(skill_detail, 'memory_schema') and skill_detail.memory_schema:
-                                await self._publish_chat_status(
-                                    state=state,
-                                    stage=ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING,
-                                    status=ChatStatusState.RUNNING,
-                                    display_text=get_chat_status_text(
-                                        ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING, ChatStatusState.RUNNING
-                                    ),
-                                )
-                                memory_agent = MCPSkillMemoryAgent()
-                                skill_memory_context = await memory_agent.extract_memory_variables(
-                                    trace_id=state.runtime.trace_id,
-                                    skill_name=first_skill_name,
-                                    memory_schema=skill_detail.memory_schema,
-                                    mcp_intent=mcp_intent,
-                                    all_round_data=all_round_data,
-                                    inner_suggestion=inner_suggestion,
-                                )
+                        # 获取第一个有效 tool 的 memory_schema（从 MCPToolRegistry 中获取）
+                        first_state = next(
+                            (s for s in execution_plan.states.values() if s.tool), None
+                        )
+                        tool_memory_schema: dict[str, Any] | None = None
+                        if first_state and first_state.tool:
+                            tool_registry = MCPToolRegistry()
+                            registered_tool = tool_registry.get_tool(first_state.tool)
+                            if registered_tool and registered_tool.schema.memory_schema:
+                                tool_memory_schema = registered_tool.schema.memory_schema
+
+                        if tool_memory_schema:
+                            await self._publish_chat_status(
+                                state=state,
+                                stage=ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING,
+                                status=ChatStatusState.RUNNING,
+                                display_text=get_chat_status_text(
+                                    ChatStatusStage.MCP_SKILL_MEMORY_EXTRACTING, ChatStatusState.RUNNING
+                                ),
+                            )
+                            memory_agent = MCPSkillMemoryAgent()
+                            skill_memory_context = await memory_agent.extract_memory_variables(
+                                trace_id=state.runtime.trace_id,
+                                skill_name=first_skill_name,
+                                memory_schema=tool_memory_schema,
+                                mcp_intent=mcp_intent,
+                                all_round_data=all_round_data,
+                                inner_suggestion=inner_suggestion,
+                            )
 
                     # ============================================================
                     # Agent 3：Skill 执行 (Resource Loading + Tool Executing)
