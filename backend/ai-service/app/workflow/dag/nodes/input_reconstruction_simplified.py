@@ -147,12 +147,11 @@ class SimplifiedInputReconstructionNode:
                 is_visible=True,
                 is_terminal=True,
             )
-            # 降级：返回原始文本
-            return SimplifiedReconstruction(
-                disambiguated_text=raw_user_message,
-                unresolved_pronouns=[],
-                emotion_state={},
-            )
+            # 向上抛出异常，终止 DAG 流程
+            # 为什么这样做：输入重构是 DAG 引擎的前置关键步骤，失败后继续执行
+            #               会导致后续节点（如 Plan 生成）基于未处理的原始文本产生错误结果。
+            #               因此必须在第一个节点失败时立即终止整个流程。
+            raise
 
     def _build_reconstruction_schema(self) -> dict[str, Any]:
         """构建简化输入重构的 JSON Schema。"""

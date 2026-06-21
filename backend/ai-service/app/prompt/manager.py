@@ -111,6 +111,18 @@ class Manager:
         logger.info(f"组装 Prompt 成功 category={category.value} prompt_length={len(prompt_str)}")
         return prompt_str
 
+    async def render(self, category: PromptCategory, variables: Dict[str, Any]) -> str:
+        """渲染完整 Prompt 文本（DAG 节点入口）。
+
+        做什么：代理 assemble_prompt，提供与 DAG 节点一致的调用接口。
+        为什么这样做：DAG 工作流节点统一通过 render(category, variables) 调用，
+                      内部委托 assemble_prompt 完成实际渲染。
+        输入输出：输入 PromptCategory 和变量字典，输出完整 Prompt 文本。
+        边界条件：与 assemble_prompt 一致。
+        异常行为：与 assemble_prompt 一致。
+        """
+        return await self.assemble_prompt(category, variables)
+
     async def render_prompt(self, category: PromptCategory, variables: Dict[str, Any]) -> PromptPayload:
         """
         按三槽位分别渲染 Prompt。

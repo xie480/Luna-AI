@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
+import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE } from '../../../shared/enum';
+import { DAG_NODE_STATUS } from '../../../shared/enum';
 import { HolographicNode } from './HolographicNode';
 import { HolographicConnections } from './HolographicConnections';
 import { HolographicARPanel } from './HolographicARPanel';
 import { PanelTransition } from '../PanelTransition/PanelTransition';
+import type { ChatNodeStatus } from '../../../shared/types';
+import type { ChatNodeProjection } from '../../types/chatWorkflow';
 import './HolographicWorkflowSidebar.css';
 
 const MIN_WIDTH = 260;
@@ -13,13 +17,18 @@ const DEFAULT_WIDTH = 320;
 // Max width will be calculated dynamically based on window size (e.g., 40%)
 
 export const HolographicWorkflowSidebar: React.FC = () => {
-  const activePlan = useChatWorkflowStore((state) => state.activePlan);
+  // Phase 8.5 日常聊天/极速闲聊模式数据
+  const chatActivePlan = useChatWorkflowStore((state) => state.activePlan);
   const nodesByInteractionId = useChatWorkflowStore((state) => state.nodesByInteractionId);
   const isWorkflowDebugDrawerOpen = useChatWorkflowStore((state) => state.isWorkflowDebugDrawerOpen);
-  
-  // Tie sidebar visibility to the existing systemStore left sidebar state
-  // But wait, the prompt said "add a new button to control visibility, right below existing button".
-  // Let's create a local state for this specific workflow sidebar visibility
+
+  // Phase 9 智能规划模式数据
+  const dagActivePlan = useDagWorkflowStore((state) => state.activePlan);
+  const dagPanelVisible = useDagWorkflowStore((state) => state.isPanelVisible);
+
+  // 聊天模式
+  const chatMode = useSystemStore((state) => state.chatMode);
+
   const [isVisible, setIsVisible] = useState(true);
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
@@ -33,12 +42,37 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const interactionId = activePlan?.interactionId;
-  
-  // Wrap nodes initialization in useMemo to prevent dependency arrays from triggering on every render
-  const nodes = useMemo(() => {
-    return interactionId ? nodesByInteractionId[interactionId] || [] : [];
-  }, [interactionId, nodesByInteractionId]);
+  // 根据聊天模式选择数据源
+  const isDagMode = chatMode === CHAT_MODE.PLAN_STATE_NODE;
+
+  // 在智能规划模式下，将 DAG State 投影转换为 ChatNodeProjection 兼容格式
+  // 为什么这样做：HolographicNode 和 HolographicConnections 组件消费的是
+  //               ChatNodeProjection[] 格式的数据，DAG 模式的四级结构需要展平为节点列表
+  const dagNodes: ChatNodeProjection[] = useMemo(() => {
+    if (!isDagMode || !dagActivePlan) return [];
+    return dagActivePlan.states.map((s) => ({
+      nodeType: s.stateId,
+      status: (() => {
+        // 将 DAG_NODE_STATUS 映射为 ChatNodeStatus
+        if (s.status === DAG_NODE_STATUS.SUCCEEDED) return 'succeeded' as ChatNodeStatus;
+        if (s.status === DAG_NODE_STATUS.FAILED) return 'failed' as ChatNodeStatus;
+        if (s.status === DAG_NODE_STATUS.RUNNING) return 'running' as ChatNodeStatus;
+        if (s.status === DAG_NODE_STATUS.DEGRADED) return 'degraded' as ChatNodeStatus;
+        return 'pending' as ChatNodeStatus;
+      })(),
+      startedAtMs: s.startedAtMs,
+    }));
+  }, [isDagMode, dagActivePlan]);
+
+  // 日常聊天/闲聊模式的节点数据
+  const chatInteractionId = chatActivePlan?.interactionId;
+  const chatNodes = useMemo(() => {
+    return chatInteractionId ? nodesByInteractionId[chatInteractionId] || [] : [];
+  }, [chatInteractionId, nodesByInteractionId]);
+
+  // 统一数据源：智能规划用 dagNodes，其他用 chatNodes
+  const interactionId = isDagMode ? dagActivePlan?.planId : chatActivePlan?.interactionId;
+  const nodes = isDagMode ? dagNodes : chatNodes;
 
   // 1. Drag to Resize Logic
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -87,15 +121,13 @@ export const HolographicWorkflowSidebar: React.FC = () => {
 
   // 2. Auto Scroll to Active Node
   useEffect(() => {
-    if (!scrollRef.current || !activePlan) return;
+    if (!scrollRef.current || !hasPlan) return;
     
     // Find the currently running node or the last node
     const activeNode = [...nodes].reverse().find(n => n.status === 'running') || nodes[nodes.length - 1];
     
     if (activeNode) {
         setActiveNodeId(activeNode.nodeType);
-        // Simple auto-scroll for now. In a real scenario with many nodes, 
-        // we'd calculate offset to keep it in the lower 60% of viewport.
         const nodeEl = scrollRef.current.querySelector(`[data-node-type="${activeNode.nodeType}"]`);
         if (nodeEl) {
              nodeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -103,7 +135,7 @@ export const HolographicWorkflowSidebar: React.FC = () => {
     } else {
         setActiveNodeId(null);
     }
-  }, [nodes, activePlan]);
+  }, [nodes, hasPlan]);
 
   // Handle Holographic AR Panel Toggle
   const toggleARPanel = useCallback((nodeType: string, event: React.MouseEvent) => {
@@ -140,15 +172,10 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [arPanelData])
 
 
-  const chatMode = useSystemStore((state) => state.chatMode);
-
-  // Plan-State-Node 模式下隐藏 Phase 8.5 的 HolographicWorkflow 侧边栏
-  // 因为 DAG 面板会替代它
-  if (chatMode === CHAT_MODE.PLAN_STATE_NODE) {
-    return null;
-  }
-
-  const hasPlan = activePlan !== null;
+  // 根据聊天模式判断是否有活跃 Plan
+  const hasPlan = isDagMode
+    ? dagActivePlan !== null && dagPanelVisible
+    : chatActivePlan !== null;
 
   return (
     <>
@@ -187,9 +214,9 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       </div>
       
       <div className="holographic-header">
-        <div className="header-title">Orbital Flow</div>
+        <div className="header-title">{isDagMode ? 'DAG Flow' : 'Orbital Flow'}</div>
         <div className="header-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {activePlan && <div className={`global-status-indicator ${activePlan.status}`}></div>}
+          {hasPlan && <div className={`global-status-indicator ${isDagMode ? (dagActivePlan?.status === 'executing' ? 'running' : dagActivePlan?.status || '') : chatActivePlan?.status || ''}`}></div>}
           <button
             onClick={() => setIsVisible(false)}
             style={{
@@ -234,16 +261,24 @@ export const HolographicWorkflowSidebar: React.FC = () => {
             ))}
             
             {/* End Node：只要存在活动计划就始终渲染，确保连线完整贯穿流程收尾阶段 */}
-            {activePlan && (
+            {hasPlan && (
                 <HolographicNode
                     type="end"
                     nodeType="workflow_end"
-                    status={
-                        activePlan.status === 'completed' ? 'succeeded' :
-                        activePlan.status === 'failed' ? 'failed' :
-                        'pending'
-                    }
-                    isActive={activePlan.status === 'postprocessing'}
+                    status={(() => {
+                        if (isDagMode) {
+                            // DAG 模式：根据 dagActivePlan.status 映射
+                            if (!dagActivePlan) return 'pending';
+                            if (dagActivePlan.status === 'completed' || dagActivePlan.status === 'succeeded') return 'succeeded';
+                            if (dagActivePlan.status === 'failed' || dagActivePlan.status === 'terminated') return 'failed';
+                            return 'pending';
+                        }
+                        // 日常聊天模式
+                        if (chatActivePlan?.status === 'completed') return 'succeeded';
+                        if (chatActivePlan?.status === 'failed') return 'failed';
+                        return 'pending';
+                    })()}
+                    isActive={isDagMode ? false : chatActivePlan?.status === 'postprocessing'}
                 />
             )}
         </div>

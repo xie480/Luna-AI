@@ -288,7 +288,41 @@ class GatingService:
             user_feedback=response.user_feedback,
         )
 
-        # 4. 触发回调
+        # 4. 保存会话级待消费审批结果（供下次工作流的 session_context_load_node 消费）
+        # 做什么：从快照中加载工具信息，执行批准后的工具，将结果写入 Redis。
+        # 为什么这样做：审批结果是异步发生的，需要在下次工作流执行时注入到上下文中。
+        # 边界条件：session_id 为空或快照不存在时跳过，不影响主流程。
+        if response.session_id:
+            try:
+                snapshot = await self._snapshot_manager.load_tool_snapshot(audit_log_id)
+                tool_name = snapshot.get("tool_name", response.tool_id) if snapshot else response.tool_id
+                tool_parameters = snapshot.get("tool_parameters", {}) if snapshot else {}
+                mcp_intent = snapshot.get("mcp_intent", "") if snapshot else ""
+                risk_level = snapshot.get("risk_level", "L2") if snapshot else "L2"
+
+                # 执行批准后的工具，获取输出结果
+                tool_output = await self._execute_approved_tool(
+                    tool_name=tool_name,
+                    tool_parameters=tool_parameters,
+                    trace_id=trace_id,
+                )
+
+                await self._snapshot_manager.save_pending_approval_result(
+                    session_id=response.session_id,
+                    result_type="approved",
+                    tool_name=tool_name,
+                    tool_parameters=tool_parameters,
+                    tool_output=tool_output,
+                    mcp_intent=mcp_intent,
+                    risk_level=risk_level,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[GatingService] 保存审批通过的待消费结果失败"
+                    f" session_id={response.session_id} audit_log_id={audit_log_id} error={e}"
+                )
+
+        # 5. 触发回调
         for callback in self._approve_callbacks:
             try:
                 callback(audit_log_id, response.tool_id, response.task_id)
@@ -370,7 +404,35 @@ class GatingService:
             user_feedback=response.user_feedback,
         )
 
-        # 4. 触发拒绝回调
+        # 4. 保存会话级待消费审批结果（供下次工作流的 session_context_load_node 消费）
+        # 做什么：将拒绝信息写入 Redis，供下次工作流注入到上下文中，
+        #         让 AI 知道用户拒绝了工具调用并获取拒绝理由。
+        # 边界条件：session_id 为空时跳过，不影响主流程。
+        if response.session_id:
+            try:
+                snapshot = await self._snapshot_manager.load_tool_snapshot(audit_log_id)
+                tool_name = snapshot.get("tool_name", response.tool_id) if snapshot else response.tool_id
+                tool_parameters = snapshot.get("tool_parameters", {}) if snapshot else {}
+                mcp_intent = snapshot.get("mcp_intent", "") if snapshot else ""
+                risk_level = snapshot.get("risk_level", "L2") if snapshot else "L2"
+
+                await self._snapshot_manager.save_pending_approval_result(
+                    session_id=response.session_id,
+                    result_type="rejected",
+                    tool_name=tool_name,
+                    tool_parameters=tool_parameters,
+                    user_feedback=response.user_feedback,
+                    rejection_info=f"用户拒绝了工具 '{tool_name}' 的调用请求",
+                    mcp_intent=mcp_intent,
+                    risk_level=risk_level,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[GatingService] 保存审批拒绝的待消费结果失败"
+                    f" session_id={response.session_id} audit_log_id={audit_log_id} error={e}"
+                )
+
+        # 5. 触发拒绝回调
         for callback in self._reject_callbacks:
             try:
                 callback(audit_log_id, response.tool_id, response.task_id, response.user_feedback)

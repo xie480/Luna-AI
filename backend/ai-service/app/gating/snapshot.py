@@ -26,11 +26,18 @@ REDIS_GATING_SNAPSHOT_PREFIX = "gating:snapshot:"
 # approve_request / reject_request 会写入，_execute_single_tool 轮询读取
 REDIS_GATING_DECISION_PREFIX = "gating:decision:"
 
+# Redis 待消费审批结果键前缀（按 session_id 组织，供下次工作流消费）
+# approve_request / reject_request 写入，session_context_load_node 加载并消费
+REDIS_GATING_PENDING_RESULT_PREFIX = "gating:pending_result:"
+
 # 快照默认 TTL（秒）= 超时时间 300 秒 + 60 秒缓冲
 DEFAULT_SNAPSHOT_TTL = 360
 
 # 决策保留 TTL（秒）= 与超时一致 300 秒 + 60 秒缓冲
 DEFAULT_DECISION_TTL = 360
+
+# 待消费审批结果 TTL（秒）= 24 小时，避免长期未消费的脏数据堆积
+DEFAULT_PENDING_RESULT_TTL = 86400
 
 
 class GatingSnapshotManager:
@@ -182,4 +189,127 @@ class GatingSnapshotManager:
             await client.delete(f"{REDIS_GATING_DECISION_PREFIX}{audit_log_id}")
             return True
         except Exception:
+            return False
+
+    # ============================================================
+    # 会话级待消费审批结果（供 session_context_load_node 加载）
+    # ============================================================
+
+    async def save_pending_approval_result(
+        self,
+        session_id: str,
+        *,
+        result_type: str,
+        tool_name: str,
+        tool_parameters: dict[str, Any],
+        user_feedback: str = "",
+        rejection_info: str = "",
+        tool_output: str = "",
+        mcp_intent: str = "",
+        risk_level: str = "L2",
+    ) -> bool:
+        """保存会话级待消费的审批结果。
+
+        做什么：在 approve_request 或 reject_request 完成后，
+                将审批结果（含工具执行输出或拒绝信息）写入 Redis，
+                按 session_id 组织，供下次工作流的 session_context_load_node 消费。
+        为什么这样做：审批结果是异步发生的（用户点击弹窗），
+                      需要在下次工作流执行时注入到上下文中。
+        输入输出：
+            - session_id: 会话 ID，作为 Redis Key 的一部分。
+            - result_type: "approved" 或 "rejected"。
+            - tool_name: 工具名称。
+            - tool_parameters: 工具参数。
+            - user_feedback: 用户反馈（拒绝时的拒绝理由）。
+            - rejection_info: 拒绝信息描述。
+            - tool_output: 工具执行输出（仅 approved 时有值）。
+            - mcp_intent: MCP 意图描述。
+            - risk_level: 风险等级。
+        边界条件：
+            - Redis 不可用时返回 False，不阻断主流程。
+            - TTL 设为 24 小时，避免长期未消费的脏数据堆积。
+        异常行为：写入失败记录 warning 并返回 False。
+        """
+        if not self._redis_client:
+            return False
+        try:
+            pending_key = f"{REDIS_GATING_PENDING_RESULT_PREFIX}{session_id}"
+            now_ms = int(time.time() * 1000)
+            result_data = {
+                "type": result_type,
+                "tool_name": tool_name,
+                "tool_parameters": tool_parameters,
+                "user_feedback": user_feedback,
+                "rejection_info": rejection_info,
+                "tool_output": tool_output,
+                "mcp_intent": mcp_intent,
+                "risk_level": risk_level,
+                "created_at": now_ms,
+            }
+            client = self._redis_client.get_client()
+            await client.setex(
+                pending_key, DEFAULT_PENDING_RESULT_TTL,
+                json.dumps(result_data, ensure_ascii=False, default=str),
+            )
+            logger.info(
+                f"[GatingSnapshot] 保存待消费审批结果成功"
+                f" session_id={session_id} type={result_type} tool={tool_name}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"[GatingSnapshot] 保存待消费审批结果失败"
+                f" session_id={session_id} error={e}"
+            )
+            return False
+
+    async def load_pending_approval_result(
+        self, session_id: str
+    ) -> dict[str, Any] | None:
+        """加载会话级待消费的审批结果。
+
+        做什么：在 session_context_load_node 中调用，按 session_id 加载
+                上次审批的待消费结果（批准+工具输出 或 拒绝+理由）。
+        输入输出：输入 session_id，输出结果字典或 None。
+        边界条件：无待消费结果时返回 None。
+        异常行为：加载失败记录 warning 并返回 None（降级处理）。
+        """
+        if not self._redis_client:
+            return None
+        try:
+            client = self._redis_client.get_client()
+            raw_data = await client.get(
+                f"{REDIS_GATING_PENDING_RESULT_PREFIX}{session_id}"
+            )
+            if not raw_data:
+                return None
+            return json.loads(raw_data)
+        except Exception as e:
+            logger.warning(
+                f"[GatingSnapshot] 加载待消费审批结果失败"
+                f" session_id={session_id} error={e}"
+            )
+            return None
+
+    async def clear_pending_approval_result(self, session_id: str) -> bool:
+        """清除会话级待消费的审批结果。
+
+        做什么：消费完成后调用，防止下次工作流重复消费。
+        输入输出：输入 session_id，输出是否成功。
+        边界条件：Key 不存在时 Redis 直接返回 0，不影响结果。
+        异常行为：删除失败记录 warning 并返回 False。
+        """
+        if not self._redis_client:
+            return False
+        try:
+            client = self._redis_client.get_client()
+            await client.delete(
+                f"{REDIS_GATING_PENDING_RESULT_PREFIX}{session_id}"
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                f"[GatingSnapshot] 清除待消费审批结果失败"
+                f" session_id={session_id} error={e}"
+            )
             return False

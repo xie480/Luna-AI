@@ -641,6 +641,141 @@ class LLMClient:
         response = await self.client.chat.completions.create(**fallback_kwargs)
         return response.choices[0].message.content or ""
 
+    async def invoke_structured(
+        self,
+        trace_id: str,
+        prompt: str,
+        schema: dict[str, Any],
+        timeout: float = 30.0,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        DAG 节点专用结构化调用入口：接受原始 prompt 和 JSON Schema dict，返回解析后的字典。
+
+        做什么：将 prompt 文本封装为 system + user 消息，从全局配置获取模型名称，
+                直接调用 OpenAI API 并注入 JSON Schema 约束，解析返回的 JSON 后以字典形式返回。
+        为什么这样做：DAG 节点统一使用 (trace_id, prompt, schema) 签名调用 LLM，
+                      与 generate_structured 的 (model, messages, response_format) 签名不同。
+                      由于传入的是原始 JSON Schema dict 而非 Pydantic BaseModel，
+                      无法直接委托给 generate_structured，因此采用直接 API 调用 +
+                      Prompt Schema 降级注入的方式实现。
+        输入输出：
+            - 输入：trace_id 全链路追踪 ID、prompt 完整提示词、schema JSON Schema dict
+            - 输出：经过 JSON 解析和 schema 校验后的字典
+        边界条件：
+            - schema 为空或格式不正确时会抛出异常
+            - kwargs 中的 trace_id/session_id/message_id 会被过滤，不传递给 OpenAI API
+        异常行为：
+            - 网络错误/限流由 tenacity 自动重试（复用 _wait_for_slot 频率限制）
+            - JSON 解析失败时尝试正则提取，仍失败则抛出 ValueError
+        """
+        logger.info(f"[TraceID:{trace_id}] 正在调用 LLM API (invoke_structured)")
+
+        # 频率限制等待
+        await self._wait_for_slot(
+            trace_id=trace_id,
+            session_id=str(kwargs.get("session_id", "")),
+            message_id=str(kwargs.get("message_id", "")),
+        )
+
+        # 从全局配置获取模型名称和参数
+        from app.config.settings import global_config_container
+        from app.types.constants import ModelSize
+        config = global_config_container.get_model_config(ModelSize.MEDIUM)
+        model = config.get("model_id") or self.model_name
+        temperature = config.get("temperature", 0.7)
+
+        # 构建消息列表：prompt 作为 system 消息，附加 JSON Schema 约束说明
+        schema_prompt = (
+            "\n\n你必须以 JSON 格式回复，严格遵循以下 JSON Schema 定义：\n"
+            f"{json.dumps(schema, ensure_ascii=False, indent=2)}\n\n"
+            "请确保输出的 JSON 完全符合上述 Schema，不要包含任何额外说明文字或 markdown 代码块包裹。"
+        )
+        messages: list[dict[str, str]] = [
+            {"role": Role.SYSTEM.value, "content": prompt + schema_prompt},
+            {"role": Role.USER.value, "content": "请根据系统提示中的要求处理用户输入并返回结构化 JSON。"},
+        ]
+
+        # 过滤掉非 OpenAI API 参数
+        clean_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k not in ("trace_id", "session_id", "message_id")
+        }
+
+        call_kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "timeout": timeout,
+            **clean_kwargs,
+        }
+
+        # 尝试原生 structured output（仅在模型支持时）
+        content: str | None = None
+        if self._should_use_native_structured_output(model):
+            # 将 JSON Schema dict 包装为 response_format 格式
+            structured_kwargs = dict(call_kwargs)
+            structured_kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "DynamicSchema",
+                    "schema": schema,
+                    "strict": True,
+                },
+            }
+            try:
+                response = await self.client.chat.completions.create(**structured_kwargs)
+                content = response.choices[0].message.content
+            except BadRequestError as e:
+                logger.warning(
+                    f"[TraceID:{trace_id}] [StructuredOutput] 模型 {model} 不支持原生结构化输出，"
+                    f"已降级为 Prompt Schema 约束，错误原因: {e!s}"
+                )
+                response = await self.client.chat.completions.create(**call_kwargs)
+                content = response.choices[0].message.content
+            except Exception as e:
+                logger.warning(
+                    f"[TraceID:{trace_id}] [StructuredOutput] 原生结构化输出调用失败，"
+                    f"已降级为 Prompt Schema 约束，异常: {type(e).__name__}: {e!s}"
+                )
+                response = await self.client.chat.completions.create(**call_kwargs)
+                content = response.choices[0].message.content
+        else:
+            response = await self.client.chat.completions.create(**call_kwargs)
+            content = response.choices[0].message.content
+
+        if not content:
+            raise ValueError(f"[TraceID:{trace_id}] LLM 返回了空内容")
+
+        # 清理可能存在的 markdown 代码块包裹
+        cleaned = content.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+        if cleaned != content:
+            logger.info(
+                f"[TraceID:{trace_id}] [StructuredOutput] LLM 返回内容包含 markdown 代码块包裹，已自动清理"
+            )
+
+        # 解析 JSON
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            logger.error(f"[TraceID:{trace_id}] invoke_structured JSON 解析失败: {e}")
+            # 尝试正则提取 JSON
+            import re
+            json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            raise ValueError(
+                f"[TraceID:{trace_id}] invoke_structured LLM 输出无法解析为 JSON: {cleaned[:200]}"
+            )
+
     async def generate_structured_text(
         self,
         model: str,

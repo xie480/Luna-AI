@@ -19,13 +19,10 @@ import { BubbleStack } from '../BubbleStack/BubbleStack';
 import { InputArea } from '../InputArea/InputArea';
 import { RecentMemoryPanel } from '../RecentMemoryPanel/RecentMemoryPanel';
 import { HolographicWorkflowSidebar } from '../HolographicWorkflow/HolographicWorkflowSidebar';
-import { DagWorkflowPanel } from '../DagWorkflow/DagWorkflowPanel';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { createErrorToast } from '../../stores/errorToastStore';
 import { reportError } from '../../services/errorLogService';
 import { useSystemStore } from '../../stores/systemStore';
-import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
-import { CHAT_MODE } from '../../../shared/enum';
 import './ChatView.css';
 
 /**
@@ -46,8 +43,6 @@ export const ChatView: React.FC = () => {
   // Live2DView 延迟挂载状态：强制设为 true 以进行诊断
   const [live2dReady] = useState(true);
   const isLive2dEnabled = useSystemStore((state) => state.isLive2dEnabled);
-  const chatMode = useSystemStore((state) => state.chatMode);
-  const activePlan = useDagWorkflowStore((state) => state.activePlan);
 
   // 暂时注释掉延迟挂载逻辑，强制渲染 Live2DView
   // useEffect(() => {
@@ -112,18 +107,11 @@ export const ChatView: React.FC = () => {
 
       {/* 近期记忆面板层 z-index: 25 — 位于交互层之上，右上角 */}
       <RecentMemoryPanel />
+{/* 工作流侧边栏 (Holographic UI) — 统一处理日常聊天/极速闲聊/智能规划三种模式 */}
+<ErrorBoundary source="workflow_sidebar">
+   <HolographicWorkflowSidebar />
+</ErrorBoundary>
 
-      {/* 工作流侧边栏 (Holographic UI) — 日常聊天/极速闲聊模式 */}
-      <ErrorBoundary source="workflow_sidebar">
-         <HolographicWorkflowSidebar />
-      </ErrorBoundary>
-
-      {/* Phase 9：DAG 深度工作流面板 — 仅在 plan_state_node 模式且有活跃 Plan 时渲染 */}
-      {chatMode === CHAT_MODE.PLAN_STATE_NODE && activePlan && (
-        <ErrorBoundary source="dag_workflow_panel">
-          <DagWorkflowPanel />
-        </ErrorBoundary>
-      )}
 
       {/* 交互层 z-index: 20 */}
       <div className="interaction-layer">
