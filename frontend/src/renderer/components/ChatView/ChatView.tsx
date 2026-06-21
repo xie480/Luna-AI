@@ -24,6 +24,7 @@ import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { createErrorToast } from '../../stores/errorToastStore';
 import { reportError } from '../../services/errorLogService';
 import { useSystemStore } from '../../stores/systemStore';
+import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
 import { CHAT_MODE } from '../../../shared/enum';
 import './ChatView.css';
 
@@ -46,6 +47,7 @@ export const ChatView: React.FC = () => {
   const [live2dReady] = useState(true);
   const isLive2dEnabled = useSystemStore((state) => state.isLive2dEnabled);
   const chatMode = useSystemStore((state) => state.chatMode);
+  const activePlan = useDagWorkflowStore((state) => state.activePlan);
 
   // 暂时注释掉延迟挂载逻辑，强制渲染 Live2DView
   // useEffect(() => {
@@ -116,8 +118,8 @@ export const ChatView: React.FC = () => {
          <HolographicWorkflowSidebar />
       </ErrorBoundary>
 
-      {/* Phase 9：DAG 深度工作流面板 — 智能规划模式 */}
-      {chatMode === CHAT_MODE.PLAN_STATE_NODE && (
+      {/* Phase 9：DAG 深度工作流面板 — 仅在 plan_state_node 模式且有活跃 Plan 时渲染 */}
+      {chatMode === CHAT_MODE.PLAN_STATE_NODE && activePlan && (
         <ErrorBoundary source="dag_workflow_panel">
           <DagWorkflowPanel />
         </ErrorBoundary>

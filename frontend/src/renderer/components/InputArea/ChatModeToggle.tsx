@@ -71,6 +71,17 @@ const DeepChatIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   </svg>
 );
 
+/**
+ * 胶囊按钮的 CSS class 名映射。
+ * 做什么：将 chatMode 值映射为对应的 CSS class 后缀。
+ * 为什么这样做：避免简单字符串替换导致 daily_chat → mode-daily-chat（应为 mode-daily）。
+ */
+const CAPSULE_MODE_CLASS: Record<ChatMode, string> = {
+  [CHAT_MODE.DAILY_CHAT]: 'mode-daily',
+  [CHAT_MODE.CASUAL_CHAT]: 'mode-casual',
+  [CHAT_MODE.PLAN_STATE_NODE]: 'mode-plan-state-node',
+};
+
 const MODE_DISPLAY: Record<ChatMode, ModeConfig> = {
   [CHAT_MODE.DAILY_CHAT]: {
     label: '陪伴',
@@ -239,7 +250,7 @@ export const ChatModeToggle: React.FC = () => {
       {/* 胶囊按钮 */}
       <button
         ref={capsuleBtnRef}
-        className={`chat-mode-capsule mode-${chatMode.replace(/_/g, '-')} ${drawerOpen ? 'capsule-active' : ''}`}
+        className={`chat-mode-capsule ${CAPSULE_MODE_CLASS[chatMode]} ${drawerOpen ? 'capsule-active' : ''}`}
         onClick={toggleDrawer}
         aria-label={`当前模式：${currentMode.title}。点击展开模式选择`}
         aria-expanded={drawerOpen}

@@ -41,7 +41,8 @@ class ChatStatusEventPayload(BaseModel):
 
     schema_version: str = CHAT_STATUS_SCHEMA_VERSION
     session_id: str = Field(..., min_length=1, max_length=64)
-    message_id: str = Field(..., min_length=1, max_length=64)
+    # 允许空字符串：DAG 引擎内部状态事件在助手消息创建之前运行，此时无 message_id
+    message_id: str = Field(..., max_length=64)
     stage: ChatStatusStage
     state: ChatStatusState
     display_text: str = ""
