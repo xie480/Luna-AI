@@ -38,6 +38,16 @@ _THOUGHT_END_RE = re.compile(r'"\s*,\s*"(?:emotion|thought|reply)"')
 # 在 reply 内容后出现 ","<字段名>":" 模式时，表示 reply 字段已结束，后续文本不应再混入 reply_buffer
 # 覆盖 replay_translation 等 reply 之后可能的字段名
 _REPLY_END_RE = re.compile(r'"\s*,\s*"\w+"\s*:\s*"')
+# 备用 reply 结束标记：处理 _pop_sentence 已消耗 reply 值末尾引号的情况。
+# 当 _SENTENCE_BOUNDARY_RE 的 [”’"\'）\]】》]? 吞掉了 reply 值末尾的 " 后，
+# 结束标记从 ","replay_translation":" 变为 ,"replay_translation":"（缺少前导 "），
+# 导致 _REPLY_END_RE 无法匹配，从而整个字段内容泄漏进 _reply_buffer。
+# 此正则补充匹配这种变形，不要求前导 "，直接匹配 ,"字段名":"。
+_REPLY_END_ALT_RE = re.compile(r',\s*"\w+"\s*:\s*"')
+# 通用 JSON 字段起始标记：匹配任意 "字段名":" 结构。
+# 用于 flush() 中的最终防御清理，当 chunk 边界极端到使 _REPLY_END_RE 和 _REPLY_END_ALT_RE
+# 均未能检测到字段切换时（如 chunk 分裂在逗号与引号之间），以此剥离泄露的后续字段内容。
+_REPLY_FIELD_START_RE = re.compile(r'"\w+"\s*:\s*"')
 # 正则：用于一次性捕获 emotion 值（仅第一次出现时返回）
 _EMOTION_RE = re.compile(r'"emotion"\s*:\s*"([^"]+)"')
 # reply 字段起始标记
@@ -225,7 +235,7 @@ class StreamParser:
                     msgs.extend(self._pop_sentence())
         elif not self._reply_finished:
             # 已经进入 reply 读取阶段，且尚未检测到 reply 结束标记
-            # 先检查当前文本中是否包含 reply 结束标记（下一个 JSON 字段起始）
+            # 先检查当前文本中是否包含标准 reply 结束标记（下一个 JSON 字段起始）
             end_m = _REPLY_END_RE.search(text)
             if end_m:
                 # 发现 reply 结束标记，截断并标记为 finished
@@ -237,11 +247,45 @@ class StreamParser:
                 if not self._disable_sentence_split:
                     msgs.extend(self._pop_sentence())
             else:
-                # 未检测到结束标记，正常追加
-                self._reply_buffer += text
-                # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
-                if not self._disable_sentence_split:
-                    msgs.extend(self._pop_sentence())
+                # 检查备用 reply 结束标记：当 _pop_sentence 已消耗了 reply 值末尾的 " 后，
+                # 结束标记从 ","replay_translation":" 变为 ,"replay_translation":"
+                # （缺少前导 "），此时 _REPLY_END_RE 无法匹配，需使用备用正则。
+                # 使用 search 而非 match 以处理 chunk 边界在 ,"replay_translation":" 内部的情况，
+                # 例如：前一个 chunk 带走了前导 " 和 ,，当前 chunk 从 replay_translation":" 开始，
+                # 此时 text 中虽然没有前导 " 或 ,，但 _reply_buffer 末尾已有部分标记。
+                # 与 _reply_buffer 末尾拼接后通过 _REPLY_END_ALT_RE.search 检测。
+                check_text = (self._reply_buffer[-30:] if len(self._reply_buffer) >= 30 else self._reply_buffer) + text
+                end_m_alt = _REPLY_END_ALT_RE.search(check_text)
+                if end_m_alt:
+                    # 备用标记匹配：标记 reply 已完成。
+                    # 匹配位置可能在 check_text 的 _reply_buffer 尾部重叠区，需要在 text 中确定截断点。
+                    # check_text = _reply_buffer_tail + text
+                    # end_m_alt.start() 是匹配在 check_text 中的起始位置
+                    buf_tail_len = min(30, len(self._reply_buffer))
+                    match_pos_in_text = end_m_alt.start() - buf_tail_len
+                    
+                    if match_pos_in_text >= 0:
+                        # 匹配起始位置在 text 中：有部分 reply 内容混入 text 前端
+                        # 例如 check_text = "...热闹" + ',"replay_translation":"...'
+                        # end_m_alt 匹配了 ,"replay_translation":"，match_pos_in_text=0
+                        self._reply_buffer += text[:match_pos_in_text]
+                        remaining_after_reply_end = text[match_pos_in_text:]
+                    else:
+                        # 匹配起始位置在 _reply_buffer 尾部：当前 text 完全属于后续字段
+                        # 例如 _reply_buffer 末尾已有 ',"'，check_text = ',"' + 'replay_translation":"...'
+                        # end_m_alt 匹配了 ,"replay_translation":"，match_pos_in_text 为负
+                        # 整个 text 都是后续字段内容，不追加到 _reply_buffer
+                        remaining_after_reply_end = text
+                    
+                    self._reply_finished = True
+                    if not self._disable_sentence_split:
+                        msgs.extend(self._pop_sentence())
+                else:
+                    # 未检测到任何结束标记，正常追加
+                    self._reply_buffer += text
+                    # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
+                    if not self._disable_sentence_split:
+                        msgs.extend(self._pop_sentence())
         
         # 当 reply 刚结束且存在剩余文本时，递归调用自身以提取 replay_translation。
         # 为什么这样做：reply 结束边界（_REPLY_END_RE 匹配的 ","replay_translation":" ）
@@ -310,6 +354,29 @@ class StreamParser:
         # ---- 提取剩余 reply 内容 ----
         remaining = self._pending_prefix + self._reply_buffer
         if remaining:
+            # 防御清理：如果 reply 尚未标记为 finished 且 _reply_buffer 中混入了后续 JSON 字段名，
+            # 在这里做最终截断，防止 replay_translation 等字段内容作为 reply_chunk 输出。
+            # 为什么需要：当 chunk 边界非常特殊导致 _REPLY_END_ALT_RE 也未能提前截断时，
+            # 这里作为最后一道防线，剥离任何已渗入 _reply_buffer 的 JSON 字段名标记及其内容。
+            if not self._reply_finished:
+                # 尝试定位 reply 内容中可能混入的 JSON 后续字段起始标记
+                field_m = _REPLY_END_ALT_RE.search(remaining)
+                if field_m:
+                    # 截断，仅保留 reply 正文部分
+                    remaining = remaining[:field_m.start()]
+                else:
+                    # 也检查标准回复结束标记（带前导逗号版）
+                    field_m2 = _REPLY_END_RE.search(remaining)
+                    if field_m2:
+                        remaining = remaining[:field_m2.start()]
+                    else:
+                        # 最后防线：检查通用 JSON 字段起始标记（不带前导逗号）。
+                        # 处理极端 chunk 边界情况：当  " 和 , 被前一个 chunk 带走，
+                        # 剩余文本以 "字段名":" 开头，此时 _REPLY_END_RE 和 _REPLY_END_ALT_RE 均无法匹配。
+                        field_m3 = _REPLY_FIELD_START_RE.search(remaining)
+                        if field_m3:
+                            remaining = remaining[:field_m3.start()]
+            
             if self._disable_sentence_split:
                 # 取消断句模式：仅移除 JSON 结束符，保留原文标点和格式
                 sentence = remaining.strip()

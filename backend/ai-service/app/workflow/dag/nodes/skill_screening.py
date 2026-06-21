@@ -86,9 +86,7 @@ class SkillScreeningNode:
                     "completion_criteria": json.dumps(
                         completion_criteria, ensure_ascii=False
                     ),
-                    "skill_briefs": json.dumps(
-                        dag_state.skill_briefs, ensure_ascii=False
-                    ),
+                    "skill_briefs": dag_state.skill_briefs,
                 },
             )
 
