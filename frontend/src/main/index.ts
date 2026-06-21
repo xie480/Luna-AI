@@ -40,7 +40,6 @@ function createWindow(): void {
   // vite-plugin-electron 会自动设置 NODE_ENV
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     // 生产环境加载打包后的 index.html
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));

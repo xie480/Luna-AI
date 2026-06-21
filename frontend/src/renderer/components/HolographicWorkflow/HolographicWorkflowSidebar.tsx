@@ -119,6 +119,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
     };
   }, [isDragging]);
 
+  // 根据聊天模式判断是否有活跃 Plan
+  const hasPlan = isDagMode
+    ? dagActivePlan !== null && dagPanelVisible
+    : chatActivePlan !== null;
+
   // 2. Auto Scroll to Active Node
   useEffect(() => {
     if (!scrollRef.current || !hasPlan) return;
@@ -172,10 +177,6 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [arPanelData])
 
 
-  // 根据聊天模式判断是否有活跃 Plan
-  const hasPlan = isDagMode
-    ? dagActivePlan !== null && dagPanelVisible
-    : chatActivePlan !== null;
 
   return (
     <>
