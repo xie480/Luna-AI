@@ -329,9 +329,14 @@ class ToolExecuteNode:
                 return ""
 
             # 加载工具专属 Prompt 文件
+            # content_path 以 "app/" 开头（相对 backend/ai-service/ 目录），
+            # 因此 base_dir 需要定位到 backend/ai-service/ 而非 app/，
+            # 故需 5 层 dirname（nodes -> dag -> workflow -> app -> ai-service）
             base_dir = os.path.dirname(
                 os.path.dirname(
-                    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    os.path.dirname(
+                        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    )
                 )
             )
             full_path = os.path.join(base_dir, content_path)
