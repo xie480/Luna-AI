@@ -91,6 +91,11 @@ class ToolExecuteNode:
                     memory_schema=tool_memory_schema,
                 )
 
+                logger.info(
+                    f"[TraceID:{trace_id}] 提取记忆变量成功，"
+                    f"结果为：{skill_memory_context}"
+                )
+
             # ============================================================
             # Step 2: 资源预加载（如果有 resource 依赖）
             # ============================================================
@@ -112,6 +117,11 @@ class ToolExecuteNode:
                 skill_memory_context=skill_memory_context,
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] 构建工具专属 Prompt成功，"
+                f"结果为：{tool_specific_prompt}"
+            )
+
             # ============================================================
             # Step 4: LLM 提取工具参数
             # ============================================================
@@ -122,6 +132,11 @@ class ToolExecuteNode:
                 resource_context=resource_context,
                 retry_context="",
                 tool_specific_prompt=tool_specific_prompt,
+            )
+
+            logger.info(
+                f"[TraceID:{trace_id}] LLM 提取工具参数成功，"
+                f"结果为：{tool_parameters}"
             )
 
             # ============================================================
@@ -167,6 +182,7 @@ class ToolExecuteNode:
                 f"tool={node_def.tool_name}, "
                 f"success={tool_result.get('success', False)}, "
                 f"elapsed_ms={elapsed_ms}"
+                f"tool_output={tool_result.get('tool_output', '')}"
             )
 
             return tool_result

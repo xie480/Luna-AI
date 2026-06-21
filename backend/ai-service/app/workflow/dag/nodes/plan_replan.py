@@ -109,6 +109,11 @@ class PlanReplanNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] Plan 重构 Prompt: "
+                f"{prompt_text}"
+            )
+
             # 调用 LLM 重构 Plan
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
@@ -129,6 +134,7 @@ class PlanReplanNode:
                 f"[TraceID:{trace_id}] Plan 重构完成: "
                 f"replan_count={dag_state.plan_replan_count}, "
                 f"remaining_states={len(dag_state.plan.states) - dag_state.cursor}"
+                f"prompt={prompt_text}"
             )
 
             # 发布 SUCCEEDED 状态

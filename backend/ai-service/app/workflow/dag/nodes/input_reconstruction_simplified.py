@@ -83,6 +83,8 @@ class SimplifiedInputReconstructionNode:
                 },
             )
 
+            logger.info(f"[TraceID:{trace_id}] 渲染简化输入重构 Prompt: {prompt_text}")
+
             # 调用 LLM 做代词消歧
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
@@ -112,7 +114,8 @@ class SimplifiedInputReconstructionNode:
             logger.info(
                 f"[TraceID:{trace_id}] 简化输入重构完成: "
                 f"disambiguated_len={len(result.disambiguated_text)}, "
-                f"unresolved_count={len(result.unresolved_pronouns)}"
+                f"unresolved_count={len(result.unresolved_pronouns)},"
+                f"prompt_text={prompt_text}"
             )
 
             # 发布 SUCCEEDED 状态

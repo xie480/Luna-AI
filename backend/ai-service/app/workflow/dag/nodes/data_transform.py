@@ -57,6 +57,13 @@ class DataTransformNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] 数据转换开始: "
+                f"node_id={node_def.node_id}, "
+                f"input_len={len(input_data)}, "
+                f"prompt={prompt_text}"
+            )
+
             # 调用 LLM 做数据转换
             result = await self.llm_client.invoke(
                 trace_id=trace_id,
@@ -66,7 +73,7 @@ class DataTransformNode:
             logger.info(
                 f"[TraceID:{trace_id}] 数据转换完成: "
                 f"node_id={node_def.node_id}, "
-                f"output_len={len(result)}"
+                f"output={result}"
             )
 
             return {

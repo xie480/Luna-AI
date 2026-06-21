@@ -182,6 +182,9 @@ class PlanResultSummaryNode:
                     f"  结果: {s.result_summary[:200]}"
                 )
 
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_PLAN_SUMMARY,
                 variables={
@@ -193,13 +196,35 @@ class PlanResultSummaryNode:
                     "total_states": len(state_summaries),
                     "terminated": dag_state.terminated,
                     "termination_reason": dag_state.termination_reason,
+                    "CURRENT_TIME": current_time,
                 },
             )
 
-            result = await self.llm_client.invoke(
+            # 使用非流式文本调用生成汇总
+            # 为什么这样做：LLMClient 没有 invoke 方法，应使用 generate_structured_text
+            # 该方法接受 (model, messages) 签名，返回字符串结果
+            from app.config.settings import global_config_container
+            from app.types.constants import ModelSize
+
+            config = global_config_container.get_model_config(ModelSize.MEDIUM)
+            model = config.get("model_id") or self.llm_client.model_name
+
+            # 构建消息列表：prompt 作为 system 消息
+            messages = [
+                {"role": "system", "content": prompt_text}
+            ]
+
+            logger.info(f"[TraceID:{trace_id}] LLM 汇总生成开始, prompt: {prompt_text}")
+
+            result = await self.llm_client.generate_structured_text(
+                model=model,
+                messages=messages,
+                timeout=30.0,
                 trace_id=trace_id,
-                prompt=prompt_text,
             )
+
+            logger.info(f"[TraceID:{trace_id}] LLM 汇总生成完成, output: {result}")
+
             return result
 
         except Exception as e:

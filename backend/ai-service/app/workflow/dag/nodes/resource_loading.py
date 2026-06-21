@@ -45,7 +45,7 @@ class ResourceLoadingNode:
                 f"[TraceID:{trace_id}] 资源加载成功: "
                 f"skill={node_def.skill_name}, "
                 f"resource={node_def.resource_name}, "
-                f"content_len={len(resource_content)}"
+                f"content={resource_content}"
             )
 
             return {

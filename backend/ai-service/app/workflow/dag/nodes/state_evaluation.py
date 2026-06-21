@@ -91,6 +91,11 @@ class StateEvaluationNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] 评估 Prompt: "
+                f"{prompt_text}"
+            )
+
             # 调用 LLM 做评估
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
@@ -112,6 +117,7 @@ class StateEvaluationNode:
                 f"[TraceID:{trace_id}] State 评估完成: "
                 f"satisfied={result.state_satisfied}, "
                 f"reason={result.evaluation_reason[:100]}"
+                f"output={formatted_output}"
             )
 
             # 发布评估结果状态

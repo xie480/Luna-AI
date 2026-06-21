@@ -111,6 +111,11 @@ class PlanGenerationNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] 全局 Plan 渲染完成: "
+                f"prompt_text={prompt_text}"
+            )
+
             # 调用 LLM 生成 Plan
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
@@ -138,7 +143,8 @@ class PlanGenerationNode:
                 f"[TraceID:{trace_id}] 全局 Plan 生成完成: "
                 f"states={len(plan.states)}, "
                 f"planning_reason={plan_data.get('planning_reason', '')[:100]}, "
-                f"elapsed_ms={elapsed_ms}"
+                f"elapsed_ms={elapsed_ms},"
+                f"prompt_text={prompt_text}"
             )
 
             # 发布 SUCCEEDED 状态

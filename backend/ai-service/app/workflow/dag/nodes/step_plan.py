@@ -79,6 +79,14 @@ class StepPlanNode:
             # 构建包含 tool/resource 详情的 skill 信息
             skill_details = self._build_skill_details(selected_skills, state_context)
 
+            # 构建可序列化的 state_context 快照
+            # 为什么这样做：state_context 中包含 MCPToolRegistry、MemoryManager 等
+            # 不可 JSON 序列化的对象，必须过滤掉只保留基础数据字段
+            serializable_context = {
+                k: v for k, v in state_context.items()
+                if k not in ("skill_registry", "memory_manager", "rag_orchestrator")
+            }
+
             # 渲染 Step Plan 生成 Prompt
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STEP_PLAN_GENERATION,
@@ -87,7 +95,7 @@ class StepPlanNode:
                     "state_intent": state_intent,
                     "selected_skills": skill_details,
                     "state_context": json.dumps(
-                        state_context, ensure_ascii=False
+                        serializable_context, ensure_ascii=False
                     ),
                     "available_node_types": json.dumps(
                         [t.value for t in DagNodeType], ensure_ascii=False

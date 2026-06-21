@@ -92,6 +92,10 @@ class SkillScreeningNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] Skill 初筛 Prompt: {prompt_text}"
+            )
+
             # 调用 LLM 做筛选
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
@@ -107,6 +111,7 @@ class SkillScreeningNode:
                 f"[TraceID:{trace_id}] Skill 初筛完成: "
                 f"selected={len(selected_skills)}, "
                 f"total={len(dag_state.skill_briefs)}"
+                f"llm_response={llm_response}"
             )
 
             # 发布 SUCCEEDED 状态
