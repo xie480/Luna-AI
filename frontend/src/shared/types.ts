@@ -5,6 +5,9 @@ import {
   CHAT_WORKFLOW_EVENT_TYPE,
   CHAT_WORKFLOW_NODE_TYPE,
   CHAT_WORKFLOW_SCHEMA_VERSION,
+  DAG_NODE_STATUS,
+  DAG_NODE_TYPE,
+  DAG_WORKFLOW_EVENT_TYPE,
   WS_MSG_TYPE,
 } from './enum';
 
@@ -663,4 +666,310 @@ export interface AuthResponsePayload {
 export interface PendingAuthsSyncPayload {
   /** 当前所有 PENDING_APPROVAL 状态的鉴权请求列表 */
   requests: AuthRequiredPayload[];
+}
+
+// ============================================================
+// Phase 9：DAG 工作流事件 Payload 类型定义
+// ============================================================
+
+/**
+ * DAG Plan 创建事件 Payload — 对应后端 EVT_DAG_PLAN_CREATED。
+ * 做什么：承载后端在 Plan 生成完成后推送的完整计划结构。
+ * 为什么这样做：前端 DAG 面板需要一次性获取全局目标、State 列表和依赖关系来渲染初始视图。
+ * 输入输出：由后端 plan_state_node/plan_service.py 推送，前端 dagWorkflowStore 消费。
+ * 边界条件：states 列表可能为空（极端场景），前端需做空值保护。
+ * 异常行为：无。
+ */
+export interface DagPlanCreatedPayload {
+  /** 计划 ID（雪花算法） */
+  plan_id: string;
+  /** 会话 ID */
+  session_id: string;
+  /** 交互 ID */
+  interaction_id: string;
+  /** assistant 消息 ID */
+  assistant_message_id: string;
+  /** 全局目标 */
+  global_objective: {
+    overall_goal: string;
+    success_criteria: string;
+    output_format: string;
+    constraints: string[];
+  };
+  /** State 列表（有序） */
+  states: Array<{
+    state_id: string;
+    order_index: number;
+    intent: string;
+    goal: string;
+    completion_criteria: Array<{ field: string; operator: string; value: unknown }>;
+    depends_on: string[];
+    required_skill_names: string[];
+  }>;
+  /** 规划推理说明 */
+  planning_reason: string;
+}
+
+/**
+ * DAG State 启动事件 Payload — 对应后端 EVT_DAG_STATE_STARTED。
+ * 做什么：承载后端进入新 State 时推送的启动信号。
+ * 为什么这样做：前端需要高亮当前 State 容器并启动耗时计时器。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onStateStarted 消费。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface DagStateStartedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** State 顺序索引 */
+  order_index: number;
+  /** State 目标 */
+  goal: string;
+}
+
+/**
+ * DAG Skill 初筛事件 Payload — 对应后端 EVT_DAG_SKILL_SCREENING。
+ * 做什么：承载后端在 State 启动后推送的 Skill 初筛结果。
+ * 为什么这样做：前端需要在 State 容器内展示选中的 Skill 标签。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onSkillScreening 消费。
+ * 边界条件：selected_skills 可能为空数组。
+ * 异常行为：无。
+ */
+export interface DagSkillScreeningPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** 选中的 Skill 列表 */
+  selected_skills: Array<{
+    skill_name: string;
+    description: string;
+    tool_names: string[];
+    capability_tags: string[];
+  }>;
+}
+
+/**
+ * DAG Step Plan 生成事件 Payload — 对应后端 EVT_DAG_STEP_PLAN_GENERATED。
+ * 做什么：承载后端为当前 State 生成的 Step 计划及其中的原子节点。
+ * 为什么这样做：前端需要渲染 Step 列表及其中的节点卡片。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onStepPlanGenerated 消费。
+ * 边界条件：steps 列表不为空（至少包含一个 Step）。
+ * 异常行为：无。
+ */
+export interface DagStepPlanPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** Step 列表 */
+  steps: Array<{
+    step_id: string;
+    step_index: number;
+    description: string;
+    execution_mode: 'parallel' | 'serial';
+    nodes: Array<{
+      node_id: string;
+      node_type: string;
+      skill_name?: string;
+      tool_name?: string;
+      resource_name?: string;
+      parameter_hint?: string;
+      transform_instruction?: string;
+      query_text?: string;
+      depends_on: string[];
+      gating_required: boolean;
+    }>;
+  }>;
+}
+
+/**
+ * DAG 节点启动事件 Payload — 对应后端 EVT_DAG_NODE_STARTED。
+ * 做什么：承载后端进入原子节点执行时推送的启动信号。
+ * 为什么这样做：前端需要将节点卡片切换为执行态并显示耗时计时器。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onNodeStarted 消费。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface DagNodeStartedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** Step ID */
+  step_id: string;
+  /** 节点 ID */
+  node_id: string;
+  /** 节点类型 */
+  node_type: string;
+}
+
+/**
+ * DAG 节点完成事件 Payload — 对应后端 EVT_DAG_NODE_COMPLETED。
+ * 做什么：承载后端原子节点执行完成时推送的结果数据。
+ * 为什么这样做：前端需要更新节点状态（成功/失败）、停止计时器并展示输出参数。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onNodeCompleted 消费。
+ * 边界条件：outputs 可能为空对象；error_message 仅在 success=false 时有意义。
+ * 异常行为：无。
+ */
+export interface DagNodeCompletedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** Step ID */
+  step_id: string;
+  /** 节点 ID */
+  node_id: string;
+  /** 节点类型 */
+  node_type: string;
+  /** 是否成功 */
+  success: boolean;
+  /** 输出参数 */
+  outputs: Record<string, unknown>;
+  /** 错误信息（失败时） */
+  error_message?: string;
+  /** 执行耗时（毫秒） */
+  latency_ms: number;
+  /** 重试次数 */
+  retry_count: number;
+}
+
+/**
+ * DAG 节点 Gating 审批事件 Payload — 对应后端 EVT_DAG_NODE_GATING。
+ * 做什么：承载后端因高危工具调用而挂起节点执行时推送的审批请求。
+ * 为什么这样做：前端需要在节点卡片上显示「等待审批」状态并弹出 Gating 确认窗口。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onNodeGating 消费。
+ * 边界条件：parameters 可能包含任意 JSON 结构。
+ * 异常行为：无。
+ */
+export interface DagNodeGatingPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** 节点 ID */
+  node_id: string;
+  /** 工具名称 */
+  tool_name: string;
+  /** 工具参数 */
+  parameters: Record<string, unknown>;
+  /** 风险等级 */
+  risk_level: string;
+}
+
+/**
+ * DAG State 评估事件 Payload — 对应后端 EVT_DAG_STATE_EVALUATED。
+ * 做什么：承载后端对当前 State 完成度评估的结果。
+ * 为什么这样做：前端需要展示评估结果（通过/未通过 + 原因）和差距分析。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onStateEvaluated 消费。
+ * 边界条件：criteria_checklist 可能为空数组。
+ * 异常行为：无。
+ */
+export interface DagStateEvaluatedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** State ID */
+  state_id: string;
+  /** State 是否满足完成条件 */
+  state_satisfied: boolean;
+  /** 评估原因 */
+  evaluation_reason: string;
+  /** 差距分析 */
+  gap_analysis: string;
+  /** 建议 */
+  suggestion: string;
+  /** 完成条件检查清单 */
+  criteria_checklist: Array<{ field: string; satisfied: boolean; detail: string }>;
+}
+
+/**
+ * DAG Plan 重构事件 Payload — 对应后端 EVT_DAG_PLAN_REPLANNED。
+ * 做什么：承载后端因 State 失败或评估未通过而重新规划时推送的修改信息。
+ * 为什么这样做：前端需要更新 State 序列（新增/修改/删除的 State）。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onPlanReplanned 消费。
+ * 边界条件：modified_states 包含全量 State 列表（非增量）。
+ * 异常行为：无。
+ */
+export interface DagPlanReplannedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 重构原因 */
+  replan_reason: string;
+  /** 修改后的 State 列表（全量） */
+  modified_states: Array<{
+    state_id: string;
+    order_index: number;
+    intent: string;
+    goal: string;
+    completion_criteria: Array<{ field: string; operator: string; value: unknown }>;
+    depends_on: string[];
+  }>;
+}
+
+/**
+ * DAG Plan 完成事件 Payload — 对应后端 EVT_DAG_PLAN_COMPLETED。
+ * 做什么：承载后端 Plan 全部执行完成时推送的执行摘要。
+ * 为什么这样做：前端需要展示执行摘要并标记 Plan 为完成态。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onPlanCompleted 消费。
+ * 边界条件：execution_highlights 和 execution_issues 可能为空数组。
+ * 异常行为：无。
+ */
+export interface DagPlanCompletedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 总 State 数 */
+  total_states: number;
+  /** 成功 State 数 */
+  succeeded_states: number;
+  /** 降级 State 数 */
+  degraded_states: number;
+  /** 失败 State 数 */
+  failed_states: number;
+  /** 整体结果描述 */
+  overall_result: string;
+  /** 执行亮点 */
+  execution_highlights: string[];
+  /** 执行问题 */
+  execution_issues: string[];
+}
+
+/**
+ * DAG Plan 终止事件 Payload — 对应后端 EVT_DAG_PLAN_TERMINATED。
+ * 做什么：承载后端因不可恢复错误而终止 Plan 时推送的终止信息。
+ * 为什么这样做：前端需要展示终止原因并标记 Plan 为终止态。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onPlanTerminated 消费。
+ * 边界条件：partial_results 可能为空字符串。
+ * 异常行为：无。
+ */
+export interface DagPlanTerminatedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 终止原因 */
+  termination_reason: string;
+  /** 导致终止的 State ID */
+  termination_state_id: string;
+  /** 部分结果描述 */
+  partial_results: string;
+}
+
+/**
+ * DAG 预算耗尽事件 Payload — 对应后端 EVT_DAG_BUDGET_EXHAUSTED。
+ * 做什么：承载后端检测到工具调用预算即将或已经耗尽时推送的警告。
+ * 为什么这样做：前端需要在全局面板展示预算警告并可能触发 Plan 终止。
+ * 输入输出：由后端推送，前端 dagWorkflowStore.onBudgetExhausted 消费。
+ * 边界条件：level 为 'state' 时仅影响当前 State，'global' 时影响整个 Plan。
+ * 异常行为：无。
+ */
+export interface DagBudgetExhaustedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 预算级别：state 级或 global 级 */
+  level: 'state' | 'global';
+  /** 已消耗量 */
+  consumed: number;
+  /** 上限量 */
+  limit: number;
 }

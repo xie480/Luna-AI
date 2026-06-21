@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
-import { CHAT_WORKFLOW_NODE_TYPE } from '../../../shared/enum';
+import { useSystemStore } from '../../stores/systemStore';
+import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE } from '../../../shared/enum';
 import { HolographicNode } from './HolographicNode';
 import { HolographicConnections } from './HolographicConnections';
 import { HolographicARPanel } from './HolographicARPanel';
@@ -138,6 +139,14 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       }
   }, [arPanelData])
 
+
+  const chatMode = useSystemStore((state) => state.chatMode);
+
+  // Plan-State-Node 模式下隐藏 Phase 8.5 的 HolographicWorkflow 侧边栏
+  // 因为 DAG 面板会替代它
+  if (chatMode === CHAT_MODE.PLAN_STATE_NODE) {
+    return null;
+  }
 
   const hasPlan = activePlan !== null;
 

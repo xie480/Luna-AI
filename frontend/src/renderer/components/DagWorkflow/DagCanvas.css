@@ -1,0 +1,37 @@
+/**
+ * DagCanvas 画布容器样式。
+ * 做什么：定义可缩放/平移画布的布局和交互样式。
+ * 为什么这样做：画布需要 overflow: hidden 加内层 transform 实现无限画布效果。
+ */
+
+/* 画布外层容器 */
+.dag-canvas-container {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  cursor: grab;
+  background:
+    linear-gradient(rgba(0, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 40px 40px;
+  border: 1px solid rgba(0, 255, 255, 0.05);
+  border-radius: 8px;
+  min-height: 300px;
+}
+
+/* 拖拽中状态 */
+.dag-canvas-container.is-dragging {
+  cursor: grabbing;
+}
+
+/* 画布内层（应用 transform） */
+.dag-canvas-inner {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  will-change: transform;
+}

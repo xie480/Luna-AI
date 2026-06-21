@@ -4,7 +4,7 @@ import { useSystemStore, type EmotionState } from '../stores/systemStore';
 import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/telemetryStore';
 import { useChatWorkflowStore } from '../stores/chatWorkflowStore';
 import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
-import { CHAT_PLAN_PRESET, CHAT_WORKFLOW_SCHEMA_VERSION, WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
+import { CHAT_PLAN_PRESET, CHAT_WORKFLOW_SCHEMA_VERSION, DAG_WORKFLOW_EVENT_TYPE, WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
 import { createErrorToast } from '../stores/errorToastStore';
 import { reportError } from '../services/errorLogService';
@@ -25,6 +25,18 @@ import {
   ReplyChunkPayload,
   InitStatePayload,
   InteractionQA,
+  DagPlanCreatedPayload,
+  DagStateStartedPayload,
+  DagSkillScreeningPayload,
+  DagStepPlanPayload,
+  DagNodeStartedPayload,
+  DagNodeCompletedPayload,
+  DagNodeGatingPayload,
+  DagStateEvaluatedPayload,
+  DagPlanReplannedPayload,
+  DagPlanCompletedPayload,
+  DagPlanTerminatedPayload,
+  DagBudgetExhaustedPayload,
 } from '../../shared/types';
 
 /**
@@ -312,6 +324,13 @@ class SSEManager {
     // === Phase 13：Gating 鉴权事件（Python AI Service -> Electron） ===
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_TOOL_AUTH_REQUIRED);
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_PENDING_AUTHS_SYNC);
+
+    // === Phase 9：DAG 工作流事件注册 ===
+    // 当 chat_mode === 'plan_state_node' 时，后端会推送以下 12 种 DAG 事件
+    const dagEventTypes = Object.values(DAG_WORKFLOW_EVENT_TYPE) as string[];
+    for (const eventName of dagEventTypes) {
+      this.registerStructuredEventListener(eventName);
+    }
 
     // 通用消息事件（兜底处理所有未注册的事件类型）
     this.eventSource.onmessage = (event) => {
@@ -656,6 +675,120 @@ class SSEManager {
           break;
         }
   
+        // ============================================================
+        // Phase 9：DAG 工作流事件处理
+        // ============================================================
+
+        case DAG_WORKFLOW_EVENT_TYPE.PLAN_CREATED: {
+          const dagStore = import('../stores/dagWorkflowStore');
+          dagStore.then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanCreated(
+              msg.payload as DagPlanCreatedPayload,
+              msg.trace_id,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STATE_STARTED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onStateStarted(
+              msg.payload as DagStateStartedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.SKILL_SCREENING: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onSkillScreening(
+              msg.payload as DagSkillScreeningPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_PLAN_GENERATED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onStepPlanGenerated(
+              msg.payload as DagStepPlanPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.NODE_STARTED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onNodeStarted(
+              msg.payload as DagNodeStartedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.NODE_COMPLETED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onNodeCompleted(
+              msg.payload as DagNodeCompletedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.NODE_GATING: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onNodeGating(
+              msg.payload as DagNodeGatingPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STATE_EVALUATED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onStateEvaluated(
+              msg.payload as DagStateEvaluatedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.PLAN_REPLANNED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanReplanned(
+              msg.payload as DagPlanReplannedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.PLAN_COMPLETED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanCompleted(
+              msg.payload as DagPlanCompletedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.PLAN_TERMINATED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanTerminated(
+              msg.payload as DagPlanTerminatedPayload,
+            );
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.BUDGET_EXHAUSTED: {
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onBudgetExhausted(
+              msg.payload as DagBudgetExhaustedPayload,
+            );
+          });
+          break;
+        }
+
         default:
           systemStore.addSystemLog(`收到未知消息类型: ${msg.type}`);
     }

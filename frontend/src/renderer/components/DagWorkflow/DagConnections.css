@@ -1,0 +1,82 @@
+/**
+ * DagConnections 连线样式。
+ * 做什么：定义 State 间连线的布局、颜色和动画。
+ * 视觉约束：严格沿用 HolographicConnections.css 的连线视觉语言。
+ */
+
+/* 连线容器 */
+.dag-connections-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* 单条连线 */
+.dag-connection-line {
+  display: flex;
+  justify-content: center;
+  height: 24px;
+  width: 100%;
+}
+
+.dag-connection-svg {
+  width: 20px;
+  height: 24px;
+}
+
+/* 连线路径 — 基线样式 */
+.dag-connection-path {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.dag-connection-arrow {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 已完成连线 */
+.dag-connection-line.connection-completed .dag-connection-path {
+  stroke: rgba(0, 250, 154, 0.4);
+}
+
+.dag-connection-line.connection-completed .dag-connection-arrow {
+  stroke: rgba(0, 250, 154, 0.4);
+}
+
+/* 活跃连线 — 流动动画 */
+.dag-connection-line.connection-active .dag-connection-path {
+  stroke: rgba(0, 255, 255, 0.6);
+  stroke-dasharray: 6, 4;
+  animation: dashFlow 1s linear infinite;
+}
+
+.dag-connection-line.connection-active .dag-connection-arrow {
+  stroke: rgba(0, 255, 255, 0.6);
+}
+
+/* 失败连线 */
+.dag-connection-line.connection-failed .dag-connection-path {
+  stroke: rgba(255, 100, 120, 0.3);
+  stroke-dasharray: 5, 5;
+}
+
+.dag-connection-line.connection-failed .dag-connection-arrow {
+  stroke: rgba(255, 100, 120, 0.3);
+}
+
+/* 流动动画（复用 HolographicConnections.css 的 dashFlow） */
+@keyframes dashFlow {
+  from {
+    stroke-dashoffset: 20;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

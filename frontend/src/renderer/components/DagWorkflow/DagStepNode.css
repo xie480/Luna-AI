@@ -1,0 +1,150 @@
+/**
+ * DagStepNode Step 节点样式。
+ * 做什么：定义 Step 可视化节点的布局、状态着色和执行模式区分。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
+ */
+
+/* Step 节点主容器 */
+.dag-step-node {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  background: rgba(20, 26, 38, 0.7);
+  overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+
+.dag-step-node.search-match {
+  border-color: rgba(255, 170, 0, 0.4);
+}
+
+/* Step 状态着色 */
+.dag-step-node.status-running {
+  border-color: rgba(0, 255, 255, 0.3);
+}
+
+.dag-step-node.status-succeeded {
+  border-color: rgba(0, 250, 154, 0.15);
+}
+
+.dag-step-node.status-failed {
+  border-color: rgba(255, 0, 60, 0.3);
+}
+
+/* Step 头部 */
+.dag-step-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.dag-step-header:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dag-step-toggle-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dag-step-index {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(0, 255, 255, 0.6);
+  letter-spacing: 0.5px;
+}
+
+.dag-step-desc {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 执行模式标签 */
+.dag-step-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.dag-step-mode-badge.mode-parallel {
+  color: #8a2be2;
+  background: rgba(138, 43, 226, 0.1);
+  border: 1px solid rgba(138, 43, 226, 0.2);
+}
+
+.dag-step-mode-badge.mode-serial {
+  color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.1);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+}
+
+/* Step 状态区域 */
+.dag-step-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dag-step-status-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.dag-step-status-text {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dag-step-latency {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Step 内容区域 */
+.dag-step-content {
+  padding: 6px 12px 12px;
+  display: flex;
+  gap: 8px;
+  animation: dagContentFadeIn 0.2s ease-out;
+}
+
+/* 串行模式：垂直排列 */
+.dag-step-content.content-serial {
+  flex-direction: column;
+}
+
+/* 并行模式：水平排列 */
+.dag-step-content.content-parallel {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.dag-step-content.content-parallel > * {
+  flex: 1 1 200px;
+  min-width: 200px;
+}

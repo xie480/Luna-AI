@@ -1,0 +1,341 @@
+/**
+ * DagStateGroup State 分组容器样式。
+ * 做什么：定义 State 可视化分组容器的布局、状态着色和嵌套视觉。
+ * 为什么这样做：State 是 DAG 面板的核心中间层容器，需要清晰的视觉边界。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
+ */
+
+/* State 分组主容器 */
+.dag-state-group {
+  position: relative;
+  border: 1px solid rgba(44, 62, 80, 0.5);
+  border-radius: 8px;
+  background: rgba(15, 20, 30, 0.65);
+  backdrop-filter: blur(8px);
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* 搜索匹配高亮 */
+.dag-state-group.search-match {
+  border-color: rgba(255, 170, 0, 0.5);
+  box-shadow: 0 0 12px rgba(255, 170, 0, 0.15);
+}
+
+/* State 状态着色 */
+.dag-state-group.status-running {
+  border-color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(138, 43, 226, 0.2);
+  animation: pulseStatus 2s ease-in-out infinite;
+}
+
+.dag-state-group.status-succeeded {
+  border-color: rgba(0, 250, 154, 0.3);
+  box-shadow: 0 0 10px rgba(0, 250, 154, 0.1);
+}
+
+.dag-state-group.status-degraded {
+  border-color: rgba(255, 170, 0, 0.3);
+}
+
+.dag-state-group.status-failed {
+  border-color: #ff003c;
+  box-shadow: 0 0 10px rgba(255, 0, 60, 0.2);
+}
+
+.dag-state-group.status-skipped {
+  opacity: 0.4;
+  filter: grayscale(100%);
+}
+
+/* State 头部 */
+.dag-state-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.dag-state-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* 展开/折叠图标 */
+.dag-state-toggle-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* State 编号 */
+.dag-state-index {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #00ffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+/* State 意图 */
+.dag-state-intent {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 状态区域 */
+.dag-state-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dag-state-status-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* 状态图标颜色 */
+.status-icon-running {
+  color: #00ffff;
+  animation: spinRing 2s linear infinite;
+}
+.status-icon-succeeded { color: #00fa9a; }
+.status-icon-degraded { color: #ffaa00; }
+.status-icon-failed { color: #ff003c; }
+.status-icon-pending { color: rgba(255, 255, 255, 0.3); }
+.status-icon-skipped { color: rgba(255, 255, 255, 0.2); }
+.status-icon-pending_user_approval { color: #ffaa00; }
+
+.dag-state-status-text {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
+}
+
+.dag-state-latency {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* State 内容区域 */
+.dag-state-content {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: dagContentFadeIn 0.2s ease-out;
+}
+
+@keyframes dagContentFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 目标行 */
+.dag-state-goal {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.dag-state-goal-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  color: #00ffff;
+  opacity: 0.6;
+}
+
+.dag-state-goal-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-state-goal-text {
+  color: rgba(255, 255, 255, 0.75);
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.5;
+}
+
+/* 完成条件 */
+.dag-state-criteria {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.dag-state-criteria-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 2px;
+  color: #00fa9a;
+  opacity: 0.6;
+}
+
+.dag-state-criteria-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-state-criteria-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dag-state-criteria-list li {
+  color: rgba(255, 255, 255, 0.55);
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.6;
+  padding-left: 12px;
+  position: relative;
+}
+
+.dag-state-criteria-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 250, 154, 0.4);
+}
+
+/* Skill 标签 */
+.dag-state-skills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dag-state-skills-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-state-skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.dag-state-skill-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: 'Courier New', Courier, monospace;
+  color: #8a2be2;
+  background: rgba(138, 43, 226, 0.1);
+  border: 1px solid rgba(138, 43, 226, 0.25);
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* Step 列表容器 */
+.dag-state-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 8px;
+  border-left: 2px solid rgba(0, 255, 255, 0.08);
+}
+
+/* 评估结果 */
+.dag-state-evaluation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+}
+
+.dag-state-evaluation.eval-passed {
+  background: rgba(0, 250, 154, 0.06);
+  border: 1px solid rgba(0, 250, 154, 0.2);
+}
+
+.dag-state-evaluation.eval-failed {
+  background: rgba(255, 170, 0, 0.06);
+  border: 1px solid rgba(255, 170, 0, 0.2);
+}
+
+.dag-eval-badge {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.eval-passed .dag-eval-badge {
+  color: #00fa9a;
+  background: rgba(0, 250, 154, 0.15);
+}
+
+.eval-failed .dag-eval-badge {
+  color: #ffaa00;
+  background: rgba(255, 170, 0, 0.15);
+}
+
+.dag-eval-reason {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dag-eval-gap {
+  color: rgba(255, 255, 255, 0.4);
+  width: 100%;
+}
+
+/* 错误信息 */
+.dag-state-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dag-state-error-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #ff003c;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-state-error-item svg {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}

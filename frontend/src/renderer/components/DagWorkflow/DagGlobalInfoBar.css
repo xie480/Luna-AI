@@ -1,0 +1,231 @@
+/**
+ * DagGlobalInfoBar 全局信息栏样式。
+ * 做什么：定义 DAG 面板顶部全局信息栏的布局、颜色和动画。
+ * 为什么这样做：全局信息栏需要展示 Plan 目标、进度和预算，视觉上需要与 HolographicWorkflow 保持一致。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
+ */
+
+/* 全局信息栏主容器 */
+.dag-global-info-bar {
+  position: relative;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  font-family: 'Courier New', Courier, monospace;
+  color: rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+}
+
+/* 网格叠加背景 */
+.dag-global-info-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 状态行 */
+.dag-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.5px;
+  position: relative;
+  z-index: 1;
+}
+
+.dag-info-row:last-child {
+  margin-bottom: 0;
+}
+
+/* 行图标 */
+.dag-info-row-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: #00ffff;
+  opacity: 0.8;
+}
+
+/* 行标签 */
+.dag-info-row-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 行内容 */
+.dag-info-row-content {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.85);
+  word-break: break-all;
+}
+
+/* 进度条容器 */
+.dag-progress-bar-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 进度条轨道 */
+.dag-progress-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* 进度条填充 */
+.dag-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+  background: linear-gradient(90deg, #00ffff, #00fa9a);
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+}
+
+/* 预算进度条警告色 */
+.dag-progress-fill.budget-warning {
+  background: linear-gradient(90deg, #ffaa00, #ff6b35);
+  box-shadow: 0 0 8px rgba(255, 170, 0, 0.4);
+}
+
+.dag-progress-fill.budget-critical {
+  background: linear-gradient(90deg, #ff003c, #ff6b35);
+  box-shadow: 0 0 8px rgba(255, 0, 60, 0.4);
+}
+
+/* 进度百分比文字 */
+.dag-progress-text {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 36px;
+  text-align: right;
+}
+
+/* 约束条件折叠区域 */
+.dag-constraints-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  z-index: 1;
+}
+
+.dag-constraints-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.dag-constraints-toggle:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dag-constraints-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+.dag-constraints-toggle.expanded svg {
+  transform: rotate(90deg);
+}
+
+.dag-constraints-list {
+  margin-top: 6px;
+  padding-left: 16px;
+  list-style: none;
+}
+
+.dag-constraints-list li {
+  position: relative;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.6;
+  padding-left: 12px;
+}
+
+.dag-constraints-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 255, 255, 0.4);
+}
+
+/* 状态标签 */
+.dag-plan-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.dag-plan-status-badge.status-planning {
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+.dag-plan-status-badge.status-executing {
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  animation: pulseStatus 1.5s ease-in-out infinite;
+}
+
+.dag-plan-status-badge.status-replanning {
+  color: #ffaa00;
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid rgba(255, 170, 0, 0.3);
+}
+
+.dag-plan-status-badge.status-completed {
+  color: #00fa9a;
+  background: rgba(0, 250, 154, 0.1);
+  border: 1px solid rgba(0, 250, 154, 0.3);
+}
+
+.dag-plan-status-badge.status-terminated {
+  color: #ff003c;
+  background: rgba(255, 0, 60, 0.1);
+  border: 1px solid rgba(255, 0, 60, 0.3);
+}
+
+.dag-plan-status-badge.status-budget-exhausted {
+  color: #ff6b35;
+  background: rgba(255, 107, 53, 0.1);
+  border: 1px solid rgba(255, 107, 53, 0.3);
+}

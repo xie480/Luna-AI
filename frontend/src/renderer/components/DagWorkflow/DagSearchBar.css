@@ -1,0 +1,68 @@
+/**
+ * DagSearchBar 搜索栏样式。
+ * 做什么：定义浮动搜索栏的布局和视觉样式。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
+ */
+
+/* 搜索栏容器 — 浮动于画布区域右上角 */
+.dag-search-bar {
+  position: absolute;
+  top: 8px;
+  right: 24px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(15, 20, 30, 0.85);
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  min-width: 200px;
+  transition: border-color 0.2s ease;
+}
+
+.dag-search-bar:focus-within {
+  border-color: rgba(0, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
+}
+
+.dag-search-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.dag-search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  letter-spacing: 0.5px;
+}
+
+.dag-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.dag-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.dag-search-clear:hover {
+  color: #ff003c;
+}

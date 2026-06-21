@@ -273,7 +273,7 @@ function loadTheme(): 'dark' | 'light' | 'cyberpunk' {
 function loadChatMode(): ChatMode {
   try {
     const raw = localStorage.getItem('luna:chatMode');
-    if (raw === CHAT_MODE.DAILY_CHAT || raw === CHAT_MODE.CASUAL_CHAT) {
+    if (raw === CHAT_MODE.DAILY_CHAT || raw === CHAT_MODE.CASUAL_CHAT || raw === CHAT_MODE.PLAN_STATE_NODE) {
       return raw as ChatMode;
     }
   } catch (e) {

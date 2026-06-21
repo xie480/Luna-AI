@@ -268,6 +268,10 @@ export const CHAT_MODE = {
    * 极速闲聊模式：跳过 RAG 与记忆写入，仅保留基础对话能力，响应更快。
    */
   CASUAL_CHAT: 'casual_chat',
+  /**
+   * 智能规划模式：Phase 9 Plan-State-Node DAG 工作流，拆解为多个执行阶段深度完成任务。
+   */
+  PLAN_STATE_NODE: 'plan_state_node',
 } as const;
 
 /**
@@ -655,3 +659,109 @@ export const TTS_LANGUAGE_LABEL: Record<string, string> = {
   [TTS_LANGUAGE.ZH]: '中文',
   [TTS_LANGUAGE.JA]: '日语',
 };
+
+// ============================================================
+// Phase 9：DAG 工作流枚举常量
+// ============================================================
+
+/**
+ * DAG 原子节点类型常量。
+ * 做什么：定义 Phase 9 State 内部 Step 中可使用的 5 种原子节点类型。
+ * 为什么这样做：与后端 DagNodeType 枚举保持一致，前端标签映射与状态着色依赖此枚举。
+ * 输入输出：无。
+ * 边界条件：新增节点类型时必须同步补充中文标签映射。
+ * 异常行为：无。
+ */
+export const DAG_NODE_TYPE = {
+  RESOURCE_LOADING: 'resource_loading',
+  TOOL_EXECUTE: 'tool_execute',
+  DATA_TRANSFORM: 'data_transform',
+  LONG_TERM_MEMORY: 'long_term_memory',
+  KNOWLEDGE_RAG: 'knowledge_rag',
+} as const;
+
+/**
+ * DAG 节点类型联合类型。
+ * 做什么：从 DAG_NODE_TYPE 常量对象中提取类型。
+ * 为什么这样做：确保类型定义与共享常量保持一致。
+ */
+export type DagNodeType = typeof DAG_NODE_TYPE[keyof typeof DAG_NODE_TYPE];
+
+/**
+ * DAG 节点类型中文标签映射。
+ * 做什么：将 DAG_NODE_TYPE 枚举映射为前端可展示的中文标签。
+ * 为什么这样做：AtomicNode 卡片标题、搜索匹配标签都依赖此映射。
+ */
+export const DAG_NODE_TYPE_LABEL: Record<DagNodeType, string> = {
+  [DAG_NODE_TYPE.RESOURCE_LOADING]: '资源加载',
+  [DAG_NODE_TYPE.TOOL_EXECUTE]: '工具执行',
+  [DAG_NODE_TYPE.DATA_TRANSFORM]: '数据转换',
+  [DAG_NODE_TYPE.LONG_TERM_MEMORY]: '长期记忆',
+  [DAG_NODE_TYPE.KNOWLEDGE_RAG]: '知识检索',
+};
+
+/**
+ * DAG 节点状态常量。
+ * 做什么：定义 Plan/State/Step/Node 各层级共享的状态枚举。
+ * 为什么这样做：前端状态着色、动画和交互逻辑全部依赖此枚举。
+ * 输入输出：无。
+ * 边界条件：PENDING_USER_APPROVAL 为 Gating 审批态，需特殊 UI 处理。
+ * 异常行为：无。
+ */
+export const DAG_NODE_STATUS = {
+  PENDING: 'PENDING',
+  RUNNING: 'RUNNING',
+  SUCCEEDED: 'SUCCEEDED',
+  DEGRADED: 'DEGRADED',
+  FAILED: 'FAILED',
+  SKIPPED: 'SKIPPED',
+  PENDING_USER_APPROVAL: 'PENDING_USER_APPROVAL',
+} as const;
+
+/**
+ * DAG 节点状态联合类型。
+ */
+export type DagNodeStatus = typeof DAG_NODE_STATUS[keyof typeof DAG_NODE_STATUS];
+
+/**
+ * DAG 节点状态中文标签映射。
+ * 做什么：将 DAG_NODE_STATUS 枚举映射为前端可展示的中文标签。
+ * 为什么这样做：节点卡片状态标识、时间线状态显示依赖此映射。
+ */
+export const DAG_NODE_STATUS_LABEL: Record<DagNodeStatus, string> = {
+  [DAG_NODE_STATUS.PENDING]: '等待中',
+  [DAG_NODE_STATUS.RUNNING]: '执行中',
+  [DAG_NODE_STATUS.SUCCEEDED]: '已完成',
+  [DAG_NODE_STATUS.DEGRADED]: '已降级',
+  [DAG_NODE_STATUS.FAILED]: '失败',
+  [DAG_NODE_STATUS.SKIPPED]: '已跳过',
+  [DAG_NODE_STATUS.PENDING_USER_APPROVAL]: '等待审批',
+};
+
+/**
+ * Phase 9 DAG 工作流 SSE 事件类型常量。
+ * 做什么：定义前端需要监听的 12 种 DAG 事件。
+ * 为什么这样做：SSEManager 注册监听和事件分发依赖稳定枚举，避免散落魔法字符串。
+ * 输入输出：无。
+ * 边界条件：新增事件类型时必须同步补充 SSEManager 注册与 Store 处理方法。
+ * 异常行为：无。
+ */
+export const DAG_WORKFLOW_EVENT_TYPE = {
+  PLAN_CREATED: 'EVT_DAG_PLAN_CREATED',
+  STATE_STARTED: 'EVT_DAG_STATE_STARTED',
+  SKILL_SCREENING: 'EVT_DAG_SKILL_SCREENING',
+  STEP_PLAN_GENERATED: 'EVT_DAG_STEP_PLAN_GENERATED',
+  NODE_STARTED: 'EVT_DAG_NODE_STARTED',
+  NODE_COMPLETED: 'EVT_DAG_NODE_COMPLETED',
+  NODE_GATING: 'EVT_DAG_NODE_GATING',
+  STATE_EVALUATED: 'EVT_DAG_STATE_EVALUATED',
+  PLAN_REPLANNED: 'EVT_DAG_PLAN_REPLANNED',
+  PLAN_COMPLETED: 'EVT_DAG_PLAN_COMPLETED',
+  PLAN_TERMINATED: 'EVT_DAG_PLAN_TERMINATED',
+  BUDGET_EXHAUSTED: 'EVT_DAG_BUDGET_EXHAUSTED',
+} as const;
+
+/**
+ * DAG 工作流事件类型联合类型。
+ */
+export type DagWorkflowEventType = typeof DAG_WORKFLOW_EVENT_TYPE[keyof typeof DAG_WORKFLOW_EVENT_TYPE];

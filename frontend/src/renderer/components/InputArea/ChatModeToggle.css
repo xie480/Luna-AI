@@ -144,6 +144,44 @@
   border-color: rgba(200, 80, 255, 0.12);
 }
 
+/* =========================================
+   智能规划模式（橙红 Orange-Red）
+   Phase 9 新增：Plan-State-Node DAG 工作流模式
+   ========================================= */
+.chat-mode-capsule.mode-plan-state-node {
+  background: rgba(255, 107, 53, 0.08);
+  border-color: rgba(255, 107, 53, 0.35);
+  color: rgba(255, 107, 53, 0.9);
+  text-shadow: 0 0 6px rgba(255, 107, 53, 0.3);
+}
+
+.chat-mode-capsule.mode-plan-state-node:hover,
+.chat-mode-capsule.mode-plan-state-node.capsule-active {
+  background: rgba(255, 107, 53, 0.15);
+  border-color: rgba(255, 107, 53, 0.6);
+  box-shadow: 0 0 14px rgba(255, 107, 53, 0.2), inset 0 0 10px rgba(255, 107, 53, 0.05);
+}
+
+.chat-mode-capsule.mode-plan-state-node:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.5);
+}
+
+.chat-mode-capsule.mode-plan-state-node::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 107, 53, 0.12) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scanlineMove 2s infinite linear;
+}
+
+/* 输入框失焦时覆盖 .mode-plan-state-node 的边框 */
+.input-area:not(:focus-within) .chat-mode-capsule.mode-plan-state-node {
+  border-color: rgba(255, 107, 53, 0.12);
+}
+
 @keyframes scanlineMove {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

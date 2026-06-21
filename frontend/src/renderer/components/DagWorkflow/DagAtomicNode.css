@@ -1,0 +1,273 @@
+/**
+ * DagAtomicNode 原子节点卡片样式。
+ * 做什么：定义原子节点卡片的布局、状态着色、类型主题色和详情展开样式。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
+ */
+
+/* 原子节点卡片主容器 */
+.dag-atomic-node-card {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  backdrop-filter: blur(4px);
+  overflow: hidden;
+  transition: border-color 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dag-atomic-node-card.search-match {
+  border-color: rgba(255, 170, 0, 0.5);
+  box-shadow: 0 0 10px rgba(255, 170, 0, 0.15);
+}
+
+/* 节点状态着色 */
+.dag-atomic-node-card.status-pending {
+  border-color: rgba(44, 62, 80, 0.5);
+}
+
+.dag-atomic-node-card.status-running {
+  border-color: var(--node-color, #00ffff);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.25), inset 0 0 16px rgba(138, 43, 226, 0.15);
+}
+
+.dag-atomic-node-card.status-succeeded {
+  border-color: rgba(0, 250, 154, 0.25);
+}
+
+.dag-atomic-node-card.status-degraded {
+  border-color: rgba(255, 170, 0, 0.25);
+}
+
+.dag-atomic-node-card.status-failed {
+  border-color: #ff003c;
+  box-shadow: 0 0 8px rgba(255, 0, 60, 0.2);
+}
+
+.dag-atomic-node-card.status-skipped {
+  opacity: 0.4;
+  filter: grayscale(100%);
+}
+
+.dag-atomic-node-card.status-pending_user_approval {
+  border-color: #ffaa00;
+  box-shadow: 0 0 10px rgba(255, 170, 0, 0.2);
+}
+
+/* 卡片头部 */
+.dag-node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.dag-node-header:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dag-node-expand-icon {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  color: rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 节点类型图标 */
+.dag-node-type-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--node-color, rgba(255, 255, 255, 0.5));
+}
+
+.dag-node-type-label {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: var(--node-color, rgba(255, 255, 255, 0.5));
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.dag-node-name {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 节点状态区域 */
+.dag-node-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dag-node-status-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.dag-node-status-icon.status-icon-running {
+  color: var(--node-color, #00ffff);
+  animation: spinRing 2s linear infinite;
+}
+.dag-node-status-icon.status-icon-succeeded { color: #00fa9a; }
+.dag-node-status-icon.status-icon-degraded { color: #ffaa00; }
+.dag-node-status-icon.status-icon-failed { color: #ff003c; }
+.dag-node-status-icon.status-icon-pending { color: rgba(255, 255, 255, 0.3); }
+.dag-node-status-icon.status-icon-pending_user_approval { color: #ffaa00; }
+
+.dag-node-status-text {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dag-node-latency {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Gating 审批图标 */
+.dag-node-gating-icon {
+  flex-shrink: 0;
+  color: #ffaa00;
+}
+
+/* 重试标记 */
+.dag-node-retry-badge {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  color: #ffaa00;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid rgba(255, 170, 0, 0.2);
+}
+
+/* 卡片详情区域 */
+.dag-node-details {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: dagContentFadeIn 0.15s ease-out;
+}
+
+/* 参数区域 */
+.dag-node-params-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dag-node-params-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  letter-spacing: 0.5px;
+}
+
+.dag-node-params-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 8px;
+}
+
+.dag-node-param-item {
+  display: flex;
+  gap: 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.dag-node-param-key {
+  flex-shrink: 0;
+  color: var(--node-color, rgba(255, 255, 255, 0.45));
+  opacity: 0.7;
+}
+
+.dag-node-param-value {
+  color: rgba(255, 255, 255, 0.6);
+  word-break: break-all;
+  max-height: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 日志区域 */
+.dag-node-logs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dag-node-logs-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dag-node-logs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.dag-node-log-item {
+  display: flex;
+  gap: 6px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.dag-node-log-time {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.dag-node-log-msg {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dag-node-log-item.log-info .dag-node-log-msg { color: rgba(255, 255, 255, 0.5); }
+.dag-node-log-item.log-warn .dag-node-log-msg { color: #ffaa00; }
+.dag-node-log-item.log-error .dag-node-log-msg { color: #ff003c; }
+.dag-node-log-item.log-debug .dag-node-log-msg { color: rgba(255, 255, 255, 0.3); }
+
+/* 错误信息条 */
+.dag-node-error-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 0, 60, 0.08);
+  border-top: 1px solid rgba(255, 0, 60, 0.2);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: #ff003c;
+}
+
+.dag-node-error-bar svg {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+}

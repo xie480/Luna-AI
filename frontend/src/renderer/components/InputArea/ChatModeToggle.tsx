@@ -86,12 +86,13 @@ const MODE_DISPLAY: Record<ChatMode, ModeConfig> = {
     IconComponent: CasualChatIcon,
     themeColor: '#c850ff',
   },
-};
-
-const DEEP_MODE_PLACEHOLDER = {
-  title: '深度推理模式',
-  description: '即将推出：Luna 会认真起来，调取所有记忆和知识帮你深度分析复杂问题。能让 Luna 这么认真的时候可不多哦。',
-  IconComponent: DeepChatIcon,
+  [CHAT_MODE.PLAN_STATE_NODE]: {
+    label: '规划',
+    title: '智能规划模式',
+    description: 'Luna 会认真分析你的请求，拆解为多个执行阶段，调用工具和知识库深度完成任务。适合复杂的研究、写作、数据分析等场景。',
+    IconComponent: DeepChatIcon,
+    themeColor: '#ff6b35',
+  },
 };
 
 /**
@@ -141,17 +142,6 @@ const ModeDrawer: React.FC<{
             </button>
           );
         })}
-        {/* 未来深度模式占位 */}
-        <div className="drawer-mode-item mode-item-disabled">
-          <span className="mode-item-icon" aria-hidden="true"><DeepChatIcon width="18" height="18" /></span>
-          <span className="mode-item-text">
-            <span className="mode-item-title">
-              {DEEP_MODE_PLACEHOLDER.title}
-              <span className="mode-item-badge">即将推出</span>
-            </span>
-            <span className="mode-item-desc">{DEEP_MODE_PLACEHOLDER.description}</span>
-          </span>
-        </div>
       </div>
     </div>
   );
@@ -249,7 +239,7 @@ export const ChatModeToggle: React.FC = () => {
       {/* 胶囊按钮 */}
       <button
         ref={capsuleBtnRef}
-        className={`chat-mode-capsule ${chatMode === CHAT_MODE.DAILY_CHAT ? 'mode-daily' : 'mode-casual'} ${drawerOpen ? 'capsule-active' : ''}`}
+        className={`chat-mode-capsule mode-${chatMode.replace(/_/g, '-')} ${drawerOpen ? 'capsule-active' : ''}`}
         onClick={toggleDrawer}
         aria-label={`当前模式：${currentMode.title}。点击展开模式选择`}
         aria-expanded={drawerOpen}
