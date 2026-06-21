@@ -157,11 +157,31 @@ class DagEngineNode:
         """从 ChatWorkflowState 构建 DagEngineState。
 
         做什么：提取必要的上下文数据，构建 DAG 引擎的初始状态。
+                包括从 SkillRegistry 单例中加载所有可用 Skill 的 Brief 列表，
+                填充到 DagEngineState.skill_briefs，供 Plan 生成和 Skill 初筛使用。
         """
+        # 从 SkillRegistry 单例获取所有可用 Skill 的 Brief 列表
+        # 为什么这样做：skill_briefs 是 Plan 生成 Prompt（memory.j2）和
+        #               Skill 初筛节点的必要输入，必须在 DAG 引擎启动前一次性加载。
+        from app.mcp.skill_registry import SkillRegistry
+        skill_briefs = SkillRegistry().get_skill_briefs()
+
+        if skill_briefs:
+            logger.info(
+                f"[TraceID:{chat_state.runtime.trace_id}] "
+                f"从 SkillRegistry 加载 skill_briefs: count={len(skill_briefs)}"
+            )
+        else:
+            logger.warning(
+                f"[TraceID:{chat_state.runtime.trace_id}] "
+                f"SkillRegistry 中无可用 Skill，skill_briefs 为空"
+            )
+
         return DagEngineState(
             disambiguated_text=chat_state.dag_state.disambiguated_text
                 or chat_state.input_payload.raw_user_message,
             unresolved_pronouns=chat_state.dag_state.unresolved_pronouns,
+            skill_briefs=skill_briefs,
             session_context={
                 "memory_snippets": chat_state.session_state.memory_snippets,
                 "key_facts": chat_state.session_state.key_facts,

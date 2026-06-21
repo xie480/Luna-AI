@@ -236,6 +236,52 @@ class SkillRegistry:
             })
         return result
 
+    def get_skill_briefs(self) -> list[dict[str, Any]]:
+        """获取所有已启用 Skill 的 Brief 列表（供 DAG 引擎使用）。
+
+        做什么：将内存缓存中的 SkillDetail 转换为 SkillBrief 兼容的字典格式，
+                包含 skill_name、description、tool_names、risk_levels 和 capability_tags。
+        为什么这样做：DagEngineState.skill_briefs 和 memory.j2 模板都需要此格式，
+                      在 DAG 引擎启动前一次性构建，避免运行时重复遍历。
+        返回:
+            list[dict]: 每个 dict 包含：
+                - skill_name: Skill 名称
+                - description: Skill 描述
+                - tool_names: 关联工具名称列表
+                - risk_levels: 工具名到风险等级的映射
+                - capability_tags: 能力标签列表（从所有工具的 tags 合并去重）
+        边界条件：缓存为空时返回空列表，不抛异常。
+        """
+        result: list[dict[str, Any]] = []
+        for _skill_id, detail in self._skills.items():
+            # 提取工具名称列表
+            tool_names: list[str] = []
+            # 工具名到风险等级的映射
+            risk_levels: dict[str, str] = {}
+            # 能力标签合并去重
+            all_tags: list[str] = []
+
+            for tool in detail.tools:
+                tool_name = tool.get("name", "")
+                if tool_name:
+                    tool_names.append(tool_name)
+                    risk_levels[tool_name] = tool.get("risk_level", "L0")
+                # 合并 tags 到能力标签列表
+                tags = tool.get("tags", [])
+                if isinstance(tags, list):
+                    for tag in tags:
+                        if tag not in all_tags:
+                            all_tags.append(tag)
+
+            result.append({
+                "skill_name": detail.name,
+                "description": detail.description,
+                "tool_names": tool_names,
+                "risk_levels": risk_levels,
+                "capability_tags": all_tags,
+            })
+        return result
+
     def get_skill_detail(self, skill_id: str) -> SkillDetail | None:
         """获取指定 Skill 的完整展开信息。
 
