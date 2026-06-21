@@ -19,6 +19,7 @@ from app.workflow.constants import (
     PROMPT_VARIABLE_CORE_SUMMARY,
     PROMPT_VARIABLE_CURRENT_MESSAGE,
     PROMPT_VARIABLE_CURRENT_TIME,
+    PROMPT_VARIABLE_DAG_PLAN_RESULT,
     PROMPT_VARIABLE_EMOTION_AROUSAL,
     PROMPT_VARIABLE_EMOTION_INTENSITY,
     PROMPT_VARIABLE_EMOTION_PRIMARY,
@@ -145,6 +146,8 @@ class ContextGovernanceNode(ChatWorkflowNode):
             # Phase 13：Gating 审批结果注入
             PROMPT_VARIABLE_GATING_REJECTION_INFO: gating_rejection_info,
             PROMPT_VARIABLE_GATING_APPROVAL_RESULT: gating_approval_result,
+            # Phase 9：DAG 智能规划执行结果注入（含成功汇总与失败原因）
+            PROMPT_VARIABLE_DAG_PLAN_RESULT: self._build_dag_plan_result(state),
             # TTS 语音语言选项
             PROMPT_VARIABLE_TTS_LANGUAGE: state.input_payload.tts_language,
             # JSON 格式重试错误信息：首次调用为空，重试时由 MainChatLlmNode 设置
@@ -184,6 +187,47 @@ class ContextGovernanceNode(ChatWorkflowNode):
                 error=str(exc),
             )
         return state
+
+    def _build_dag_plan_result(self, state: ChatWorkflowState) -> str:
+        """构造 DAG 智能规划执行结果文本。
+
+        做什么：从 dag_state 中提取 plan_summary_text、partial_results、
+                termination_reason 等字段，格式化为可注入 Prompt 的文本。
+                无论 DAG 执行成功还是失败，都会构造包含对应信息的文本。
+        为什么这样做：dag_state 中的字段原本未被 ContextGovernance 读取，
+                      主 Chat LLM 无法感知 DAG 执行结果，导致回复中缺失任务执行上下文。
+        输入输出：
+            - 输入：ChatWorkflowState
+            - 输出：格式化后的 DAG 结果文本（str），无 DAG 数据时返回空字符串。
+        边界条件：
+            - is_dag_active 为 False 时直接返回空字符串（非智能规划模式）。
+            - 执行成功时注入汇总结果。
+            - 执行失败/终止时注入失败原因和已完成的部分结果。
+        异常行为：无。
+        """
+        # 非智能规划模式，不注入任何 DAG 数据
+        if not state.dag_state.is_dag_active:
+            return ""
+
+        parts: list[str] = []
+
+        # 注入 Plan 汇总结果（执行成功时由 PlanResultSummaryNode 生成）
+        if state.dag_state.plan_summary_text:
+            parts.append(f"## 规划执行总结\n{state.dag_state.plan_summary_text}")
+
+        # 注入执行终止信息（执行失败/异常终止时）
+        if state.dag_state.terminated:
+            if state.dag_state.termination_reason:
+                parts.append(
+                    f"## 执行终止原因\n任务在执行过程中被终止：{state.dag_state.termination_reason}"
+                )
+            # 即使终止了，已完成的部分结果也应注入，避免丢失已完成工作的上下文
+            if state.dag_state.partial_results:
+                parts.append(
+                    f"## 已完成的部分结果\n{state.dag_state.partial_results}"
+                )
+
+        return "\n\n".join(parts)
 
     async def _publish_chat_status(
         self,

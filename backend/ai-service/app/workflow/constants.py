@@ -216,6 +216,11 @@ PROMPT_VARIABLE_RETRY_ERROR_INFO: Final[str] = "RETRY_ERROR_INFO"
 # TTS 语音语言选项：zh（中文）/ ja（日语），用于 runtime.j2 模板判断是否需要输出 replay_translation。
 PROMPT_VARIABLE_TTS_LANGUAGE: Final[str] = "TTS_LANGUAGE"
 
+# Phase 9 新增：DAG 智能规划执行结果模板变量，
+# 当 plan_state_node 路径执行完毕后，将 DAG 汇总结果（含成功汇总与失败原因）注入此变量，
+# 供 chat/memory.j2 渲染为主 Chat LLM 可感知的上下文。
+PROMPT_VARIABLE_DAG_PLAN_RESULT: Final[str] = "DAG_PLAN_RESULT"
+
 CHAT_STREAM_TYPE_REPLY_CHUNK: Final[str] = "reply_chunk"
 CHAT_STREAM_TYPE_THOUGHT_CONTENT: Final[str] = "thought_content"
 CHAT_STREAM_TYPE_EMOTION_UPDATE: Final[str] = "emotion_update"
