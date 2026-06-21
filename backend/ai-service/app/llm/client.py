@@ -798,12 +798,19 @@ class LLMClient:
             message_id=str(kwargs.get("message_id", "")),
         )
 
+        # 过滤掉非 OpenAI API 的内部参数，防止 trace_id/session_id/message_id 等
+        # 透传给 OpenAI chat.completions.create() 导致 unrecognized argument 错误
+        clean_kwargs = {
+            k: v for k, v in kwargs.items()
+            if k not in ("trace_id", "session_id", "message_id")
+        }
+
         response = await self.client.chat.completions.create(
             model=model,
             messages=messages,
             stream=False,
             timeout=timeout,
-            **kwargs,
+            **clean_kwargs,
         )
         return response.choices[0].message.content or ""
 

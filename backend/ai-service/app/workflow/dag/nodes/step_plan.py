@@ -291,15 +291,27 @@ class StepPlanNode:
                 except ValueError:
                     node_type = DagNodeType.TOOL_EXECUTE
 
+                # 防御性字符串转换：LLM 输出有时会将 string 字段返回为 list，
+                # 如 query_text: ["2026年世界杯热点...", "世界杯最新动态"]
+                # 必须转换为字符串，否则 Pydantic 校验失败
+                def _safe_str(value: Any) -> str:
+                    if isinstance(value, str):
+                        return value
+                    if isinstance(value, list):
+                        return "；".join(str(v) for v in value)
+                    if value is None:
+                        return ""
+                    return str(value)
+
                 node = AtomicNodeDefinition(
                     node_id=node_ids[node_index],
                     node_type=node_type,
-                    skill_name=node_data.get("skill_name"),
-                    tool_name=node_data.get("tool_name"),
-                    resource_name=node_data.get("resource_name"),
-                    parameter_hint=node_data.get("parameter_hint", ""),
-                    transform_instruction=node_data.get("transform_instruction", ""),
-                    query_text=node_data.get("query_text", ""),
+                    skill_name=_safe_str(node_data.get("skill_name")),
+                    tool_name=_safe_str(node_data.get("tool_name")),
+                    resource_name=_safe_str(node_data.get("resource_name")),
+                    parameter_hint=_safe_str(node_data.get("parameter_hint", "")),
+                    transform_instruction=_safe_str(node_data.get("transform_instruction", "")),
+                    query_text=_safe_str(node_data.get("query_text", "")),
                     depends_on=depends_on,
                     gating_required=node_data.get("gating_required", False),
                 )
