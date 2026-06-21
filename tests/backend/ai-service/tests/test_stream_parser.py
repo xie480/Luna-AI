@@ -384,5 +384,46 @@ class TestStreamParserReplayTranslation:
             assert "今日は" not in c
 
 
+    def test_replay_translation_content_extracted_flush(self):
+        """测试 flush 阶段能正确提取 replay_translation 的日语翻译内容（非流式单次 feed 场景）"""
+        parser = StreamParser(trace_id="test-replay-006")
+        parser.feed(self.REPLAY_JSON)
+        flush_msgs = parser.flush()
+        replay_trans = [c for t, c in flush_msgs if t == "replay_translation"]
+        # flush 后必须提取到 replay_translation 内容
+        assert len(replay_trans) == 1, (
+            f"flush 应提取到 replay_translation 内容，实际 msgs={flush_msgs}"
+        )
+        assert "褒められて" in replay_trans[0], (
+            f"replay_translation 应包含日语翻译文本，实际内容={replay_trans[0]}"
+        )
+        assert "Luna" in replay_trans[0], (
+            f"replay_translation 应包含日语人称，实际内容={replay_trans[0]}"
+        )
+
+    def test_replay_translation_content_extracted_disable_split(self):
+        """测试 disable_sentence_split=True 模式下 flush 阶段也能正确提取 replay_translation"""
+        parser = StreamParser(trace_id="test-replay-007", disable_sentence_split=True)
+        parser.feed(self.REPLAY_JSON)
+        flush_msgs = parser.flush()
+        replay_trans = [c for t, c in flush_msgs if t == "replay_translation"]
+        assert len(replay_trans) == 1, (
+            f"disable_split 模式下 flush 应提取到 replay_translation，实际 msgs={flush_msgs}"
+        )
+        assert "褒められて" in replay_trans[0]
+
+    def test_replay_translation_single_feed_no_emotion(self):
+        """测试没有 emotion 字段的 JSON 中 replay_translation 也能被正确提取（单次 feed）"""
+        parser = StreamParser(trace_id="test-replay-008")
+        chunk = '{"check":"c","thought":"t","reply":"你好呀～","replay_translation":"こんにちは～"}'
+        parser.feed(chunk)
+        flush_msgs = parser.flush()
+        replay_trans = [c for t, c in flush_msgs if t == "replay_translation"]
+        assert len(replay_trans) == 1, (
+            f"无 emotion 字段时也应提取到 replay_translation，实际 msgs={flush_msgs}"
+        )
+        assert "こんにちは" in replay_trans[0]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

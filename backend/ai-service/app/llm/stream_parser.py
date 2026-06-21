@@ -158,6 +158,11 @@ class StreamParser:
             同时独立提取 replay_translation 内容，供 TTS 日语合成使用。
         """
         msgs: list[tuple[str, str]] = []
+        # 保存 reply 结束边界之后的剩余文本，用于在同一调用中继续提取 replay_translation。
+        # 为什么这样做：在非流式场景下，整个 JSON 在单次 feed() 中传入，
+        # reply 结束标记之后的 replay_translation 内容必须在同一调用中处理，
+        # 否则 feed() 返回后 _search_buffer 被清空，replay_translation 文本将丢失。
+        remaining_after_reply_end: str = ""
 
         # ---- replay_translation 提取阶段（reply 结束后） ----
         if self._reply_finished and not self._replay_translation_finished:
@@ -209,6 +214,9 @@ class StreamParser:
                     # reply 结束标记已出现在当前片段中，截断
                     self._reply_buffer += reply_tail[:end_m.start()]
                     self._reply_finished = True
+                    # 保存 reply 结束标记之后的剩余文本（包含 replay_translation 等后续字段）
+                    # 使用 end_m.start() 而非 end_m.end()，确保剩余文本包含 replay_translation 的字段名标记
+                    remaining_after_reply_end = reply_tail[end_m.start():]
                 else:
                     self._reply_buffer += reply_tail
                 self._intermediate_buffer = ""  # 释放缓冲池
@@ -223,6 +231,8 @@ class StreamParser:
                 # 发现 reply 结束标记，截断并标记为 finished
                 self._reply_buffer += text[:end_m.start()]
                 self._reply_finished = True
+                # 保存 reply 结束标记之后的剩余文本（包含 replay_translation 等后续字段）
+                remaining_after_reply_end = text[end_m.start():]
                 # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
                 if not self._disable_sentence_split:
                     msgs.extend(self._pop_sentence())
@@ -232,8 +242,14 @@ class StreamParser:
                 # 取消断句时：reply 内容暂不输出，由 flush() 统一返回完整文本
                 if not self._disable_sentence_split:
                     msgs.extend(self._pop_sentence())
-        # 已检测到 reply 结束标记（_reply_finished = True），
-        # 剩余文本交由下一轮处理（replay_translation 提取）
+        
+        # 当 reply 刚结束且存在剩余文本时，递归调用自身以提取 replay_translation。
+        # 为什么这样做：reply 结束边界（_REPLY_END_RE 匹配的 ","replay_translation":" ）
+        # 已将 replay_translation 的字段名标记消耗在匹配中，但字段值尚未提取。
+        # 将剩余文本（包含 replay_translation 字段名 + 值）递归传入，使其进入
+        # 方法顶部的 replay_translation 提取分支，确保内容被正确累积到 _replay_translation_buffer。
+        if remaining_after_reply_end and self._reply_finished and not self._replay_translation_finished:
+            msgs.extend(self._process_emotion_reply(remaining_after_reply_end))
             
         return msgs
 
