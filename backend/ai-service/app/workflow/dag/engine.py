@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
@@ -16,6 +15,8 @@ from app.api.chat_status import ChatStatusPublisher
 from app.api.chat_status_texts import get_chat_status_text
 from app.logger import logger
 from app.types.constants import ChatStatusStage, ChatStatusState
+from app.utils.snowflake import generate_string_id
+from app.workflow.constants import DagWorkflowEventType
 from app.workflow.dag.budget import BudgetTracker
 from app.workflow.dag.evaluation import StateResultCompressor
 from app.workflow.dag.nodes.plan_generation import PlanGenerationNode
@@ -37,6 +38,7 @@ from app.workflow.dag.types import (
     StateRuntimeState,
     TerminationContext,
 )
+from app.workflow.events import ChatWorkflowEventPublisher
 
 
 class DagEngine:
@@ -54,6 +56,7 @@ class DagEngine:
         memory_manager: Any,
         rag_orchestrator: Any,
         chat_status_publisher: ChatStatusPublisher | None = None,
+        event_publisher: ChatWorkflowEventPublisher | None = None,
     ):
         """初始化 DAG 引擎。
 
@@ -64,8 +67,10 @@ class DagEngine:
             memory_manager: 记忆管理器。
             rag_orchestrator: RAG 检索编排器。
             chat_status_publisher: Chat 状态发布器。
+            event_publisher: DAG 工作流事件发布器，用于向前端推送 DAG 生命周期事件。
         """
         self.chat_status_publisher = chat_status_publisher or ChatStatusPublisher()
+        self.event_publisher = event_publisher
 
         # 初始化各子节点
         self.plan_generation = PlanGenerationNode(
@@ -119,6 +124,40 @@ class DagEngine:
         self._rag_orchestrator = rag_orchestrator
         self._mcp_tool_registry = mcp_tool_registry
 
+    async def _emit_dag_event(
+        self,
+        event_type: DagWorkflowEventType,
+        trace_id: str,
+        session_id: str,
+        dag_state: DagEngineState,
+        payload: dict[str, Any],
+    ) -> None:
+        """发布 DAG 工作流事件到前端。
+
+        做什么：将 DAG 生命周期事件通过 SSE 通道推送给前端 dagWorkflowStore。
+        为什么这样做：前端 HolographicWorkflowSidebar 依赖 EVT_DAG_* 事件驱动 DAG 面板渲染。
+        参数:
+            event_type: DAG 事件类型枚举（如 EVT_DAG_PLAN_CREATED）。
+            trace_id: 当前请求的追踪 ID。
+            session_id: 会话 ID。
+            dag_state: DAG 引擎全局状态（用于提取 interaction_id 等）。
+            payload: 事件载荷字典，结构必须与前端 shared/types.ts 中对应接口一致。
+        边界条件：event_publisher 为空时静默跳过，不阻断主链路。
+        异常行为：事件发布失败仅打印警告，不中断 DAG 引擎执行。
+        """
+        if not self.event_publisher:
+            return
+        try:
+            # 直接通过 SSE 通道发布，避免 ChatWorkflowEventType 类型约束
+            from app.api.sse import sse_manager
+            await sse_manager.publish({
+                "type": event_type.value,
+                "trace_id": trace_id,
+                "payload": payload,
+            })
+        except Exception as exc:
+            logger.warning(f"DAG 事件发布失败: type={event_type.value}, error={exc}")
+
     async def run(
         self,
         trace_id: str,
@@ -170,6 +209,38 @@ class DagEngine:
                 dag_state.terminated = True
                 dag_state.termination_reason = "Plan 生成结果为空"
 
+            # === 发布 DAG Plan 创建事件（前端 DAG 面板数据入口） ===
+            if not dag_state.terminated:
+                await self._emit_dag_event(
+                    DagWorkflowEventType.EVT_DAG_PLAN_CREATED,
+                    trace_id, session_id, dag_state,
+                    {
+                        "plan_id": dag_state.plan.plan_id,
+                        "session_id": dag_state.plan.session_id,
+                        "interaction_id": dag_state.workflow_state.get("runtime", {}).get("interaction_id", ""),
+                        "assistant_message_id": dag_state.workflow_state.get("generation_state", {}).get("assistant_message_id", ""),
+                        "global_objective": {
+                            "overall_goal": dag_state.global_objective.overall_goal,
+                            "success_criteria": dag_state.global_objective.success_criteria,
+                            "output_format": dag_state.global_objective.output_format,
+                            "constraints": dag_state.global_objective.constraints,
+                        },
+                        "states": [
+                            {
+                                "state_id": s.state_id,
+                                "order_index": s.order_index,
+                                "intent": s.intent,
+                                "goal": s.goal,
+                                "completion_criteria": [c.model_dump() for c in s.completion_criteria],
+                                "depends_on": s.depends_on,
+                                "required_skill_names": s.required_skill_names,
+                            }
+                            for s in dag_state.plan.states
+                        ],
+                        "planning_reason": dag_state.plan.original_intent or "",
+                    },
+                )
+
             # ============================================================
             # Phase 2: Plan + Cursor 循环
             # ============================================================
@@ -204,6 +275,18 @@ class DagEngine:
                     is_terminal=False,
                 )
 
+                # === 发布 DAG State 启动事件 ===
+                await self._emit_dag_event(
+                    DagWorkflowEventType.EVT_DAG_STATE_STARTED,
+                    trace_id, session_id, dag_state,
+                    {
+                        "plan_id": dag_state.plan.plan_id,
+                        "state_id": current_state.state_id,
+                        "order_index": current_state.order_index,
+                        "goal": current_state.goal,
+                    },
+                )
+
                 # 初始化 State 运行时
                 state_runtime = StateRuntimeState(
                     state_id=current_state.state_id,
@@ -234,6 +317,25 @@ class DagEngine:
                 )
                 state_runtime.selected_skills = selected_skills
 
+                # === 发布 DAG Skill 初筛事件 ===
+                await self._emit_dag_event(
+                    DagWorkflowEventType.EVT_DAG_SKILL_SCREENING,
+                    trace_id, session_id, dag_state,
+                    {
+                        "plan_id": dag_state.plan.plan_id,
+                        "state_id": current_state.state_id,
+                        "selected_skills": [
+                            {
+                                "skill_name": s.get("skill_name", ""),
+                                "description": s.get("description", ""),
+                                "tool_names": s.get("tool_names", []),
+                                "capability_tags": s.get("capability_tags", []),
+                            }
+                            for s in (selected_skills if isinstance(selected_skills, list) else [])
+                        ],
+                    },
+                )
+
                 # --- Step Plan 生成 ---
                 try:
                     steps = await self.step_plan.execute(
@@ -248,6 +350,40 @@ class DagEngine:
                     state_runtime.step_plan = [
                         s.model_dump() for s in steps
                     ]
+
+                    # === 发布 DAG Step Plan 生成事件 ===
+                    await self._emit_dag_event(
+                        DagWorkflowEventType.EVT_DAG_STEP_PLAN_GENERATED,
+                        trace_id, session_id, dag_state,
+                        {
+                            "plan_id": dag_state.plan.plan_id,
+                            "state_id": current_state.state_id,
+                            "steps": [
+                                {
+                                    "step_id": s.step_id,
+                                    "step_index": s.step_index,
+                                    "description": s.description,
+                                    "execution_mode": "parallel",
+                                    "nodes": [
+                                        {
+                                            "node_id": n.node_id,
+                                            "node_type": n.node_type.value if hasattr(n.node_type, 'value') else str(n.node_type),
+                                            "skill_name": n.skill_name,
+                                            "tool_name": n.tool_name,
+                                            "resource_name": n.resource_name,
+                                            "parameter_hint": n.parameter_hint,
+                                            "transform_instruction": n.transform_instruction,
+                                            "query_text": n.query_text,
+                                            "depends_on": n.depends_on,
+                                            "gating_required": n.gating_required,
+                                        }
+                                        for n in s.nodes
+                                    ],
+                                }
+                                for s in steps
+                            ],
+                        },
+                    )
                 except Exception as e:
                     logger.error(
                         f"[TraceID:{trace_id}] Step Plan 生成失败: {e}"
@@ -334,6 +470,21 @@ class DagEngine:
 
                 state_runtime.evaluation_result = eval_result.model_dump()
 
+                # === 发布 DAG State 评估事件 ===
+                await self._emit_dag_event(
+                    DagWorkflowEventType.EVT_DAG_STATE_EVALUATED,
+                    trace_id, session_id, dag_state,
+                    {
+                        "plan_id": dag_state.plan.plan_id,
+                        "state_id": current_state.state_id,
+                        "state_satisfied": eval_result.state_satisfied,
+                        "evaluation_reason": eval_result.evaluation_reason,
+                        "gap_analysis": eval_result.gap_analysis,
+                        "suggestion": eval_result.suggestion,
+                        "criteria_checklist": eval_result.criteria_checklist,
+                    },
+                )
+
                 if eval_result.state_satisfied:
                     # 评估通过：标记成功，cursor 推进
                     state_runtime.status = DagNodeStatus.SUCCEEDED
@@ -371,6 +522,27 @@ class DagEngine:
                             session_id=session_id,
                             dag_state=dag_state,
                             replan_context=replan_context,
+                        )
+
+                        # === 发布 DAG Plan 重构事件 ===
+                        await self._emit_dag_event(
+                            DagWorkflowEventType.EVT_DAG_PLAN_REPLANNED,
+                            trace_id, session_id, dag_state,
+                            {
+                                "plan_id": dag_state.plan.plan_id,
+                                "replan_reason": eval_result.evaluation_reason,
+                                "modified_states": [
+                                    {
+                                        "state_id": s.state_id,
+                                        "order_index": s.order_index,
+                                        "intent": s.intent,
+                                        "goal": s.goal,
+                                        "completion_criteria": [c.model_dump() for c in s.completion_criteria],
+                                        "depends_on": s.depends_on,
+                                    }
+                                    for s in dag_state.plan.states
+                                ],
+                            },
                         )
 
                         # 重构后 cursor 不变，重新执行当前 State
@@ -447,10 +619,50 @@ class DagEngine:
                 is_terminal=True,
             )
 
+            # === 发布 DAG Plan 完成/终止事件 ===
+            if dag_state.terminated:
+                await self._emit_dag_event(
+                    DagWorkflowEventType.EVT_DAG_PLAN_TERMINATED,
+                    trace_id, session_id, dag_state,
+                    {
+                        "plan_id": dag_state.plan.plan_id,
+                        "termination_reason": dag_state.termination_reason,
+                        "termination_state_id": dag_state.termination_state_id,
+                        "partial_results": summary_result.overall_result if summary_result else "",
+                    },
+                )
+            else:
+                await self._emit_dag_event(
+                    DagWorkflowEventType.EVT_DAG_PLAN_COMPLETED,
+                    trace_id, session_id, dag_state,
+                    {
+                        "plan_id": dag_state.plan.plan_id,
+                        "total_states": summary_result.total_states if summary_result else len(dag_state.plan.states),
+                        "succeeded_states": summary_result.succeeded_states if summary_result else 0,
+                        "degraded_states": summary_result.degraded_states if summary_result else 0,
+                        "failed_states": summary_result.failed_states if summary_result else 0,
+                        "overall_result": summary_result.overall_result if summary_result else "",
+                        "execution_highlights": summary_result.execution_highlights if summary_result else [],
+                        "execution_issues": summary_result.execution_issues if summary_result else [],
+                    },
+                )
+
         except Exception as e:
             logger.error(f"[TraceID:{trace_id}] DAG 引擎执行异常: {e}")
             dag_state.terminated = True
             dag_state.termination_reason = f"引擎异常: {e}"
+
+            # === 发布 DAG Plan 终止事件（异常终止） ===
+            await self._emit_dag_event(
+                DagWorkflowEventType.EVT_DAG_PLAN_TERMINATED,
+                trace_id, session_id, dag_state,
+                {
+                    "plan_id": dag_state.plan.plan_id,
+                    "termination_reason": dag_state.termination_reason,
+                    "termination_state_id": dag_state.termination_state_id,
+                    "partial_results": "",
+                },
+            )
 
         return dag_state
 

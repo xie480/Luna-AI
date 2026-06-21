@@ -73,6 +73,7 @@ class ChatWorkflowNodeRegistry:
             memory_manager=dependencies.memory_manager,
             rag_orchestrator=dependencies.rag_orchestrator,
             chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
         )
 
         return DagEngineNode(

@@ -91,6 +91,30 @@ class ChatWorkflowEventType(str, Enum):
     EVT_CHAT_PLAN_COMPLETED = "EVT_CHAT_PLAN_COMPLETED"
 
 
+class DagWorkflowEventType(str, Enum):
+    """Phase 9 DAG 工作流事件类型。
+
+    做什么：定义 DAG 引擎向前端推送的 12 种 SSE 事件类型。
+    为什么这样做：前端 dagWorkflowStore 依赖这些事件驱动 DAG 面板渲染，
+                  事件名必须与前端 enum.ts 中的 DAG_WORKFLOW_EVENT_TYPE 完全一致。
+    输入输出：由 DagEngine.run() 中的 _emit_dag_event 发布，经 SSE 通道推送到前端。
+    边界条件：新增事件类型时必须同步更新前端 enum.ts 和 sseManager.ts。
+    异常行为：无。
+    """
+    EVT_DAG_PLAN_CREATED = "EVT_DAG_PLAN_CREATED"
+    EVT_DAG_STATE_STARTED = "EVT_DAG_STATE_STARTED"
+    EVT_DAG_SKILL_SCREENING = "EVT_DAG_SKILL_SCREENING"
+    EVT_DAG_STEP_PLAN_GENERATED = "EVT_DAG_STEP_PLAN_GENERATED"
+    EVT_DAG_NODE_STARTED = "EVT_DAG_NODE_STARTED"
+    EVT_DAG_NODE_COMPLETED = "EVT_DAG_NODE_COMPLETED"
+    EVT_DAG_NODE_GATING = "EVT_DAG_NODE_GATING"
+    EVT_DAG_STATE_EVALUATED = "EVT_DAG_STATE_EVALUATED"
+    EVT_DAG_PLAN_REPLANNED = "EVT_DAG_PLAN_REPLANNED"
+    EVT_DAG_PLAN_COMPLETED = "EVT_DAG_PLAN_COMPLETED"
+    EVT_DAG_PLAN_TERMINATED = "EVT_DAG_PLAN_TERMINATED"
+    EVT_DAG_BUDGET_EXHAUSTED = "EVT_DAG_BUDGET_EXHAUSTED"
+
+
 class ChatWorkflowErrorCode(str, Enum):
     """当前真实使用的错误码。"""
 
