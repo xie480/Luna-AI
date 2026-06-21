@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE } from '../../../shared/enum';
-import { DAG_NODE_STATUS } from '../../../shared/enum';
+import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE, DAG_NODE_STATUS } from '../../../shared/enum';
 import { HolographicNode } from './HolographicNode';
 import { HolographicConnections } from './HolographicConnections';
 import { HolographicARPanel } from './HolographicARPanel';
 import { PanelTransition } from '../PanelTransition/PanelTransition';
 import type { ChatNodeStatus } from '../../../shared/types';
 import type { ChatNodeProjection } from '../../types/chatWorkflow';
+import type { DagPlanProjection, DagStateProjection } from '../../types/dagWorkflow';
 import './HolographicWorkflowSidebar.css';
 
 const MIN_WIDTH = 260;
@@ -45,15 +45,48 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   // 根据聊天模式选择数据源
   const isDagMode = chatMode === CHAT_MODE.PLAN_STATE_NODE;
 
-  // 在智能规划模式下，将 DAG State 投影转换为 ChatNodeProjection 兼容格式
-  // 为什么这样做：HolographicNode 和 HolographicConnections 组件消费的是
-  //               ChatNodeProjection[] 格式的数据，DAG 模式的四级结构需要展平为节点列表
-  const dagNodes: ChatNodeProjection[] = useMemo(() => {
-    if (!isDagMode || !dagActivePlan) return [];
-    return dagActivePlan.states.map((s) => ({
+  /** Phase 8.5 工作流中属于预 DAG 阶段的节点类型集合。
+   * 做什么：在 plan_state_node 模式下，SESSION_CONTEXT_LOAD 和 INPUT_RECONSTRUCTION_SIMPLIFIED
+   *         是 DAG 引擎之前执行的 LangGraph 节点，它们的事件发布到 chatWorkflowStore 而非 dagWorkflowStore。
+   *         需要将这些节点作为"预 DAG 节点"合并到侧边栏节点列表中。
+   */
+  const PRE_DAG_NODE_TYPES = new Set([
+    CHAT_WORKFLOW_NODE_TYPE.SESSION_CONTEXT_LOAD,
+    CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION,
+  ]);
+
+  // 日常聊天/闲聊模式的节点数据
+  const chatInteractionId = chatActivePlan?.interactionId;
+  const chatNodes = useMemo(() => {
+    return chatInteractionId ? nodesByInteractionId[chatInteractionId] || [] : [];
+  }, [chatInteractionId, nodesByInteractionId]);
+
+  /**
+   * 在智能规划模式下，构建合并的节点列表：
+   * 1. 从 chatWorkflowStore 提取预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION）
+   * 2. 从 dagWorkflowStore 提取 DAG State 节点（展示 intent 而非雪花 ID）
+   * 3. 按后端执行顺序合并
+   *
+   * 为什么这样做：预 DAG 节点的事件经 SSE 路由到 chatWorkflowStore，
+   *               而 DAG 引擎完成后才向 dagWorkflowStore 发布事件，
+   *               侧边栏不能等到 DAG Plan 生成后才显示前两个节点。
+   */
+  const dagNodes: { nodeType: string; status: ChatNodeStatus | 'pending'; startedAtMs?: number; customLabel?: string }[] = useMemo(() => {
+    if (!isDagMode) return [];
+
+    // 1. 从 chatWorkflowStore 提取预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION）
+    const preDagNodes = chatNodes.filter((n) => PRE_DAG_NODE_TYPES.has(n.nodeType));
+
+    // 如果 DAG Plan 尚未生成，只显示预 DAG 节点（用户发送后即时可见）
+    // 为什么这样做：SESSION_CONTEXT_LOAD 和 INPUT_RECONSTRUCTION 在 DAG 引擎之前执行，
+    //               它们的事件通过 chatWorkflowStore 传播，但侧边栏不应等到 DAG Plan 生成才渲染
+    if (!dagActivePlan) return preDagNodes;
+
+    // 2. 将 DAG State 投影转换为节点格式，使用 intent 作为 customLabel
+    //    修复：不再使用雪花 ID 作为节点标签，而是展示 intent 语义描述
+    const stateNodes = dagActivePlan.states.map((s) => ({
       nodeType: s.stateId,
       status: (() => {
-        // 将 DAG_NODE_STATUS 映射为 ChatNodeStatus
         if (s.status === DAG_NODE_STATUS.SUCCEEDED) return 'succeeded' as ChatNodeStatus;
         if (s.status === DAG_NODE_STATUS.FAILED) return 'failed' as ChatNodeStatus;
         if (s.status === DAG_NODE_STATUS.RUNNING) return 'running' as ChatNodeStatus;
@@ -61,14 +94,12 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         return 'pending' as ChatNodeStatus;
       })(),
       startedAtMs: s.startedAtMs,
+      customLabel: s.intent || s.goal || 'State ' + s.orderIndex,
     }));
-  }, [isDagMode, dagActivePlan]);
 
-  // 日常聊天/闲聊模式的节点数据
-  const chatInteractionId = chatActivePlan?.interactionId;
-  const chatNodes = useMemo(() => {
-    return chatInteractionId ? nodesByInteractionId[chatInteractionId] || [] : [];
-  }, [chatInteractionId, nodesByInteractionId]);
+    // 3. 合并：预 DAG 节点在前，DAG State 节点在后
+    return [...preDagNodes, ...stateNodes];
+  }, [isDagMode, dagActivePlan, chatNodes]);
 
   // 统一数据源：智能规划用 dagNodes，其他用 chatNodes
   const interactionId = isDagMode ? dagActivePlan?.planId : chatActivePlan?.interactionId;
@@ -120,8 +151,10 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [isDragging]);
 
   // 根据聊天模式判断是否有活跃 Plan
+  // 智能规划模式下：有 DAG Plan 或已有预 DAG 节点（SESSION_CONTEXT_LOAD / INPUT_RECONSTRUCTION）时都显示侧边栏
+  // 为什么这样做：预 DAG 节点在 DAG 引擎之前执行，侧边栏应即时渲染这些节点
   const hasPlan = isDagMode
-    ? dagActivePlan !== null && dagPanelVisible
+    ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && nodes.length > 0)
     : chatActivePlan !== null;
 
   // 2. Auto Scroll to Active Node
@@ -250,7 +283,7 @@ export const HolographicWorkflowSidebar: React.FC = () => {
             />
             
             {nodes.map((node) => (
-                <HolographicNode 
+                <HolographicNode
                     key={node.nodeType}
                     type={getUINodeType(node.nodeType)}
                     nodeType={node.nodeType}
@@ -258,6 +291,7 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                     isActive={node.nodeType === activeNodeId}
                     onToggleAR={(e) => toggleARPanel(node.nodeType, e)}
                     interactionId={interactionId}
+                    customLabel={'customLabel' in node ? (node as any).customLabel : undefined}
                 />
             ))}
             

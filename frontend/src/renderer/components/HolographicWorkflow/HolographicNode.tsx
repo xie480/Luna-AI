@@ -10,6 +10,8 @@ interface HolographicNodeProps {
   isActive: boolean;
   onToggleAR?: (e: React.MouseEvent) => void;
   interactionId?: string;
+  /** 自定义标签，当 nodeType 无法匹配 CHAT_WORKFLOW_NODE_LABEL 时使用 */
+  customLabel?: string;
 }
 
 export const HolographicNode: React.FC<HolographicNodeProps> = ({
@@ -17,14 +19,17 @@ export const HolographicNode: React.FC<HolographicNodeProps> = ({
   nodeType,
   status,
   isActive,
-  onToggleAR
+  onToggleAR,
+  customLabel,
 }) => {
-  // Determine Label
-  let label = nodeType;
+  // Determine Label — 优先使用 customLabel，再查 CHAT_WORKFLOW_NODE_LABEL，最后回退到 nodeType
+  let label = customLabel || nodeType;
   if (type === 'start') label = 'INGRESS';
   else if (type === 'end') label = 'TERMINATE';
   else if (CHAT_WORKFLOW_NODE_LABEL[nodeType as keyof typeof CHAT_WORKFLOW_NODE_LABEL]) {
       label = CHAT_WORKFLOW_NODE_LABEL[nodeType as keyof typeof CHAT_WORKFLOW_NODE_LABEL];
+  } else if (customLabel) {
+      // customLabel 已赋值，保持原样
   }
 
   // Map backend status to visual status
