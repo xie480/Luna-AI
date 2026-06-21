@@ -144,7 +144,7 @@ class PlanGenerationNode:
                 f"states={len(plan.states)}, "
                 f"planning_reason={plan_data.get('planning_reason', '')[:100]}, "
                 f"elapsed_ms={elapsed_ms},"
-                f"prompt_text={prompt_text}"
+                f"plan={plan}"
             )
 
             # 发布 SUCCEEDED 状态

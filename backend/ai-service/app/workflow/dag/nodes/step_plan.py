@@ -104,6 +104,11 @@ class StepPlanNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] Step Plan 开始请求: "
+                f"prompt_text={prompt_text}"
+            )
+
             # 调用 LLM 生成 Step Plan
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
@@ -119,6 +124,7 @@ class StepPlanNode:
                 f"[TraceID:{trace_id}] Step Plan 生成完成: "
                 f"steps={len(steps)}, "
                 f"total_nodes={sum(len(s.nodes) for s in steps)}"
+                f"llm_response={llm_response}"
             )
 
             # 发布 SUCCEEDED 状态

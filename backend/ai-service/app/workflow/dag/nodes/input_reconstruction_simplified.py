@@ -115,7 +115,7 @@ class SimplifiedInputReconstructionNode:
                 f"[TraceID:{trace_id}] 简化输入重构完成: "
                 f"disambiguated_len={len(result.disambiguated_text)}, "
                 f"unresolved_count={len(result.unresolved_pronouns)},"
-                f"prompt_text={prompt_text}"
+                f"result={result}"
             )
 
             # 发布 SUCCEEDED 状态
