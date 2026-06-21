@@ -68,10 +68,11 @@ class SimplifiedInputReconstructionImpl(ChatWorkflowNode):
             ],
         }
 
-        # 创建简化输入重构节点
+        # 创建简化输入重构节点（使用全局 LLM 客户端单例）
+        from app.llm.client import llm_client as _llm_client
         node = SimplifiedInputReconstructionNode(
             prompt_manager=prompt_manager,
-            llm_client=prompt_manager.llm_client if hasattr(prompt_manager, 'llm_client') else None,
+            llm_client=_llm_client,
             chat_status_publisher=self.dependencies.chat_status_publisher,
         )
 

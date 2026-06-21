@@ -12,8 +12,7 @@ from typing import Any
 
 from app.api.chat_status import ChatStatusPublisher
 from app.logger import logger
-from app.types.constants import ChatWorkflowNodeType
-from app.workflow.constants import ChatNodeStatus, ChatWorkflowEventType
+from app.workflow.constants import ChatNodeStatus, ChatWorkflowEventType, ChatWorkflowNodeType
 from app.workflow.context import ChatWorkflowState
 from app.workflow.dag.engine import DagEngine
 from app.workflow.dag.types import DagEngineState, GlobalObjective

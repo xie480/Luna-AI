@@ -62,12 +62,13 @@ class ChatWorkflowNodeRegistry:
         做什么：创建 DagEngine 实例并包装为 LangGraph 节点。
         为什么这样做：DAG 引擎需要多个依赖注入，通过工厂方法集中构建。
         """
+        from app.llm.client import llm_client as _llm_client
         from app.workflow.dag.engine import DagEngine
         from app.workflow.nodes.impl.dag_engine_node import DagEngineNode
 
         dag_engine = DagEngine(
             prompt_manager=dependencies.prompt_manager,
-            llm_client=dependencies.prompt_manager.llm_client if dependencies.prompt_manager else None,
+            llm_client=_llm_client,
             mcp_tool_registry=dependencies.mcp_tool_registry,
             memory_manager=dependencies.memory_manager,
             rag_orchestrator=dependencies.rag_orchestrator,
