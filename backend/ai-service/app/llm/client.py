@@ -1227,6 +1227,73 @@ class LLMClient:
             **kwargs,
         )
 
+    async def invoke(
+        self,
+        trace_id: str,
+        prompt: str,
+        **kwargs: Any,
+    ) -> str:
+        """
+        DAG 节点专用非结构化调用入口：接受原始 prompt 文本，返回 LLM 纯文本回复。
+
+        做什么：将 prompt 文本封装为 system 消息，附带固定的 user 占位消息，
+                通过非流式 API 调用获取 LLM 完整文本回复。
+        为什么这样做：DAG 节点（如 ToolExecuteNode、DataTransformNode）需要一个
+                      简单的 (trace_id, prompt) 签名来调用 LLM，无需传入完整
+                      message 列表或 Pydantic Schema。
+        输入输出：
+            - 输入：trace_id 全链路追踪 ID、prompt 完整提示词（作为 system 消息）
+            - 输出：LLM 完整回复文本（str）
+        边界条件：
+            - 空 prompt 不做特殊处理，直接透传给模型
+        异常行为：
+            - 网络错误/限流由 tenacity 自动重试（复用 _call_api_sync_with_retry）
+            - 其他异常上抛，由调用方记录当前业务上下文
+        """
+        logger.info(
+            f"[TraceID:{trace_id}] 正在调用 LLM API (invoke), "
+            f"prompt 长度: {len(prompt)} 字符"
+        )
+
+        # 频率限制等待
+        await self._wait_for_slot(
+            trace_id=trace_id,
+            session_id=str(kwargs.pop("session_id", "")),
+            message_id=str(kwargs.pop("message_id", "")),
+        )
+
+        # 构建消息列表：prompt 作为 system 消息
+        messages: list[dict[str, str]] = [
+            {"role": Role.SYSTEM.value, "content": prompt},
+            {"role": Role.USER.value, "content": "请根据系统提示中的要求回复。"},
+        ]
+
+        # 非流式 API 调用（带 tenacity 重试）
+        try:
+            response = await self._call_api_sync_with_retry(
+                messages=messages,
+                trace_id=trace_id,
+                **kwargs,
+            )
+            content = response.choices[0].message.content or ""
+            logger.info(
+                f"[TraceID:{trace_id}] invoke 调用完成, "
+                f"回复长度: {len(content)} 字符"
+            )
+            return content
+        except (RateLimitError, APIConnectionError) as e:
+            logger.error(
+                f"[TraceID:{trace_id}] invoke API 重试耗尽后仍失败: "
+                f"{type(e).__name__}: {e}"
+            )
+            raise
+        except Exception as e:
+            logger.error(
+                f"[TraceID:{trace_id}] invoke API 发生错误: "
+                f"{type(e).__name__}: {e}"
+            )
+            raise
+
     async def chat_sync(
         self,
         system_prompt: str,
