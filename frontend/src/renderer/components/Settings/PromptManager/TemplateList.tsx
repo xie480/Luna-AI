@@ -20,10 +20,48 @@ const SLOT_LABELS: Record<SlotPosition, string> = {
   runtime: '运行时变量',
 };
 
-/** 场景中文映射 */
+/** 场景中文映射：覆盖后端所有可能的 Prompt 分类值（含 PromptCategory 枚举 + simple 文件夹目录名） */
 const CATEGORY_LABELS: Record<string, string> = {
+  // 基础对话与总结
   chat: '对话',
   summary: '总结',
+  short_summary: '短期总结',
+  long_summary: '长期总结',
+  // 输入重构
+  input_reconstruction: '输入重构',
+  input_reconstruction_simplified: '简化输入重构',
+  // 证据评估
+  evidence_evaluator: '证据评估',
+  // 用户画像
+  user_profile_extract: '用户画像提取',
+  user_profile_summarize: '用户画像摘要',
+  // MCP 技能三阶段
+  mcp_skill_screening: '技能初筛',
+  mcp_skill_loading: '技能加载',
+  mcp_skill_execution: '技能执行',
+  // MCP 资源与回退
+  mcp_resource_extraction: '资源提取',
+  mcp_skill_fallback_extraction: '技能回退提取',
+  mcp_skill_execution_summary: '技能执行摘要',
+  skill_execution_summary: '技能执行摘要',
+  // MCP 意图、工具与评价
+  mcp_intent_judge: '意图判断',
+  mcp_intent_alignment: '意图对齐',
+  mcp_tool_calling: '工具调用',
+  mcp_tool_screening: '工具筛选',
+  mcp_skill_memory: '技能记忆',
+  mcp_evaluation: '技能评价',
+  // DAG 引擎
+  dag_plan_generation: 'DAG 计划生成',
+  dag_skill_screening: 'DAG 技能筛选',
+  dag_step_plan_generation: 'DAG 步骤计划生成',
+  dag_tool_parameter_extraction: 'DAG 工具参数提取',
+  dag_data_transform: 'DAG 数据转换',
+  dag_state_evaluation: 'DAG 状态评估',
+  dag_plan_replan: 'DAG 计划重规划',
+  dag_result_compression: 'DAG 结果压缩',
+  dag_plan_summary: 'DAG 计划摘要',
+  dag_tool_memory: 'DAG 工具记忆',
 };
 
 /**
