@@ -1,0 +1,333 @@
+/**
+ * DagStateNode State 流程图节点样式。
+ * 做什么：定义 State 作为流程图节点时的卡片样式，融入 HolographicNode 视觉体系。
+ * 为什么这样做：State 需要作为 holographic-node-container 的子元素，
+ *               样式需要与 HolographicNode 保持一致但有不同的视觉语言。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言，禁止缩放动画。
+ */
+
+/* State 节点容器 — 覆盖 holographic-node-container 的默认尺寸 */
+.node-type-dag-state {
+  width: 90%;
+  max-width: 280px;
+  /* 禁止缩放动画 — 用户明确要求 */
+  transition: none;
+}
+
+.node-type-dag-state.is-active {
+  /* 禁止 is-active 的缩放 */
+  transform: none;
+}
+
+/* State 节点卡片 — 沿用 card-glass 模式但更宽 */
+.dag-state-node-card {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dag-state-node-glass {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+}
+
+.dag-state-node-content {
+  position: relative;
+  z-index: 2;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 头部 */
+.dag-state-node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dag-state-node-index {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #00ffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+}
+
+.dag-state-node-intent {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dag-state-node-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dag-state-node-latency {
+  color: rgba(255, 255, 255, 0.35);
+  margin-left: 2px;
+}
+
+/* 目标行 */
+.dag-state-node-goal {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.dag-state-node-goal svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #00ffff;
+  opacity: 0.6;
+}
+
+.dag-state-node-goal-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+}
+
+.dag-state-node-goal-text {
+  color: rgba(255, 255, 255, 0.7);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* 完成条件 */
+.dag-state-node-criteria {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.dag-state-node-criteria svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #00fa9a;
+  opacity: 0.6;
+}
+
+.dag-state-node-criteria-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-state-node-criteria-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dag-state-node-criteria-list li {
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  padding-left: 10px;
+  position: relative;
+}
+
+.dag-state-node-criteria-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(0, 250, 154, 0.5);
+}
+
+/* Skill 标签 */
+.dag-state-node-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.dag-state-node-skill-tag {
+  display: inline-flex;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-family: 'Courier New', Courier, monospace;
+  color: #8a2be2;
+  background: rgba(138, 43, 226, 0.1);
+  border: 1px solid rgba(138, 43, 226, 0.2);
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+/* Steps 展开/折叠区域 */
+.dag-state-node-steps-section {
+  margin-top: 2px;
+}
+
+.dag-state-node-steps-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 0;
+  letter-spacing: 0.5px;
+  transition: color 0.2s ease;
+}
+
+.dag-state-node-steps-toggle:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dag-state-node-steps-toggle svg {
+  flex-shrink: 0;
+}
+
+.dag-state-node-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-left: 6px;
+  border-left: 1.5px solid rgba(0, 255, 255, 0.08);
+}
+
+/* 评估结果 */
+.dag-state-node-eval {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+}
+
+.dag-state-node-eval.eval-passed {
+  background: rgba(0, 250, 154, 0.06);
+  border: 1px solid rgba(0, 250, 154, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dag-state-node-eval.eval-failed {
+  background: rgba(255, 170, 0, 0.06);
+  border: 1px solid rgba(255, 170, 0, 0.15);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dag-eval-badge {
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.dag-state-node-eval.eval-passed .dag-eval-badge {
+  color: #00fa9a;
+  background: rgba(0, 250, 154, 0.12);
+}
+
+.dag-state-node-eval.eval-failed .dag-eval-badge {
+  color: #ffaa00;
+  background: rgba(255, 170, 0, 0.12);
+}
+
+/* 错误信息 */
+.dag-state-node-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dag-state-node-error-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #ff003c;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-state-node-error-item svg {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+}
+
+/* ============================================================
+ * 状态着色 — 沿用 HolographicNode 的视觉状态体系
+ * ============================================================ */
+
+/* PENDING */
+.node-type-dag-state.status-pending .dag-state-node-glass {
+  border-color: rgba(44, 62, 80, 0.5);
+}
+
+/* RUNNING — 赛博青边框 + 光晕 */
+.node-type-dag-state.status-running .dag-state-node-glass {
+  border-color: #00ffff;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(138, 43, 226, 0.15);
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(0, 255, 255, 0.03));
+}
+.node-type-dag-state.status-running .dag-state-node-index {
+  color: #00ffff;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+}
+.node-type-dag-state.status-running .dag-state-node-intent {
+  color: #ffffff;
+  text-shadow: 0 0 4px rgba(0, 255, 255, 0.3);
+}
+
+/* SUCCESS — 薄荷绿 */
+.node-type-dag-state.status-success .dag-state-node-glass {
+  border-color: #00fa9a;
+  background: rgba(0, 250, 154, 0.04);
+}
+.node-type-dag-state.status-success .dag-state-node-index {
+  color: #00fa9a;
+}
+
+/* FAILED — 赛博红 */
+.node-type-dag-state.status-failed .dag-state-node-glass {
+  border-color: #ff003c;
+  background: rgba(255, 100, 120, 0.06);
+}
+.node-type-dag-state.status-failed .dag-state-node-index {
+  color: #ff003c;
+}
+
+/* BYPASSED/SKIPPED — 灰化 */
+.node-type-dag-state.status-bypassed {
+  opacity: 0.4;
+  filter: grayscale(100%);
+}

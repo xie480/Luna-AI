@@ -165,50 +165,40 @@
 【致命约束】：`tool_parameters` 中的参数值必须基于真实上下文，**禁止编造**！
 输出必须是一个合法的 JSON 对象，**禁止**包含任何额外的解释性文本、Markdown 代码块标记或注释。
 
+**重要**：`tool_parameters` 中填写的是**实际参数值**（不是 JSON Schema 定义）。
+
 ```json
 {
-  "can_proceed": "布尔值。true 表示可以继续执行当前工具；false 表示无法继续执行，需要触发退回。",
+  "can_proceed": true,
   "tool_parameters": {
-      "type": "object",
-      "properties": {
-           "query": {
-               "type": "array",
-               "items": {
-                   "type": "array",
-                   "items": {
-                       "type": "string",
-                       "minLength": 1,
-                       "maxLength": 500
-                   },
-                   "minItems": 1,
-                   "maxItems": 50,
-                   "description": "该并发请求要同时使用的多个搜索词。例如：['2024年诺贝尔奖获得者', 'Nobel Prize winners 2024']。"
-               },
-               "minItems": 3,
-               "maxItems": 3,
-               "description": "搜索查询关键词外层数组。必填。外层数组共 3 个子数组，每个子数组包含该并发请求要同时使用的多个搜索词。示例（搜索 2026 世界杯）：[['2026世界杯 赛程 6月14日 比赛结果'], ['FIFA World Cup 2026 June 14 results'], ['世界杯 2026 6月14日 战报']]。其中外层数组长度 3 对应 3 个并发请求。"
-           },
-           "categories": {
-               "type": "string",
-               "description": "搜索分类筛选，可选。多个分类用逗号分隔。"
-                              "可选值：general, news, images, videos, files, music, it, science,"
-                              "  social media。默认：general。例如：'general,news'。",
-               "default": "general",
-           },
-           "time_range": {
-               "type": "string",
-               "enum": [
-                   "",
-                   "day",
-                   "month",
-                   "year",
-               ],
-               "default": "",
-               "description": "时间范围过滤"
-           }
-       },
-       "required": ["query"]
-   },
-  "fallback_reason": "字符串。\n仅当 can_proceed=false 时必填，详细描述无法继续执行的原因：\n1. 缺失哪些必需资源\n2. 哪些前序工具失败\n3. 数据不充分的具体表现\n4. 目标无法达成的原因\n当 can_proceed=true 时此字段为空字符串。"
+    "query": [
+      ["搜索词1A", "搜索词1B"],
+      ["搜索词2A", "搜索词2B"],
+      ["搜索词3A", "搜索词3B"]
+    ],
+    "categories": "general",
+    "time_range": ""
+  },
+  "fallback_reason": ""
 }
 ```
+
+#### tool_parameters 参数说明
+
+以下为 `web_search` 工具的参数 Schema（**请据此填写实际值，不要输出 Schema 本身**）：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| query | array（外层 3 个子数组，每个子数组含 1-N 个字符串搜索词） | 是 | 搜索查询关键词外层数组。外层数组长度必须为 3（对应 3 个并发请求），其中每个子数组包含该并发请求要同时使用的多个搜索词。示例（搜索 2026 世界杯）：`[['2026世界杯 赛程 6月14日 比赛结果'], ['FIFA World Cup 2026 June 14 results'], ['世界杯 2026 6月14日 战报']]`。 |
+| categories | string | 否 | 搜索分类筛选，多个分类用逗号分隔。可选值：`general, news, images, videos, files, music, it, science, social media`。默认：`general`。 |
+| time_range | string（枚举：`""` / `"day"` / `"month"` / `"year"`） | 否 | 时间范围过滤。默认空字符串表示无限制。 |
+
+#### fallback_reason 说明
+
+仅当 `can_proceed=false` 时必填，详细描述无法继续执行的原因：
+1. 缺失哪些必需资源
+2. 哪些前序工具失败
+3. 数据不充分的具体表现
+4. 目标无法达成的原因
+
+当 `can_proceed=true` 时此字段为空字符串。

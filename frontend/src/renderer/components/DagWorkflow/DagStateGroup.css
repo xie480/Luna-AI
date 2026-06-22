@@ -1,19 +1,46 @@
 /**
- * DagStateGroup State 分组容器样式。
- * 做什么：定义 State 可视化分组容器的布局、状态着色和嵌套视觉。
- * 为什么这样做：State 是 DAG 面板的核心中间层容器，需要清晰的视觉边界。
+ * DagStateGroup State 子图背景容器样式。
+ * 做什么：定义 State 作为子图背景容器的布局、状态着色和嵌套视觉。
+ * 为什么这样做：State 是 DAG 面板的核心中间层容器，必须以子图背景容器形式
+ *               呈现每个 State 的边界，与外部画布形成明显的视觉层级区分。
  * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
  */
 
-/* State 分组主容器 */
+/* ============================================================
+ * State 子图背景容器 — 外层壳
+ * ============================================================ */
 .dag-state-group {
   position: relative;
-  border: 1px solid rgba(44, 62, 80, 0.5);
-  border-radius: 8px;
-  background: rgba(15, 20, 30, 0.65);
-  backdrop-filter: blur(8px);
+  /* 子图容器使用较粗的边框和更深的背景，与外部画布形成明显区分 */
+  border: 1.5px solid rgba(44, 62, 80, 0.5);
+  border-radius: 10px;
+  background: rgba(12, 16, 26, 0.75);
+  backdrop-filter: blur(10px);
   overflow: hidden;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  /* 子图容器内部使用 flex 列布局 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 子图容器内嵌网格叠加背景（与全局信息栏一致的赛博朋克网格） */
+.dag-state-group::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 0;
+}
+
+/* 确保子图内容在网格叠加之上 */
+.dag-state-group > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* 搜索匹配高亮 */
@@ -22,75 +49,78 @@
   box-shadow: 0 0 12px rgba(255, 170, 0, 0.15);
 }
 
-/* State 状态着色 */
+/* ============================================================
+ * State 状态着色 — 子图容器边框与光晕
+ * ============================================================ */
+
+/* PENDING 态：暗灰边框，无光晕 */
+.dag-state-group.status-pending {
+  border-color: rgba(44, 62, 80, 0.5);
+}
+
+/* RUNNING 态：赛博青边框 + 脉冲光晕 */
 .dag-state-group.status-running {
   border-color: #00ffff;
-  box-shadow: 0 0 15px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(138, 43, 226, 0.2);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.25), inset 0 0 30px rgba(138, 43, 226, 0.12);
   animation: pulseStatus 2s ease-in-out infinite;
 }
 
+/* SUCCEEDED 态：薄荷绿边框 + 柔和光晕 */
 .dag-state-group.status-succeeded {
-  border-color: rgba(0, 250, 154, 0.3);
-  box-shadow: 0 0 10px rgba(0, 250, 154, 0.1);
+  border-color: rgba(0, 250, 154, 0.35);
+  box-shadow: 0 0 12px rgba(0, 250, 154, 0.1);
 }
 
+/* DEGRADED 态：橙色边框 */
 .dag-state-group.status-degraded {
-  border-color: rgba(255, 170, 0, 0.3);
+  border-color: rgba(255, 170, 0, 0.35);
+  box-shadow: 0 0 8px rgba(255, 170, 0, 0.1);
 }
 
+/* FAILED 态：赛博红边框 + 红色光晕 */
 .dag-state-group.status-failed {
   border-color: #ff003c;
-  box-shadow: 0 0 10px rgba(255, 0, 60, 0.2);
+  box-shadow: 0 0 15px rgba(255, 0, 60, 0.2);
 }
 
+/* SKIPPED 态：灰化 + 半透明 */
 .dag-state-group.status-skipped {
   opacity: 0.4;
   filter: grayscale(100%);
 }
 
-/* State 头部 */
+/* ============================================================
+ * State 子图头部 — 始终可见
+ * ============================================================ */
 .dag-state-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  cursor: pointer;
+  gap: 10px;
+  padding: 12px 16px;
+  /* 头部使用更深的背景，形成标题栏效果 */
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.06);
   user-select: none;
-  transition: background 0.2s ease;
-}
-
-.dag-state-header:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-/* 展开/折叠图标 */
-.dag-state-toggle-icon {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  color: rgba(255, 255, 255, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* State 编号 */
 .dag-state-index {
   flex-shrink: 0;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #00ffff;
-  letter-spacing: 1px;
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+  text-transform: uppercase;
 }
 
 /* State 意图 */
 .dag-state-intent {
   flex: 1;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
   letter-spacing: 0.5px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -135,18 +165,14 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
-/* State 内容区域 */
-.dag-state-content {
-  padding: 0 14px 14px;
+/* ============================================================
+ * State 信息区 — 目标 + 完成条件 + Skills（始终可见）
+ * ============================================================ */
+.dag-state-info-area {
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  animation: dagContentFadeIn 0.2s ease-out;
-}
-
-@keyframes dagContentFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+  gap: 8px;
 }
 
 /* 目标行 */
@@ -163,19 +189,21 @@
   height: 12px;
   margin-top: 2px;
   color: #00ffff;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .dag-state-goal-label {
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.45);
   font-size: 11px;
   font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.5px;
 }
 
 .dag-state-goal-text {
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.8);
   font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -193,13 +221,14 @@
   height: 12px;
   margin-top: 2px;
   color: #00fa9a;
-  opacity: 0.6;
+  opacity: 0.7;
 }
 
 .dag-state-criteria-label {
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.45);
   font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.5px;
 }
 
 .dag-state-criteria-list {
@@ -209,10 +238,11 @@
 }
 
 .dag-state-criteria-list li {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.6);
   font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
   line-height: 1.6;
-  padding-left: 12px;
+  padding-left: 14px;
   position: relative;
 }
 
@@ -224,7 +254,7 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: rgba(0, 250, 154, 0.4);
+  background: rgba(0, 250, 154, 0.5);
 }
 
 /* Skill 标签 */
@@ -260,13 +290,57 @@
   letter-spacing: 0.5px;
 }
 
+/* ============================================================
+ * 分隔线 — 信息区与内容区之间
+ * ============================================================ */
+.dag-state-divider {
+  height: 1px;
+  margin: 0 16px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 255, 255, 0.12) 20%,
+    rgba(0, 255, 255, 0.12) 80%,
+    transparent
+  );
+}
+
+/* ============================================================
+ * State 内容区 — Step 列表
+ * ============================================================ */
+.dag-state-content {
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: dagContentFadeIn 0.2s ease-out;
+}
+
+@keyframes dagContentFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Step 列表容器 */
 .dag-state-steps {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-left: 8px;
-  border-left: 2px solid rgba(0, 255, 255, 0.08);
+  /* Step 列表左侧使用更明显的竖线指示嵌套关系 */
+  padding-left: 10px;
+  border-left: 2px solid rgba(0, 255, 255, 0.1);
+}
+
+/* Step 为空时的占位提示 */
+.dag-state-steps-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.5px;
 }
 
 /* 评估结果 */

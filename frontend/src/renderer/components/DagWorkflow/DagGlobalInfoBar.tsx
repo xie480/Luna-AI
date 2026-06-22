@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
 import { DAG_PLAN_STATUS_LABEL } from '../../types/dagWorkflow';
-import { DagIconTarget, DagIconCheckCircle, DagIconBarChart, DagIconWrench, DagIconChevronRight, DagIconChevronDown } from './DagIcons';
+import { DagIconTarget, DagIconCheckCircle, DagIconBarChart, DagIconWrench, DagIconFileText, DagIconChevronRight, DagIconChevronDown } from './DagIcons';
 import './DagGlobalInfoBar.css';
 
 /**
@@ -60,6 +60,15 @@ export const DagGlobalInfoBar: React.FC = () => {
         <span className="dag-info-row-label">标准</span>
         <span className="dag-info-row-content">{globalObjective.successCriteria}</span>
       </div>
+
+      {/* 输出格式行（仅在有值时渲染） */}
+      {globalObjective.outputFormat && (
+        <div className="dag-info-row">
+          <DagIconFileText className="dag-info-row-icon" />
+          <span className="dag-info-row-label">格式</span>
+          <span className="dag-info-row-content">{globalObjective.outputFormat}</span>
+        </div>
+      )}
 
       {/* State 进度行 */}
       <div className="dag-info-row">

@@ -1,3 +1,14 @@
+/**
+ * HolographicWorkflowSidebar — 全息工作流侧边栏。
+ * 做什么：统一处理日常聊天/极速闲聊/智能规划三种模式的工作流可视化。
+ *         日常聊天模式渲染扁平 HolographicNode 节点列表；
+ *         智能规划模式将全局目标和 State 作为流程图节点嵌入 .node-list，
+ *         由 HolographicConnections 自动绘制连线。
+ * 为什么这样做：State 和全局目标需要作为流程图节点的一部分融入现有连线系统。
+ * 输入输出：数据来源为 chatWorkflowStore（日常聊天）和 dagWorkflowStore（智能规划）。
+ * 边界条件：无活跃 Plan 时侧边栏隐藏。
+ * 异常行为：无。
+ */
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
@@ -7,6 +18,8 @@ import { HolographicNode } from './HolographicNode';
 import { HolographicConnections } from './HolographicConnections';
 import { HolographicARPanel } from './HolographicARPanel';
 import { PanelTransition } from '../PanelTransition/PanelTransition';
+import { DagGlobalObjectiveNode } from '../DagWorkflow/DagGlobalObjectiveNode';
+import { DagStateNode } from '../DagWorkflow/DagStateNode';
 import type { ChatNodeStatus } from '../../../shared/types';
 import type { ChatNodeProjection } from '../../types/chatWorkflow';
 import type { DagPlanProjection, DagStateProjection } from '../../types/dagWorkflow';
@@ -14,7 +27,6 @@ import './HolographicWorkflowSidebar.css';
 
 const MIN_WIDTH = 260;
 const DEFAULT_WIDTH = 320;
-// Max width will be calculated dynamically based on window size (e.g., 40%)
 
 export const HolographicWorkflowSidebar: React.FC = () => {
   // Phase 8.5 日常聊天/极速闲聊模式数据
@@ -42,14 +54,9 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 根据聊天模式选择数据源
   const isDagMode = chatMode === CHAT_MODE.PLAN_STATE_NODE;
 
-  /** Phase 8.5 工作流中属于预 DAG 阶段的节点类型集合。
-   * 做什么：在 plan_state_node 模式下，SESSION_CONTEXT_LOAD 和 INPUT_RECONSTRUCTION_SIMPLIFIED
-   *         是 DAG 引擎之前执行的 LangGraph 节点，它们的事件发布到 chatWorkflowStore 而非 dagWorkflowStore。
-   *         需要将这些节点作为"预 DAG 节点"合并到侧边栏节点列表中。
-   */
+  /** 预 DAG 阶段的节点类型集合 */
   const PRE_DAG_NODE_TYPES = new Set([
     CHAT_WORKFLOW_NODE_TYPE.SESSION_CONTEXT_LOAD,
     CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION,
@@ -62,50 +69,19 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [chatInteractionId, nodesByInteractionId]);
 
   /**
-   * 在智能规划模式下，构建合并的节点列表：
-   * 1. 从 chatWorkflowStore 提取预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION）
-   * 2. 从 dagWorkflowStore 提取 DAG State 节点（展示 intent 而非雪花 ID）
-   * 3. 按后端执行顺序合并
-   *
-   * 为什么这样做：预 DAG 节点的事件经 SSE 路由到 chatWorkflowStore，
-   *               而 DAG 引擎完成后才向 dagWorkflowStore 发布事件，
-   *               侧边栏不能等到 DAG Plan 生成后才显示前两个节点。
+   * 在智能规划模式下，构建预 DAG 节点列表。
+   * 为什么这样做：预 DAG 节点在 DAG 引擎之前执行，需要即时显示。
    */
-  const dagNodes: { nodeType: string; status: ChatNodeStatus | 'pending'; startedAtMs?: number; customLabel?: string }[] = useMemo(() => {
+  const preDagNodes = useMemo(() => {
     if (!isDagMode) return [];
+    return chatNodes.filter((n) => PRE_DAG_NODE_TYPES.has(n.nodeType));
+  }, [isDagMode, chatNodes]);
 
-    // 1. 从 chatWorkflowStore 提取预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION）
-    const preDagNodes = chatNodes.filter((n) => PRE_DAG_NODE_TYPES.has(n.nodeType));
-
-    // 如果 DAG Plan 尚未生成，只显示预 DAG 节点（用户发送后即时可见）
-    // 为什么这样做：SESSION_CONTEXT_LOAD 和 INPUT_RECONSTRUCTION 在 DAG 引擎之前执行，
-    //               它们的事件通过 chatWorkflowStore 传播，但侧边栏不应等到 DAG Plan 生成才渲染
-    if (!dagActivePlan) return preDagNodes;
-
-    // 2. 将 DAG State 投影转换为节点格式，使用 intent 作为 customLabel
-    //    修复：不再使用雪花 ID 作为节点标签，而是展示 intent 语义描述
-    const stateNodes = dagActivePlan.states.map((s) => ({
-      nodeType: s.stateId,
-      status: (() => {
-        if (s.status === DAG_NODE_STATUS.SUCCEEDED) return 'succeeded' as ChatNodeStatus;
-        if (s.status === DAG_NODE_STATUS.FAILED) return 'failed' as ChatNodeStatus;
-        if (s.status === DAG_NODE_STATUS.RUNNING) return 'running' as ChatNodeStatus;
-        if (s.status === DAG_NODE_STATUS.DEGRADED) return 'degraded' as ChatNodeStatus;
-        return 'pending' as ChatNodeStatus;
-      })(),
-      startedAtMs: s.startedAtMs,
-      customLabel: s.intent || s.goal || 'State ' + s.orderIndex,
-    }));
-
-    // 3. 合并：预 DAG 节点在前，DAG State 节点在后
-    return [...preDagNodes, ...stateNodes];
-  }, [isDagMode, dagActivePlan, chatNodes]);
-
-  // 统一数据源：智能规划用 dagNodes，其他用 chatNodes
+  // 统一数据源
   const interactionId = isDagMode ? dagActivePlan?.planId : chatActivePlan?.interactionId;
-  const nodes = isDagMode ? dagNodes : chatNodes;
+  const nodes = isDagMode ? preDagNodes : chatNodes;
 
-  // 1. Drag to Resize Logic
+  // Drag to Resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -114,25 +90,15 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging) return;
-      
       const maxWidth = window.innerWidth * 0.4;
-      // Calculate new width (mouse X position relative to left edge, assuming sidebar is docked left)
-      // Since it's docked left, the new width is simply e.clientX
       let newWidth = e.clientX;
-      
-      // If it's floating or offset, we'd need containerRef.current.getBoundingClientRect().left
-      
       if (newWidth < MIN_WIDTH) newWidth = MIN_WIDTH;
       if (newWidth > maxWidth) newWidth = maxWidth;
-      
       setWidth(newWidth);
     };
 
     const handleMouseUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
-        // TODO: Persist width to local storage
-      }
+      if (isDragging) setIsDragging(false);
     };
 
     if (isDragging) {
@@ -150,66 +116,77 @@ export const HolographicWorkflowSidebar: React.FC = () => {
     };
   }, [isDragging]);
 
-  // 根据聊天模式判断是否有活跃 Plan
-  // 智能规划模式下：有 DAG Plan 或已有预 DAG 节点（SESSION_CONTEXT_LOAD / INPUT_RECONSTRUCTION）时都显示侧边栏
-  // 为什么这样做：预 DAG 节点在 DAG 引擎之前执行，侧边栏应即时渲染这些节点
+  // 是否有活跃 Plan
   const hasPlan = isDagMode
-    ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && nodes.length > 0)
+    ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && preDagNodes.length > 0)
     : chatActivePlan !== null;
 
-  // 2. Auto Scroll to Active Node
+  // Auto Scroll
   useEffect(() => {
     if (!scrollRef.current || !hasPlan) return;
-    
-    // Find the currently running node or the last node
-    const activeNode = [...nodes].reverse().find(n => n.status === 'running') || nodes[nodes.length - 1];
-    
+    const allNodeTypes = isDagMode && dagActivePlan
+      ? ['dag_global_objective', ...preDagNodes.map(n => n.nodeType), ...dagActivePlan.states.map(s => s.stateId)]
+      : nodes.map(n => n.nodeType);
+    const activeNode = allNodeTypes[allNodeTypes.length - 1];
     if (activeNode) {
-        setActiveNodeId(activeNode.nodeType);
-        const nodeEl = scrollRef.current.querySelector(`[data-node-type="${activeNode.nodeType}"]`);
-        if (nodeEl) {
-             nodeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    } else {
-        setActiveNodeId(null);
+      setActiveNodeId(activeNode);
     }
-  }, [nodes, hasPlan]);
+  }, [nodes, hasPlan, dagActivePlan]);
 
-  // Handle Holographic AR Panel Toggle
+  // AR Panel
   const toggleARPanel = useCallback((nodeType: string, event: React.MouseEvent) => {
     event.stopPropagation();
     const targetRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     setARPanelData((current) => {
-      if (current?.nodeType === nodeType) {
-        return null;
-      }
+      if (current?.nodeType === nodeType) return null;
       return { nodeType, targetRect };
     });
   }, []);
-  
-  // Close AR Panel when clicking outside
+
   useEffect(() => {
-      const handleClickOutside = (e: MouseEvent) => {
-          if (arPanelData && containerRef.current && !containerRef.current.contains(e.target as Node)) {
-              // We are clicking entirely outside the sidebar, maybe close it?
-              // Actually, closing on outside click is standard for popovers.
-              setARPanelData(null);
-          }
-      };
-      
-      // Need a slight delay to prevent the trigger click from immediately closing it
-      if (arPanelData) {
-          setTimeout(() => {
-            window.addEventListener('click', handleClickOutside);
-          }, 10);
+    const handleClickOutside = (e: MouseEvent) => {
+      if (arPanelData && containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setARPanelData(null);
       }
-      
-      return () => {
-          window.removeEventListener('click', handleClickOutside);
-      }
-  }, [arPanelData])
+    };
+    if (arPanelData) {
+      setTimeout(() => { window.addEventListener('click', handleClickOutside); }, 10);
+    }
+    return () => { window.removeEventListener('click', handleClickOutside); };
+  }, [arPanelData]);
 
+  // 计算 DAG 模式下的节点列表（用于 HolographicConnections）
+  const dagConnectionNodes: ChatNodeProjection[] = useMemo(() => {
+    if (!isDagMode || !dagActivePlan) return preDagNodes as ChatNodeProjection[];
+    // 构建虚拟 node 列表供 HolographicConnections 计算连线
+    const virtualNodes: ChatNodeProjection[] = [];
+    // 全局目标节点
+    virtualNodes.push({
+      nodeType: 'dag_global_objective',
+      status: dagActivePlan.status === 'executing' ? 'running' : dagActivePlan.status === 'completed' ? 'succeeded' : 'pending',
+    } as ChatNodeProjection);
+    // 预 DAG 节点
+    for (const n of preDagNodes) {
+      virtualNodes.push(n as ChatNodeProjection);
+    }
+    // State 节点
+    for (const s of dagActivePlan.states) {
+      virtualNodes.push({
+        nodeType: s.stateId,
+        status: (() => {
+          if (s.status === DAG_NODE_STATUS.SUCCEEDED) return 'succeeded';
+          if (s.status === DAG_NODE_STATUS.FAILED) return 'failed';
+          if (s.status === DAG_NODE_STATUS.RUNNING) return 'running';
+          if (s.status === DAG_NODE_STATUS.DEGRADED) return 'degraded';
+          return 'pending';
+        })(),
+      } as ChatNodeProjection);
+    }
+    return virtualNodes;
+  }, [isDagMode, dagActivePlan, preDagNodes]);
 
+  // HolographicConnections 使用的节点列表
+  const connectionNodes = isDagMode ? dagConnectionNodes : chatNodes;
 
   return (
     <>
@@ -227,7 +204,6 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       }}
     >
       <div className="trigger-icon">
-        {/* Network / Workflow Icon */}
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
            <circle cx="18" cy="5" r="3" />
            <circle cx="6" cy="12" r="3" />
@@ -271,19 +247,19 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       </div>
 
       <div className="holographic-canvas" ref={scrollRef}>
-        <HolographicConnections nodes={nodes} activeNodeId={activeNodeId} width={width} />
+        {/* 连线层 — 统一处理日常聊天和 DAG 模式 */}
+        <HolographicConnections nodes={connectionNodes} activeNodeId={activeNodeId} width={width} />
         
         <div className="node-list">
-            {/* Start Node */}
-            <HolographicNode 
-                type="start" 
-                nodeType={CHAT_WORKFLOW_NODE_TYPE.MESSAGE_INGRESS} 
-                status="succeeded"
-                isActive={false}
-            />
-            
-            {nodes.map((node) => (
-                <HolographicNode
+            {/* ═══ DAG 模式：全局目标 + 预DAG节点 + State 节点 ═══ */}
+            {isDagMode && dagActivePlan ? (
+              <>
+                {/* 全局目标节点（流程图最上方） */}
+                <DagGlobalObjectiveNode plan={dagActivePlan} />
+
+                {/* 预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION） */}
+                {preDagNodes.map((node) => (
+                  <HolographicNode
                     key={node.nodeType}
                     type={getUINodeType(node.nodeType)}
                     nodeType={node.nodeType}
@@ -292,29 +268,62 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                     onToggleAR={(e) => toggleARPanel(node.nodeType, e)}
                     interactionId={interactionId}
                     customLabel={'customLabel' in node ? (node as any).customLabel : undefined}
-                />
-            ))}
-            
-            {/* End Node：只要存在活动计划就始终渲染，确保连线完整贯穿流程收尾阶段 */}
-            {hasPlan && (
+                  />
+                ))}
+
+                {/* State 节点列表（作为流程图节点，用连线连接） */}
+                {dagActivePlan.states.map((state) => (
+                  <DagStateNode key={state.stateId} state={state} />
+                ))}
+
+                {/* End Node */}
                 <HolographicNode
-                    type="end"
-                    nodeType="workflow_end"
-                    status={(() => {
-                        if (isDagMode) {
-                            // DAG 模式：根据 dagActivePlan.status 映射
-                            if (!dagActivePlan) return 'pending';
-                            if (dagActivePlan.status === 'completed' || dagActivePlan.status === 'succeeded') return 'succeeded';
-                            if (dagActivePlan.status === 'failed' || dagActivePlan.status === 'terminated') return 'failed';
-                            return 'pending';
-                        }
-                        // 日常聊天模式
-                        if (chatActivePlan?.status === 'completed') return 'succeeded';
-                        if (chatActivePlan?.status === 'failed') return 'failed';
-                        return 'pending';
-                    })()}
-                    isActive={isDagMode ? false : chatActivePlan?.status === 'postprocessing'}
+                  type="end"
+                  nodeType="workflow_end"
+                  status={(() => {
+                    if (dagActivePlan.status === 'completed') return 'succeeded';
+                    if (dagActivePlan.status === 'failed' || dagActivePlan.status === 'terminated') return 'failed';
+                    return 'pending';
+                  })()}
+                  isActive={false}
                 />
+              </>
+            ) : (
+              /* ═══ 日常聊天/极速闲聊模式 ═══ */
+              <>
+                <HolographicNode 
+                    type="start" 
+                    nodeType={CHAT_WORKFLOW_NODE_TYPE.MESSAGE_INGRESS} 
+                    status="succeeded"
+                    isActive={false}
+                />
+                
+                {nodes.map((node) => (
+                    <HolographicNode
+                        key={node.nodeType}
+                        type={getUINodeType(node.nodeType)}
+                        nodeType={node.nodeType}
+                        status={node.status}
+                        isActive={node.nodeType === activeNodeId}
+                        onToggleAR={(e) => toggleARPanel(node.nodeType, e)}
+                        interactionId={interactionId}
+                        customLabel={'customLabel' in node ? (node as any).customLabel : undefined}
+                    />
+                ))}
+                
+                {hasPlan && (
+                    <HolographicNode
+                        type="end"
+                        nodeType="workflow_end"
+                        status={(() => {
+                            if (chatActivePlan?.status === 'completed') return 'succeeded';
+                            if (chatActivePlan?.status === 'failed') return 'failed';
+                            return 'pending';
+                        })()}
+                        isActive={chatActivePlan?.status === 'postprocessing'}
+                    />
+                )}
+              </>
             )}
         </div>
       </div>
@@ -327,10 +336,9 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         <div className="resize-glow"></div>
       </div>
 
-      {/* 全息投影覆盖层 — 绝对定位脱离 Flex 文档流，避免抢占 canvas 高度 */}
+      {/* 全息投影覆盖层 */}
       <div className="holographic-overlay-container">
         <PanelTransition isLoading={!hasPlan}>
-          {/* AR Projection Panel */}
           {arPanelData && (
               <HolographicARPanel
                 nodeType={arPanelData.nodeType}

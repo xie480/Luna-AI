@@ -1,9 +1,11 @@
 /**
- * DagStateGroup — State 可视化分组容器。
- * 做什么：将同一 State 内的所有 Step 和 Node 聚合到统一的视觉背景容器中，
- *         展示 State 的目标描述、完成条件、当前状态和耗时。
- * 为什么这样做：State 是 Plan-State-Node 的核心中间层，
- *               前端需要以可视化容器呈现每个 State 的边界。
+ * DagStateGroup — State 可视化子图背景容器。
+ * 做什么：将 State 渲染为一个独立的子图背景容器（而非可折叠卡片），
+ *         容器头部始终展示 State 的目标描述和完成条件，
+ *         容器内部包含该 State 下的所有 Step 可视化节点。
+ * 为什么这样做：设计文档要求 State 作为 Plan-State-Node 的核心中间层，
+ *               必须以可视化容器形式呈现每个 State 的边界，
+ *               让用户在同一视图中区分不同的 State 并理解其目标。
  * 输入输出：数据来源为 DagPlanProjection.states 中的单个 DagStateProjection。
  * 边界条件：State 内 Step 列表可能为空（尚未生成 Step Plan）。
  * 异常行为：无。
@@ -16,8 +18,6 @@ import { DagStepNode } from './DagStepNode';
 import {
   DagIconTarget,
   DagIconCheckCircle,
-  DagIconChevronDown,
-  DagIconChevronRight,
   DagIconLoader,
   DagIconCheck,
   DagIconAlertTriangle,
@@ -26,7 +26,7 @@ import {
 import './DagStateGroup.css';
 
 /**
- * State 分组容器组件属性。
+ * State 子图容器组件属性。
  */
 interface DagStateGroupProps {
   /** State 投影数据 */
@@ -65,14 +65,16 @@ function getStatusIcon(status: string): React.FC<React.SVGProps<SVGSVGElement>> 
 }
 
 /**
- * State 分组容器组件。
+ * State 子图背景容器组件。
+ * 做什么：将 State 渲染为一个独立的子图背景容器，
+ *         头部始终展示 State 编号、意图、状态和耗时，
+ *         信息区始终展示目标描述和完成条件，
+ *         内容区渲染该 State 下的所有 Step 节点。
+ * 为什么这样做：State 是 DAG 的核心中间层，必须以背景容器形式呈现其边界，
+ *               让用户在同一视图中区分不同 State 并理解各 State 的目标与进展。
  */
 export const DagStateGroup: React.FC<DagStateGroupProps> = ({ state }) => {
-  const expandedStates = useDagWorkflowStore((s) => s.expandedStates);
-  const toggleStateExpanded = useDagWorkflowStore((s) => s.toggleStateExpanded);
   const searchQuery = useDagWorkflowStore((s) => s.searchQuery);
-
-  const isExpanded = expandedStates[state.stateId] ?? false;
 
   // 实时耗时计时器
   const [elapsedMs, setElapsedMs] = useState<number | undefined>(state.latencyMs);
@@ -104,19 +106,8 @@ export const DagStateGroup: React.FC<DagStateGroupProps> = ({ state }) => {
     <div
       className={`dag-state-group status-${state.status.toLowerCase()} ${isSearchMatch ? 'search-match' : ''}`}
     >
-      {/* State 头部 */}
-      <div
-        className="dag-state-header"
-        onClick={() => toggleStateExpanded(state.stateId)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleStateExpanded(state.stateId); }}
-      >
-        {/* 展开/折叠图标 */}
-        <span className="dag-state-toggle-icon">
-          {isExpanded ? <DagIconChevronDown width="14" height="14" /> : <DagIconChevronRight width="14" height="14" />}
-        </span>
-
+      {/* ─── State 子图头部（始终可见） ─── */}
+      <div className="dag-state-header">
         {/* State 编号和意图 */}
         <span className="dag-state-index">State {state.orderIndex}</span>
         <span className="dag-state-intent">{state.intent}</span>
@@ -131,80 +122,88 @@ export const DagStateGroup: React.FC<DagStateGroupProps> = ({ state }) => {
         </span>
       </div>
 
-      {/* State 内容（展开时显示） */}
-      {isExpanded && (
-        <div className="dag-state-content">
-          {/* 目标 */}
-          <div className="dag-state-goal">
-            <DagIconTarget width="12" height="12" className="dag-state-goal-icon" />
-            <span className="dag-state-goal-label">目标</span>
-            <span className="dag-state-goal-text">{state.goal}</span>
-          </div>
-
-          {/* 完成条件 */}
-          {state.completionCriteria.length > 0 && (
-            <div className="dag-state-criteria">
-              <DagIconCheckCircle width="12" height="12" className="dag-state-criteria-icon" />
-              <span className="dag-state-criteria-label">完成条件</span>
-              <ul className="dag-state-criteria-list">
-                {state.completionCriteria.map((c, i) => (
-                  <li key={i}>
-                    {c.field} {c.operator} {String(c.value)}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Skill 标签 */}
-          {state.selectedSkills.length > 0 && (
-            <div className="dag-state-skills">
-              <span className="dag-state-skills-label">已选 Skills</span>
-              <div className="dag-state-skill-tags">
-                {state.selectedSkills.map((skill) => (
-                  <span key={skill.skillName} className="dag-state-skill-tag" title={skill.description}>
-                    {skill.skillName}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Step 列表 */}
-          {state.steps.length > 0 && (
-            <div className="dag-state-steps">
-              {state.steps.map((step) => (
-                <DagStepNode key={step.stepId} step={step} />
-              ))}
-            </div>
-          )}
-
-          {/* 评估结果 */}
-          {state.evaluationResult && (
-            <div className={`dag-state-evaluation ${state.evaluationResult.stateSatisfied ? 'eval-passed' : 'eval-failed'}`}>
-              <span className="dag-eval-badge">
-                {state.evaluationResult.stateSatisfied ? '通过' : '未通过'}
-              </span>
-              <span className="dag-eval-reason">{state.evaluationResult.evaluationReason}</span>
-              {state.evaluationResult.gapAnalysis && (
-                <span className="dag-eval-gap">差距：{state.evaluationResult.gapAnalysis}</span>
-              )}
-            </div>
-          )}
-
-          {/* 错误信息 */}
-          {state.errorMessages.length > 0 && (
-            <div className="dag-state-errors">
-              {state.errorMessages.map((err, i) => (
-                <div key={i} className="dag-state-error-item">
-                  <DagIconAlertTriangle width="12" height="12" />
-                  <span>{err}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* ─── State 信息区：目标 + 完成条件（始终可见，作为子图的描述装饰） ─── */}
+      <div className="dag-state-info-area">
+        {/* 目标 */}
+        <div className="dag-state-goal">
+          <DagIconTarget width="12" height="12" className="dag-state-goal-icon" />
+          <span className="dag-state-goal-label">目标</span>
+          <span className="dag-state-goal-text">{state.goal}</span>
         </div>
-      )}
+
+        {/* 完成条件 */}
+        {state.completionCriteria.length > 0 && (
+          <div className="dag-state-criteria">
+            <DagIconCheckCircle width="12" height="12" className="dag-state-criteria-icon" />
+            <span className="dag-state-criteria-label">完成条件</span>
+            <ul className="dag-state-criteria-list">
+              {state.completionCriteria.map((c, i) => (
+                <li key={i}>
+                  {c.field} {c.operator} {String(c.value)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Skill 标签 */}
+        {state.selectedSkills.length > 0 && (
+          <div className="dag-state-skills">
+            <span className="dag-state-skills-label">已选 Skills</span>
+            <div className="dag-state-skill-tags">
+              {state.selectedSkills.map((skill) => (
+                <span key={skill.skillName} className="dag-state-skill-tag" title={skill.description}>
+                  {skill.skillName}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── 分隔线 ─── */}
+      <div className="dag-state-divider" />
+
+      {/* ─── State 子图内容区：Step 列表（始终渲染） ─── */}
+      <div className="dag-state-content">
+        {state.steps.length > 0 ? (
+          <div className="dag-state-steps">
+            {state.steps.map((step) => (
+              <DagStepNode key={step.stepId} step={step} />
+            ))}
+          </div>
+        ) : (
+          /* Step 尚未生成时的占位提示 */
+          <div className="dag-state-steps-empty">
+            <span>等待 Step 计划生成...</span>
+          </div>
+        )}
+
+        {/* 评估结果 */}
+        {state.evaluationResult && (
+          <div className={`dag-state-evaluation ${state.evaluationResult.stateSatisfied ? 'eval-passed' : 'eval-failed'}`}>
+            <span className="dag-eval-badge">
+              {state.evaluationResult.stateSatisfied ? '通过' : '未通过'}
+            </span>
+            <span className="dag-eval-reason">{state.evaluationResult.evaluationReason}</span>
+            {state.evaluationResult.gapAnalysis && (
+              <span className="dag-eval-gap">差距：{state.evaluationResult.gapAnalysis}</span>
+            )}
+          </div>
+        )}
+
+        {/* 错误信息 */}
+        {state.errorMessages.length > 0 && (
+          <div className="dag-state-errors">
+            {state.errorMessages.map((err, i) => (
+              <div key={i} className="dag-state-error-item">
+                <DagIconAlertTriangle width="12" height="12" />
+                <span>{err}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

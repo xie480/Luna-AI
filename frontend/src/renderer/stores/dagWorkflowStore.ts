@@ -51,8 +51,6 @@ interface DagWorkflowStoreState {
   // === UI 展示状态 ===
   /** DAG 面板是否展开 */
   isPanelVisible: boolean;
-  /** State 容器展开/折叠状态（按 stateId 索引） */
-  expandedStates: Record<string, boolean>;
   /** Step 容器展开/折叠状态（按 stepId 索引） */
   expandedSteps: Record<string, boolean>;
   /** Node 详情展开/折叠状态（按 nodeId 索引） */
@@ -93,8 +91,6 @@ interface DagWorkflowStoreState {
   // === UI 操作方法 ===
   /** 设置面板可见性 */
   setPanelVisible: (visible: boolean) => void;
-  /** 切换 State 容器展开/折叠 */
-  toggleStateExpanded: (stateId: string) => void;
   /** 切换 Step 容器展开/折叠 */
   toggleStepExpanded: (stepId: string) => void;
   /** 切换 Node 详情展开/折叠 */
@@ -267,7 +263,6 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
 
   // === UI 展示状态初始值 ===
   isPanelVisible: false,
-  expandedStates: {},
   expandedSteps: {},
   expandedNodes: {},
   searchQuery: '',
@@ -332,16 +327,9 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
       planningReason: payload.planning_reason,
     };
 
-    // 自动展开第一个 State
-    const expandedStates: Record<string, boolean> = {};
-    if (states.length > 0) {
-      expandedStates[states[0].stateId] = true;
-    }
-
     set({
       activePlan: plan,
       isPanelVisible: true,
-      expandedStates,
       expandedSteps: {},
       expandedNodes: {},
       canvasZoom: 1,
@@ -366,11 +354,7 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
         targetState.status = DAG_NODE_STATUS.RUNNING;
         targetState.startedAtMs = Date.now();
       }
-      // 自动展开当前 State
-      return {
-        activePlan: plan,
-        expandedStates: { ...state.expandedStates, [payload.state_id]: true },
-      };
+      return { activePlan: plan };
     });
   },
 
@@ -683,15 +667,6 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
   /** 设置面板可见性 */
   setPanelVisible: (visible) => set({ isPanelVisible: visible }),
 
-  /** 切换 State 容器展开/折叠 */
-  toggleStateExpanded: (stateId) =>
-    set((state) => ({
-      expandedStates: {
-        ...state.expandedStates,
-        [stateId]: !state.expandedStates[stateId],
-      },
-    })),
-
   /** 切换 Step 容器展开/折叠 */
   toggleStepExpanded: (stepId) =>
     set((state) => ({
@@ -725,7 +700,6 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
     set({
       activePlan: null,
       isPanelVisible: false,
-      expandedStates: {},
       expandedSteps: {},
       expandedNodes: {},
       searchQuery: '',

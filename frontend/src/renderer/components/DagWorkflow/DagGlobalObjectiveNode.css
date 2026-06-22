@@ -1,0 +1,264 @@
+/**
+ * DagGlobalObjectiveNode 全局目标节点样式。
+ * 做什么：定义全局目标作为流程图节点时的卡片样式。
+ * 为什么这样做：全局目标需要作为流程图的第一个节点，融入 HolographicNode 视觉体系。
+ * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言，禁止缩放动画。
+ */
+
+/* 全局目标节点容器 — 较宽的卡片 */
+.node-type-dag-objective {
+  width: 90%;
+  max-width: 280px;
+  /* 禁止缩放动画 */
+  transition: none;
+}
+
+.node-type-dag-objective.is-active {
+  transform: none;
+}
+
+/* 卡片主体 */
+.dag-objective-card {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dag-objective-glass {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  transition: all 0.3s ease;
+}
+
+.dag-objective-content {
+  position: relative;
+  z-index: 2;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 头部 */
+.dag-objective-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dag-objective-icon {
+  color: #00ffff;
+  opacity: 0.8;
+}
+
+.dag-objective-title {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #00ffff;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+  text-transform: uppercase;
+}
+
+.dag-objective-status {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+
+.dag-objective-status.status-planning,
+.dag-objective-status.status-executing,
+.dag-objective-status.status-replanning {
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+.dag-objective-status.status-completed {
+  color: #00fa9a;
+  background: rgba(0, 250, 154, 0.1);
+  border: 1px solid rgba(0, 250, 154, 0.2);
+}
+
+.dag-objective-status.status-terminated,
+.dag-objective-status.status-budget_exhausted {
+  color: #ff003c;
+  background: rgba(255, 0, 60, 0.1);
+  border: 1px solid rgba(255, 0, 60, 0.2);
+}
+
+/* 目标内容 */
+.dag-objective-goal {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+}
+
+/* 实现标准 */
+.dag-objective-criteria,
+.dag-objective-format {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.dag-objective-criteria svg,
+.dag-objective-format svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #00fa9a;
+  opacity: 0.6;
+}
+
+.dag-objective-format svg {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.dag-objective-criteria-label,
+.dag-objective-format-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: 'Courier New', Courier, monospace;
+}
+
+.dag-objective-criteria-text,
+.dag-objective-format-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* 进度和预算 */
+.dag-objective-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.dag-objective-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.dag-objective-stat svg {
+  flex-shrink: 0;
+  color: #00ffff;
+  opacity: 0.5;
+}
+
+.dag-objective-stat-label {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  min-width: 28px;
+}
+
+.dag-objective-progress-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dag-objective-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #00ffff, #00fa9a);
+  box-shadow: 0 0 4px rgba(0, 255, 255, 0.3);
+  transition: width 0.5s ease;
+}
+
+.dag-objective-progress-fill.budget-warning {
+  background: linear-gradient(90deg, #ffaa00, #ff8800);
+}
+
+.dag-objective-progress-fill.budget-critical {
+  background: linear-gradient(90deg, #ff003c, #ff4444);
+  box-shadow: 0 0 4px rgba(255, 0, 60, 0.3);
+}
+
+.dag-objective-stat-value {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  min-width: 30px;
+  text-align: right;
+}
+
+/* 约束条件 */
+.dag-objective-constraints {
+  margin-top: 2px;
+}
+
+.dag-objective-constraints-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dag-objective-constraints-list {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 0;
+}
+
+.dag-objective-constraints-list li {
+  color: rgba(255, 255, 255, 0.45);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  padding-left: 10px;
+  position: relative;
+}
+
+.dag-objective-constraints-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 170, 0, 0.4);
+}
+
+/* ============================================================
+ * 状态着色
+ * ============================================================ */
+
+/* RUNNING */
+.node-type-dag-objective.status-running .dag-objective-glass {
+  border-color: rgba(0, 255, 255, 0.3);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.15);
+}
+
+/* SUCCESS */
+.node-type-dag-objective.status-success .dag-objective-glass {
+  border-color: rgba(0, 250, 154, 0.3);
+  box-shadow: 0 0 10px rgba(0, 250, 154, 0.1);
+}
+
+/* FAILED */
+.node-type-dag-objective.status-failed .dag-objective-glass {
+  border-color: rgba(255, 0, 60, 0.3);
+  box-shadow: 0 0 10px rgba(255, 0, 60, 0.1);
+}

@@ -601,9 +601,32 @@ class ToolExecuteNode:
         }
 
     def _parse_params(self, llm_response: str | dict) -> dict[str, Any]:
-        """解析 LLM 输出的参数。"""
+        """解析 LLM 输出的参数。
+
+        做什么：从 LLM 的 JSON 响应中提取工具调用参数。
+                兼容两种输出格式：
+                1. DAG 通用格式：{"parameters": {参数名: 参数值}}
+                2. 工具专属 Prompt 格式：{"can_proceed": true, "tool_parameters": {参数名: 参数值}, ...}
+        为什么这样做：工具专属 Prompt（如 search_tool_prompt.j2）指导 LLM 输出
+                     tool_parameters 键而非 parameters 键，需要统一解析逻辑。
+        """
+        def _extract_params(data: dict) -> dict[str, Any]:
+            """从解析后的 JSON 数据中提取参数字典。
+
+            优先查找 parameters（DAG 通用格式），其次 tool_parameters（工具专属格式），
+            都不存在时返回整个字典。
+            使用显式 None 检查而非 or 运算符，避免空字典 {} 被误判为 falsy。
+            """
+            params = data.get("parameters")
+            if params is not None:
+                return params
+            params = data.get("tool_parameters")
+            if params is not None:
+                return params
+            return data
+
         if isinstance(llm_response, dict):
-            return llm_response.get("parameters", llm_response)
+            return _extract_params(llm_response)
         try:
             # 清理可能的 markdown 代码块
             cleaned = llm_response.strip()
@@ -616,13 +639,13 @@ class ToolExecuteNode:
             cleaned = cleaned.strip()
 
             data = json.loads(cleaned)
-            return data.get("parameters", data)
+            return _extract_params(data)
         except json.JSONDecodeError:
             import re
             json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
-                return data.get("parameters", data)
+                return _extract_params(data)
             return {}
 
     def _validate_params_against_schema(

@@ -225,3 +225,60 @@
   box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
   width: 4px;
 }
+
+/* ============================================================
+ * DAG 模式：嵌入侧边栏的子图容器布局
+ * 做什么：在智能规划模式下，侧边栏 canvas 区域内嵌入
+ *         DagGlobalInfoBar + DagStateGroup 子图容器。
+ * 为什么这样做：DAG 组件需要融入现有侧边栏框架，而非替换它。
+ * ============================================================ */
+
+/* DAG 内容主容器 */
+.dag-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+/* 预 DAG 节点区域 */
+.dag-pre-dag-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* State 子图容器列表 */
+.dag-state-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* State 间连线指示器 */
+.dag-state-connection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 24px;
+}
+
+.dag-state-connection-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.dag-state-connection-path {
+  stroke: rgba(0, 255, 255, 0.15);
+  stroke-width: 2;
+  stroke-dasharray: 4, 4;
+}
+
+.dag-state-connection-arrow {
+  stroke: rgba(0, 255, 255, 0.15);
+  stroke-width: 2;
+  fill: none;
+}
