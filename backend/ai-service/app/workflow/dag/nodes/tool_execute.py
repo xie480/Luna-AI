@@ -565,12 +565,24 @@ class ToolExecuteNode:
         return results
 
     async def _get_tool_schema(self, tool_name: str | None) -> dict[str, Any]:
-        """获取 MCP 工具的 input schema。"""
+        """获取 MCP 工具的 parameters_schema。
+
+        做什么：从 MCPToolRegistry 中查找已注册工具，返回其 parameters_schema。
+                该 Schema 用于 LLM 参数提取的上下文引导和机械层校验。
+        为什么这样做：RegisteredTool 的参数 Schema 存储在 schema.parameters_schema 中，
+                     而非 input_schema 属性。之前的实现错误地查找了不存在的 input_schema，
+                     导致返回空字典，LLM 无法获取正确的参数约束，机械层校验也被跳过，
+                     最终在 execute_tool 的 jsonschema.validate 阶段才报错。
+        边界条件：
+            - tool_name 为空时返回空字典。
+            - 工具不存在或未注册时返回空字典。
+            - 工具存在但 parameters_schema 为空时返回空字典。
+        """
         if not tool_name:
             return {}
         tool = self.mcp_tool_registry.get_tool(tool_name)
-        if tool and hasattr(tool, "input_schema"):
-            return tool.input_schema
+        if tool and hasattr(tool, 'schema') and tool.schema.parameters_schema:
+            return tool.schema.parameters_schema
         return {}
 
     def _build_param_schema(
