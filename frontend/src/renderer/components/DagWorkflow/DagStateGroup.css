@@ -306,6 +306,84 @@
 }
 
 /* ============================================================
+ * 前置操作行 — Skill 扫描 / Skill 初筛 / Step 计划生成
+ * ============================================================ */
+.dag-state-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 0;
+}
+
+.dag-state-op-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  transition: background 0.3s ease;
+}
+
+.dag-state-op-icon {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.dag-state-op-label {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.3px;
+}
+
+.dag-state-op-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* 前置操作 — 完成态 */
+.dag-state-op-row.op-done {
+  background: rgba(0, 250, 154, 0.03);
+}
+.dag-state-op-row.op-done .dag-state-op-icon { color: #00fa9a; opacity: 0.6; }
+.dag-state-op-row.op-done .dag-state-op-label { color: rgba(0, 250, 154, 0.6); }
+.dag-state-op-row.op-done .dag-state-op-check { color: #00fa9a; }
+
+/* 前置操作 — 运行态 */
+.dag-state-op-row.op-running {
+  background: rgba(0, 255, 255, 0.04);
+}
+.dag-state-op-row.op-running .dag-state-op-icon { color: #00ffff; opacity: 0.8; }
+.dag-state-op-row.op-running .dag-state-op-label { color: rgba(0, 255, 255, 0.7); }
+.dag-state-op-row.op-running .dag-state-op-spinner {
+  color: #00ffff;
+  animation: dagSpinRing 2s linear infinite;
+}
+
+/* 前置操作 — 等待态 */
+.dag-state-op-row.op-pending .dag-state-op-pending { color: rgba(255, 255, 255, 0.2); }
+
+/* ============================================================
+ * 后置操作区 — State 评估（增强版）
+ * ============================================================ */
+.dag-state-evaluation .dag-state-eval-icon {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+}
+.dag-state-evaluation.eval-passed .dag-state-eval-icon { color: #00fa9a; }
+.dag-state-evaluation.eval-failed .dag-state-eval-icon { color: #ffaa00; }
+
+.dag-state-eval-label {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.3px;
+}
+
+/* ============================================================
  * State 内容区 — Step 列表
  * ============================================================ */
 .dag-state-content {
@@ -336,7 +414,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px 0;
+  padding: 12px 0;
   font-family: 'Courier New', Courier, monospace;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.2);

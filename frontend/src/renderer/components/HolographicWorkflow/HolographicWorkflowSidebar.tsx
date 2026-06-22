@@ -13,7 +13,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE, DAG_NODE_STATUS } from '../../../shared/enum';
+import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE, DAG_NODE_STATUS, CHAT_WORKFLOW_NODE_LABEL } from '../../../shared/enum';
 import { HolographicNode } from './HolographicNode';
 import { HolographicConnections } from './HolographicConnections';
 import { HolographicARPanel } from './HolographicARPanel';
@@ -56,10 +56,28 @@ export const HolographicWorkflowSidebar: React.FC = () => {
 
   const isDagMode = chatMode === CHAT_MODE.PLAN_STATE_NODE;
 
-  /** 预 DAG 阶段的节点类型集合 */
+  /**
+   * 预 DAG 阶段的节点类型集合。
+   * 做什么：定义 DAG 引擎之前执行的 Chat Workflow 节点。
+   * 为什么这样做：这些节点在 DAG 引擎启动前就需要渲染。
+   */
   const PRE_DAG_NODE_TYPES = new Set([
     CHAT_WORKFLOW_NODE_TYPE.SESSION_CONTEXT_LOAD,
     CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION,
+  ]);
+
+  /**
+   * 后 DAG 阶段的节点类型集合。
+   * 做什么：定义 DAG 引擎之后执行的 Chat Workflow 节点。
+   * 为什么这样做：DAG 引擎执行完成后，后半段链路节点需要在侧边栏中正常渲染，
+   *               而不是只渲染 State 节点就结束了。
+   */
+  const POST_DAG_NODE_TYPES = new Set([
+    CHAT_WORKFLOW_NODE_TYPE.CONTEXT_GOVERNANCE,
+    CHAT_WORKFLOW_NODE_TYPE.PROMPT_ASSEMBLY,
+    CHAT_WORKFLOW_NODE_TYPE.MAIN_CHAT_LLM,
+    CHAT_WORKFLOW_NODE_TYPE.RESPONSE_PERSISTENCE,
+    CHAT_WORKFLOW_NODE_TYPE.FINALIZE,
   ]);
 
   // 日常聊天/闲聊模式的节点数据
@@ -75,6 +93,17 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   const preDagNodes = useMemo(() => {
     if (!isDagMode) return [];
     return chatNodes.filter((n) => PRE_DAG_NODE_TYPES.has(n.nodeType));
+  }, [isDagMode, chatNodes]);
+
+  /**
+   * 在智能规划模式下，构建后 DAG 节点列表。
+   * 做什么：提取 DAG 引擎之后执行的 Chat Workflow 节点。
+   * 为什么这样做：DAG 引擎完成后，上下文治理、Prompt 装配、LLM 推理、响应持久化等
+   *               后半段链路节点需要在侧边栏中作为普通节点正常渲染。
+   */
+  const postDagNodes = useMemo(() => {
+    if (!isDagMode) return [];
+    return chatNodes.filter((n) => POST_DAG_NODE_TYPES.has(n.nodeType));
   }, [isDagMode, chatNodes]);
 
   // 统一数据源
@@ -121,17 +150,22 @@ export const HolographicWorkflowSidebar: React.FC = () => {
     ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && preDagNodes.length > 0)
     : chatActivePlan !== null;
 
-  // Auto Scroll
+  // Auto Scroll — 追踪最新活跃节点
   useEffect(() => {
     if (!scrollRef.current || !hasPlan) return;
     const allNodeTypes = isDagMode && dagActivePlan
-      ? ['dag_global_objective', ...preDagNodes.map(n => n.nodeType), ...dagActivePlan.states.map(s => s.stateId)]
+      ? [
+          'dag_global_objective',
+          ...preDagNodes.map(n => n.nodeType),
+          ...dagActivePlan.states.map(s => s.stateId),
+          ...postDagNodes.map(n => n.nodeType),
+        ]
       : nodes.map(n => n.nodeType);
     const activeNode = allNodeTypes[allNodeTypes.length - 1];
     if (activeNode) {
       setActiveNodeId(activeNode);
     }
-  }, [nodes, hasPlan, dagActivePlan]);
+  }, [nodes, hasPlan, dagActivePlan, postDagNodes]);
 
   // AR Panel
   const toggleARPanel = useCallback((nodeType: string, event: React.MouseEvent) => {
@@ -182,8 +216,12 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         })(),
       } as ChatNodeProjection);
     }
+    // 后 DAG 节点（上下文治理、Prompt 装配、LLM、响应持久化等）
+    for (const n of postDagNodes) {
+      virtualNodes.push(n as ChatNodeProjection);
+    }
     return virtualNodes;
-  }, [isDagMode, dagActivePlan, preDagNodes]);
+  }, [isDagMode, dagActivePlan, preDagNodes, postDagNodes]);
 
   // HolographicConnections 使用的节点列表
   const connectionNodes = isDagMode ? dagConnectionNodes : chatNodes;
@@ -274,6 +312,20 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                 {/* State 节点列表（作为流程图节点，用连线连接） */}
                 {dagActivePlan.states.map((state) => (
                   <DagStateNode key={state.stateId} state={state} />
+                ))}
+
+                {/* 后 DAG 节点（上下文治理、Prompt 装配、LLM、响应持久化等） */}
+                {postDagNodes.map((node) => (
+                  <HolographicNode
+                    key={node.nodeType}
+                    type={getUINodeType(node.nodeType)}
+                    nodeType={node.nodeType}
+                    status={node.status}
+                    isActive={node.nodeType === activeNodeId}
+                    onToggleAR={(e) => toggleARPanel(node.nodeType, e)}
+                    interactionId={interactionId}
+                    customLabel={'customLabel' in node ? (node as any).customLabel : undefined}
+                  />
                 ))}
 
                 {/* End Node */}

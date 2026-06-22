@@ -89,6 +89,11 @@
                 "description": "搜索分类筛选，可选。多个分类用逗号分隔。可选值：general, news, images, videos, files, music, it, science, social media。默认：general。例如：'general,news'。",
                 "default": "general"
               },
+              "language": {
+                "type": "string",
+                "description": "搜索语言过滤，可选。强烈建议根据搜索词的语言指定。中文搜索词请使用 'zh-CN'，英文搜索词请使用 'en'。留空则由 SearXNG 实例默认配置决定，可能导致中文查询返回空结果。",
+                "default": ""
+              },
               "time_range": {
                 "type": "string",
                 "enum": ["", "day", "month", "year"],

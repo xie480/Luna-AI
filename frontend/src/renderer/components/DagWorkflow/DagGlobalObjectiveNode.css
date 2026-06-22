@@ -9,8 +9,14 @@
 .node-type-dag-objective {
   width: 90%;
   max-width: 280px;
-  /* 禁止缩放动画 */
+  /* 禁止缩放动画，仅保留入场淡入 */
   transition: none;
+  animation: dagObjectiveFadeIn 0.4s ease-out both;
+}
+
+@keyframes dagObjectiveFadeIn {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .node-type-dag-objective.is-active {

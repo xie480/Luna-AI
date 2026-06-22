@@ -108,7 +108,7 @@ export const DagStepNode: React.FC<DagStepNodeProps> = ({ step }) => {
         </span>
 
         <span className="dag-step-index">Step {step.stepIndex}</span>
-        <span className="dag-step-desc">{step.description}</span>
+        <span className="dag-step-desc" title={step.description}>{step.description}</span>
 
         {/* 执行模式标签 */}
         <span className={`dag-step-mode-badge ${isParallel ? 'mode-parallel' : 'mode-serial'}`}>

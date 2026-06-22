@@ -124,7 +124,7 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
         <NodeIcon width="14" height="14" className="dag-node-type-icon" />
         <span className="dag-node-type-label">{typeLabel}</span>
 
-        <span className="dag-node-name">{nodeDisplayName}</span>
+        <span className="dag-node-name" title={nodeDisplayName}>{nodeDisplayName}</span>
 
         <span className="dag-node-status">
           <StatusIcon width="11" height="11" className={`dag-node-status-icon status-icon-${node.status.toLowerCase()}`} />
@@ -163,22 +163,26 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
             </div>
           )}
 
-          {/* 输出参数 */}
-          {Object.keys(node.outputs).length > 0 && (
-            <div className="dag-node-params-section">
-              <span className="dag-node-params-label">输出参数</span>
+          {/* 执行结果（输出参数）— 始终展示区域标题，无数据时显示占位提示 */}
+          <div className="dag-node-params-section">
+            <span className="dag-node-params-label">执行结果</span>
+            {Object.keys(node.outputs).length > 0 ? (
               <div className="dag-node-params-list">
                 {Object.entries(node.outputs).map(([key, value]) => (
                   <div key={key} className="dag-node-param-item">
                     <span className="dag-node-param-key">{key}:</span>
-                    <span className="dag-node-param-value">
+                    <span className="dag-node-param-value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}>
                       {typeof value === 'object' ? JSON.stringify(value).slice(0, 200) : String(value).slice(0, 200)}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <span className="dag-node-params-empty">
+                {node.status === 'RUNNING' ? '执行中...' : node.status === 'PENDING' ? '等待执行' : '无输出数据'}
+              </span>
+            )}
+          </div>
 
           {/* 中间日志 */}
           {node.intermediateLogs.length > 0 && (

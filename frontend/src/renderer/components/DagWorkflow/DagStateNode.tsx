@@ -21,6 +21,7 @@ import {
   DagIconCircle,
   DagIconChevronDown,
   DagIconChevronRight,
+  DagIconSearch,
 } from './DagIcons';
 import './DagStateNode.css';
 
@@ -108,7 +109,7 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
           {/* 头部：State 编号 + 意图 + 状态 */}
           <div className="dag-state-node-header">
             <span className="dag-state-node-index">State {state.orderIndex}</span>
-            <span className="dag-state-node-intent">{state.intent}</span>
+            <span className="dag-state-node-intent" title={state.intent}>{state.intent}</span>
             <span className="dag-state-node-status">
               <StatusIcon width="11" height="11" />
               <span>{statusLabel}</span>
@@ -147,6 +148,57 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
             </div>
           )}
 
+          {/* ─── 前置操作行：Skill 扫描与初筛 ─── */}
+          {state.status !== 'PENDING' && (
+            <div className="dag-state-node-ops">
+              {/* Skill 扫描 */}
+              <div className={`dag-state-node-op-row ${state.steps.length > 0 || state.selectedSkills.length > 0 ? 'op-done' : 'op-running'}`}>
+                <DagIconSearch width="9" height="9" className="dag-state-node-op-icon" />
+                <span className="dag-state-node-op-label">Skill 扫描</span>
+                <span className="dag-state-node-op-status">
+                  {state.steps.length > 0 || state.selectedSkills.length > 0
+                    ? <DagIconCheck width="9" height="9" className="dag-state-node-op-check" />
+                    : <DagIconLoader width="9" height="9" className="dag-state-node-op-spinner" />
+                  }
+                </span>
+              </div>
+
+              {/* Skill 初筛 */}
+              <div className={`dag-state-node-op-row ${state.selectedSkills.length > 0 ? 'op-done' : (state.status === 'RUNNING' ? 'op-running' : 'op-pending')}`}>
+                <DagIconTarget width="9" height="9" className="dag-state-node-op-icon" />
+                <span className="dag-state-node-op-label">
+                  Skill 初筛{state.selectedSkills.length > 0 ? `（${state.selectedSkills.length}）` : ''}
+                </span>
+                <span className="dag-state-node-op-status">
+                  {state.selectedSkills.length > 0
+                    ? <DagIconCheck width="9" height="9" className="dag-state-node-op-check" />
+                    : (state.status === 'RUNNING'
+                      ? <DagIconLoader width="9" height="9" className="dag-state-node-op-spinner" />
+                      : <DagIconCircle width="9" height="9" className="dag-state-node-op-pending" />
+                    )
+                  }
+                </span>
+              </div>
+
+              {/* Step 计划生成 */}
+              <div className={`dag-state-node-op-row ${state.steps.length > 0 ? 'op-done' : (state.selectedSkills.length > 0 ? 'op-running' : 'op-pending')}`}>
+                <DagIconCheckCircle width="9" height="9" className="dag-state-node-op-icon" />
+                <span className="dag-state-node-op-label">
+                  Step 计划{state.steps.length > 0 ? `（${state.steps.length} 步）` : ''}
+                </span>
+                <span className="dag-state-node-op-status">
+                  {state.steps.length > 0
+                    ? <DagIconCheck width="9" height="9" className="dag-state-node-op-check" />
+                    : (state.selectedSkills.length > 0
+                      ? <DagIconLoader width="9" height="9" className="dag-state-node-op-spinner" />
+                      : <DagIconCircle width="9" height="9" className="dag-state-node-op-pending" />
+                    )
+                  }
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Steps 展开/折叠区域 */}
           {state.steps.length > 0 && (
             <div className="dag-state-node-steps-section">
@@ -168,9 +220,11 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
             </div>
           )}
 
-          {/* 评估结果 */}
+          {/* ─── 后置操作行：State 评估 ─── */}
           {state.evaluationResult && (
             <div className={`dag-state-node-eval ${state.evaluationResult.stateSatisfied ? 'eval-passed' : 'eval-failed'}`}>
+              <DagIconCheckCircle width="9" height="9" className="dag-state-node-eval-icon" />
+              <span className="dag-state-node-eval-label">State 评估</span>
               <span className="dag-eval-badge">
                 {state.evaluationResult.stateSatisfied ? '通过' : '未通过'}
               </span>

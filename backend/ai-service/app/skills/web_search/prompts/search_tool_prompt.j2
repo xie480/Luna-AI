@@ -177,6 +177,7 @@
       ["搜索词3A", "搜索词3B"]
     ],
     "categories": "general",
+    "language": "zh-CN",
     "time_range": ""
   },
   "fallback_reason": ""
@@ -191,6 +192,7 @@
 |--------|------|------|------|
 | query | array（外层 3 个子数组，每个子数组含 1-N 个字符串搜索词） | 是 | 搜索查询关键词外层数组。外层数组长度必须为 3（对应 3 个并发请求），其中每个子数组包含该并发请求要同时使用的多个搜索词。示例（搜索 2026 世界杯）：`[['2026世界杯 赛程 6月14日 比赛结果'], ['FIFA World Cup 2026 June 14 results'], ['世界杯 2026 6月14日 战报']]`。 |
 | categories | string | 否 | 搜索分类筛选，多个分类用逗号分隔。可选值：`general, news, images, videos, files, music, it, science, social media`。默认：`general`。 |
+| language | string | 否 | **强烈建议填写**。搜索语言过滤。中文搜索词请使用 `zh-CN`，英文搜索词请使用 `en`。留空可能导致中文查询返回空结果。 |
 | time_range | string（枚举：`""` / `"day"` / `"month"` / `"year"`） | 否 | 时间范围过滤。默认空字符串表示无限制。 |
 
 #### fallback_reason 说明

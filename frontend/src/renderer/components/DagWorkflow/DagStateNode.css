@@ -10,13 +10,24 @@
 .node-type-dag-state {
   width: 90%;
   max-width: 280px;
-  /* 禁止缩放动画 — 用户明确要求 */
-  transition: none;
+  /* 入场淡入动画，避免突然出现 */
+  animation: dagNodeFadeIn 0.4s ease-out both;
 }
 
-.node-type-dag-state.is-active {
-  /* 禁止 is-active 的缩放 */
-  transform: none;
+/* 运行中的 State 节点 — 仅通过内部 glass 元素做光晕脉冲，不使用 transform 以避免边框闪烁 */
+.node-type-dag-state.status-running .dag-state-node-glass {
+  animation: dagStateGlowPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes dagStateGlowPulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 255, 0.2), inset 0 0 15px rgba(138, 43, 226, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.4), inset 0 0 25px rgba(138, 43, 226, 0.2); }
+}
+
+/* 全局入场淡入动画 */
+@keyframes dagNodeFadeIn {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 /* State 节点卡片 — 沿用 card-glass 模式但更宽 */
@@ -350,4 +361,80 @@
 .node-type-dag-state.status-bypassed {
   opacity: 0.4;
   filter: grayscale(100%);
+}
+
+/* ============================================================
+ * 前置/后置操作行 — 侧边栏精简版
+ * ============================================================ */
+.dag-state-node-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 1px 0;
+}
+
+.dag-state-node-op-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  transition: background 0.3s ease;
+}
+
+.dag-state-node-op-icon {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.dag-state-node-op-label {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.3px;
+}
+
+.dag-state-node-op-status {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* 前置操作 — 完成态 */
+.dag-state-node-op-row.op-done {
+  background: rgba(0, 250, 154, 0.03);
+}
+.dag-state-node-op-row.op-done .dag-state-node-op-icon { color: #00fa9a; opacity: 0.6; }
+.dag-state-node-op-row.op-done .dag-state-node-op-label { color: rgba(0, 250, 154, 0.6); }
+.dag-state-node-op-row.op-done .dag-state-node-op-check { color: #00fa9a; }
+
+/* 前置操作 — 运行态 */
+.dag-state-node-op-row.op-running {
+  background: rgba(0, 255, 255, 0.04);
+}
+.dag-state-node-op-row.op-running .dag-state-node-op-icon { color: #00ffff; opacity: 0.8; }
+.dag-state-node-op-row.op-running .dag-state-node-op-label { color: rgba(0, 255, 255, 0.7); }
+.dag-state-node-op-row.op-running .dag-state-node-op-spinner {
+  color: #00ffff;
+  animation: dagSpinRing 2s linear infinite;
+}
+
+/* 前置操作 — 等待态 */
+.dag-state-node-op-row.op-pending .dag-state-node-op-pending { color: rgba(255, 255, 255, 0.2); }
+
+/* 后置操作 — State 评估增强 */
+.dag-state-node-eval .dag-state-node-eval-icon {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.4);
+}
+.dag-state-node-eval.eval-passed .dag-state-node-eval-icon { color: #00fa9a; }
+.dag-state-node-eval.eval-failed .dag-state-node-eval-icon { color: #ffaa00; }
+
+.dag-state-node-eval-label {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.3px;
 }

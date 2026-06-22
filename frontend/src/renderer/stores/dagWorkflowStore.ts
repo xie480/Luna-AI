@@ -453,13 +453,19 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
         const { node, step, state: dagState } = result;
         // 更新节点状态
         node.status = payload.success ? DAG_NODE_STATUS.SUCCEEDED : DAG_NODE_STATUS.FAILED;
-        node.outputs = payload.outputs;
+        // 确保 outputs 不为 null/undefined，避免渲染时 Object.keys 报错
+        node.outputs = payload.outputs ?? {};
         node.latencyMs = payload.latency_ms;
         node.retryCount = payload.retry_count;
         node.endedAtMs = Date.now();
         if (!payload.success && payload.error_message) {
           node.errorMessage = payload.error_message;
         }
+        // 每次节点完成时递增全局预算消耗计数
+        plan.budgetConsumed = {
+          ...plan.budgetConsumed,
+          tool_calls: (plan.budgetConsumed.tool_calls || 0) + 1,
+        };
         // 推导 Step 状态
         deriveStepStatus(step);
         // 重新计算 State 统计
@@ -503,6 +509,8 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
    * 处理 State 评估事件。
    * 做什么：将评估结果写入目标 State 的 evaluationResult 字段。
    * 为什么这样做：State 容器需要展示评估结果（通过/未通过 + 原因）。
+   * 注意：评估通过时，必须递归更新 State 内部所有 Step 和 Node 的状态为 SUCCEEDED，
+   *       否则前端 Step/Tool 卡片仍显示"等待中"。
    */
   onStateEvaluated: (payload) => {
     const { activePlan } = get();
@@ -523,13 +531,34 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
             detail: c.detail,
           })),
         };
-        // 如果评估通过，标记 State 为 SUCCEEDED
+        // 如果评估通过，标记 State 为 SUCCEEDED，并递归更新 Step 和 Node
         if (payload.state_satisfied) {
           targetState.status = DAG_NODE_STATUS.SUCCEEDED;
           targetState.endedAtMs = Date.now();
           if (targetState.startedAtMs) {
             targetState.latencyMs = targetState.endedAtMs - targetState.startedAtMs;
           }
+          // 递归更新所有仍处于 PENDING 或 RUNNING 的 Step 为 SUCCEEDED
+          for (const step of targetState.steps) {
+            if (step.status === DAG_NODE_STATUS.PENDING || step.status === DAG_NODE_STATUS.RUNNING) {
+              step.status = DAG_NODE_STATUS.SUCCEEDED;
+              if (!step.endedAtMs) {
+                step.endedAtMs = Date.now();
+                if (step.startedAtMs) {
+                  step.latencyMs = step.endedAtMs - step.startedAtMs;
+                }
+              }
+            }
+            // 递归更新所有仍处于 PENDING 的 Node 为 SUCCEEDED
+            for (const node of step.nodes) {
+              if (node.status === DAG_NODE_STATUS.PENDING) {
+                node.status = DAG_NODE_STATUS.SUCCEEDED;
+                node.endedAtMs = Date.now();
+              }
+            }
+          }
+          // 重新计算 State 统计
+          recalcStateStats(targetState);
           recalcPlanStats(plan);
         }
       }

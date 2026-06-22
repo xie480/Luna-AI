@@ -161,6 +161,13 @@ def build_web_search_schema(concurrent_requests: int = _DEFAULT_CONCURRENT_REQUE
                                "强烈建议默认留空，仅在需要特定媒体类型时才指定。例如：'general,news'。",
                 "default": "",
             },
+            "language": {
+                "type": "string",
+                "description": "搜索语言过滤，可选。强烈建议根据搜索词的语言指定。"
+                               "中文搜索词请使用 'zh-CN'，英文搜索词请使用 'en'。"
+                               "留空则由 SearXNG 实例默认配置决定，可能导致中文查询返回空结果。",
+                "default": "",
+            },
             "time_range": {
                 "type": "string",
                 "enum": [
@@ -223,6 +230,14 @@ async def _fetch_for_single_term(
         params["q"] = term
         params["pageno"] = current_page
 
+        # 调试日志：记录实际发送的请求参数
+        logger.info(
+            f"SearXNG 请求详情 trace_id={trace_id} "
+            f"term={term} page={current_page} "
+            f"request_url={base_url}/search "
+            f"params={params}"
+        )
+
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.get(
@@ -235,6 +250,20 @@ async def _fetch_for_single_term(
                 )
                 response.raise_for_status()
                 data: dict[str, Any] = response.json()
+
+                # 调试日志：记录 SearXNG 返回的原始响应摘要
+                # 特别关注 unresponsive_engines 字段，它记录了哪些引擎响应失败
+                unresponsive = data.get("unresponsive_engines", [])
+                logger.info(
+                    f"SearXNG 响应详情 trace_id={trace_id} "
+                    f"term={term} page={current_page} "
+                    f"status_code={response.status_code} "
+                    f"response_keys={list(data.keys()) if isinstance(data, dict) else 'N/A'} "
+                    f"results_count={len(data.get('results', []))} "
+                    f"infoboxes_count={len(data.get('infoboxes', []))} "
+                    f"number_of_results={data.get('number_of_results', 'N/A')} "
+                    f"unresponsive_engines={unresponsive if unresponsive else '无'}"
+                )
 
                 results = data.get("results", [])
                 infoboxes = data.get("infoboxes", [])
@@ -265,9 +294,25 @@ async def _fetch_for_single_term(
                 current_page += 1
 
         except Exception as exc:
+            # 记录更详细的异常信息，区分超时、连接错误和 HTTP 错误
+            import httpx as _httpx
+            exc_detail = f"type={type(exc).__name__} error={exc!s}"
+            if isinstance(exc, _httpx.TimeoutException):
+                exc_detail = f"超时 timeout={timeout}s {exc_detail}"
+            elif isinstance(exc, _httpx.HTTPStatusError):
+                exc_detail = (
+                    f"HTTP 错误 status={exc.response.status_code} "
+                    f"response_body={exc.response.text[:500]} {exc_detail}"
+                )
+            elif isinstance(exc, _httpx.ConnectError):
+                exc_detail = f"连接失败 base_url={base_url} {exc_detail}"
+
             logger.warning(
                 f"SearXNG 单个搜索词异常 trace_id={trace_id} "
-                f"term={term} page={current_page} error={exc!s}"
+                f"term={term} page={current_page} "
+                f"request_url={base_url}/search "
+                f"params={params} "
+                f"{exc_detail}"
             )
             break
 
@@ -448,13 +493,14 @@ async def handle_searxng_search(
         query_groups.append(cleaned_terms)
 
     categories: str = parameters.get("categories", "")
+    language: str = parameters.get("language", "")
     time_range: str = parameters.get("time_range", "")
 
     # ============================================================
     # 构造核心模板参数
     # 注意：SearXNG 不接受空字符串参数值，传递空值参数会导致 400 Bad Request。
     # 因此只在参数有值时加入字典，空值参数不传递。
-    # 不再传递 language 参数，使用 SearXNG 实例的默认语言配置。
+    # language 参数必须传递，否则 SearXNG 默认语言配置可能导致中文查询返回空结果。
     # ============================================================
     search_params_template: dict[str, Any] = {
         "format": "json",
@@ -464,14 +510,21 @@ async def handle_searxng_search(
     if categories and categories.strip():
         search_params_template["categories"] = categories.strip()
 
+    if language and language.strip():
+        search_params_template["language"] = language.strip()
+
     if time_range and time_range.strip():
         search_params_template["time_range"] = time_range.strip()
 
     logger.info(
         f"SearXNG 高级搜索请求 trace_id={trace_id} "
+        f"base_url={base_url} "
         f"concurrent_groups={concurrent_requests} "
         f"query_groups={query_groups} "
-        f"results_per_request={results_per_request}"
+        f"search_params_template={search_params_template} "
+        f"results_per_request={results_per_request} "
+        f"timeout={timeout} "
+        f"raw_parameters={parameters}"
     )
 
     # ============================================================
