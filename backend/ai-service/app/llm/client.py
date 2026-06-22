@@ -22,6 +22,7 @@ Luna AI LLM 客户端封装模块
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -571,6 +572,66 @@ class LLMClient:
             
         return response_format.model_validate_json(cleaned)
 
+    @staticmethod
+    def _attempt_json_repair(raw: str) -> dict[str, Any]:
+        """尝试修复 LLM 返回的常见 JSON 语法错误并解析。
+
+        做什么：针对 LLM 生成 JSON 时常见的语法问题（尾部逗号、未转义控制字符、
+                字符串内嵌换行等）进行修复，然后尝试 json.loads 解析。
+        为什么这样做：DeepSeek 等模型在 Prompt Schema 降级模式下输出的 JSON
+                      常出现尾部逗号、字符串内含裸换行符等问题，导致 json.loads 直接失败。
+                      通过逐层修复提高一次解析成功率。
+        输入输出：
+            - 输入：原始或已清理的 JSON 字符串
+            - 输出：解析后的 dict
+        边界条件：
+            - 修复后的 JSON 如果仍无法解析，抛出 ValueError
+        异常行为：
+            - 所有修复步骤均基于正则替换，不保证覆盖所有边缘情况
+        """
+        repaired = raw
+
+        # 1. 修复尾部逗号：将 } 或 ] 前的多余逗号移除
+        #    例如 {"a": 1, "b": 2,} -> {"a": 1, "b": 2}
+        repaired = re.sub(r',\s*([}\]])', r'\1', repaired)
+
+        # 2. 修复字符串值内的未转义控制字符（换行、回车、制表符）
+        #    匹配 JSON 字符串内容（双引号之间），对其中的控制字符进行转义
+        def _escape_controls_in_strings(match: re.Match) -> str:
+            """对 JSON 字符串值内部的未转义控制字符进行转义。"""
+            s = match.group(0)
+            # 替换常见的未转义控制字符
+            s = s.replace('\n', '\\n')
+            s = s.replace('\r', '\\r')
+            s = s.replace('\t', '\\t')
+            return s
+
+        # 匹配所有 JSON 字符串（双引号包裹，含转义双引号）
+        repaired = re.sub(
+            r'"(?:[^"\\]|\\.)*"',
+            _escape_controls_in_strings,
+            repaired,
+        )
+
+        # 3. 尝试直接解析
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            pass
+
+        # 4. 最后手段：正则提取最外层 JSON 对象并再次尝试
+        json_match = re.search(r'\{.*\}', repaired, re.DOTALL)
+        if json_match:
+            extracted = json_match.group()
+            # 对提取结果再次应用尾部逗号修复
+            extracted = re.sub(r',\s*([}\]])', r'\1', extracted)
+            try:
+                return json.loads(extracted)
+            except json.JSONDecodeError:
+                pass
+
+        raise ValueError(f"JSON 修复后仍无法解析: {raw[:300]}")
+
     def _should_use_native_structured_output(self, model: str) -> bool:
         """
         判断当前模型接入是否允许使用 OpenAI 原生结构化输出参数。
@@ -762,19 +823,24 @@ class LLMClient:
                 f"[TraceID:{trace_id}] [StructuredOutput] LLM 返回内容包含 markdown 代码块包裹，已自动清理"
             )
 
-        # 解析 JSON
+        # 解析 JSON（先尝试直接解析，失败后使用自动修复）
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError as e:
-            logger.error(f"[TraceID:{trace_id}] invoke_structured JSON 解析失败: {e}")
-            # 尝试正则提取 JSON
-            import re
-            json_match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-            raise ValueError(
-                f"[TraceID:{trace_id}] invoke_structured LLM 输出无法解析为 JSON: {cleaned[:200]}"
+            logger.warning(
+                f"[TraceID:{trace_id}] invoke_structured JSON 直接解析失败: {e}，"
+                "尝试自动修复 LLM 输出的 JSON 语法错误"
             )
+            try:
+                return self._attempt_json_repair(cleaned)
+            except ValueError:
+                logger.error(
+                    f"[TraceID:{trace_id}] invoke_structured JSON 修复后仍无法解析，"
+                    f"原始内容前 200 字符: {cleaned[:200]!r}"
+                )
+                raise ValueError(
+                    f"[TraceID:{trace_id}] invoke_structured LLM 输出无法解析为 JSON: {cleaned[:200]}"
+                )
 
     async def generate_structured_text(
         self,
