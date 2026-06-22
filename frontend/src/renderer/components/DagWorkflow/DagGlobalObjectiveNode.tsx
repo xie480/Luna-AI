@@ -64,17 +64,19 @@ export const DagGlobalObjectiveNode: React.FC<DagGlobalObjectiveNodeProps> = ({ 
             </span>
           </div>
 
-          {/* 目标内容 */}
+          {/* 目标内容 — 当 overallGoal 为空时回退到 planningReason */}
           <div className="dag-objective-goal">
-            {globalObjective.overallGoal}
+            {globalObjective.overallGoal || plan.planningReason || '（目标待生成）'}
           </div>
 
-          {/* 实现标准 */}
-          <div className="dag-objective-criteria">
-            <DagIconCheckCircle width="10" height="10" />
-            <span className="dag-objective-criteria-label">标准</span>
-            <span className="dag-objective-criteria-text">{globalObjective.successCriteria}</span>
-          </div>
+          {/* 实现标准 — 仅在有值时渲染 */}
+          {globalObjective.successCriteria && (
+            <div className="dag-objective-criteria">
+              <DagIconCheckCircle width="10" height="10" />
+              <span className="dag-objective-criteria-label">标准</span>
+              <span className="dag-objective-criteria-text">{globalObjective.successCriteria}</span>
+            </div>
+          )}
 
           {/* 输出格式（仅在有值时渲染） */}
           {globalObjective.outputFormat && (

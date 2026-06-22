@@ -614,6 +614,28 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
       plan.completedStates = payload.succeeded_states;
       plan.failedStates = payload.failed_states;
 
+      // 终止所有未结束的 State 计时
+      for (const s of plan.states) {
+        if (!s.endedAtMs && s.startedAtMs) {
+          s.endedAtMs = now;
+          s.latencyMs = now - s.startedAtMs;
+        }
+        // 终止所有未结束的 Step 计时
+        for (const step of s.steps) {
+          if (!step.endedAtMs && step.startedAtMs) {
+            step.endedAtMs = now;
+            step.latencyMs = now - step.startedAtMs;
+          }
+          // 终止所有未结束的 Node 计时
+          for (const node of step.nodes) {
+            if (!node.endedAtMs && node.startedAtMs) {
+              node.endedAtMs = now;
+              node.latencyMs = now - node.startedAtMs;
+            }
+          }
+        }
+      }
+
       // 保存到历史
       const newHistory = { ...state.planHistory, [plan.planId]: plan };
       return { activePlan: plan, planHistory: newHistory };
@@ -631,8 +653,39 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
 
     set((state) => {
       const plan = { ...state.activePlan! };
+      const now = Date.now();
       plan.status = 'terminated';
-      plan.endedAtMs = Date.now();
+      plan.endedAtMs = now;
+
+      // 终止所有未结束的 State/Step/Node 计时
+      for (const s of plan.states) {
+        if (!s.endedAtMs && s.startedAtMs) {
+          s.endedAtMs = now;
+          s.latencyMs = now - s.startedAtMs;
+        }
+        // 将 RUNNING 状态的 State 标记为 FAILED
+        if (s.status === DAG_NODE_STATUS.RUNNING) {
+          s.status = DAG_NODE_STATUS.FAILED;
+          s.errorMessages.push('Plan 已终止');
+        }
+        for (const step of s.steps) {
+          if (!step.endedAtMs && step.startedAtMs) {
+            step.endedAtMs = now;
+            step.latencyMs = now - step.startedAtMs;
+          }
+          for (const node of step.nodes) {
+            if (!node.endedAtMs && node.startedAtMs) {
+              node.endedAtMs = now;
+              node.latencyMs = now - node.startedAtMs;
+            }
+            // 将 RUNNING 状态的 Node 标记为 FAILED
+            if (node.status === DAG_NODE_STATUS.RUNNING) {
+              node.status = DAG_NODE_STATUS.FAILED;
+              node.errorMessage = 'Plan 已终止';
+            }
+          }
+        }
+      }
 
       // 保存到历史
       const newHistory = { ...state.planHistory, [plan.planId]: plan };

@@ -84,6 +84,26 @@
   color: rgba(255, 255, 255, 0.5);
 }
 
+/* 运行中状态图标旋转动画 */
+.dag-state-node-status svg {
+  color: rgba(255, 255, 255, 0.5);
+}
+.node-type-dag-state.status-running .dag-state-node-status svg {
+  color: #00ffff;
+  animation: dagSpinRing 2s linear infinite;
+}
+
+@keyframes dagSpinRing {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.node-type-dag-state.status-success .dag-state-node-status svg {
+  color: #00fa9a;
+}
+.node-type-dag-state.status-failed .dag-state-node-status svg {
+  color: #ff003c;
+}
+
 .dag-state-node-latency {
   color: rgba(255, 255, 255, 0.35);
   margin-left: 2px;

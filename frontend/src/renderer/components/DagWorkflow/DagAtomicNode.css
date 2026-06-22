@@ -253,6 +253,32 @@
 .dag-node-log-item.log-error .dag-node-log-msg { color: #ff003c; }
 .dag-node-log-item.log-debug .dag-node-log-msg { color: rgba(255, 255, 255, 0.3); }
 
+/* 错误详情（展开时在详情区内展示） */
+.dag-node-error-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 6px 8px;
+  background: rgba(255, 0, 60, 0.06);
+  border: 1px solid rgba(255, 0, 60, 0.15);
+  border-radius: 4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: #ff003c;
+}
+
+.dag-node-error-detail svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  width: 10px;
+  height: 10px;
+}
+
+.dag-node-error-detail-text {
+  word-break: break-all;
+  line-height: 1.4;
+}
+
 /* 错误信息条 */
 .dag-node-error-bar {
   display: flex;

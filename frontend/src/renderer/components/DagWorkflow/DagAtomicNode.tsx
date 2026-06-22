@@ -196,10 +196,18 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
               </div>
             </div>
           )}
+
+          {/* 错误详情（展开时在详情区内展示） */}
+          {node.status === 'FAILED' && node.errorMessage && (
+            <div className="dag-node-error-detail">
+              <DagIconAlertTriangle width="10" height="10" />
+              <span className="dag-node-error-detail-text">{node.errorMessage}</span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* 错误信息条（FAILED 状态时显示） */}
+      {/* 错误信息条（FAILED 状态时始终显示，不论是否展开） */}
       {node.status === 'FAILED' && node.errorMessage && (
         <div className="dag-node-error-bar">
           <DagIconAlertTriangle width="12" height="12" />
