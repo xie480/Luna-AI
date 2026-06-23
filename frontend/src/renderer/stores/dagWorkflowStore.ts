@@ -322,8 +322,8 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
       completedStates: 0,
       failedStates: 0,
       startedAtMs: now,
-      budgetConsumed: { tool_calls: 0 },
-      budgetLimit: { max_total_tool_calls: 50 },
+      budgetConsumed: payload.budget_consumed || { tool_calls: 0 },
+      budgetLimit: payload.budget_limit || { max_total_tool_calls: 50 },
       planningReason: payload.planning_reason,
     };
 

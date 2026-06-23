@@ -30,6 +30,7 @@ from app.workflow.dag.nodes.step_plan import StepPlanNode
 from app.workflow.dag.types import (
     DagEngineState,
     DagNodeStatus,
+    DagNodeType,
     GlobalBudget,
     PlanSummaryResult,
     ReplanContext,
@@ -210,6 +211,7 @@ class DagEngine:
                 dag_state.termination_reason = "Plan 生成结果为空"
 
             # === 发布 DAG Plan 创建事件（前端 DAG 面板数据入口） ===
+            # 包含预算信息，使前端能正确显示预算限制
             if not dag_state.terminated:
                 await self._emit_dag_event(
                     DagWorkflowEventType.EVT_DAG_PLAN_CREATED,
@@ -238,6 +240,8 @@ class DagEngine:
                             for s in dag_state.plan.states
                         ],
                         "planning_reason": dag_state.plan.original_intent or "",
+                        "budget_consumed": {"tool_calls": 0},
+                        "budget_limit": {"max_total_tool_calls": dag_state.plan.global_budget.max_total_tool_calls},
                     },
                 )
 
@@ -400,6 +404,12 @@ class DagEngine:
 
                 # --- 逐 Step 执行 ---
                 all_partitioned_outputs: dict[str, dict[str, Any]] = {}
+                # 构建 node_id → node_def 映射，用于发射 NODE_STARTED/COMPLETED 事件
+                node_def_map: dict[str, Any] = {}
+                for step in steps:
+                    for n in step.nodes:
+                        node_def_map[n.node_id] = n
+
                 for step in steps:
                     # 检查预算
                     if budget_tracker.is_state_budget_exhausted():
@@ -408,6 +418,17 @@ class DagEngine:
                             f"跳过剩余 Step"
                         )
                         state_runtime.budget_exhausted = True
+                        # 发射 State 级预算耗尽事件
+                        await self._emit_dag_event(
+                            DagWorkflowEventType.EVT_DAG_BUDGET_EXHAUSTED,
+                            trace_id, session_id, dag_state,
+                            {
+                                "plan_id": dag_state.plan.plan_id,
+                                "level": "state",
+                                "consumed": budget_tracker.global_consumed,
+                                "limit": budget_tracker.global_limit,
+                            },
+                        )
                         break
 
                     if budget_tracker.is_global_budget_exhausted():
@@ -418,7 +439,34 @@ class DagEngine:
                         dag_state.terminated = True
                         dag_state.termination_reason = "Plan 全局预算耗尽"
                         dag_state.termination_state_id = current_state.state_id
+                        # 发射全局预算耗尽事件
+                        await self._emit_dag_event(
+                            DagWorkflowEventType.EVT_DAG_BUDGET_EXHAUSTED,
+                            trace_id, session_id, dag_state,
+                            {
+                                "plan_id": dag_state.plan.plan_id,
+                                "level": "global",
+                                "consumed": budget_tracker.global_consumed,
+                                "limit": budget_tracker.global_limit,
+                            },
+                        )
                         break
+
+                    # === 发射 Step 内所有节点的 NODE_STARTED 事件 ===
+                    for node_in_step in step.nodes:
+                        await self._emit_dag_event(
+                            DagWorkflowEventType.EVT_DAG_NODE_STARTED,
+                            trace_id, session_id, dag_state,
+                            {
+                                "plan_id": dag_state.plan.plan_id,
+                                "state_id": current_state.state_id,
+                                "step_id": step.step_id,
+                                "node_id": node_in_step.node_id,
+                                "node_type": node_in_step.node_type.value
+                                    if hasattr(node_in_step.node_type, 'value')
+                                    else str(node_in_step.node_type),
+                            },
+                        )
 
                     # 带重试执行 Step
                     state_context["steps_total"] = len(steps)
@@ -435,12 +483,41 @@ class DagEngine:
 
                     state_runtime.steps_completed += 1
 
-                    # 统计成功/失败节点
+                    # 统计成功/失败节点并发射 NODE_COMPLETED 事件
                     for nid, out in step_outputs.items():
-                        if out.get("success", True):
+                        success = out.get("success", True)
+                        if success:
                             state_runtime.nodes_succeeded += 1
                         else:
                             state_runtime.nodes_failed += 1
+
+                        # 每个工具执行节点消耗一次预算配额
+                        node_def = node_def_map.get(nid)
+                        if node_def and getattr(node_def, 'node_type', None) == DagNodeType.TOOL_EXECUTE:
+                            budget_tracker.consume_tool_call()
+
+                        # === 发射 NODE_COMPLETED 事件 ===
+                        await self._emit_dag_event(
+                            DagWorkflowEventType.EVT_DAG_NODE_COMPLETED,
+                            trace_id, session_id, dag_state,
+                            {
+                                "plan_id": dag_state.plan.plan_id,
+                                "state_id": current_state.state_id,
+                                "step_id": step.step_id,
+                                "node_id": nid,
+                                "node_type": node_def.node_type.value
+                                    if node_def and hasattr(node_def.node_type, 'value')
+                                    else (str(node_def.node_type) if node_def else "unknown"),
+                                "success": success,
+                                "outputs": {
+                                    k: v for k, v in out.items()
+                                    if k not in ("success", "error_message")
+                                } if isinstance(out, dict) else {},
+                                "error_message": out.get("error_message", "") if not success and isinstance(out, dict) else None,
+                                "latency_ms": out.get("latency_ms", 0),
+                                "retry_count": out.get("retry_count", 0),
+                            },
+                        )
 
                 if dag_state.terminated:
                     break

@@ -708,6 +708,10 @@ export interface DagPlanCreatedPayload {
   }>;
   /** 规划推理说明 */
   planning_reason: string;
+  /** 已消耗预算 */
+  budget_consumed?: { tool_calls: number };
+  /** 预算上限 */
+  budget_limit?: { max_total_tool_calls: number };
 }
 
 /**
