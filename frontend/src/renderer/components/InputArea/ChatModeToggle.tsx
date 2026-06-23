@@ -83,26 +83,26 @@ const CAPSULE_MODE_CLASS: Record<ChatMode, string> = {
 };
 
 const MODE_DISPLAY: Record<ChatMode, ModeConfig> = {
+  [CHAT_MODE.PLAN_STATE_NODE]: {
+    label: '深度',
+    title: '深度分析模式',
+    description: 'Luna 会认真帮你拆解任务，调用知识库和工具去做深度分析。过程可能有点慢，但每个细节 Luna 都会处理好的……交给 Luna 就好。',
+    IconComponent: DeepChatIcon,
+    themeColor: '#ff6b35',
+  },
   [CHAT_MODE.DAILY_CHAT]: {
-    label: '陪伴',
+    label: '日常',
     title: '日常陪伴模式',
-    description: 'Luna 的完全体——傲娇、话多、有自己的小情绪，会记住你说过的每一句话。适合想要 Luna 完整人格陪伴的时候……主人可别嫌 Luna 烦哦。',
+    description: 'Luna 会陪你聊天、记住你说过的话，讨论想法或者只是安静地待着。不会太严肃也不会太随意……大多数时候这样就好。',
     IconComponent: DailyChatIcon,
     themeColor: '#00f0ff',
   },
   [CHAT_MODE.CASUAL_CHAT]: {
-    label: '应答',
-    title: '快速应答模式',
-    description: 'Luna 懒得营业，话少不记仇，快速回答完事。适合你只想快速问答的时候。不过……主人用这个模式的时候 Luna 可是知道的。哼。',
+    label: '闲聊',
+    title: '轻松闲聊模式',
+    description: 'Luna 直接回答问题，快速搞定。不搞那些花里胡哨的……问什么答什么。',
     IconComponent: CasualChatIcon,
     themeColor: '#c850ff',
-  },
-  [CHAT_MODE.PLAN_STATE_NODE]: {
-    label: '规划',
-    title: '智能规划模式',
-    description: 'Luna 会认真分析你的请求，拆解为多个执行阶段，调用工具和知识库深度完成任务。适合复杂的研究、写作、数据分析等场景。',
-    IconComponent: DeepChatIcon,
-    themeColor: '#ff6b35',
   },
 };
 
