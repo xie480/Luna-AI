@@ -88,6 +88,7 @@ class StepPlanNode:
             }
 
             # 渲染 Step Plan 生成 Prompt
+            # 注意：available_node_types 变量已移除，节点类型说明已内化到 system.j2 的静态提示词中
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STEP_PLAN_GENERATION,
                 variables={
@@ -96,9 +97,6 @@ class StepPlanNode:
                     "selected_skills": skill_details,
                     "state_context": json.dumps(
                         serializable_context, ensure_ascii=False
-                    ),
-                    "available_node_types": json.dumps(
-                        [t.value for t in DagNodeType], ensure_ascii=False
                     ),
                     "CURRENT_TIME": current_time,
                 },

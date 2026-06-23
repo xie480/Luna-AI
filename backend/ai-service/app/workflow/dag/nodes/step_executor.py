@@ -259,14 +259,12 @@ class StepExecutor:
                     "error_message": "memory_manager 未注入到 state_context 中",
                 }
 
-            # 执行长期记忆检索
+            # 执行长期记忆检索：委托 HybridRetriever 混合检索 + Rerank 全流程
             query_text = node_def.query_text
-            memory_result = await memory_manager.search(
-                query=query_text,
-                user_id=state_context.get("user_id", "local_default_user"),
+            memory_text = await memory_manager.retrieve_and_format_memories(
+                query_text=query_text,
+                query_vector=[],
             )
-
-            memory_text = memory_result if isinstance(memory_result, str) else str(memory_result)
 
             return {
                 "success": True,
