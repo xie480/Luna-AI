@@ -150,6 +150,21 @@ class ChatWorkflowGraphNodeName(str, Enum):
     INPUT_RECONSTRUCTION_SIMPLIFIED = "input_reconstruction_simplified"
 
 
+class DagSubGraphNodeName(str, Enum):
+    """Phase 9 重构：Plan + Cursor 子图内部节点名。
+
+    做什么：定义 build_plan_cursor_subgraph() 工厂函数生成的子图内部 4 个节点名。
+    为什么这样做：将原 DagEngine.run() 中的 Python while 循环逻辑拆分为
+                  4 个独立 LangGraph 节点，每个节点名必须是唯一常量，
+                  避免硬编码魔法字符串。
+    """
+
+    DAG_PLANNER = "dag_planner"
+    DAG_STATE_EXECUTOR = "dag_state_executor"
+    DAG_CURSOR_ROUTER = "dag_cursor_router"
+    DAG_PLAN_SUMMARIZER = "dag_plan_summarizer"
+
+
 CHAT_WORKFLOW_CHECKPOINT_TABLE: Final[str] = "langgraph_chat_checkpoints"
 CHAT_WORKFLOW_CHECKPOINT_NS_SEPARATOR: Final[str] = ":"
 CHAT_WORKFLOW_DEFAULT_LOCALE: Final[str] = "zh-CN"

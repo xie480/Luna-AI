@@ -557,3 +557,34 @@ class DagEngineState(BaseModel):
     class Config:
         """允许任意类型嵌套。"""
         arbitrary_types_allowed = True
+
+
+# ===========================================================================
+# Executor 节点输出（Phase 9 重构新增）
+# ===========================================================================
+
+
+class DagExecutorOutput(BaseModel):
+    """Executor 节点输出 — 写入 DagEngineState。
+
+    做什么：承载单次 State 执行的产出，供 Router 和下一轮 Executor 使用。
+    为什么这样做：在 Plan + Cursor 子图中，Executor 节点每次只执行一个 State，
+                  需要一个中间类型来跟踪本次执行的状态和 cursor 推进情况。
+    """
+
+    state_id: str = Field(
+        default="",
+        description="本次执行的 State ID。",
+    )
+    status: DagNodeStatus = Field(
+        default=DagNodeStatus.PENDING,
+        description="本次 State 执行的最终状态。",
+    )
+    state_runtime: dict[str, Any] = Field(
+        default_factory=dict,
+        description="本次 State 的 StateRuntimeState 序列化结果。",
+    )
+    cursor_advanced: bool = Field(
+        default=False,
+        description="cursor 是否已推进（评估通过时为 True）。",
+    )

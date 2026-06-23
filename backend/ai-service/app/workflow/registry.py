@@ -57,27 +57,94 @@ class ChatWorkflowNodeRegistry:
         }
 
     def _build_dag_engine_node(self, dependencies: WorkflowDependencies):
-        """构建 DAG 引擎节点。
+        """构建 DAG 引擎节点（Plan + Cursor 子图版本）。
 
-        做什么：创建 DagEngine 实例并包装为 LangGraph 节点。
-        为什么这样做：DAG 引擎需要多个依赖注入，通过工厂方法集中构建。
+        做什么：创建 Plan + Cursor 子图并包装为 LangGraph 外层节点。
+        为什么这样做：Phase 9 重构将 DagEngine 单体引擎拆分为 4 个独立 LangGraph 节点，
+                      子图通过 build_plan_cursor_subgraph() 工厂函数构建，
+                      DagEngineNode 负责调用子图的 ainvoke() 方法。
         """
         from app.llm.client import llm_client as _llm_client
-        from app.workflow.dag.engine import DagEngine
+        from app.workflow.dag.engine import build_plan_cursor_subgraph
+        from app.workflow.dag.evaluation import StateResultCompressor
+        from app.workflow.dag.nodes.plan_generation import PlanGenerationNode
+        from app.workflow.dag.nodes.plan_replan import PlanReplanNode
+        from app.workflow.dag.nodes.plan_summary import PlanResultSummaryNode
+        from app.workflow.dag.nodes.skill_screening import SkillScreeningNode
+        from app.workflow.dag.nodes.state_evaluation import StateEvaluationNode
+        from app.workflow.dag.nodes.step_executor import StepExecutor, StepRetryPolicy
+        from app.workflow.dag.nodes.step_merge import StepMergeNode
+        from app.workflow.dag.nodes.step_plan import StepPlanNode
         from app.workflow.nodes.impl.dag_engine_node import DagEngineNode
 
-        dag_engine = DagEngine(
+        # 创建子节点实例（与原 DagEngine.__init__ 中完全一致）
+        plan_generation = PlanGenerationNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        skill_screening = SkillScreeningNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        step_plan = StepPlanNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        step_executor = StepExecutor(
             prompt_manager=dependencies.prompt_manager,
             llm_client=_llm_client,
             mcp_tool_registry=dependencies.mcp_tool_registry,
-            memory_manager=dependencies.memory_manager,
-            rag_orchestrator=dependencies.rag_orchestrator,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        step_retry = StepRetryPolicy(step_executor)
+        step_merge = StepMergeNode(
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        state_evaluation = StateEvaluationNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        state_compressor = StateResultCompressor(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        plan_replan = PlanReplanNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+        plan_summary = PlanResultSummaryNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+
+        # 构建 Plan + Cursor 子图
+        subgraph = build_plan_cursor_subgraph(
+            plan_generation=plan_generation,
+            skill_screening=skill_screening,
+            step_plan=step_plan,
+            step_executor=step_executor,
+            step_retry=step_retry,
+            step_merge=step_merge,
+            state_evaluation=state_evaluation,
+            state_compressor=state_compressor,
+            plan_replan=plan_replan,
+            plan_summary=plan_summary,
             chat_status_publisher=dependencies.chat_status_publisher,
             event_publisher=dependencies.event_publisher,
+            memory_manager=dependencies.memory_manager,
+            rag_orchestrator=dependencies.rag_orchestrator,
+            mcp_tool_registry=dependencies.mcp_tool_registry,
         )
 
         return DagEngineNode(
-            dag_engine=dag_engine,
+            plan_cursor_subgraph=subgraph,
             event_publisher=dependencies.event_publisher,
             chat_status_publisher=dependencies.chat_status_publisher,
         )
