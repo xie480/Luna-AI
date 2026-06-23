@@ -227,9 +227,168 @@
 }
 
 /* ============================================================
+ * DAG 模式：全局目标固定区域
+ * 做什么：将全局目标从可滚动的 node-list 中移出，
+ *         固定在侧边栏标题栏下方，不随画布滚动。
+ * 为什么这样做：全局目标是用户理解当前 Plan 的关键入口，
+ *               固定后用户无需滚动画布即可查看任务总览。
+ * 视觉约束：通过发光边框、深色背景和底部分割线与下方画布明确区分。
+ * ============================================================ */
+
+/* 全局目标固定区域容器 */
+.dag-objective-fixed-area {
+  flex-shrink: 0;
+  position: relative;
+  background: linear-gradient(180deg, rgba(0, 255, 255, 0.03) 0%, rgba(15, 20, 30, 0.95) 100%);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 5;
+}
+
+/* 展开状态 — 允许内容完全展开 */
+.dag-objective-fixed-area.expanded {
+  max-height: 400px;
+}
+
+/* 收起状态 — 仅保留摘要行高度 */
+.dag-objective-fixed-area.collapsed {
+  max-height: 40px;
+}
+
+/* 网格叠加装饰（与侧边栏风格保持一致） */
+.dag-objective-fixed-area::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* 底部发光装饰线 */
+.dag-objective-fixed-area::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 255, 255, 0.2) 20%,
+    rgba(0, 255, 255, 0.4) 50%,
+    rgba(0, 255, 255, 0.2) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* 全局目标摘要行（始终可见） */
+.dag-objective-fixed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  position: relative;
+  z-index: 2;
+}
+
+/* "全局目标" 标签 */
+.dag-objective-fixed-label {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #00ffff;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+  padding: 1px 6px;
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 3px;
+  background: rgba(0, 255, 255, 0.06);
+}
+
+/* 目标文本（超出截断） */
+.dag-objective-fixed-goal {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+/* 收起/展开按钮 */
+.dag-objective-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dag-objective-toggle-btn:hover {
+  background: rgba(0, 255, 255, 0.08);
+  border-color: rgba(0, 255, 255, 0.25);
+  color: rgba(0, 255, 255, 0.8);
+}
+
+.dag-objective-toggle-btn svg {
+  width: 10px;
+  height: 10px;
+}
+
+.dag-objective-toggle-text {
+  font-size: 9px;
+}
+
+/* 全局目标详情容器（收起/展开内容区域） */
+.dag-objective-fixed-details {
+  position: relative;
+  z-index: 2;
+  padding: 0 16px 10px;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.25s ease, padding 0.3s ease;
+}
+
+/* 收起状态隐藏详情 */
+.dag-objective-fixed-area.collapsed .dag-objective-fixed-details {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* 全局目标节点在固定区域内全宽显示（覆盖原流程图节点的窄宽度） */
+.dag-objective-fixed-details .node-type-dag-objective {
+  width: 100%;
+  max-width: none;
+}
+
+/* ============================================================
  * DAG 模式：嵌入侧边栏的子图容器布局
  * 做什么：在智能规划模式下，侧边栏 canvas 区域内嵌入
- *         DagGlobalInfoBar + DagStateGroup 子图容器。
+ *         DagStateGroup 子图容器。
  * 为什么这样做：DAG 组件需要融入现有侧边栏框架，而非替换它。
  * ============================================================ */
 

@@ -1,11 +1,16 @@
 /**
  * DagWorkflowPanel DAG 面板主容器样式。
  * 做什么：定义 DAG 深度工作流面板的整体布局、背景和动画。
+ *         全局目标区域固定在标题栏下方，不随画布滚动，
+ *         通过视觉分隔和收起/展开按钮与下方画布明确区分。
  * 为什么这样做：DAG 面板是独立于日常聊天模式的全屏覆盖面板，需要完整的布局定义。
+ *               全局目标作为核心摘要需要固定可见，画布需要独立的滚动/平移空间。
  * 视觉约束：严格沿用 HolographicWorkflow 的赛博朋克视觉语言。
  */
 
-/* DAG 面板主容器 */
+/* ═══════════════════════════════════════════════════════
+ * DAG 面板主容器
+ * ═══════════════════════════════════════════════════════ */
 .dag-workflow-panel {
   position: absolute;
   inset: 0;
@@ -30,7 +35,9 @@
   }
 }
 
-/* 面板顶部工具栏 */
+/* ═══════════════════════════════════════════════════════
+ * 面板顶部工具栏（固定不可滚动）
+ * ═══════════════════════════════════════════════════════ */
 .dag-panel-toolbar {
   display: flex;
   align-items: center;
@@ -79,13 +86,173 @@
   color: #ff003c;
 }
 
-/* 信息栏区域 */
-.dag-panel-info-section {
-  padding: 12px 16px;
+/* ═══════════════════════════════════════════════════════
+ * 全局目标固定区域
+ * 做什么：固定在标题栏下方，不随画布滚动，作为核心摘要始终可见。
+ * 为什么这样做：全局目标是用户理解当前 Plan 的关键入口，
+ *               固定后用户无需滚动画布即可查看任务总览。
+ * 视觉约束：通过深色背景、发光边框和底部分割线与画布区域明确区分。
+ * ═══════════════════════════════════════════════════════ */
+.dag-panel-objective-fixed {
   flex-shrink: 0;
+  position: relative;
+  background: linear-gradient(180deg, rgba(0, 255, 255, 0.04) 0%, rgba(10, 14, 22, 0.95) 100%);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* 画布区域 */
+/* 展开状态 — 限制最大高度防止过度占用空间 */
+.dag-panel-objective-fixed.expanded {
+  max-height: 320px;
+}
+
+/* 收起状态 — 仅保留摘要行高度 */
+.dag-panel-objective-fixed.collapsed {
+  max-height: 44px;
+}
+
+/* 网格叠加装饰（与 DagGlobalInfoBar 的风格保持一致） */
+.dag-panel-objective-fixed::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 顶部发光装饰线 */
+.dag-panel-objective-fixed::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 255, 255, 0.3) 20%,
+    rgba(0, 255, 255, 0.5) 50%,
+    rgba(0, 255, 255, 0.3) 80%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* ─── 全局目标摘要行（始终可见，不随收起/展开变化） ─── */
+.dag-objective-fixed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.dag-objective-fixed-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* "全局目标" 标签 */
+.dag-objective-fixed-label {
+  flex-shrink: 0;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #00ffff;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
+  padding: 1px 6px;
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 3px;
+  background: rgba(0, 255, 255, 0.06);
+}
+
+/* 目标文本 */
+.dag-objective-fixed-goal {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+  line-height: 1.4;
+}
+
+/* ─── 收起/展开按钮 ───
+ * 做什么：允许用户收起全局目标详情以获得更大画布空间。
+ * 为什么这样做：全局目标信息量较大时会占用较多垂直空间，
+ *               收起后仅保留一行摘要，释放画布可视面积。
+ */
+.dag-objective-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dag-objective-toggle-btn:hover {
+  background: rgba(0, 255, 255, 0.08);
+  border-color: rgba(0, 255, 255, 0.25);
+  color: rgba(0, 255, 255, 0.8);
+}
+
+.dag-objective-toggle-btn svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+/* 文字标签 */
+.dag-objective-toggle-text {
+  font-size: 10px;
+}
+
+/* ─── 全局目标详情容器（收起/展开内容区域） ─── */
+.dag-objective-fixed-details {
+  padding: 0 16px 10px;
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.25s ease, padding 0.3s ease;
+}
+
+/* 收起状态隐藏详情 */
+.dag-panel-objective-fixed.collapsed .dag-objective-fixed-details {
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+ * 画布区域（可滑动、可交互）
+ * ═══════════════════════════════════════════════════════ */
 .dag-panel-canvas-section {
   flex: 1;
   padding: 0 16px 16px;
@@ -93,7 +260,9 @@
   position: relative;
 }
 
-/* 空状态 */
+/* ═══════════════════════════════════════════════════════
+ * 空状态
+ * ═══════════════════════════════════════════════════════ */
 .dag-panel-empty-state {
   display: flex;
   flex-direction: column;

@@ -155,7 +155,15 @@ class StepExecutor:
 
         # 按 depends_on 拓扑排序，分层并行
         layers = self._topological_sort(step_def.nodes)
-        partitioned_outputs: dict[str, dict[str, Any]] = {}
+
+        # 从 state_context 中继承前序 Step 的输出（跨 Step 依赖共享）
+        # 为什么这样做：当 Step 2 的 data_transform 节点依赖 Step 1 的
+        #               long_term_memory 节点输出时，必须能读取到前序 Step 的结果。
+        #               ExecutorStepExecNode 会将 executor_rt.all_partitioned_outputs
+        #               注入到 state_context["partitioned_outputs"] 中，
+        #               这里用 copy 浅拷贝以避免直接修改上游数据。
+        existing_outputs = state_context.get("partitioned_outputs", {})
+        partitioned_outputs: dict[str, dict[str, Any]] = dict(existing_outputs) if existing_outputs else {}
 
         for layer in layers:
             # 同一层的节点并行执行

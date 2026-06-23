@@ -466,7 +466,7 @@ class LLMClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((RateLimitError, APIConnectionError, asyncio.TimeoutError)),
+        retry=retry_if_exception_type((RateLimitError, APIConnectionError, asyncio.TimeoutError, ValidationError)),
         reraise=True,
         before_sleep=before_sleep_log(logger, 20),
     )
@@ -728,18 +728,12 @@ class LLMClient:
             - kwargs 中的 trace_id/session_id/message_id 会被过滤，不传递给 OpenAI API
         异常行为：
             - 网络错误/限流由 tenacity 自动重试（复用 _wait_for_slot 频率限制）
-            - JSON 解析失败时尝试正则提取，仍失败则抛出 ValueError
+            - JSON 解析失败时先尝试自动修复（_attempt_json_repair），仍失败则重新调用
+              LLM 获取新输出，最多重试 2 次（总尝试 3 次）后抛出 ValueError
         """
         logger.info(f"[TraceID:{trace_id}] 正在调用 LLM API (invoke_structured)")
 
-        # 频率限制等待
-        await self._wait_for_slot(
-            trace_id=trace_id,
-            session_id=str(kwargs.get("session_id", "")),
-            message_id=str(kwargs.get("message_id", "")),
-        )
-
-        # 从全局配置获取模型名称和参数
+        # 从全局配置获取模型名称和参数（提前解析，避免每次重试重复导入）
         from app.config.settings import global_config_container
         from app.types.constants import ModelSize
         config = global_config_container.get_model_config(ModelSize.MEDIUM)
@@ -771,76 +765,115 @@ class LLMClient:
             **clean_kwargs,
         }
 
-        # 尝试原生 structured output（仅在模型支持时）
-        content: str | None = None
-        if self._should_use_native_structured_output(model):
-            # 将 JSON Schema dict 包装为 response_format 格式
-            structured_kwargs = dict(call_kwargs)
-            structured_kwargs["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "DynamicSchema",
-                    "schema": schema,
-                    "strict": True,
-                },
-            }
-            try:
-                response = await self.client.chat.completions.create(**structured_kwargs)
-                content = response.choices[0].message.content
-            except BadRequestError as e:
-                logger.warning(
-                    f"[TraceID:{trace_id}] [StructuredOutput] 模型 {model} 不支持原生结构化输出，"
-                    f"已降级为 Prompt Schema 约束，错误原因: {e!s}"
-                )
-                response = await self.client.chat.completions.create(**call_kwargs)
-                content = response.choices[0].message.content
-            except Exception as e:
-                logger.warning(
-                    f"[TraceID:{trace_id}] [StructuredOutput] 原生结构化输出调用失败，"
-                    f"已降级为 Prompt Schema 约束，异常: {type(e).__name__}: {e!s}"
-                )
-                response = await self.client.chat.completions.create(**call_kwargs)
-                content = response.choices[0].message.content
-        else:
-            response = await self.client.chat.completions.create(**call_kwargs)
-            content = response.choices[0].message.content
+        # --------------------------------------------------------
+        # 重试循环：LLM 调用 + JSON 解析失败时自动重试（最大 2 次重试）
+        # 做什么：当 LLM 返回的 JSON 无法解析时（包括直接解析和自动修复均失败），
+        #         重新发起整个 LLM 调用以获取新的输出，而非立即抛异常。
+        # 为什么这样做：LLM 输出具有随机性，同一 prompt 重试可能产生合法 JSON；
+        #               这是"硬性错误"（JSON 语法错误、参数类型错误等）的通用容错策略。
+        # 边界条件：仅对 JSON 解析 / 修复失败进行重试，网络错误由其他机制处理。
+        # --------------------------------------------------------
+        max_retries: int = 2  # 最大重试次数（总尝试次数 = 1 + max_retries = 3）
+        last_error: Exception | None = None
 
-        if not content:
-            raise ValueError(f"[TraceID:{trace_id}] LLM 返回了空内容")
-
-        # 清理可能存在的 markdown 代码块包裹
-        cleaned = content.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        elif cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-
-        if cleaned != content:
-            logger.info(
-                f"[TraceID:{trace_id}] [StructuredOutput] LLM 返回内容包含 markdown 代码块包裹，已自动清理"
+        for attempt in range(1 + max_retries):
+            # 频率限制等待（每次重试前都需等待，防止频繁调用触发限流）
+            await self._wait_for_slot(
+                trace_id=trace_id,
+                session_id=str(kwargs.get("session_id", "")),
+                message_id=str(kwargs.get("message_id", "")),
             )
 
-        # 解析 JSON（先尝试直接解析，失败后使用自动修复）
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError as e:
-            logger.warning(
-                f"[TraceID:{trace_id}] invoke_structured JSON 直接解析失败: {e}，"
-                "尝试自动修复 LLM 输出的 JSON 语法错误"
-            )
+            if attempt > 0:
+                logger.info(
+                    f"[TraceID:{trace_id}] invoke_structured 第 {attempt + 1} 次尝试 "
+                    f"（第 {attempt} 次重试），原因: {last_error!s}"
+                )
+
+            # 尝试原生 structured output（仅在模型支持时）
+            content: str | None = None
+            if self._should_use_native_structured_output(model):
+                # 将 JSON Schema dict 包装为 response_format 格式
+                structured_kwargs = dict(call_kwargs)
+                structured_kwargs["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "DynamicSchema",
+                        "schema": schema,
+                        "strict": True,
+                    },
+                }
+                try:
+                    response = await self.client.chat.completions.create(**structured_kwargs)
+                    content = response.choices[0].message.content
+                except BadRequestError as e:
+                    logger.warning(
+                        f"[TraceID:{trace_id}] [StructuredOutput] 模型 {model} 不支持原生结构化输出，"
+                        f"已降级为 Prompt Schema 约束，错误原因: {e!s}"
+                    )
+                    response = await self.client.chat.completions.create(**call_kwargs)
+                    content = response.choices[0].message.content
+                except Exception as e:
+                    logger.warning(
+                        f"[TraceID:{trace_id}] [StructuredOutput] 原生结构化输出调用失败，"
+                        f"已降级为 Prompt Schema 约束，异常: {type(e).__name__}: {e!s}"
+                    )
+                    response = await self.client.chat.completions.create(**call_kwargs)
+                    content = response.choices[0].message.content
+            else:
+                response = await self.client.chat.completions.create(**call_kwargs)
+                content = response.choices[0].message.content
+
+            if not content:
+                last_error = ValueError(f"[TraceID:{trace_id}] LLM 返回了空内容")
+                if attempt < max_retries:
+                    logger.warning(
+                        f"[TraceID:{trace_id}] invoke_structured LLM 返回空内容，"
+                        f"将在下次尝试中重试 ({attempt + 1}/{max_retries})"
+                    )
+                    continue
+                raise last_error
+
+            # 清理可能存在的 markdown 代码块包裹
+            cleaned = content.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            elif cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+            if cleaned != content:
+                logger.info(
+                    f"[TraceID:{trace_id}] [StructuredOutput] LLM 返回内容包含 markdown 代码块包裹，已自动清理"
+                )
+
+            # 解析 JSON（先尝试直接解析，失败后使用自动修复）
             try:
-                return self._attempt_json_repair(cleaned)
-            except ValueError:
-                logger.error(
-                    f"[TraceID:{trace_id}] invoke_structured JSON 修复后仍无法解析，"
-                    f"原始内容前 200 字符: {cleaned[:200]!r}"
+                return json.loads(cleaned)
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"[TraceID:{trace_id}] invoke_structured JSON 直接解析失败: {e}，"
+                    "尝试自动修复 LLM 输出的 JSON 语法错误"
                 )
-                raise ValueError(
-                    f"[TraceID:{trace_id}] invoke_structured LLM 输出无法解析为 JSON: {cleaned[:200]}"
-                )
+                try:
+                    return self._attempt_json_repair(cleaned)
+                except ValueError:
+                    parse_error = ValueError(
+                        f"[TraceID:{trace_id}] invoke_structured LLM 输出无法解析为 JSON: "
+                        f"{cleaned[:200]}"
+                    )
+                    last_error = parse_error
+                    logger.error(
+                        f"[TraceID:{trace_id}] invoke_structured JSON 修复后仍无法解析，"
+                        f"原始内容前 200 字符: {cleaned[:200]!r}，"
+                        f"尝试次数: {attempt + 1}/{1 + max_retries}"
+                    )
+                    # 未达最大重试次数则继续下一轮 LLM 调用
+                    if attempt < max_retries:
+                        continue
+                    raise parse_error
 
     async def generate_structured_text(
         self,

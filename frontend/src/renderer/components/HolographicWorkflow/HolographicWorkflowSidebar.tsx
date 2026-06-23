@@ -20,6 +20,7 @@ import { HolographicARPanel } from './HolographicARPanel';
 import { PanelTransition } from '../PanelTransition/PanelTransition';
 import { DagGlobalObjectiveNode } from '../DagWorkflow/DagGlobalObjectiveNode';
 import { DagStateNode } from '../DagWorkflow/DagStateNode';
+import { DagIconChevronDown, DagIconChevronRight } from '../DagWorkflow/DagIcons';
 import type { ChatNodeStatus } from '../../../shared/types';
 import type { ChatNodeProjection } from '../../types/chatWorkflow';
 import type { DagPlanProjection, DagStateProjection } from '../../types/dagWorkflow';
@@ -42,6 +43,14 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   const chatMode = useSystemStore((state) => state.chatMode);
 
   const [isVisible, setIsVisible] = useState(true);
+
+  /**
+   * 全局目标区域的展开/收起状态。
+   * 做什么：控制全局目标详细信息在侧边栏中的显示与隐藏。
+   * 为什么这样做：全局目标固定在标题栏下方后，用户需要收起详情以获得更多画布空间。
+   * 默认值：true（默认展开）。
+   */
+  const [objectiveExpanded, setObjectiveExpanded] = useState(true);
 
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
@@ -151,11 +160,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
     : chatActivePlan !== null;
 
   // Auto Scroll — 追踪最新活跃节点
+  // 注意：全局目标已移至固定区域，不再参与滚动追踪
   useEffect(() => {
     if (!scrollRef.current || !hasPlan) return;
     const allNodeTypes = isDagMode && dagActivePlan
       ? [
-          'dag_global_objective',
           ...preDagNodes.map(n => n.nodeType),
           ...dagActivePlan.states.map(s => s.stateId),
           ...postDagNodes.map(n => n.nodeType),
@@ -190,15 +199,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [arPanelData]);
 
   // 计算 DAG 模式下的节点列表（用于 HolographicConnections）
+  // 注意：全局目标节点已从可滚动区域移除，不再参与连线计算
   const dagConnectionNodes: ChatNodeProjection[] = useMemo(() => {
     if (!isDagMode || !dagActivePlan) return preDagNodes as ChatNodeProjection[];
     // 构建虚拟 node 列表供 HolographicConnections 计算连线
     const virtualNodes: ChatNodeProjection[] = [];
-    // 全局目标节点
-    virtualNodes.push({
-      nodeType: 'dag_global_objective',
-      status: dagActivePlan.status === 'executing' ? 'running' : dagActivePlan.status === 'completed' ? 'succeeded' : 'pending',
-    } as ChatNodeProjection);
     // 预 DAG 节点
     for (const n of preDagNodes) {
       virtualNodes.push(n as ChatNodeProjection);
@@ -284,16 +289,48 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         </div>
       </div>
 
+      {/* ═══ 全局目标固定区域（仅 DAG 模式）
+       * 做什么：将全局目标固定在侧边栏标题栏下方，不随画布滚动。
+       * 为什么这样做：全局目标是用户理解当前 Plan 的关键入口，
+       *               固定后用户无需滚动画布即可查看任务总览。
+       * 视觉约束：通过发光边框和背景色与下方可滚动画布明确区分。
+       */}
+      {isDagMode && dagActivePlan && (
+        <div className={`dag-objective-fixed-area ${objectiveExpanded ? 'expanded' : 'collapsed'}`}>
+          <div className="dag-objective-fixed-header">
+            <span className="dag-objective-fixed-label">全局目标</span>
+            <span className="dag-objective-fixed-goal">
+              {dagActivePlan.globalObjective.overallGoal || dagActivePlan.planningReason || '（目标待生成）'}
+            </span>
+            <button
+              className={`dag-objective-toggle-btn ${objectiveExpanded ? 'is-expanded' : ''}`}
+              onClick={() => setObjectiveExpanded((prev) => !prev)}
+              aria-label={objectiveExpanded ? '收起全局目标详情' : '展开全局目标详情'}
+              type="button"
+            >
+              <span className="dag-objective-toggle-text">
+                {objectiveExpanded ? '收起' : '展开'}
+              </span>
+              {objectiveExpanded
+                ? <DagIconChevronDown width="12" height="12" />
+                : <DagIconChevronRight width="12" height="12" />
+              }
+            </button>
+          </div>
+          <div className="dag-objective-fixed-details">
+            <DagGlobalObjectiveNode plan={dagActivePlan} />
+          </div>
+        </div>
+      )}
+
       <div className="holographic-canvas" ref={scrollRef}>
         {/* 连线层 — 统一处理日常聊天和 DAG 模式 */}
         <HolographicConnections nodes={connectionNodes} activeNodeId={activeNodeId} width={width} />
         
         <div className="node-list">
-            {/* ═══ DAG 模式：全局目标 + 预DAG节点 + State 节点 ═══ */}
+            {/* ═══ DAG 模式：预DAG节点 + State 节点 ═══ */}
             {isDagMode && dagActivePlan ? (
               <>
-                {/* 全局目标节点（流程图最上方） */}
-                <DagGlobalObjectiveNode plan={dagActivePlan} />
 
                 {/* 预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION） */}
                 {preDagNodes.map((node) => (
