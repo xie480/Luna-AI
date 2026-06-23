@@ -1,4 +1,5 @@
 {# Phase 9：Step Plan 生成 Prompt — 记忆槽位 #}
+{% if selected_skills %}
 ## 已筛选技能的工具与资源列表
 {% for skill in selected_skills %}
 ### {{ skill.skill_name }}
@@ -15,6 +16,10 @@
 {% endfor %}
 {% endif %}
 {% endfor %}
+{% else %}
+## 已筛选技能：无
+当前任务无需外部技能，请使用 data_transform（纯推理/写作/分析）、long_term_memory（记忆检索）或 knowledge_rag（知识库检索）节点类型来完成任务。
+{% endif %}
 
 ## 当前上下文
 {{ state_context }}

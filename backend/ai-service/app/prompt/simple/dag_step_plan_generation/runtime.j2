@@ -52,3 +52,4 @@
 3. 每种 node_type 只填写其必填字段，其他字段留空或省略。
 4. parameter_hint 和 transform_instruction 要具体明确，让执行器能准确理解意图。
 5. 合理利用并行：将无依赖关系的节点放在同一 Step 中以提高效率。
+6. **无技能时的处理**：如果已筛选技能列表为空，请优先使用 `data_transform` 节点直接完成任务（如纯推理、写作、分析），或使用 `long_term_memory` 和 `knowledge_rag` 检索信息。不要伪造 skill_name 或 tool_name。

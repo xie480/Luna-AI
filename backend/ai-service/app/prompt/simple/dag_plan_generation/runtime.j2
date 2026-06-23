@@ -16,6 +16,7 @@
 
 ## 输出要求
 请输出 JSON，只包含 states 和 planning_reason 字段：
+```json
 {
   "states": [
     {
@@ -26,13 +27,14 @@
         {"field": "字段名", "operator": ">=", "value": 1}
       ],
       "depends_on": [],
-      "required_skill_names": ["skill_name_1"]
+      "required_skill_names": []
     }
   ],
   "planning_reason": "为什么这样拆分 State 的理由"
 }
+```
 
 注意：
 - depends_on 中填写的是依赖的 State 的 order_index（整数）。
-- required_skill_names 中填写的是从可用能力列表中选择的 skill_name。
+- required_skill_names 是**可选字段**：只有当该 State 明确需要调用外部工具或加载技能资源时才填写具体的 skill_name；纯推理/对话/写作类任务应留空数组 `[]`。
 - 如果用户请求简单，只需生成 1 个 State。

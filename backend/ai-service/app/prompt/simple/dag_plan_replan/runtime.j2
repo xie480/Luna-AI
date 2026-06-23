@@ -20,6 +20,7 @@
 
 ## 输出要求
 请输出 JSON：
+```json
 {
   "revised_states": [
     {
@@ -29,9 +30,14 @@
       "completion_criteria": [
         {"field": "字段名", "operator": ">=", "value": 1}
       ],
-      "required_skill_names": ["skill_name"]
+      "required_skill_names": []
     }
   ],
   "replan_reason": "调整理由"
 }
+```
 请保持调整后的阶段数量合理，确保最终仍能达成全局目标。
+
+注意：
+- `required_skill_names` 是可选字段：只有当该 State 明确需要调用外部工具或加载技能资源时才填写具体的 skill_name；纯推理/对话/写作类任务应留空数组 `[]`。
+- 不要因为"可能有用"而强选技能，只在有明确外部工具需求时才选择。
