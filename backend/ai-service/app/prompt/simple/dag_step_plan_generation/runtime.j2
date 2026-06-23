@@ -17,7 +17,7 @@
       "description": "步骤描述（简要说明这个步骤做什么）",
       "nodes": [
         {
-          "node_type": "resource_loading | tool_execute | data_transform | long_term_memory | knowledge_rag",
+          "node_type": "resource_loading | tool_execute | data_transform",
 
           "skill_name": "所属技能名称（resource_loading 和 tool_execute 时必填，填写已筛选技能中的 skill_name）",
 
@@ -28,8 +28,6 @@
           "parameter_hint": "参数提取提示（tool_execute 时必填，描述如何从上下文中提取工具参数，包括参数含义、取值范围、格式要求等）",
 
           "transform_instruction": "转换指令（data_transform 时必填，详细描述需要做什么数据转换，如：从搜索结果中提取表格数据、将 JSON 转为 Markdown 等）",
-
-          "query_text": "查询文本（long_term_memory 和 knowledge_rag 时必填，字符串格式。如需多角度检索，用分号分隔多个查询，如：'公司2023年营收；公司2024年利润率'）",
 
           "depends_on": [0, 1],
 
@@ -44,7 +42,6 @@
 ### 字段说明
 - **depends_on**：整数数组，填写同一 Step 内依赖节点的索引。例如 `[0, 1]` 表示依赖当前 Step 中第 0 和第 1 个节点的输出。跨 Step 的数据自动可见，无需声明。
 - **gating_required**：布尔值，当工具风险等级为 L2/L3 时设为 true，表示需要用户审批后才能执行。默认为 false。
-- **query_text**：字符串类型。如需多角度检索，用分号分隔多个查询文本。
 
 ### 注意事项
 1. 同一 Step 内的节点可以并行执行，不同 Step 按顺序执行。
@@ -52,4 +49,4 @@
 3. 每种 node_type 只填写其必填字段，其他字段留空或省略。
 4. parameter_hint 和 transform_instruction 要具体明确，让执行器能准确理解意图。
 5. 合理利用并行：将无依赖关系的节点放在同一 Step 中以提高效率。
-6. **无技能时的处理**：如果已筛选技能列表为空，请优先使用 `data_transform` 节点直接完成任务（如纯推理、写作、分析），或使用 `long_term_memory` 和 `knowledge_rag` 检索信息。不要伪造 skill_name 或 tool_name。
+6. **无技能时的处理**：如果已筛选技能列表为空，请优先使用 `data_transform` 节点直接完成任务（如纯推理、写作、分析）。不要伪造 skill_name 或 tool_name。

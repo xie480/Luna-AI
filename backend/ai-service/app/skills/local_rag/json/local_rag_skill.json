@@ -1,0 +1,132 @@
+{
+  "skills": [
+    {
+      "name": "local_rag",
+      "description": "本地 RAG 检索能力集合。提供两种系统级核心检索工具：长期记忆检索（从用户记忆库中检索偏好、历史事实）和知识库 RAG 检索（从导入的文档中语义检索）。作为系统内置 Skill 始终启用，不可被卸载。",
+      "version": "1.0.0",
+      "enabled": true,
+      "metadata": {
+        "author": "Luna-AI",
+        "tags": ["rag", "memory", "knowledge", "retrieval", "system-builtin"],
+        "system_builtin": true
+      },
+      "prompts": [
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_rag/prompts/retrieve_memories_prompt.j2",
+          "constraint": "tool=retrieve_memories",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/local_rag/prompts/retrieve_knowledge_prompt.j2",
+          "constraint": "tool=retrieve_knowledge",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        }
+      ],
+      "resources": [],
+      "tools": [
+        {
+          "name": "retrieve_memories",
+          "description": "从用户的长期记忆库中检索相关信息，包括用户偏好、历史对话中的关键事实、个人习惯等。基于混合检索（向量语义检索 + BM25 关键词检索）+ Rerank 技术。支持多查询词并行向量检索和时间范围约束的 BM25 检索。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "query_text": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "minItems": 1,
+                "maxItems": 5,
+                "description": "检索查询文本数组。每个元素为一个独立的查询词，用于向量语义检索。系统将对每个查询词并行执行 Embedding + Qdrant 向量检索后合并去重。例如：['用户对报告格式的偏好', '用户的工作领域']。"
+              },
+              "reference_time": {
+                "type": "string",
+                "description": "BM25 检索的时间约束，ISO 8601 格式。用于在关键词检索结果中按 session_id 做时间过滤。留空表示不限时间。例如：'2024-06-15T10:00:00+08:00'。",
+                "default": ""
+              },
+              "temporal_deviation": {
+                "type": "integer",
+                "description": "BM25 时间过滤允许的偏差天数。0 表示精确匹配当天，1 表示前后各 1 天，依此类推。最大不超过 7。默认 0。",
+                "default": 0,
+                "minimum": 0,
+                "maximum": 7
+              }
+            },
+            "required": ["query_text"]
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["memory", "retrieval", "preference", "history"],
+          "category": "system",
+          "use_case_examples": [
+            "检索用户对报告格式的偏好",
+            "回忆用户之前提到的个人信息",
+            "查找用户的历史习惯和工作背景",
+            "检索最近一周内用户提到的项目信息"
+          ],
+          "core_purpose": "从用户长期记忆库中检索历史偏好、关键事实和个人信息，为个性化任务执行提供依据。",
+          "final_deliverable": "与查询相关的记忆片段汇总文本",
+          "source": "local",
+          "module_path": "app.skills.local_rag.tools.retrieve_memories",
+          "tool_config": {}
+        },
+        {
+          "name": "retrieve_knowledge",
+          "description": "从导入的知识库文档中检索相关信息，基于混合检索（向量语义检索 + BM25 关键词检索）+ Rerank 技术。支持多查询词并行向量检索和时间范围约束的 BM25 检索。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "query_text": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                "minItems": 1,
+                "maxItems": 5,
+                "description": "检索查询文本数组。每个元素为一个独立的查询词，用于向量语义检索。系统将对每个查询词并行执行 Embedding + Qdrant 向量检索后合并去重。例如：['公司2023年营收数据', '公司2024年利润率']。"
+              },
+              "reference_time": {
+                "type": "string",
+                "description": "BM25 检索的时间约束，ISO 8601 格式。用于在关键词检索结果中按文档创建时间做时间过滤。留空表示不限时间。例如：'2024-06-15T10:00:00+08:00'。",
+                "default": ""
+              },
+              "temporal_deviation": {
+                "type": "integer",
+                "description": "BM25 时间过滤允许的偏差天数。0 表示精确匹配当天，1 表示前后各 1 天，依此类推。最大不超过 7。默认 0。",
+                "default": 0,
+                "minimum": 0,
+                "maximum": 7
+              }
+            },
+            "required": ["query_text"]
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["knowledge", "rag", "retrieval", "document"],
+          "category": "system",
+          "use_case_examples": [
+            "从知识库中检索公司财务数据",
+            "查找已导入文档中的特定信息",
+            "引用权威来源支撑后续分析"
+          ],
+          "core_purpose": "从导入的知识库文档中语义检索相关信息，为问答和分析提供外部知识支撑。",
+          "final_deliverable": "与查询相关的知识库文档片段汇总文本及引用来源",
+          "source": "local",
+          "module_path": "app.skills.local_rag.tools.retrieve_knowledge",
+          "tool_config": {}
+        }
+      ],
+      "servers": []
+    }
+  ]
+}
