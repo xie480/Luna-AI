@@ -177,9 +177,12 @@ class PlanResultSummaryNode:
         try:
             summaries_text = []
             for s in state_summaries:
+                # 将完整的 result_summary 传给 LLM，不做截断。
+                # 为什么这样做：LLM 才是汇总的主体，机械截断会导致 LLM
+                #               只看到元信息而丢失实际内容（如搜索结果全文）。
                 summaries_text.append(
                     f"- [{s.status.value}] {s.intent}: {s.goal}\n"
-                    f"  结果: {s.result_summary[:200]}"
+                    f"  结果: {s.result_summary}"
                 )
 
             from datetime import datetime
@@ -243,6 +246,12 @@ class PlanResultSummaryNode:
             return "（无输出）"
 
         parts = []
+        # 每个节点输出最大保留 2000 字符，防止极端长输出撑爆 prompt，
+        # 但保留足够上下文供 LLM 汇总使用（如搜索结果全文）。
+        # 为什么这样做：原 200 字符截断导致 LLM 只看到元信息（查询词、并发数），
+        #               丢失全部实际搜索结果内容。
+        max_per_node = 2000
+        max_nodes = 5
         for node_id, output in merged_output.items():
             if isinstance(output, dict):
                 success = output.get("success", True)
@@ -253,11 +262,11 @@ class PlanResultSummaryNode:
                     or ""
                 )
                 if content:
-                    if len(content) > 200:
-                        content = content[:200] + "……"
+                    if len(content) > max_per_node:
+                        content = content[:max_per_node] + "……(已截断)"
                     parts.append(content)
 
-        return "; ".join(parts[:5]) if parts else "（无有效输出）"
+        return "; ".join(parts[:max_nodes]) if parts else "（无有效输出）"
 
     def _build_fallback_summary(
         self,

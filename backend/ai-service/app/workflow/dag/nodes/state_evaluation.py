@@ -116,7 +116,7 @@ class StateEvaluationNode:
             logger.info(
                 f"[TraceID:{trace_id}] State 评估完成: "
                 f"satisfied={result.state_satisfied}, "
-                f"reason={result.evaluation_reason[:100]}"
+                f"reason={result.evaluation_reason}"
                 f"output={formatted_output}"
             )
 
