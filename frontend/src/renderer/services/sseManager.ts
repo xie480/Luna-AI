@@ -3,6 +3,7 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useSystemStore, type EmotionState } from '../stores/systemStore';
 import { useTelemetryStore, TelemetrySpan, MetricsDataPoint } from '../stores/telemetryStore';
 import { useChatWorkflowStore } from '../stores/chatWorkflowStore';
+import { useDagWorkflowStore } from '../stores/dagWorkflowStore';
 import { EMOTION_EXPRESSIONS } from '../constants/emotionExpressions';
 import { CHAT_PLAN_PRESET, CHAT_WORKFLOW_SCHEMA_VERSION, DAG_WORKFLOW_EVENT_TYPE, WS_MSG_TYPE, WSMsgType } from '../../shared/enum';
 import { generateId } from '../../shared/utils/snowflake';
@@ -1146,6 +1147,11 @@ class SSEManager {
       systemStore.addSystemLog('无活跃会话，无法发送消息');
       return;
     }
+
+    // 发送新请求前，清除上一次的 DAG 工作流面板数据
+    // 为什么这样做：每次发送新请求时，旧的 Plan 投影数据必须被清除，
+    // 否则 DAG 面板会残留上一次请求的流程图，造成视觉混淆。
+    useDagWorkflowStore.getState().clearPlan();
 
     this.registerBubbleBatchSettledListener();
 
