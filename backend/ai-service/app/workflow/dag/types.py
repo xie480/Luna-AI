@@ -545,6 +545,16 @@ class DagEngineState(BaseModel):
         description="PlanResultSummaryResult 序列化。",
     )
 
+    # === Executor 子图运行时状态 ===
+    # 做什么：存储 Executor 子图（skill_screening → step_plan → step_executor → state_evaluator）
+    #         的中间运行时数据，供子图内 4 个节点跨调用共享。
+    # 为什么这样做：LangGraph 子图的每个节点调用是独立的，需要通过 State 传递中间数据。
+    executor_runtime: dict[str, Any] = Field(
+        default_factory=dict,
+        description="DagExecutorRuntimeState 的序列化结果。"
+                    "由 Executor 子图内部节点读写，外层图不直接访问。",
+    )
+
     # === 原始工作流状态引用 ===
     # 做什么：DAG 引擎需要访问原始 ChatWorkflowState 中的字段
     #         （trace_id、session_id 等），通过序列化字典传递。
@@ -587,4 +597,94 @@ class DagExecutorOutput(BaseModel):
     cursor_advanced: bool = Field(
         default=False,
         description="cursor 是否已推进（评估通过时为 True）。",
+    )
+
+
+# ===========================================================================
+# Executor 子图运行时状态（Phase 9 子图拆解新增）
+# ===========================================================================
+
+
+class DagExecutorRuntimeState(BaseModel):
+    """Executor 子图运行时状态 — 在子图节点间传递中间数据。
+
+    做什么：承载 Executor 子图内部 4 个节点（SkillScreening / StepPlan /
+           StepExecutor / StateEvaluator）之间传递的运行时数据。
+    为什么这样做：将原 DagStateExecutorNode.__call__() 中的局部变量
+                  提升为可序列化的 Pydantic Model，使 LangGraph 子图的
+                  每个节点都能读取和更新这些状态，天然享受 Checkpoint 持久化。
+    存储位置：序列化后存储在 DagEngineState.dag_engine_state["_executor_runtime"] 中。
+    """
+
+    # === 当前 State 信息 ===
+    current_state_id: str = Field(
+        default="",
+        description="当前正在执行的 State ID。",
+    )
+    current_state_goal: str = Field(
+        default="",
+        description="当前 State 的目标描述。",
+    )
+    current_state_intent: str = Field(
+        default="",
+        description="当前 State 的意图描述。",
+    )
+    current_state_order_index: int = Field(
+        default=0,
+        description="当前 State 在 Plan 中的顺序索引。",
+    )
+    completion_criteria: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="当前 State 的完成标准列表（序列化后的 CompletionCriterion）。",
+    )
+
+    # === State 运行时 ===
+    state_runtime: dict[str, Any] = Field(
+        default_factory=dict,
+        description="StateRuntimeState 的序列化结果。",
+    )
+
+    # === 预算 ===
+    budget_global_consumed: int = Field(
+        default=0,
+        description="全局预算已消耗的工具调用次数。",
+    )
+
+    # === Skill 初筛结果 ===
+    selected_skills: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="SkillScreeningNode 输出的筛选结果。",
+    )
+
+    # === Step Plan ===
+    steps: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="StepPlanNode 输出的 StepDefinition 序列化列表。",
+    )
+    step_cursor: int = Field(
+        default=0,
+        ge=0,
+        description="当前执行到第几个 Step。",
+    )
+
+    # === Step 执行结果 ===
+    all_partitioned_outputs: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="所有已执行 Step 的分区输出汇总。",
+    )
+    node_def_map: dict[str, Any] = Field(
+        default_factory=dict,
+        description="node_id → AtomicNodeDefinition 序列化映射。",
+    )
+
+    # === State 上下文（可序列化子集） ===
+    state_context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="供原子节点使用的 state_context（已过滤不可序列化对象）。",
+    )
+
+    # === 初始化标记 ===
+    initialized: bool = Field(
+        default=False,
+        description="子图是否已完成初始化（SkillScreeningNode 首次调用时设为 True）。",
     )

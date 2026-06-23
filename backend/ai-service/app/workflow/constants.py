@@ -165,6 +165,45 @@ class DagSubGraphNodeName(str, Enum):
     DAG_PLAN_SUMMARIZER = "dag_plan_summarizer"
 
 
+class DagExecutorSubGraphNodeName(str, Enum):
+    """Phase 9 重构：State Executor 子图内部节点名。
+
+    做什么：定义 build_state_executor_subgraph() 工厂函数生成的子图内部 4 个节点名。
+    为什么这样做：将原 DagStateExecutorNode 中的单体逻辑拆分为
+                  Skill 初筛 → Step Plan → Step 执行（循环）→ State 评估 的独立节点。
+    """
+
+    SKILL_SCREENING = "executor_skill_screening"
+    STEP_PLAN = "executor_step_plan"
+    STEP_EXECUTOR = "executor_step_executor"
+    STATE_EVALUATOR = "executor_state_evaluator"
+
+
+class DagStepCursorRoute(str, Enum):
+    """Step Cursor 路由结果枚举。
+
+    做什么：标识 Step 执行循环中路由函数的决策结果。
+    为什么这样做：step_executor_node 执行完当前 step 后，
+                  由路由函数判断是否还有剩余 step。
+    """
+
+    NEXT_STEP = "next_step"         # step_cursor < len(steps)，继续下一个 Step
+    ALL_DONE = "all_done"           # 所有 Step 执行完毕，进入 State 评估
+
+
+class DagEvalRoute(str, Enum):
+    """State 评估路由结果枚举。
+
+    做什么：标识 State 评估后路由函数的决策结果。
+    为什么这样做：state_evaluator_node 评估完成后，
+                  由路由函数决定是重走 skill 筛选还是结束子图。
+    """
+
+    SATISFIED = "eval_satisfied"    # 评估通过，子图结束
+    RETRY = "eval_retry"            # 评估不通过且未达上限，回退到 skill_screening 重走
+    TERMINATED = "eval_terminated"  # 评估不通过且已达上限，子图结束（终止）
+
+
 CHAT_WORKFLOW_CHECKPOINT_TABLE: Final[str] = "langgraph_chat_checkpoints"
 CHAT_WORKFLOW_CHECKPOINT_NS_SEPARATOR: Final[str] = ":"
 CHAT_WORKFLOW_DEFAULT_LOCALE: Final[str] = "zh-CN"
