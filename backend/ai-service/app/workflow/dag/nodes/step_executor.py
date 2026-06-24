@@ -49,10 +49,16 @@ class StepRetryPolicy:
     ) -> tuple[dict[str, Any], list[str]]:
         """带重试的 Step 执行。
 
+        Phase 13 增强：当检测到工具节点返回 gating_pending=True 时，
+        立即停止重试，将该结果原样返回给上层（ExecutorStepExecNode），
+        由上层决定挂起子图等待用户审批。
+
         返回:
             (partitioned_outputs, error_messages)
             - 成功时 error_messages 为空列表
             - 重试耗尽时 error_messages 包含所有尝试的错误信息
+            - gating_pending 时 error_messages 为空列表，但 outputs 中
+              包含 gating_pending 标志
         """
         errors = []
         for attempt in range(self.MAX_RETRIES + 1):
@@ -60,6 +66,22 @@ class StepRetryPolicy:
                 outputs = await self.step_executor.execute(
                     trace_id, step_def, state_context
                 )
+
+                # Phase 13：检测是否有节点触发了 Gating 审批挂起
+                # 做什么：如果任意节点返回 gating_pending=True，立即停止重试，
+                #         将结果原样返回，由 ExecutorStepExecNode 处理挂起逻辑。
+                # 为什么这样做：审批挂起不是执行失败，不应触发重试。
+                gating_pending_nodes = [
+                    nid for nid, out in outputs.items()
+                    if out.get("gating_pending", False)
+                ]
+                if gating_pending_nodes:
+                    logger.info(
+                        f"[TraceID:{trace_id}] Step {step_def.step_id} "
+                        f"检测到 Gating 审批挂起: nodes={gating_pending_nodes}，停止重试"
+                    )
+                    return outputs, []
+
                 # 检查是否有节点失败
                 failed_nodes = [
                     nid for nid, out in outputs.items()

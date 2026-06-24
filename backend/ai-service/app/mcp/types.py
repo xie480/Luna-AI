@@ -147,11 +147,14 @@ class MCPToolResult(BaseModel):
 
     做什么：封装 execute_tool() 返回的完整执行结果，包含执行状态、输出、
             错误信息、耗时及审计所需字段。
+            Phase 13 增强：新增 gating_pending 和 gating_audit_log_id 字段，
+            用于标识 L2/L3 工具已进入审批挂起状态。
     为什么这样做：统一的执行结果模型便于下游 Skill 执行节点解析，
                  同时也为审计回放提供结构化数据。
     边界条件：
         - success=False 时，error_message 必须非空。
         - execution_id 由 Gateway 在执行时生成，用于审计回放。
+        - gating_pending=True 时表示工具已创建审批请求，等待用户确认。
     """
     success: bool = Field(
         ..., description="工具执行是否成功。true 表示正常返回，false 表示发生错误。"
@@ -175,4 +178,13 @@ class MCPToolResult(BaseModel):
     risk_level: str = Field(
         default="L0",
         description="本次执行的工具风险等级。",
+    )
+    gating_pending: bool = Field(
+        default=False,
+        description="Phase 13：L2/L3 工具已创建审批请求，正在等待用户确认。"
+                    "True 表示工具未执行，已挂起等待审批。"
+    )
+    gating_audit_log_id: str = Field(
+        default="",
+        description="Phase 13：审批请求的审计日志 ID，用于关联审批决策和快照。"
     )

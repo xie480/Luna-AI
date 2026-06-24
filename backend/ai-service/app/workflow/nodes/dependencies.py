@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.api.chat_status import ChatStatusPublisher
 from app.mcp.registry import MCPToolRegistry
 from app.memory.manager import Manager as MemoryManager
@@ -35,6 +37,10 @@ class WorkflowDependencies:
         mcp_pg_repo: MCPToolPGRepo | None = None,
         # --- Phase 12 新增：RAG 知识库 PG 仓库（用于注入 KNOWLEDGE_DOCS） ---
         rag_pg_repo: RagPGRepository | None = None,
+        # --- Phase 13 新增：Gating 权限网关服务 ---
+        gating_service: Any = None,
+        # --- Phase 13 新增：Gating 快照管理器 ---
+        snapshot_manager: Any = None,
     ):
         """保存节点运行依赖，依赖由 FastAPI lifespan 注入。"""
         self.redis_repo = redis_repo
@@ -51,3 +57,7 @@ class WorkflowDependencies:
         self.mcp_pg_repo = mcp_pg_repo
         # --- Phase 12 新增：RAG 知识库 PG 仓库（InputReconstructionNode 读取知识库文档列表用） ---
         self.rag_pg_repo = rag_pg_repo
+        # --- Phase 13 新增：Gating 权限网关服务（L2/L3 工具审批拦截） ---
+        self.gating_service = gating_service
+        # --- Phase 13 新增：Gating 快照管理器（审批结果持久化） ---
+        self.snapshot_manager = snapshot_manager

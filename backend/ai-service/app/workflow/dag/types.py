@@ -594,6 +594,21 @@ class DagEngineState(BaseModel):
                     "包含 runtime、input_payload、session_state 等。",
     )
 
+    # === Phase 13: Gating 审批挂起状态 ===
+    # 做什么：当 L2/L3 工具触发 Gating 审批时，标记子图为挂起状态。
+    #         gating_suspended=True 时，子图暂停执行，等待用户审批结果。
+    # 为什么这样做：审批挂起不是错误，是一种正常的业务状态。
+    #              需要在 DagEngineState 中显式记录，以便路由和恢复逻辑正确处理。
+    gating_suspended: bool = Field(
+        default=False,
+        description="Phase 13：当前 DAG 是否处于 Gating 审批挂起状态。"
+                    "True 时表示有 L2/L3 工具正在等待用户审批。",
+    )
+    gating_pending_node_ids: list[str] = Field(
+        default_factory=list,
+        description="Phase 13：处于 Gating 审批挂起状态的节点 ID 列表。",
+    )
+
     class Config:
         """允许任意类型嵌套。"""
         arbitrary_types_allowed = True

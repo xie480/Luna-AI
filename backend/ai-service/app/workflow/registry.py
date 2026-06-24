@@ -141,6 +141,8 @@ class ChatWorkflowNodeRegistry:
             memory_manager=dependencies.memory_manager,
             rag_orchestrator=dependencies.rag_orchestrator,
             mcp_tool_registry=dependencies.mcp_tool_registry,
+            gating_service=dependencies.gating_service,
+            snapshot_manager=dependencies.snapshot_manager,
         )
 
         return DagEngineNode(

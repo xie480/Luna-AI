@@ -58,6 +58,10 @@ class ChatWorkflowService:
         event_publisher: ChatWorkflowEventPublisher | None = None,
         # --- Phase 12 新增：RAG 知识库 PG 仓库（InputReconstructionNode 注入 KNOWLEDGE_DOCS 用） ---
         rag_pg_repo: Any = None,
+        # --- Phase 13 新增：Gating 权限网关服务 ---
+        gating_service: Any = None,
+        # --- Phase 13 新增：Gating 快照管理器 ---
+        snapshot_manager: Any = None,
     ):
         self.pg_client = pg_client
         self.event_publisher = event_publisher or ChatWorkflowEventPublisher()
@@ -75,6 +79,9 @@ class ChatWorkflowService:
             chat_status_publisher=chat_status_publisher,
             # --- Phase 12 新增：透传 RAG 知识库 PG 仓库 ---
             rag_pg_repo=rag_pg_repo,
+            # --- Phase 13 新增：透传 Gating 依赖 ---
+            gating_service=gating_service,
+            snapshot_manager=snapshot_manager,
         )
         factory = ChatGraphFactory(dependencies)
         self.daily_chat_graph = factory.build_daily_chat_graph()

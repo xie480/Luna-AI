@@ -168,10 +168,10 @@ class ToolExecuteNode:
                     }
 
             # ============================================================
-            # Step 6: 执行工具
+            # Step 6: 执行工具（Phase 13 传递 state_context 以支持 Gating 审批）
             # ============================================================
             tool_result = await self._execute_tool(
-                trace_id, node_def, tool_parameters,
+                trace_id, node_def, tool_parameters, state_context,
             )
 
             elapsed_ms = int(time.time() * 1000) - started_at_ms
@@ -719,15 +719,43 @@ class ToolExecuteNode:
         trace_id: str,
         node_def: AtomicNodeDefinition,
         tool_parameters: dict[str, Any],
+        state_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """执行 MCP 工具。"""
+        """执行 MCP 工具。
+
+        做什么：调用 MCP executor 的 execute_tool 执行工具。
+                Phase 13 增强：从 state_context 中获取 gating_service 和
+                snapshot_manager，传递给 execute_tool 以支持 L2/L3 审批拦截。
+                同时将 gating_pending 和 gating_audit_log_id 传播到返回结果中，
+                供 StepRetryPolicy 和 ExecutorStepExecNode 检测。
+
+        参数:
+            trace_id: 全链路追踪 ID。
+            node_def: 原子节点定义。
+            tool_parameters: 工具参数。
+            state_context: 状态上下文，包含 gating_service 等运行时依赖。
+        返回:
+            dict: 包含 success、tool_output、error_message、tool_parameters、
+                  gating_pending、gating_audit_log_id 等字段。
+        """
         try:
             from app.mcp.executor import execute_tool
+
+            # Phase 13：从 state_context 获取 gating 相关依赖
+            gating_service = None
+            snapshot_manager = None
+            if state_context:
+                gating_service = state_context.get("gating_service")
+                snapshot_manager = state_context.get("snapshot_manager")
 
             exec_result = await execute_tool(
                 tool_name=node_def.tool_name,
                 parameters=tool_parameters,
                 trace_id=trace_id,
+                gating_service=gating_service,
+                snapshot_manager=snapshot_manager,
+                task_id=(state_context or {}).get("task_id", ""),
+                goal=node_def.parameter_hint or "",
             )
 
             return {
@@ -738,6 +766,8 @@ class ToolExecuteNode:
                 ),
                 "tool_parameters": tool_parameters,
                 "gating_rejected": False,
+                "gating_pending": exec_result.gating_pending,
+                "gating_audit_log_id": exec_result.gating_audit_log_id,
             }
 
         except ImportError:
@@ -752,4 +782,6 @@ class ToolExecuteNode:
                 "error_message": f"MCP executor 模块不可用: {node_def.tool_name}",
                 "tool_parameters": tool_parameters,
                 "gating_rejected": False,
+                "gating_pending": False,
+                "gating_audit_log_id": "",
             }

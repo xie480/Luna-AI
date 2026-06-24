@@ -503,6 +503,9 @@ class ExecutorStepExecNode:
     做什么：从 executor_runtime 读取 steps[step_cursor]，
            执行当前 Step（带重试），推进 step_cursor，
            发布 NODE_STARTED/COMPLETED 事件。
+           Phase 13 增强：当工具节点触发 L2/L3 Gating 审批时，
+           检测 gating_pending 标志，标记子图为 gating_suspended 并
+           优雅退出子图，等待用户审批结果后再恢复执行。
     为什么这样做：对应原 DagStateExecutorNode 中的逐 Step 执行循环体。
                   每次调用只执行一个 Step，由 LangGraph 条件路由驱动循环。
     """
@@ -515,6 +518,8 @@ class ExecutorStepExecNode:
         memory_manager: Any = None,
         rag_orchestrator: Any = None,
         mcp_tool_registry: Any = None,
+        gating_service: Any = None,
+        snapshot_manager: Any = None,
     ):
         self.step_retry = step_retry
         self.chat_status_publisher = chat_status_publisher
@@ -522,6 +527,8 @@ class ExecutorStepExecNode:
         self._memory_manager = memory_manager
         self._rag_orchestrator = rag_orchestrator
         self._mcp_tool_registry = mcp_tool_registry
+        self._gating_service = gating_service
+        self._snapshot_manager = snapshot_manager
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """LangGraph 子图节点入口 — 执行当前 Step。
@@ -638,12 +645,57 @@ class ExecutorStepExecNode:
         )
         state_context["steps_total"] = len(steps_data)
 
+        # Phase 13：将 gating 依赖注入到 state_context，供 ToolExecuteNode 使用
+        # 做什么：优先使用构造函数注入的实例（如果可用）；
+        #         否则从 FastAPI app.state 读取（因为 GatingService 在
+        #         ChatWorkflowService 之后才初始化，构造时可能为 None）。
+        # 为什么这样做：与 mcp_skill_execution_node.py 保持一致的读取策略。
+        gating_svc = self._gating_service
+        snap_mgr = self._snapshot_manager
+        if not gating_svc:
+            try:
+                from app.main import app as _fastapi_app
+                gating_svc = getattr(_fastapi_app.state, "gating_service", None)
+                if not snap_mgr:
+                    redis_client = getattr(_fastapi_app.state, "redis_client", None)
+                    if redis_client:
+                        from app.gating.snapshot import GatingSnapshotManager
+                        snap_mgr = GatingSnapshotManager(redis_client)
+            except Exception:
+                pass
+        state_context["gating_service"] = gating_svc
+        state_context["snapshot_manager"] = snap_mgr
+
         # 带重试执行 Step
         step_outputs, step_errors = await self.step_retry.execute_with_retry(
             trace_id=trace_id,
             step_def=step_def,
             state_context=state_context,
         )
+
+        # Phase 13：检测 Gating 审批挂起
+        # 做什么：如果任意工具节点返回 gating_pending=True，说明 L2/L3 工具
+        #         已创建审批请求，正在等待用户确认。
+        #         此时不应视为执行失败，而是标记 gating_suspended 并优雅退出子图。
+        # 为什么这样做：审批挂起是正常的业务流程，不是错误。
+        #              子图退出后，外层 DAG 图会在下一轮执行时通过
+        #              session_context_load_node 消费审批结果。
+        gating_suspended = False
+        if step_outputs:
+            gating_pending_nodes = [
+                nid for nid, out in step_outputs.items()
+                if out.get("gating_pending", False)
+            ]
+            if gating_pending_nodes:
+                gating_suspended = True
+                logger.info(
+                    f"[TraceID:{trace_id}] StepExecSubNode: "
+                    f"工具 Gating 审批挂起，nodes={gating_pending_nodes}，"
+                    f"标记 gating_suspended 并退出子图"
+                )
+                # 将 gating 信息写入 dag_state，供外层图使用
+                dag_state.gating_suspended = True
+                dag_state.gating_pending_node_ids = gating_pending_nodes
 
         if step_outputs:
             executor_rt.all_partitioned_outputs.update(step_outputs)
@@ -655,6 +707,11 @@ class ExecutorStepExecNode:
         executor_rt.state_runtime["steps_completed"] = (
             executor_rt.state_runtime.get("steps_completed", 0) + 1
         )
+
+        # 如果处于 Gating 挂起状态，提前退出，不推进 step_cursor
+        if gating_suspended:
+            dag_state.executor_runtime = executor_rt.model_dump()
+            return _save_dag_state_to_graph(chat_state, dag_state)
 
         # 统计成功/失败节点并发射 NODE_COMPLETED 事件
         for nid, out in step_outputs.items():
@@ -934,6 +991,8 @@ def build_state_executor_subgraph(
     memory_manager: Any = None,
     rag_orchestrator: Any = None,
     mcp_tool_registry: Any = None,
+    gating_service: Any = None,
+    snapshot_manager: Any = None,
 ):
     """构建 State Executor 子图。
 
@@ -972,6 +1031,8 @@ def build_state_executor_subgraph(
         memory_manager=memory_manager,
         rag_orchestrator=rag_orchestrator,
         mcp_tool_registry=mcp_tool_registry,
+        gating_service=gating_service,
+        snapshot_manager=snapshot_manager,
     )
     eval_node = ExecutorStateEvalNode(
         step_merge=step_merge,
@@ -1463,6 +1524,8 @@ def build_plan_cursor_subgraph(
     memory_manager: Any = None,
     rag_orchestrator: Any = None,
     mcp_tool_registry: Any = None,
+    gating_service: Any = None,
+    snapshot_manager: Any = None,
 ):
     """构建 Plan + Cursor 子图。
 
@@ -1489,6 +1552,8 @@ def build_plan_cursor_subgraph(
         memory_manager=memory_manager,
         rag_orchestrator=rag_orchestrator,
         mcp_tool_registry=mcp_tool_registry,
+        gating_service=gating_service,
+        snapshot_manager=snapshot_manager,
     )
 
     graph = StateGraph(ChatWorkflowState)

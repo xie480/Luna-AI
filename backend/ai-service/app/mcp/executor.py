@@ -205,6 +205,8 @@ async def execute_tool(
                 execution_id=execution_id,
                 latency_ms=0,
                 risk_level=risk_level.value,
+                gating_pending=True,
+                gating_audit_log_id=auth_request.audit_log_id,
             )
         else:
             # GatingService 未提供，直接提醒
