@@ -177,13 +177,23 @@ class PlanReplanNode:
     def _build_replan_schema(self) -> dict[str, Any]:
         """构建 Plan 重构的 JSON Schema。
 
-        做什么：定义重构 LLM 输出的结构化约束。
+        做什么：定义重构 LLM 输出的结构化约束，与 Prompt 模板（system.j2 + runtime.j2）
+                的输出要求完全对齐。
+        为什么这样做：Prompt 中要求 LLM 输出 check 字段用于 CoT 推演校验，
+                       且 replan_reason 为必填项，Schema 必须反映这一点。
         设计原则：每个 State 强制要求填写 responsibility 字段，
                   确保重构后的 Plan 仍然按职责拆分。
         """
         return {
             "type": "object",
             "properties": {
+                "check": {
+                    "type": "string",
+                    "description": (
+                        "生成前推演校验结果，按 [失败根因][调整合理性][技能选择] "
+                        "三个维度逐一校验并记录。"
+                    ),
+                },
                 "revised_states": {
                     "type": "array",
                     "items": {
@@ -243,7 +253,7 @@ class PlanReplanNode:
                 },
                 "replan_reason": {"type": "string"},
             },
-            "required": ["revised_states"],
+            "required": ["check", "revised_states", "replan_reason"],
         }
 
     def _parse_replan_response(

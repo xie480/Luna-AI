@@ -82,11 +82,26 @@ class StepPlanNode:
 
             # 构建可序列化的 state_context 快照
             # 为什么这样做：state_context 中包含 MCPToolRegistry、MemoryManager 等
-            # 不可 JSON 序列化的对象，必须过滤掉只保留基础数据字段
-            serializable_context = {
+            # 不可 JSON 序列化的对象，必须过滤掉只保留基础数据字段。
+            # 同时对超长字段做截断，防止总 prompt 过大导致 LLM 输出被截断触发重试。
+            MAX_CONTEXT_FIELD_LENGTH = 2000  # 单个字段最大字符数
+
+            def _truncate_deep(obj: Any, max_len: int = MAX_CONTEXT_FIELD_LENGTH) -> Any:
+                """递归截断嵌套结构中的超长字符串字段。"""
+                if isinstance(obj, str):
+                    if len(obj) > max_len:
+                        return obj[:max_len] + f"……[已截断，原长 {len(obj)} 字符]"
+                    return obj
+                if isinstance(obj, dict):
+                    return {k: _truncate_deep(v, max_len) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [_truncate_deep(item, max_len) for item in obj]
+                return obj
+
+            serializable_context = _truncate_deep({
                 k: v for k, v in state_context.items()
                 if k not in ("skill_registry", "memory_manager", "rag_orchestrator")
-            }
+            })
 
             # 渲染 Step Plan 生成 Prompt
             # 注意：available_node_types 变量已移除，节点类型说明已内化到 system.j2 的静态提示词中
@@ -104,9 +119,12 @@ class StepPlanNode:
                 },
             )
 
+            # 记录 prompt 长度，用于诊断是否因 prompt 过长导致 LLM 输出被截断
             logger.info(
                 f"[TraceID:{trace_id}] Step Plan 开始请求: "
-                f"prompt_text={prompt_text}"
+                f"prompt_length={len(prompt_text)} chars, "
+                f"state_context_length={len(json.dumps(serializable_context, ensure_ascii=False))} chars, "
+                f"selected_skills_count={len(skill_details)}"
             )
 
             # 调用 LLM 生成 Step Plan
@@ -162,10 +180,25 @@ class StepPlanNode:
             raise
 
     def _build_step_plan_schema(self) -> dict[str, Any]:
-        """构建 Step Plan 生成的 JSON Schema。"""
+        """构建 Step Plan 生成的 JSON Schema。
+
+        做什么：定义 LLM 输出的结构化约束，与 Prompt 模板（system.j2 + runtime.j2）
+                的输出要求完全对齐。
+        为什么这样做：Prompt 中要求 LLM 输出 check 字段用于 CoT 推演校验，
+                       且 node_type 枚举必须与 DagNodeType 完全一致，
+                       否则 LLM 会在 Prompt 要求和 Schema 约束之间产生认知冲突，
+                       导致输出格式混乱、JSON 解析失败触发重试。
+        """
         return {
             "type": "object",
             "properties": {
+                "check": {
+                    "type": "string",
+                    "description": (
+                        "生成前推演校验结果，按 [节点类型][依赖关系][并行合理性][参数具体性] "
+                        "四个维度逐一校验并记录。"
+                    ),
+                },
                 "steps": {
                     "type": "array",
                     "items": {
@@ -179,7 +212,11 @@ class StepPlanNode:
                                     "properties": {
                                         "node_type": {
                                             "type": "string",
-                                            "enum": [t.value for t in DagNodeType],
+                                            "enum": [
+                                                DagNodeType.RESOURCE_LOADING.value,
+                                                DagNodeType.TOOL_EXECUTE.value,
+                                                DagNodeType.DATA_TRANSFORM.value,
+                                            ],
                                         },
                                         "skill_name": {"type": "string"},
                                         "tool_name": {"type": "string"},
@@ -201,7 +238,7 @@ class StepPlanNode:
                     },
                 },
             },
-            "required": ["steps"],
+            "required": ["check", "steps"],
         }
 
     def _parse_step_plan_response(

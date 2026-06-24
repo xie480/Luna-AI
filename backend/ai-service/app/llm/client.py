@@ -411,10 +411,14 @@ class LLMClient:
             limits=httpx.Limits(keepalive_expiry=2.0, max_keepalive_connections=5)
         )
         
+        # 关闭 OpenAI SDK 自带重试，由应用层（tenacity / invoke_structured 循环）统一管理重试逻辑，
+        # 避免 SDK 内置重试与业务层重试叠加导致不可控的多次重复请求。
+        # CompressionLLMClient 已正确设置 max_retries=0，此处保持一致。
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
             http_client=http_client,
+            max_retries=0,
         )
         self.model_name = config.get("model_id") or "gpt-3.5-turbo"
         self.base_url = base_url
@@ -707,7 +711,7 @@ class LLMClient:
         trace_id: str,
         prompt: str,
         schema: dict[str, Any],
-        timeout: float = 30.0,
+        timeout: float = 120.0,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
@@ -726,6 +730,7 @@ class LLMClient:
         边界条件：
             - schema 为空或格式不正确时会抛出异常
             - kwargs 中的 trace_id/session_id/message_id 会被过滤，不传递给 OpenAI API
+            - 默认超时 120 秒，复杂 prompt（>5000 chars）下 LLM 可能需要较长时间生成结构化 JSON
         异常行为：
             - 网络错误/限流由 tenacity 自动重试（复用 _wait_for_slot 频率限制）
             - JSON 解析失败时先尝试自动修复（_attempt_json_repair），仍失败则重新调用

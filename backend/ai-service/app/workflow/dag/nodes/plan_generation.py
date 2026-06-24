@@ -185,13 +185,24 @@ class PlanGenerationNode:
     def _build_plan_schema(self) -> dict[str, Any]:
         """构建 Plan 生成的 JSON Schema。
 
-        做什么：定义 LLM 输出的结构化约束。
+        做什么：定义 LLM 输出的结构化约束，与 Prompt 模板（system.j2 + runtime.j2）
+                的输出要求完全对齐。
+        为什么这样做：Prompt 中要求 LLM 输出 check 字段用于 CoT 推演校验，
+                       且 planning_reason 为必填项，Schema 必须反映这一点，
+                       否则 LLM 会在 Prompt 要求和 Schema 约束之间产生认知冲突。
         设计原则：每个 State 强制要求填写 responsibility 字段，
                   确保按职责拆分而非按难易度拆分。
         """
         return {
             "type": "object",
             "properties": {
+                "check": {
+                    "type": "string",
+                    "description": (
+                        "生成前推演校验结果，按 [需求理解][职责拆分][依赖与数据流]"
+                        "[技能选择][全局覆盖] 五个维度逐一校验并记录。"
+                    ),
+                },
                 "states": {
                     "type": "array",
                     "items": {
@@ -256,7 +267,7 @@ class PlanGenerationNode:
                 },
                 "planning_reason": {"type": "string"},
             },
-            "required": ["states"],
+            "required": ["check", "states", "planning_reason"],
         }
 
     def _parse_plan_response(self, llm_response: str) -> dict[str, Any]:

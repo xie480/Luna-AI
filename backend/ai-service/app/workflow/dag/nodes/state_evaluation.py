@@ -164,11 +164,20 @@ class StateEvaluationNode:
     def _build_evaluation_schema(self) -> dict[str, Any]:
         """构建评估的 JSON Schema。
 
-        做什么：定义 LLM 输出的结构化约束，包含 check 字段用于 CoT。
+        做什么：定义 LLM 输出的结构化约束，与 Prompt 模板的输出要求完全对齐。
+        为什么这样做：Prompt 中要求 LLM 输出 check 字段用于 CoT 推演校验，
+                       Schema 已包含 check 但未设为 required，需同步修正。
         """
         return {
             "type": "object",
             "properties": {
+                "check": {
+                    "type": "string",
+                    "description": (
+                        "生成前推演校验结果，按 [标准对齐][证据充分性][改进建议] "
+                        "三个维度逐一校验并记录。"
+                    ),
+                },
                 "state_satisfied": {"type": "boolean"},
                 "evaluation_reason": {"type": "string"},
                 "gap_analysis": {"type": "string"},
@@ -185,9 +194,8 @@ class StateEvaluationNode:
                         },
                     },
                 },
-                "check": {"type": "string"},
             },
-            "required": ["state_satisfied"],
+            "required": ["check", "state_satisfied"],
         }
 
     def _parse_evaluation_response(

@@ -139,4 +139,4 @@ Step 3: [data_transform: 综合所有结果生成最终输出]
 4. **不要遗漏数据源**：如果目标需要外部数据，必须有对应的 `tool_execute` 来获取。
 5. **不要重复获取**：如果前序节点已经获取了数据，后续节点应通过 `depends_on` 引用，而非重新获取。
 6. **depends_on 只引用同 Step 内的索引**：跨 Step 的数据传递是自动的（前序 Step 的所有输出对后续 Step 可见）。
-7. **无技能时优先使用 data_transform**：当没有筛选到任何技能时，大多数任务可以通过 data_transform 节点直接完成。
+7. **无技能时优先使用 data_transform**：当没有筛选到任何技能时，大多数任务可以通过 `data_transform` 节点直接完成（如纯推理、写作、分析）。不要伪造 skill_name 或 tool_name。

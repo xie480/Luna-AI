@@ -18,7 +18,7 @@
 {% endfor %}
 {% else %}
 ## 已筛选技能：无
-当前任务无需外部技能，请使用 data_transform（纯推理/写作/分析）、long_term_memory（记忆检索）或 knowledge_rag（知识库检索）节点类型来完成任务。
+当前任务无需外部技能，请使用 data_transform（纯推理/写作/分析）节点类型来完成任务。不要伪造 skill_name 或 tool_name。
 {% endif %}
 
 ## 当前上下文

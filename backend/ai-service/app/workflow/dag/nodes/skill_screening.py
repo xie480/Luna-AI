@@ -152,10 +152,24 @@ class SkillScreeningNode:
         )
 
     def _build_screening_schema(self) -> dict[str, Any]:
-        """构建 Skill 初筛的 JSON Schema。"""
+        """构建 Skill 初筛的 JSON Schema。
+
+        做什么：定义 LLM 输出的结构化约束，与 Prompt 模板（system.j2 + runtime.j2）
+                的输出要求完全对齐。
+        为什么这样做：Prompt 中要求 LLM 输出 check 字段用于 CoT 推演校验，
+                       且 screening_reason 为必填项，Schema 必须反映这一点，
+                       否则 LLM 会在 Prompt 要求和 Schema 约束之间产生认知冲突。
+        """
         return {
             "type": "object",
             "properties": {
+                "check": {
+                    "type": "string",
+                    "description": (
+                        "生成前推演校验结果，按 [必要性][精准性][最小化] "
+                        "三个维度逐一校验并记录。"
+                    ),
+                },
                 "selected_skills": {
                     "type": "array",
                     "items": {
@@ -169,7 +183,7 @@ class SkillScreeningNode:
                 },
                 "screening_reason": {"type": "string"},
             },
-            "required": ["selected_skills"],
+            "required": ["check", "selected_skills", "screening_reason"],
         }
 
     def _parse_screening_response(self, llm_response: str | dict) -> dict[str, Any]:
