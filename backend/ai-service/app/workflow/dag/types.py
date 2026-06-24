@@ -165,11 +165,19 @@ class CompletionCriterion(BaseModel):
 class OverallState(BaseModel):
     """宏观状态定义。
 
-    做什么：描述 Plan 中单个 State 的目标、完成标准和依赖关系。
+    做什么：描述 Plan 中单个 State 的职责、目标、完成标准和依赖关系。
+    设计原则：每个 State 只承担单一职责，按职责类型（而非难易度）进行划分。
     """
 
     state_id: str = Field(default_factory=generate_string_id)
     order_index: int
+    responsibility: str = Field(
+        default="",
+        description="该 State 承担的唯一职责类型。"
+                    "如：信息收集、数据分析、内容生成、知识检索、格式转换、"
+                    "验证校对、总结归纳、方案设计、代码实现、测试验证。"
+                    "每个 State 只能有一种职责，禁止将多种职责混在一个 State 中。",
+    )
     intent: str
     goal: str
     completion_criteria: list[CompletionCriterion] = Field(default_factory=list)
@@ -269,6 +277,10 @@ class StateRuntimeState(BaseModel):
 
     state_id: str
     status: DagNodeStatus = DagNodeStatus.PENDING
+    responsibility: str = Field(
+        default="",
+        description="该 State 承担的唯一职责类型。",
+    )
     intent: str = ""
     goal: str = ""
 
@@ -369,6 +381,10 @@ class StateSummary(BaseModel):
     """
 
     state_id: str = ""
+    responsibility: str = Field(
+        default="",
+        description="该 State 承担的职责类型。",
+    )
     intent: str = ""
     goal: str = ""
     status: DagNodeStatus = DagNodeStatus.SUCCEEDED
@@ -421,9 +437,19 @@ class ReplanContext(BaseModel):
     """Plan 重构上下文。
 
     做什么：承载 Plan 重构节点所需的全部上下文。
+    设计原则：包含失败 State 的完整职责信息，
+              确保重构时能准确理解原始职责定位。
     """
 
     failed_state_id: str = ""
+    failed_state_responsibility: str = Field(
+        default="",
+        description="失败 State 的职责类型。",
+    )
+    failed_state_intent: str = Field(
+        default="",
+        description="失败 State 的意图描述。",
+    )
     failed_state_goal: str = ""
     failed_state_result: str = ""
     evaluation_reason: str = ""

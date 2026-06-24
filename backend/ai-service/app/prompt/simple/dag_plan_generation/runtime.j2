@@ -21,8 +21,9 @@
   "states": [
     {
       "order_index": 0,
-      "intent": "该阶段的核心意图（简短描述）",
-      "goal": "该阶段期望达成的具体目标（详细描述）",
+      "responsibility": "职责类型（如：信息收集、数据分析、内容生成、验证校对等）",
+      "intent": "[职责类型]: 具体意图描述（简短）",
+      "goal": "该阶段期望达成的具体目标（详细描述，明确输入来源和输出产物）",
       "completion_criteria": [
         {"field": "字段名", "operator": ">=", "value": 1}
       ],
@@ -30,11 +31,21 @@
       "required_skill_names": []
     }
   ],
-  "planning_reason": "为什么这样拆分 State 的理由"
+  "planning_reason": "为什么这样按职责拆分 State 的理由，说明每个 State 职责边界"
 }
 ```
 
-注意：
-- depends_on 中填写的是依赖的 State 的 order_index（整数）。
-- required_skill_names 是**可选字段**：只有当该 State 明确需要调用外部工具或加载技能资源时才填写具体的 skill_name；纯推理/对话/写作类任务应留空数组 `[]`。
-- 如果用户请求简单，只需生成 1 个 State。
+### 字段说明
+- **responsibility**（必填）：该 State 承担的**唯一职责类型**。必须是单一职责，禁止将多种职责混在一个 State 中。常见值：信息收集、数据分析、内容生成、知识检索、格式转换、验证校对、总结归纳、方案设计、代码实现、测试验证。
+- **intent**（必填）：格式为 `[职责类型]: 具体意图描述`，与 responsibility 保持一致。
+- **goal**（必填）：详细描述该 State 的目标，必须说明输入来源（依赖哪些上游 State 的产出）和期望的输出产物。
+- **depends_on**：填写依赖的 State 的 `order_index`（整数）。反映数据流向，而非先后顺序。
+- **required_skill_names**（可选）：只有当该 State 明确需要调用外部工具或加载技能资源时才填写；纯推理/对话/写作类任务应留空数组 `[]`。
+
+### 拆分自检清单
+在输出前，请逐条检查：
+1. ✅ 每个 State 是否只承担一种职责？（如果一个 State 既要搜索又要分析，必须拆开）
+2. ✅ 是否存在职责重叠的 State？（两个 State 做同一件事，应合并）
+3. ✅ State 数量是否合理？（职责单一的前提下，通常 2-5 个 State）
+4. ✅ depends_on 是否反映了真实的数据依赖？（下游 State 确实需要上游的产出）
+5. ✅ 简单请求是否只生成了 1 个 State？（不要过度拆分简单任务）

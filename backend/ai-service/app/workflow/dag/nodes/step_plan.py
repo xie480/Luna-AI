@@ -51,6 +51,7 @@ class StepPlanNode:
         state_intent: str,
         selected_skills: list[dict[str, Any]],
         state_context: dict[str, Any],
+        state_responsibility: str = "",
     ) -> list[StepDefinition]:
         """生成 Step 执行计划。
 
@@ -92,6 +93,7 @@ class StepPlanNode:
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STEP_PLAN_GENERATION,
                 variables={
+                    "state_responsibility": state_responsibility,
                     "state_goal": state_goal,
                     "state_intent": state_intent,
                     "selected_skills": skill_details,

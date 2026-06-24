@@ -99,6 +99,7 @@ class PlanResultSummaryNode:
 
                 summary = StateSummary(
                     state_id=state_def.state_id,
+                    responsibility=state_def.responsibility,
                     intent=state_def.intent,
                     goal=state_def.goal,
                     status=status,

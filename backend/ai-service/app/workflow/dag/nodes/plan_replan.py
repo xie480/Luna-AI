@@ -91,6 +91,8 @@ class PlanReplanNode:
                 category=PromptCategory.DAG_PLAN_REPLAN,
                 variables={
                     "failed_state_id": replan_context.failed_state_id,
+                    "failed_state_responsibility": replan_context.failed_state_responsibility,
+                    "failed_state_intent": replan_context.failed_state_intent,
                     "failed_state_goal": replan_context.failed_state_goal,
                     "failed_state_result": replan_context.failed_state_result,
                     "evaluation_reason": replan_context.evaluation_reason,
@@ -173,7 +175,12 @@ class PlanReplanNode:
         return dag_state
 
     def _build_replan_schema(self) -> dict[str, Any]:
-        """构建 Plan 重构的 JSON Schema。"""
+        """构建 Plan 重构的 JSON Schema。
+
+        做什么：定义重构 LLM 输出的结构化约束。
+        设计原则：每个 State 强制要求填写 responsibility 字段，
+                  确保重构后的 Plan 仍然按职责拆分。
+        """
         return {
             "type": "object",
             "properties": {
@@ -183,6 +190,15 @@ class PlanReplanNode:
                         "type": "object",
                         "properties": {
                             "order_index": {"type": "integer"},
+                            "responsibility": {
+                                "type": "string",
+                                "description": (
+                                    "该 State 承担的唯一职责类型，如：信息收集、"
+                                    "数据分析、内容生成、知识检索、格式转换、"
+                                    "验证校对、总结归纳、方案设计、代码实现、测试验证。"
+                                    "每个 State 只能有一种职责。"
+                                ),
+                            },
                             "intent": {"type": "string"},
                             "goal": {"type": "string"},
                             "completion_criteria": {
@@ -201,7 +217,7 @@ class PlanReplanNode:
                                 "items": {"type": "string"},
                             },
                         },
-                        "required": ["order_index", "intent", "goal"],
+                        "required": ["order_index", "responsibility", "intent", "goal"],
                     },
                 },
                 "replan_reason": {"type": "string"},
@@ -257,6 +273,7 @@ class PlanReplanNode:
 
             state = OverallState(
                 order_index=state_data.get("order_index", 0),
+                responsibility=state_data.get("responsibility", ""),
                 intent=state_data.get("intent", ""),
                 goal=state_data.get("goal", ""),
                 completion_criteria=criteria,

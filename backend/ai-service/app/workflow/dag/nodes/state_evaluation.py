@@ -51,6 +51,7 @@ class StateEvaluationNode:
         merged_output: dict[str, Any],
         nodes_succeeded: int,
         nodes_failed: int,
+        state_responsibility: str = "",
     ) -> StateEvaluationResult:
         """执行 State 评估。
 
@@ -80,6 +81,7 @@ class StateEvaluationNode:
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STATE_EVALUATION,
                 variables={
+                    "state_responsibility": state_responsibility,
                     "state_goal": state_goal,
                     "state_intent": state_intent,
                     "completion_criteria": json.dumps(

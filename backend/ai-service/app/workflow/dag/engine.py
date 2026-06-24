@@ -156,6 +156,7 @@ def _build_replan_context(
         if runtime_data.get("status") == DagNodeStatus.SUCCEEDED.value:
             completed_states.append({
                 "state_id": sid,
+                "responsibility": runtime_data.get("responsibility", ""),
                 "intent": runtime_data.get("intent", ""),
                 "goal": runtime_data.get("goal", ""),
             })
@@ -165,12 +166,15 @@ def _build_replan_context(
         remaining_states.append({
             "state_id": state_def.state_id,
             "order_index": state_def.order_index,
+            "responsibility": state_def.responsibility,
             "intent": state_def.intent,
             "goal": state_def.goal,
         })
 
     return ReplanContext(
         failed_state_id=current_state.state_id,
+        failed_state_responsibility=current_state.responsibility,
+        failed_state_intent=current_state.intent,
         failed_state_goal=current_state.goal,
         failed_state_result=compressed_result,
         evaluation_reason=eval_result.evaluation_reason,
@@ -242,6 +246,7 @@ def _reset_executor_runtime(dag_state: DagEngineState, current_state: Any) -> No
         state_runtime=StateRuntimeState(
             state_id=current_state.state_id,
             status=DagNodeStatus.RUNNING,
+            responsibility=current_state.responsibility,
             intent=current_state.intent,
             goal=current_state.goal,
         ).model_dump(),
@@ -320,6 +325,7 @@ class ExecutorSkillScreeningNode:
                 completion_criteria=[
                     c.model_dump() for c in current_state.completion_criteria
                 ],
+                state_responsibility=current_state.responsibility,
             )
             executor_rt.selected_skills = selected_skills
 
@@ -428,6 +434,7 @@ class ExecutorStepPlanNode:
                 state_intent=current_state.intent,
                 selected_skills=executor_rt.selected_skills,
                 state_context=state_context,
+                state_responsibility=current_state.responsibility,
             )
 
             executor_rt.steps = [s.model_dump() for s in steps]
@@ -767,6 +774,7 @@ class ExecutorStateEvalNode:
                 merged_output=state_runtime.merged_output,
                 nodes_succeeded=state_runtime.nodes_succeeded,
                 nodes_failed=state_runtime.nodes_failed,
+                state_responsibility=current_state.responsibility,
             )
 
             state_runtime.evaluation_result = eval_result.model_dump()
@@ -833,6 +841,7 @@ class ExecutorStateEvalNode:
                                 {
                                     "state_id": s.state_id,
                                     "order_index": s.order_index,
+                                    "responsibility": s.responsibility,
                                     "intent": s.intent,
                                     "goal": s.goal,
                                     "completion_criteria": [c.model_dump() for c in s.completion_criteria],
@@ -1100,6 +1109,7 @@ class DagPlannerNode:
                             {
                                 "state_id": s.state_id,
                                 "order_index": s.order_index,
+                                "responsibility": s.responsibility,
                                 "intent": s.intent,
                                 "goal": s.goal,
                                 "completion_criteria": [c.model_dump() for c in s.completion_criteria],
@@ -1244,6 +1254,8 @@ class DagStateExecutorWrapper:
                 "plan_id": dag_state.plan.plan_id,
                 "state_id": current_state.state_id,
                 "order_index": current_state.order_index,
+                "responsibility": current_state.responsibility,
+                "intent": current_state.intent,
                 "goal": current_state.goal,
             },
             self.event_publisher,

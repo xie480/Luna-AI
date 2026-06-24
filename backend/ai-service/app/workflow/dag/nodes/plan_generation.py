@@ -186,6 +186,8 @@ class PlanGenerationNode:
         """构建 Plan 生成的 JSON Schema。
 
         做什么：定义 LLM 输出的结构化约束。
+        设计原则：每个 State 强制要求填写 responsibility 字段，
+                  确保按职责拆分而非按难易度拆分。
         """
         return {
             "type": "object",
@@ -196,6 +198,15 @@ class PlanGenerationNode:
                         "type": "object",
                         "properties": {
                             "order_index": {"type": "integer"},
+                            "responsibility": {
+                                "type": "string",
+                                "description": (
+                                    "该 State 承担的唯一职责类型，如：信息收集、"
+                                    "数据分析、内容生成、知识检索、格式转换、"
+                                    "验证校对、总结归纳、方案设计、代码实现、测试验证。"
+                                    "每个 State 只能有一种职责。"
+                                ),
+                            },
                             "intent": {"type": "string"},
                             "goal": {"type": "string"},
                             "completion_criteria": {
@@ -219,7 +230,7 @@ class PlanGenerationNode:
                                 "items": {"type": "string"},
                             },
                         },
-                        "required": ["order_index", "intent", "goal"],
+                        "required": ["order_index", "responsibility", "intent", "goal"],
                     },
                 },
                 "planning_reason": {"type": "string"},
@@ -296,6 +307,7 @@ class PlanGenerationNode:
 
             state = OverallState(
                 order_index=state_data.get("order_index", 0),
+                responsibility=state_data.get("responsibility", ""),
                 intent=state_data.get("intent", ""),
                 goal=state_data.get("goal", ""),
                 completion_criteria=criteria,

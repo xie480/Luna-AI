@@ -47,6 +47,7 @@ class SkillScreeningNode:
         state_goal: str,
         state_intent: str,
         completion_criteria: list[dict[str, Any]],
+        state_responsibility: str = "",
     ) -> list[dict[str, Any]]:
         """执行 Skill 初筛。
 
@@ -81,6 +82,7 @@ class SkillScreeningNode:
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_SKILL_SCREENING,
                 variables={
+                    "state_responsibility": state_responsibility,
                     "state_goal": state_goal,
                     "state_intent": state_intent,
                     "completion_criteria": json.dumps(
