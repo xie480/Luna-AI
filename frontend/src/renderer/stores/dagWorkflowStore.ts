@@ -450,6 +450,8 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
         node.status = payload.success ? DAG_NODE_STATUS.SUCCEEDED : DAG_NODE_STATUS.FAILED;
         // 确保 outputs 不为 null/undefined，避免渲染时 Object.keys 报错
         node.outputs = payload.outputs ?? {};
+        // 映射 Agent CoT 推演字段（优先从 payload.check 读取，其次从 outputs.check 提取）
+        node.check = payload.check || (payload.outputs?.check as string) || undefined;
         node.latencyMs = payload.latency_ms;
         node.retryCount = payload.retry_count;
         node.endedAtMs = Date.now();
@@ -525,6 +527,7 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
             satisfied: c.satisfied,
             detail: c.detail,
           })),
+          check: payload.check,
         };
         // 如果评估通过，标记 State 为 SUCCEEDED，并递归更新 Step 和 Node
         if (payload.state_satisfied) {

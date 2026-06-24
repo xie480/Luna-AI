@@ -839,6 +839,8 @@ export interface DagNodeCompletedPayload {
   latency_ms: number;
   /** 重试次数 */
   retry_count: number;
+  /** Agent CoT 系统校验推演过程 */
+  check?: string;
 }
 
 /**
@@ -887,6 +889,8 @@ export interface DagStateEvaluatedPayload {
   suggestion: string;
   /** 完成条件检查清单 */
   criteria_checklist: Array<{ field: string; satisfied: boolean; detail: string }>;
+  /** Agent CoT 系统校验推演过程 */
+  check?: string;
 }
 
 /**

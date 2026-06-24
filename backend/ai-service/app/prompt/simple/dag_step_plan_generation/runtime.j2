@@ -8,11 +8,32 @@
 {{ CURRENT_TIME }}
 -当前系统时间结束-
 
+## 生成前推演流程
+你必须在生成最终输出前，按顺序完成以下系统校验。将校验结果写入 `check` 字段。
+
+### 2.1 节点类型校验
+1. **类型匹配**：每个 node 的 `node_type` 是否正确匹配了其职责？需要外部数据的是否用了 `tool_execute`？需要加载资源的是否用了 `resource_loading`？纯推理/转换的是否用了 `data_transform`？
+2. **无技能时的降级**：如果已筛选技能列表为空，是否优先使用 `data_transform` 节点？有没有伪造 skill_name 或 tool_name？
+
+### 2.2 依赖关系校验
+1. **同 Step 内依赖**：`depends_on` 是否只引用了同一 Step 内的节点索引？有没有跨 Step 引用？
+2. **数据流完整性**：需要前序节点输出作为输入的节点，是否正确声明了 `depends_on`？
+3. **无遗漏依赖**：有没有节点实际需要前序数据但未声明依赖的情况？
+
+### 2.3 并行合理性校验
+1. **并行机会利用**：无依赖关系的节点是否被放在了同一 Step 中？有没有不必要的串行化？
+2. **Step 粒度**：Step 数量是否为最小必要数量？
+
+### 2.4 参数具体性校验
+1. **parameter_hint 质量**：工具执行节点的 `parameter_hint` 是否足够具体？是否说明了参数含义、取值范围和格式要求？
+2. **transform_instruction 质量**：数据转换节点的 `transform_instruction` 是否明确了输入来源和期望输出格式？
+
 ## 输出要求
-请输出 JSON，结构如下。每个 Step 包含 description 和 nodes 数组，每个 node 的字段根据 node_type 的不同而有所不同：
+请输出 JSON，结构如下。每个 Step 包含 description 和 nodes 数组，每个 node 的字段根据 node_type 的不同而有所不同。同时必须包含 `check` 字段：
 
 ```json
 {
+  "check": "[节点类型] 类型匹配：... 无技能降级：... [依赖关系] 同 Step 内依赖：... 数据流完整性：... 无遗漏依赖：... [并行合理性] 并行机会利用：... Step 粒度：... [参数具体性] parameter_hint 质量：... transform_instruction 质量：...",
   "steps": [
     {
       "description": "步骤描述（简要说明这个步骤做什么）",

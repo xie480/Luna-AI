@@ -222,14 +222,30 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
 
           {/* ─── 后置操作行：State 评估 ─── */}
           {state.evaluationResult && (
-            <div className={`dag-state-node-eval ${state.evaluationResult.stateSatisfied ? 'eval-passed' : 'eval-failed'}`}>
-              <DagIconCheckCircle width="9" height="9" className="dag-state-node-eval-icon" />
-              <span className="dag-state-node-eval-label">State 评估</span>
-              <span className="dag-eval-badge">
-                {state.evaluationResult.stateSatisfied ? '通过' : '未通过'}
-              </span>
-              <span>{state.evaluationResult.evaluationReason}</span>
-            </div>
+            <>
+              <div className={`dag-state-node-eval ${state.evaluationResult.stateSatisfied ? 'eval-passed' : 'eval-failed'}`}>
+                <DagIconCheckCircle width="9" height="9" className="dag-state-node-eval-icon" />
+                <span className="dag-state-node-eval-label">State 评估</span>
+                <span className="dag-eval-badge">
+                  {state.evaluationResult.stateSatisfied ? '通过' : '未通过'}
+                </span>
+                <span>{state.evaluationResult.evaluationReason}</span>
+              </div>
+              {/* 评估 Agent CoT 推演 */}
+              {state.evaluationResult.check && (
+                <div className="dag-node-cot-section">
+                  <span className="dag-node-cot-label">🧠 评估 Agent CoT</span>
+                  <div className="dag-node-cot-content">
+                    {state.evaluationResult.check.split(/\[(.*?)\]/g).map((part, i) => {
+                      if (i % 2 === 1) {
+                        return <span key={i} className="dag-node-cot-dimension">[{part}]</span>;
+                      }
+                      return part.trim() ? <span key={i} className="dag-node-cot-text">{part}</span> : null;
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* 错误信息 */}

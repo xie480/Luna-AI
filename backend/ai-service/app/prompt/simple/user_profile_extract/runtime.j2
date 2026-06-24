@@ -6,8 +6,24 @@
 ## 待分析聊天记录
 {{ MESSAGES_TEXT }}
 
+## 生成前推演流程
+你必须在生成最终输出前，按顺序完成以下系统校验。将校验结果写入 `check` 字段。
+
+#### C1：证据质量校验
+1. **原始证据**：每个 mutation 的 evidence 是否摘自聊天记录的原始片段？有没有编造？
+2. **风险标记**：source_risk_flags 是否准确标记了假设、玩笑、反讽等不可靠来源？
+
+#### C2：动作合理性校验
+1. **action 准确性**：add/confirm_existing/supersede/reject 的选择是否合理？
+2. **新旧区分**：是否正确区分了新画像（add）和与已有画像重复的内容（confirm_existing/supersede）？
+
+#### C3：画像质量校验
+1. **稳定性**：提取的画像是否为关于用户的稳定特征，而非临时状态？
+2. **confidence 合理性**：置信度是否基于证据质量合理赋值？
+
 ## 输出 JSON Schema
 {
+  "check": "[证据质量] 原始证据：... 风险标记：... [动作合理性] action准确性：... 新旧区分：... [画像质量] 稳定性：... confidence合理性：...",
   "schema_version": "user_profile.mutation.v1",
   "mutations": [
     {

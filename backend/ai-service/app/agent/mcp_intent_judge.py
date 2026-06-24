@@ -33,6 +33,10 @@ class MCPIntentJudgeJudgment(BaseModel):
     reason: str = Field(..., description="判断原因说明，详细解释为什么需要或不需要 MCP 能力。")
     keywords: list[str] = Field(..., description="关键词数组，用于匹配技能。至少包含 1 个，建议 1~5 个关键词。当 need_skill=false 时为空数组 []。")
     mcp_intent: str = Field(..., description="MCP 意图文本。当 need_skill=true 时，为重构后的需求描述；当 need_skill=false 时，此字段为空字符串。")
+    check: str = Field(
+        default="",
+        description="系统校验推演过程，包含需求分析、判断准确性、意图提炼等维度的自检结果。",
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典。"""

@@ -367,6 +367,10 @@ class StateEvaluationResult(BaseModel):
         default_factory=list,
         description="逐条 completion_criteria 的验证结果。",
     )
+    check: str = Field(
+        default="",
+        description="系统校验推演过程，包含标准对齐、证据充分性、改进建议等维度的自检结果。",
+    )
 
 
 # ===========================================================================

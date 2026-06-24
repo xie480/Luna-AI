@@ -14,9 +14,25 @@
 ### 合并输出
 {{ merged_output }}
 
+## 生成前推演流程
+你必须在生成最终输出前，按顺序完成以下系统校验。将校验结果写入 `check` 字段。
+
+### 2.1 标准对齐校验
+1. **逐条对照**：是否逐一对照了 completion_criteria 中的每一条标准？有没有遗漏？
+2. **判定一致性**：`state_satisfied` 的判定是否与 criteria_checklist 中各项的 met 状态逻辑一致？
+
+### 2.2 证据充分性校验
+1. **数据支撑**：评估结论是否有足够的执行数据（merged_output）支撑？是否基于事实而非推测？
+2. **成功/失败节点分析**：是否正确考虑了成功节点数和失败节点数对整体评估的影响？
+
+### 2.3 改进建议校验（satisfied=false 时）
+1. **具体可操作**：suggestion 是否给出了具体的、可操作的改进方向？而非笼统的"继续执行"？
+2. **差距对应**：gap_analysis 是否准确指出了实际值与期望值之间的具体差距？
+
 ## 输出要求
-请输出 JSON：
+请输出 JSON，包含 state_satisfied、evaluation_reason、gap_analysis、suggestion、criteria_checklist 和 check 字段：
 {
+  "check": "[标准对齐] 逐条对照：... 判定一致性：... [证据充分性] 数据支撑：... 成功/失败分析：... [改进建议] 具体可操作：... 差距对应：...",
   "state_satisfied": true/false,
   "evaluation_reason": "评估理由",
   "gap_analysis": "差距分析（satisfied=false 时填写）",

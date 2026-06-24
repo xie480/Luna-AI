@@ -148,6 +148,26 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
       {/* 卡片详情（展开时显示） */}
       {isExpanded && (
         <div className="dag-node-details">
+          {/* Agent CoT 系统校验 — 展示 LLM 生成前的推演过程 */}
+          {(() => {
+            const checkText = node.check || (typeof node.outputs === 'object' && node.outputs !== null ? (node.outputs as Record<string, unknown>).check as string : undefined);
+            return checkText ? (
+              <div className="dag-node-cot-section">
+                <span className="dag-node-cot-label">🧠 Agent CoT 推演</span>
+                <div className="dag-node-cot-content">
+                  {checkText.split(/\[(.*?)\]/g).map((part, i) => {
+                    if (i % 2 === 1) {
+                      // 方括号内的维度标签
+                      return <span key={i} className="dag-node-cot-dimension">[{part}]</span>;
+                    }
+                    // 维度内容文本
+                    return part.trim() ? <span key={i} className="dag-node-cot-text">{part}</span> : null;
+                  })}
+                </div>
+              </div>
+            ) : null;
+          })()}
+
           {/* 输入参数 */}
           {Object.keys(node.inputs).length > 0 && (
             <div className="dag-node-params-section">
@@ -166,22 +186,26 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
           {/* 执行结果（输出参数）— 始终展示区域标题，无数据时显示占位提示 */}
           <div className="dag-node-params-section">
             <span className="dag-node-params-label">执行结果</span>
-            {Object.keys(node.outputs).length > 0 ? (
-              <div className="dag-node-params-list">
-                {Object.entries(node.outputs).map(([key, value]) => (
-                  <div key={key} className="dag-node-param-item">
-                    <span className="dag-node-param-key">{key}:</span>
-                    <span className="dag-node-param-value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}>
-                      {typeof value === 'object' ? JSON.stringify(value).slice(0, 200) : String(value).slice(0, 200)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <span className="dag-node-params-empty">
-                {node.status === 'RUNNING' ? '执行中...' : node.status === 'PENDING' ? '等待执行' : '无输出数据'}
-              </span>
-            )}
+            {(() => {
+              // 过滤掉 check 字段，避免重复显示
+              const filteredOutputs = Object.entries(node.outputs).filter(([key]) => key !== 'check');
+              return filteredOutputs.length > 0 ? (
+                <div className="dag-node-params-list">
+                  {filteredOutputs.map(([key, value]) => (
+                    <div key={key} className="dag-node-param-item">
+                      <span className="dag-node-param-key">{key}:</span>
+                      <span className="dag-node-param-value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}>
+                        {typeof value === 'object' ? JSON.stringify(value).slice(0, 200) : String(value).slice(0, 200)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="dag-node-params-empty">
+                  {node.status === 'RUNNING' ? '执行中...' : node.status === 'PENDING' ? '等待执行' : '无输出数据'}
+                </span>
+              );
+            })()}
           </div>
 
           {/* 中间日志 */}

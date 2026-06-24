@@ -28,6 +28,10 @@ class EvaluationResult(BaseModel):
         description="Luna 当前情绪状态。必须从情绪枚举中选择一个最符合当前 reply 的情绪。"
                     "情绪应与执行结果和上下文保持一致，不得随机选择。",
     )
+    check: str = Field(
+        default="",
+        description="系统校验推演过程，包含目标对齐、建议质量、人设一致性等维度的自检结果。",
+    )
 
 
 class MCPEvaluationAgent:

@@ -149,6 +149,8 @@ export interface DagStateEvaluationResult {
   suggestion: string;
   /** 完成条件检查清单 */
   criteriaChecklist: { field: string; satisfied: boolean; detail: string }[];
+  /** Agent CoT 系统校验推演过程 */
+  check?: string;
 }
 
 /**
@@ -280,6 +282,9 @@ export interface DagNodeProjection {
 
   // 输出参数
   outputs: Record<string, unknown>;
+
+  /** Agent CoT 系统校验推演过程。做什么：展示 LLM 在生成最终输出前的自检过程。 */
+  check?: string;
 
   // 中间产物 / 日志
   intermediateLogs: DagIntermediateLog[];

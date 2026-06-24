@@ -113,6 +113,7 @@ class StateEvaluationNode:
                 gap_analysis=eval_data.get("gap_analysis", ""),
                 suggestion=eval_data.get("suggestion", ""),
                 criteria_checklist=eval_data.get("criteria_checklist", []),
+                check=eval_data.get("check", ""),
             )
 
             logger.info(
@@ -161,7 +162,10 @@ class StateEvaluationNode:
             )
 
     def _build_evaluation_schema(self) -> dict[str, Any]:
-        """构建评估的 JSON Schema。"""
+        """构建评估的 JSON Schema。
+
+        做什么：定义 LLM 输出的结构化约束，包含 check 字段用于 CoT。
+        """
         return {
             "type": "object",
             "properties": {
@@ -181,6 +185,7 @@ class StateEvaluationNode:
                         },
                     },
                 },
+                "check": {"type": "string"},
             },
             "required": ["state_satisfied"],
         }

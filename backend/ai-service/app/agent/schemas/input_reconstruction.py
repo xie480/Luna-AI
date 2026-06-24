@@ -124,3 +124,11 @@ class InputReconstructionOutput(BaseModel):
                     "包含 need_skill(bool)、reason(str)、keywords(list[str])。"
                     "取代原有的 mcp_tool_judgment 字段。",
     )
+
+    # --- CoT 系统校验字段 ---
+    # 做什么：承载 LLM 在生成最终输出前的系统校验推演过程。
+    # 为什么这样做：提高 Agent 输出质量，通过强制自检减少幻觉和逻辑错误。
+    check: str = Field(
+        default="",
+        description="系统校验推演过程，包含消歧质量、路由决策、情绪分析、MCP判定等维度的自检结果。",
+    )

@@ -61,6 +61,10 @@ class SkillChainPlan(BaseModel):
         description="标记为 true 表示候选 Skill 中无任何技能匹配用户需求。"
                     "此时 selected_skill_ids 应为空列表。",
     )
+    check: str = Field(
+        default="",
+        description="系统校验推演过程，包含需求匹配、组合合理性、边界情况等维度的自检结果。",
+    )
 
 
 # ============================================================

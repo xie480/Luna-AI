@@ -336,3 +336,61 @@
   width: 12px;
   height: 12px;
 }
+
+/* ============================================================
+ * Agent CoT 推演区域样式
+ * 做什么：展示 LLM 生成最终输出前的系统校验推演过程。
+ * 视觉约束：使用紫色系主题色，与节点类型色区分，突出 CoT 的独立性。
+ * ============================================================ */
+
+.dag-node-cot-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: linear-gradient(135deg, rgba(138, 43, 226, 0.06), rgba(0, 255, 255, 0.03));
+  border: 1px solid rgba(138, 43, 226, 0.15);
+  border-radius: 4px;
+}
+
+.dag-node-cot-label {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  color: rgba(138, 43, 226, 0.8);
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.dag-node-cot-content {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+  max-height: 150px;
+  overflow-y: auto;
+  word-break: break-all;
+}
+
+.dag-node-cot-dimension {
+  color: rgba(0, 255, 255, 0.65);
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.dag-node-cot-text {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* CoT 内容区域滚动条 */
+.dag-node-cot-content::-webkit-scrollbar {
+  width: 3px;
+}
+
+.dag-node-cot-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dag-node-cot-content::-webkit-scrollbar-thumb {
+  background: rgba(138, 43, 226, 0.3);
+  border-radius: 2px;
+}

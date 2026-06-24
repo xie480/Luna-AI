@@ -791,6 +791,7 @@ class ExecutorStateEvalNode:
                     "gap_analysis": eval_result.gap_analysis,
                     "suggestion": eval_result.suggestion,
                     "criteria_checklist": eval_result.criteria_checklist,
+                    "check": eval_result.check or "",
                 },
                 self.event_publisher,
             )

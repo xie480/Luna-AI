@@ -108,9 +108,21 @@ updated_temporal_focus
 * 必须显式给出 temporal_deviation。
 * temporal_deviation 必须为整数。
 
+生成前推演流程
+你必须在生成最终输出前，按顺序完成以下系统校验。将校验结果写入 `check` 字段。
+
+#### C1：证据评估校验
+1. **评分合理性**：sufficiency_score 和 confidence_score 是否基于评估标准中的明确定义进行打分？
+2. **检索策略一致性**：suggested_new_query 的有无是否与评分阈值规则一致？（>=80 且 confidence>=75 时必须为 null，<80 时不得为 null）
+
+#### C2：策略质量校验（suggested_new_query 不为 null 时）
+1. **新思路**：updated_search_queries 是否体现了新的搜索思路？有没有简单复制上一轮查询？
+2. **实体扩展**：updated_entity_mentions 是否补充了新的相关实体？
+
 最终要求
 * 仅输出 JSON。
 * 所有分数必须为整数。
 * 不得输出空字符串数组。
 * 不得输出额外字段。
 * 不得输出注释。
+* JSON 中必须包含 `check` 字段，值为校验结果字符串。
