@@ -69,7 +69,7 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
   const toggleNodeExpanded = useDagWorkflowStore((s) => s.toggleNodeExpanded);
   const searchQuery = useDagWorkflowStore((s) => s.searchQuery);
 
-  const isExpanded = expandedNodes[node.nodeId] ?? false;
+  const isExpanded = expandedNodes[node.nodeId] ?? true;
 
   // 实时耗时计时器
   const [elapsedMs, setElapsedMs] = useState<number | undefined>(node.latencyMs);

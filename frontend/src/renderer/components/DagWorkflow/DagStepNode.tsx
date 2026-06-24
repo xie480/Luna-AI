@@ -66,7 +66,7 @@ export const DagStepNode: React.FC<DagStepNodeProps> = ({ step }) => {
   const toggleStepExpanded = useDagWorkflowStore((s) => s.toggleStepExpanded);
   const searchQuery = useDagWorkflowStore((s) => s.searchQuery);
 
-  const isExpanded = expandedSteps[step.stepId] ?? false;
+  const isExpanded = expandedSteps[step.stepId] ?? true;
 
   // 实时耗时计时器
   const [elapsedMs, setElapsedMs] = useState<number | undefined>(step.latencyMs);

@@ -69,7 +69,7 @@ function getStatusIcon(status: string): React.FC<React.SVGProps<SVGSVGElement>> 
  * 为什么这样做：融入 HolographicConnections 连线系统，同时保持 State 子图的语义。
  */
 export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const StatusIcon = getStatusIcon(state.status);
   const statusLabel = DAG_NODE_STATUS_LABEL[state.status as keyof typeof DAG_NODE_STATUS_LABEL] || state.status;
 

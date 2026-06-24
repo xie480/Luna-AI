@@ -404,12 +404,7 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
           nodes: createNodeProjections(s.nodes),
         }));
         targetState.stepsTotal = targetState.steps.length;
-        // 自动展开第一个 Step
-        if (targetState.steps.length > 0) {
-          const newExpandedSteps = { ...state.expandedSteps };
-          newExpandedSteps[targetState.steps[0].stepId] = true;
-          return { activePlan: plan, expandedSteps: newExpandedSteps };
-        }
+        // 所有 Step 默认展开（组件默认值为 true），无需手动设置 expandedSteps
       }
       return { activePlan: plan };
     });
@@ -749,21 +744,29 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
   /** 设置面板可见性 */
   setPanelVisible: (visible) => set({ isPanelVisible: visible }),
 
-  /** 切换 Step 容器展开/折叠 */
+  /**
+   * 切换 Step 容器展开/折叠。
+   * 做什么：翻转指定 Step 的展开状态。
+   * 为什么这样做：默认值已改为 true（展开），使用 ?? true 兜底确保首次点击能正确折叠。
+   */
   toggleStepExpanded: (stepId) =>
     set((state) => ({
       expandedSteps: {
         ...state.expandedSteps,
-        [stepId]: !state.expandedSteps[stepId],
+        [stepId]: !(state.expandedSteps[stepId] ?? true),
       },
     })),
 
-  /** 切换 Node 详情展开/折叠 */
+  /**
+   * 切换 Node 详情展开/折叠。
+   * 做什么：翻转指定 Node 的展开状态。
+   * 为什么这样做：默认值已改为 true（展开），使用 ?? true 兜底确保首次点击能正确折叠。
+   */
   toggleNodeExpanded: (nodeId) =>
     set((state) => ({
       expandedNodes: {
         ...state.expandedNodes,
-        [nodeId]: !state.expandedNodes[nodeId],
+        [nodeId]: !(state.expandedNodes[nodeId] ?? true),
       },
     })),
 
