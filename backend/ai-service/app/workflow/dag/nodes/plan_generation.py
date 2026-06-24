@@ -229,6 +229,27 @@ class PlanGenerationNode:
                                 "type": "array",
                                 "items": {"type": "string"},
                             },
+                            "selected_skills": {
+                                "type": "array",
+                                "description": (
+                                    "预分配的技能筛选结果。对于需要外部工具的 State，"
+                                    "列出筛选出的技能及选择理由；纯推理/写作类 State 留空。"
+                                ),
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "skill_name": {
+                                            "type": "string",
+                                            "description": "技能名称，必须与可用能力列表中的名称完全一致。",
+                                        },
+                                        "relevance_reason": {
+                                            "type": "string",
+                                            "description": "选择该技能的原因，说明与当前任务目标的直接关联。",
+                                        },
+                                    },
+                                    "required": ["skill_name"],
+                                },
+                            },
                         },
                         "required": ["order_index", "responsibility", "intent", "goal"],
                     },
@@ -305,6 +326,12 @@ class PlanGenerationNode:
                 if isinstance(dep_index, int) and 0 <= dep_index < len(states):
                     depends_on.append(states[dep_index].state_id)
 
+            # 提取预分配的 Skill 筛选结果
+            # 做什么：从 LLM 输出中读取 selected_skills，存入 pre_allocated_skills。
+            # 为什么这样做：Plan 生成时同步完成 Skill 筛选，后续 Executor 子图
+            #               可跳过独立的 SkillScreening LLM 调用，减少 token 消耗。
+            pre_allocated_skills = state_data.get("selected_skills", [])
+
             state = OverallState(
                 order_index=state_data.get("order_index", 0),
                 responsibility=state_data.get("responsibility", ""),
@@ -313,6 +340,7 @@ class PlanGenerationNode:
                 completion_criteria=criteria,
                 depends_on=depends_on,
                 required_skill_names=state_data.get("required_skill_names", []),
+                pre_allocated_skills=pre_allocated_skills,
                 budget=StateBudget(),
             )
             states.append(state)

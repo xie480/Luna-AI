@@ -187,6 +187,14 @@ class OverallState(BaseModel):
         description="该 State 需要使用的 Skill 名称列表。"
                     "由 Plan 生成 Agent 根据 SkillBrief 填写。",
     )
+    pre_allocated_skills: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Plan 阶段预分配的 Skill 筛选结果列表。"
+                    "每个元素包含 skill_name 和 relevance_reason。"
+                    "当此列表非空时，Executor 子图中的 SkillScreening 节点"
+                    "将跳过 LLM 调用，直接使用预分配结果，以减少 token 消耗。"
+                    "由 Plan 生成 Agent 在生成 Plan 时同步输出。",
+    )
     budget: StateBudget = Field(default_factory=StateBudget)
 
 

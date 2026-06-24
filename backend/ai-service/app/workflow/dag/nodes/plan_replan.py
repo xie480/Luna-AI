@@ -216,6 +216,27 @@ class PlanReplanNode:
                                 "type": "array",
                                 "items": {"type": "string"},
                             },
+                            "selected_skills": {
+                                "type": "array",
+                                "description": (
+                                    "预分配的技能筛选结果。对于需要外部工具的 State，"
+                                    "列出筛选出的技能及选择理由；纯推理/写作类 State 留空。"
+                                ),
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "skill_name": {
+                                            "type": "string",
+                                            "description": "技能名称，必须与可用能力列表中的名称完全一致。",
+                                        },
+                                        "relevance_reason": {
+                                            "type": "string",
+                                            "description": "选择该技能的原因。",
+                                        },
+                                    },
+                                    "required": ["skill_name"],
+                                },
+                            },
                         },
                         "required": ["order_index", "responsibility", "intent", "goal"],
                     },
@@ -271,6 +292,12 @@ class PlanReplanNode:
                     value=c.get("value"),
                 ))
 
+            # 提取预分配的 Skill 筛选结果
+            # 做什么：从重构 LLM 输出中读取 selected_skills，存入 pre_allocated_skills。
+            # 为什么这样做：与 Plan 生成保持一致，重构后的 State 也使用预分配
+            #               跳过独立的 SkillScreening LLM 调用。
+            pre_allocated_skills = state_data.get("selected_skills", [])
+
             state = OverallState(
                 order_index=state_data.get("order_index", 0),
                 responsibility=state_data.get("responsibility", ""),
@@ -278,6 +305,7 @@ class PlanReplanNode:
                 goal=state_data.get("goal", ""),
                 completion_criteria=criteria,
                 required_skill_names=state_data.get("required_skill_names", []),
+                pre_allocated_skills=pre_allocated_skills,
                 budget=StateBudget(),
             )
             new_states.append(state)

@@ -316,17 +316,31 @@ class ExecutorSkillScreeningNode:
         current_state = dag_state.plan.states[dag_state.cursor]
 
         try:
-            selected_skills = await self.skill_screening.execute(
-                trace_id=trace_id,
-                session_id=session_id,
-                dag_state=dag_state,
-                state_goal=current_state.goal,
-                state_intent=current_state.intent,
-                completion_criteria=[
-                    c.model_dump() for c in current_state.completion_criteria
-                ],
-                state_responsibility=current_state.responsibility,
-            )
+            # 检测 Plan 阶段预分配的 Skill 筛选结果
+            # 做什么：如果 Plan 生成时已为该 State 同步输出了 selected_skills，
+            #         则直接使用预分配结果，跳过 LLM 调用，减少 token 消耗。
+            # 为什么这样做：Plan 生成 Prompt 已要求 LLM 同步输出每个 State 的
+            #               Skill 筛选结果，避免每个 State 再单独调用一次 SkillScreening。
+            if current_state.pre_allocated_skills:
+                logger.info(
+                    f"[TraceID:{trace_id}] SkillScreeningSubNode: "
+                    f"检测到 Plan 阶段预分配的 Skill，"
+                    f"count={len(current_state.pre_allocated_skills)}，"
+                    f"跳过 LLM 调用"
+                )
+                selected_skills = current_state.pre_allocated_skills
+            else:
+                selected_skills = await self.skill_screening.execute(
+                    trace_id=trace_id,
+                    session_id=session_id,
+                    dag_state=dag_state,
+                    state_goal=current_state.goal,
+                    state_intent=current_state.intent,
+                    completion_criteria=[
+                        c.model_dump() for c in current_state.completion_criteria
+                    ],
+                    state_responsibility=current_state.responsibility,
+                )
             executor_rt.selected_skills = selected_skills
 
             # === 发布 DAG Skill 初筛事件 ===
