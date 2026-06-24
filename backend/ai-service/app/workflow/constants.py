@@ -1,4 +1,8 @@
-"""Phase 8.5 workflow 常量定义。"""
+"""Phase 8.5 + Phase 9 Agent Loop workflow 常量定义。
+
+做什么：集中定义所有 workflow 枚举、节点名、事件类型和模板变量常量。
+为什么这样做：agent.md 禁止硬编码魔法字符串，所有枚举与常量集中管理。
+"""
 
 from __future__ import annotations
 
@@ -21,7 +25,8 @@ class ChatMode(str, Enum):
 
     DAILY_CHAT = "daily_chat"
     CASUAL_CHAT = "casual_chat"
-    PLAN_STATE_NODE = "plan_state_node"     # 智能规划：Phase 9 Plan-State-Node
+    PLAN_STATE_NODE = "plan_state_node"     # 智能规划：Phase 9 Plan-State-Node（原 Plan + Cursor）
+    AGENT_LOOP = "agent_loop"              # 智能规划：Agent Loop 架构（Goal-Stable / Plan-Mutable）
 
 
 class ChatPlanPreset(str, Enum):
@@ -30,6 +35,7 @@ class ChatPlanPreset(str, Enum):
     DAILY_CHAT_DEFAULT = "daily_chat.default.v1"
     CASUAL_CHAT_DEFAULT = "casual_chat.default.v1"
     PLAN_STATE_NODE_DEFAULT = "plan_state_node.default.v1"
+    AGENT_LOOP_DEFAULT = "agent_loop.default.v1"
 
 
 class ChatWorkflowNodeType(str, Enum):
@@ -113,6 +119,64 @@ class DagWorkflowEventType(str, Enum):
     EVT_DAG_PLAN_COMPLETED = "EVT_DAG_PLAN_COMPLETED"
     EVT_DAG_PLAN_TERMINATED = "EVT_DAG_PLAN_TERMINATED"
     EVT_DAG_BUDGET_EXHAUSTED = "EVT_DAG_BUDGET_EXHAUSTED"
+    # --- Agent Loop 新增事件 ---
+    EVT_DAG_GOAL_LOCKED = "EVT_DAG_GOAL_LOCKED"
+    EVT_DAG_STEP_THINKING = "EVT_DAG_STEP_THINKING"
+    EVT_DAG_STEP_OBSERVED = "EVT_DAG_STEP_OBSERVED"
+    EVT_DAG_STEP_EVALUATED = "EVT_DAG_STEP_EVALUATED"
+    EVT_DAG_STEP_REPAIRED = "EVT_DAG_STEP_REPAIRED"
+    EVT_DAG_FINAL_VERIFIED = "EVT_DAG_FINAL_VERIFIED"
+
+
+class AgentLoopSubGraphNodeName(str, Enum):
+    """Agent Loop 子图外层节点名。
+
+    做什么：定义 build_agent_loop_subgraph() 工厂函数生成的外层子图内部 4 个节点名。
+    为什么这样做：将原 Plan + Cursor 外层图（Planner/Executor/Router/Summary）重构为
+                  Agent Loop 外层图（GoalLock/GlobalPlanner/StepLoop/FinalVerify）。
+    """
+
+    GOAL_LOCK = "agent_goal_lock"
+    GLOBAL_PLANNER = "agent_global_planner"
+    STEP_LOOP = "agent_step_loop"
+    FINAL_VERIFY = "agent_final_verify"
+
+
+class AgentStepLoopSubGraphNodeName(str, Enum):
+    """Agent Step Loop 子图内部节点名。
+
+    做什么：定义 Step Loop 内层子图的 7 个节点名。
+    为什么这样做：对应 agent loop.md 的 StepLoop = Think → Execute → Observe → Evaluate → (Pass/Repair/Replan)。
+    """
+
+    STEP_ROUTER = "agent_step_router"
+    STEP_THINK = "agent_step_think"
+    TOOL_EXECUTE = "agent_tool_execute"
+    OBSERVE = "agent_observe"
+    STEP_EVALUATE = "agent_step_evaluate"
+    STEP_REPAIR = "agent_step_repair"
+    REPLAN = "agent_replan"
+
+
+class AgentStepRoute(str, Enum):
+    """Step 路由结果枚举。
+
+    做什么：标识 StepLoop 中 step_router 的路由决策。
+    """
+
+    STEP_THINK = "step_think"       # 还有未执行步骤，继续思考
+    FINAL_VERIFY = "final_verify"   # 全部完成或终止，进入最终验收
+
+
+class StepEvaluationRoute(str, Enum):
+    """Step 评估路由结果枚举。
+
+    做什么：标识 step_evaluate 节点后的路由决策。
+    """
+
+    PASS = "pass"                   # 步骤通过，回到 step_router 推进下一步
+    FAIL = "fail"                   # 步骤失败，尝试 step_repair
+    NEEDS_REPLAN = "needs_replan"   # 需要重规划，触发 replan
 
 
 class ChatWorkflowErrorCode(str, Enum):
@@ -144,8 +208,10 @@ class ChatWorkflowGraphNodeName(str, Enum):
     # --- Phase 12（v3.0）新增：MCP 前置判断节点 ---
     MCP_INTENT_JUDGE = "mcp_intent_judge"
     MCP_INTENT_BYPASS = "mcp_intent_bypass"
-    # --- Phase 9 新增：DAG 引擎节点 ---
+    # --- Phase 9 新增：DAG 引擎节点（原 Plan + Cursor）---
     DAG_ENGINE = "dag_engine"
+    # --- Agent Loop 新增：Agent Loop DAG 引擎节点 ---
+    DAG_ENGINE_AGENT_LOOP = "dag_engine_agent_loop"
     # --- Phase 9 新增：简化输入重构节点 ---
     INPUT_RECONSTRUCTION_SIMPLIFIED = "input_reconstruction_simplified"
 

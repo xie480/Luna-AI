@@ -272,6 +272,10 @@ export const CHAT_MODE = {
    * 智能规划模式：Phase 9 Plan-State-Node DAG 工作流，拆解为多个执行阶段深度完成任务。
    */
   PLAN_STATE_NODE: 'plan_state_node',
+  /**
+   * 万能循环模式：Agent Loop 架构，Goal-Stable / Plan-Mutable 的 6 层循环。
+   */
+  AGENT_LOOP: 'agent_loop',
 } as const;
 
 /**
@@ -759,6 +763,13 @@ export const DAG_WORKFLOW_EVENT_TYPE = {
   PLAN_COMPLETED: 'EVT_DAG_PLAN_COMPLETED',
   PLAN_TERMINATED: 'EVT_DAG_PLAN_TERMINATED',
   BUDGET_EXHAUSTED: 'EVT_DAG_BUDGET_EXHAUSTED',
+  // Agent Loop 新增事件
+  GOAL_LOCKED: 'EVT_DAG_GOAL_LOCKED',
+  STEP_THINKING: 'EVT_DAG_STEP_THINKING',
+  STEP_OBSERVED: 'EVT_DAG_STEP_OBSERVED',
+  STEP_EVALUATED: 'EVT_DAG_STEP_EVALUATED',
+  STEP_REPAIRED: 'EVT_DAG_STEP_REPAIRED',
+  FINAL_VERIFIED: 'EVT_DAG_FINAL_VERIFIED',
 } as const;
 
 /**

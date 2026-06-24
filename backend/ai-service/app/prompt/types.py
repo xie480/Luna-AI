@@ -69,6 +69,14 @@ class PromptCategory(str, Enum):
     DAG_RESULT_COMPRESSION = "dag_result_compression"
     DAG_PLAN_SUMMARY = "dag_plan_summary"
     DAG_TOOL_MEMORY = "dag_tool_memory"
+    # --- Agent Loop 新增：7 个 Prompt 分类 ---
+    DAG_GOAL_LOCK = "dag_goal_lock"
+    DAG_GLOBAL_PLANNER = "dag_global_planner"
+    DAG_STEP_THINK = "dag_step_think"
+    DAG_STEP_OBSERVE = "dag_step_observe"
+    DAG_STEP_EVALUATE = "dag_step_evaluate"
+    DAG_STEP_REPAIR = "dag_step_repair"
+    DAG_FINAL_VERIFY = "dag_final_verify"
 
 
 # 这些分类必须从 PostgreSQL 读取，禁止运行期回退到 app/prompt/simple 本地文件。

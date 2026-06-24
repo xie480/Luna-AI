@@ -1,13 +1,14 @@
 """Phase 9 DAG 引擎 — LangGraph 节点包装器。
 
-做什么：将 Plan + Cursor 子图包装为 LangGraph 外层图的可调用节点。
+做什么：将 Plan + Cursor 子图或 Agent Loop 子图包装为 LangGraph 外层图的可调用节点。
 为什么这样做：LangGraph 的 StateGraph 需要一个 async 函数作为节点，
-              Plan + Cursor 子图是独立的 CompiledGraph，
-              需要一个适配层将其包装为外层图的节点。
+              子图是独立的 CompiledGraph，需要一个适配层将其包装为外层图的节点。
+              支持两种子图模式：原 Plan + Cursor（plan_state_node）和 Agent Loop（agent_loop）。
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from app.api.chat_status import ChatStatusPublisher
@@ -21,15 +22,15 @@ from app.workflow.events import ChatNodeStatusPayload, ChatWorkflowEvent, ChatWo
 class DagEngineNode:
     """DAG 引擎 LangGraph 节点包装器。
 
-    做什么：将 Plan + Cursor 子图包装为 LangGraph 外层图的节点函数。
+    做什么：将子图包装为 LangGraph 外层图的节点函数。
     为什么这样做：外层图看到的 DAG_ENGINE 仍然是一个节点，
-                  但内部已从 DagEngine.run() 变为调用子图 ainvoke()，
-                  每个 State 执行都是独立的子图节点调用。
+                  内部根据构造参数选择 Plan + Cursor 子图或 Agent Loop 子图。
     """
 
     def __init__(
         self,
-        plan_cursor_subgraph: Any,
+        plan_cursor_subgraph: Any = None,
+        agent_loop_subgraph: Any = None,
         event_publisher: ChatWorkflowEventPublisher | None = None,
         chat_status_publisher: ChatStatusPublisher | None = None,
     ):
@@ -37,10 +38,14 @@ class DagEngineNode:
 
         参数:
             plan_cursor_subgraph: 编译后的 Plan + Cursor 子图（CompiledGraph）。
+            agent_loop_subgraph: 编译后的 Agent Loop 子图（CompiledGraph）。
             event_publisher: 工作流事件发布器。
             chat_status_publisher: Chat 状态发布器。
         """
         self.plan_cursor_subgraph = plan_cursor_subgraph
+        self.agent_loop_subgraph = agent_loop_subgraph
+        # 选择实际使用的子图：优先 Agent Loop，回退到 Plan + Cursor
+        self._active_subgraph = agent_loop_subgraph or plan_cursor_subgraph
         self.event_publisher = event_publisher
         self.chat_status_publisher = chat_status_publisher or ChatStatusPublisher()
 
@@ -50,7 +55,7 @@ class DagEngineNode:
         做什么：
         1. 从外层图状态反序列化 ChatWorkflowState
         2. 发布节点开始事件
-        3. 调用子图 ainvoke()，内部执行 Planner → Executor → Router → Summary
+        3. 调用 Agent Loop 子图 ainvoke()
         4. 从子图结果恢复 ChatWorkflowState
         5. 发布节点完成/失败事件
         6. 返回更新后的图状态
@@ -84,8 +89,8 @@ class DagEngineNode:
                 logger.warning(f"DAG 引擎节点事件发布失败: {exc}")
 
         try:
-            # 调用编译后的子图，每个 State 执行都是独立的图节点调用
-            subgraph_result = await self.plan_cursor_subgraph.ainvoke(
+            # 调用编译后的子图（根据初始化时选择的子图类型）
+            subgraph_result = await self._active_subgraph.ainvoke(
                 chat_state.as_graph_state()
             )
 
@@ -118,9 +123,8 @@ class DagEngineNode:
 
         except Exception as exc:
             logger.error(
-                f"[TraceID:{trace_id}] DAG 引擎子图执行异常: {exc}"
+                f"[TraceID:{trace_id}] DAG 引擎 Agent Loop 子图执行异常: {exc}"
             )
-            # 发布节点失败事件
             ended_at_ms = _now_ms()
             if self.event_publisher:
                 failed_event = ChatWorkflowEvent(
@@ -151,5 +155,4 @@ class DagEngineNode:
 
 def _now_ms() -> int:
     """获取当前时间戳（毫秒）。"""
-    import time
     return int(time.time() * 1000)

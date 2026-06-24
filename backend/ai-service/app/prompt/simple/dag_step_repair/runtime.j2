@@ -1,0 +1,43 @@
+{# Phase 9：步骤修复 Prompt — 运行时槽位 #}
+## 当前步骤
+
+**标题**：{{ step_title }}
+**意图**：{{ step_intent }}
+**预期输出**：{{ step_expected_output }}
+**完成标准**：{{ step_completion_criteria }}
+
+## 评估结果
+
+**结论**：{{ verdict }}
+**评估原因**：{{ evaluation_reason }}
+**差距分析**：{{ gap_analysis }}
+**改进建议**：{{ suggestion }}
+
+## 观察结果
+
+{{ observation }}
+
+## 执行信息
+
+**重试次数**：{{ retry_count }}
+**修复次数**：{{ repair_count }}
+
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
+## 输出要求
+请输出 JSON，包含 repair_strategy、adjusted_tool_calls 和 escalate_to_replan 字段：
+{
+  "repair_strategy": "修复策略描述，说明针对评估中发现的问题采取什么修复方案",
+  "adjusted_tool_calls": [
+    {
+      "tool_name": "调整后的工具名称",
+      "parameters": {"param1": "修正后的参数值"},
+      "purpose": "本次调用的目的，说明如何针对上次失败进行改进"
+    }
+  ],
+  "escalate_to_replan": false
+}
+修复策略优先级：1.修正参数 → 2.换工具 → 3.补充上下文 → 4.重试同一步。
+escalate_to_replan 为 true 时表示修复无法解决问题，建议升级为全局重规划。

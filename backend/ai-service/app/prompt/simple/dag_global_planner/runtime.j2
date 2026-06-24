@@ -1,0 +1,37 @@
+{# Phase 9：全局计划生成 Prompt — 运行时槽位 #}
+## 已锁定的全局目标
+
+**目标**：{{ global_goal }}
+**详细描述**：{{ goal_definition }}
+**验收标准**：{{ acceptance_criteria }}
+**非目标声明**：{{ non_goals }}
+**约束条件**：{{ constraints }}
+
+## 用户输入（已消歧）
+
+{{ disambiguated_text }}
+
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
+## 输出要求
+请输出 JSON，包含 steps、planning_reason 和 check 字段：
+{
+  "check": "[需求理解] 意图完整性：... 复杂度判断：... [职责拆分] 单一职责：... 禁止按难易度拆分：... 禁止职责重叠：... [依赖与数据流] 依赖正确性：... 无循环依赖：... [技能选择] 必要性：... 最小化：... [全局覆盖] 完整性：... 边界清晰：...",
+  "steps": [
+    {
+      "title": "步骤标题，简明描述该步骤做什么",
+      "intent": "步骤意图，说明该步骤的具体目标和期望达成的效果",
+      "expected_output": "预期输出，描述该步骤完成后应产出什么结果",
+      "completion_criteria": [
+        {"field": "字段名", "operator": ">=", "value": 1}
+      ],
+      "dependencies": [],
+      "risk_notes": "风险点：该步骤可能遇到的困难或失败场景",
+      "rollback_hint": "回退提示：如果该步骤失败，应该如何回退或降级处理",
+      "pre_allocated_skills": []
+    }
+  ],
+  "planning_reason": "整体规划理由，说明为什么按此方式拆分步骤、各步骤之间的逻辑关系"
+}

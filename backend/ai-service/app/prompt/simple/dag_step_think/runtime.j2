@@ -1,0 +1,50 @@
+{# Phase 9：步骤思考 Prompt — 运行时槽位 #}
+## 全局目标
+
+{{ global_goal }}
+
+**验收标准**：{{ acceptance_criteria }}
+**非目标**：{{ non_goals }}
+
+## 当前步骤
+
+**标题**：{{ step_title }}
+**意图**：{{ step_intent }}
+**预期输出**：{{ step_expected_output }}
+**完成标准**：{{ step_completion_criteria }}
+**风险点**：{{ step_risk_notes }}
+**回退提示**：{{ step_rollback_hint }}
+
+{% if completed_steps %}
+## 已完成步骤
+
+{{ completed_steps }}
+{% endif %}
+
+{% if retry_context %}
+## 重试上下文
+
+{{ retry_context }}
+{% endif %}
+
+## 用户输入
+
+{{ disambiguated_text }}
+
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
+## 输出要求
+请输出 JSON，包含 thought 和 tool_calls 字段：
+{
+  "thought": "对当前步骤的局部思考过程：分析当前步骤的目标、可用信息、执行策略，以及为什么选择这种执行路径",
+  "tool_calls": [
+    {
+      "tool_name": "工具名称，必须是系统中实际可用的工具",
+      "parameters": {"param1": "参数值，从上下文中提取或根据步骤意图推断"},
+      "purpose": "调用该工具的目的，说明期望获得什么结果"
+    }
+  ]
+}
+tool_calls 可为空数组 []（纯思考步骤不需要工具调用时）。thought 必须详细说明推理过程。

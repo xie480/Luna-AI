@@ -741,3 +741,297 @@ class DagExecutorRuntimeState(BaseModel):
         default=False,
         description="子图是否已完成初始化（SkillScreeningNode 首次调用时设为 True）。",
     )
+
+
+# ===========================================================================
+# Agent Loop 状态模型（agent-loop-langgraph-design.md Phase A）
+# ===========================================================================
+
+
+class StepEvaluationVerdict(str, Enum):
+    """Step 评估结论 — 对应 agent loop.md 的四种结果。
+
+    做什么：标识 StepEvaluateNode 对单步执行结果的评估结论。
+    为什么这样做：agent loop.md 要求每步完成后评估，支持 pass/fail/partial/needs_replan。
+    """
+
+    PASS = "pass"               # 步骤完成，进入下一步
+    FAIL = "fail"               # 步骤失败，尝试 Repair
+    PARTIAL = "partial"         # 部分完成，可继续或 Repair
+    NEEDS_REPLAN = "needs_replan"  # 路径不对，触发 Replan
+
+
+class StepStatusEnum(str, Enum):
+    """Step 状态枚举 — StepState 的生命周期状态。
+
+    做什么：标识 PlanState 中每个步骤的执行状态。
+    """
+
+    PENDING = "pending"         # 等待执行
+    RUNNING = "running"         # 正在执行
+    PASSED = "passed"           # 已通过评估
+    FAILED = "failed"           # 执行失败
+    SKIPPED = "skipped"         # 被跳过（replan 后不再需要）
+
+
+class ReplanRecord(BaseModel):
+    """Replan 历史记录 — 每次 replan 追加一条。
+
+    做什么：记录 replan 的版本、原因和受影响步骤，便于回溯。
+    """
+
+    from_version: int = Field(default=1, description="replan 前的版本号。")
+    to_version: int = Field(default=2, description="replan 后的版本号。")
+    reason: str = Field(default="", description="replan 原因。")
+    failed_step_id: str = Field(default="", description="触发 replan 的失败步骤 ID。")
+    changed_step_ids: list[str] = Field(
+        default_factory=list,
+        description="replan 中被修改、新增或删除的步骤 ID 列表。",
+    )
+    timestamp_ms: int = Field(default=0, description="replan 发生的时间戳（毫秒）。")
+
+
+class GoalState(BaseModel):
+    """全局目标锁定态 — 写入后不可变。
+
+    做什么：存储任务的全局目标、验收标准、非目标声明和约束。
+    为什么这样做：agent loop.md 要求 GoalState 只写一次，锁定后不允许
+                  replan 改写，防止目标漂移。
+    不变量：locked=True 后，任何节点都不允许修改 global_goal / acceptance_criteria / non_goals。
+    """
+
+    task_id: str = Field(default_factory=generate_string_id)
+    global_goal: str = Field(default="", description="全局总目标描述，锁定后不可变。")
+    goal_definition: str = Field(default="", description="目标详细描述。")
+    acceptance_criteria: list[str] = Field(
+        default_factory=list,
+        description="验收标准列表，锁定后不可变。",
+    )
+    non_goals: list[str] = Field(
+        default_factory=list,
+        description="非目标声明，防止目标漂移。例如：'不涉及竞品分析'。",
+    )
+    constraints: list[str] = Field(
+        default_factory=list,
+        description="约束条件列表。例如：['数据来源需标注', '中文撰写']。",
+    )
+    locked: bool = Field(
+        default=False,
+        description="目标是否已锁定。GoalLockNode 执行完毕后设为 True。",
+    )
+    locked_at_ms: int = Field(default=0, description="锁定时间戳（毫秒）。")
+
+
+class AgentStepState(BaseModel):
+    """单步定义 — PlanState 中的一个步骤。
+
+    做什么：描述一个可执行步骤的元信息和运行时状态。
+    为什么这样做：对应 agent loop.md 的 StepState，粒度比 OverallState 更精细。
+    """
+
+    step_id: str = Field(default_factory=generate_string_id)
+    title: str = Field(default="", description="步骤标题，简要描述该步做什么。")
+    intent: str = Field(default="", description="步骤意图。")
+    dependencies: list[str] = Field(
+        default_factory=list,
+        description="依赖的前置步骤 ID 列表。",
+    )
+    expected_output: str = Field(
+        default="",
+        description="预期输出描述，用于 StepEvaluateNode 判断是否完成。",
+    )
+    completion_criteria: list[CompletionCriterion] = Field(
+        default_factory=list,
+        description="可量化的完成标准。",
+    )
+    status: StepStatusEnum = Field(
+        default=StepStatusEnum.PENDING,
+        description="步骤状态：pending / running / passed / failed / skipped。",
+    )
+    risk_notes: str = Field(default="", description="风险点说明。")
+    rollback_hint: str = Field(default="", description="可能的回退点说明。")
+    pre_allocated_skills: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Plan 阶段预分配的 Skill 筛选结果列表。",
+    )
+
+
+class PlanState(BaseModel):
+    """全局步骤计划 — 可变，版本化。
+
+    做什么：存储当前全局步骤序列，每次 replan 产生新版本。
+    为什么这样做：agent loop.md 要求 PlanState 是可变的，
+                  每次 replan 都保留版本便于回溯。
+    """
+
+    plan_version: int = Field(default=1, ge=1, description="计划版本号，replan 时递增。")
+    steps: list[AgentStepState] = Field(
+        default_factory=list,
+        description="全局步骤列表，中粒度（3~12 步）。",
+    )
+    current_step_index: int = Field(default=0, ge=0, description="当前执行到第几步。")
+    replan_history: list[ReplanRecord] = Field(
+        default_factory=list,
+        description="replan 历史记录，每次 replan 追加一条。",
+    )
+
+
+class StepEvaluationResult(BaseModel):
+    """Step 评估结果 — StepEvaluateNode 的输出。
+
+    做什么：承载 Step 级评估的结构化结果。
+    """
+
+    verdict: StepEvaluationVerdict = Field(
+        default=StepEvaluationVerdict.PASS,
+        description="评估结论：pass / fail / partial / needs_replan。",
+    )
+    evaluation_reason: str = Field(default="", description="评估判断的理由。")
+    gap_analysis: str = Field(
+        default="",
+        description="当前结果与预期之间的差距分析。verdict=pass 时为空。",
+    )
+    suggestion: str = Field(
+        default="",
+        description="改进建议，供 StepRepairNode 和 ReplanNode 使用。",
+    )
+    criteria_checklist: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="逐条 completion_criteria 的验证结果。",
+    )
+
+
+class ExecutionState(BaseModel):
+    """执行实时快照 — 正在发生什么。
+
+    做什么：存储当前步骤的执行过程中的实时信息。
+    为什么这样做：agent loop.md 要求 ExecutionState 是"正在发生什么"的快照。
+    """
+
+    current_step_id: str = Field(default="", description="当前正在执行的步骤 ID。")
+    last_thought: str = Field(default="", description="StepThinkNode 输出的局部思考。")
+    last_tool_calls: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="最近一次工具调用记录。",
+    )
+    last_observation: str = Field(
+        default="",
+        description="ObserveNode 输出的结构化观察。",
+    )
+    last_error: str = Field(default="", description="最近一次错误信息。")
+    retry_count: int = Field(default=0, ge=0, description="当前步骤的重试次数。")
+    repair_count: int = Field(default=0, ge=0, description="当前步骤的修复次数。")
+    evaluation_result: StepEvaluationResult | None = Field(
+        default=None,
+        description="最近一次 Step 评估结果。",
+    )
+    partitioned_outputs: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="当前步骤的分区输出。",
+    )
+
+
+class AgentBudgetState(BaseModel):
+    """预算集中管理态。
+
+    做什么：集中管理所有预算维度，禁止散落在各节点中。
+    为什么这样做：agent loop.md 要求预算状态不能散落在各节点里。
+    """
+
+    token_used: int = Field(default=0, ge=0, description="已消耗 Token 数。")
+    tool_calls_used: int = Field(default=0, ge=0, description="已消耗工具调用次数。")
+    step_retries_used: int = Field(default=0, ge=0, description="已消耗步骤重试次数。")
+    replan_count: int = Field(default=0, ge=0, description="已触发 replan 次数。")
+    time_used_ms: int = Field(default=0, ge=0, description="已消耗执行时间（毫秒）。")
+
+    # 上限配置
+    max_tool_calls: int = Field(default=50, ge=1, description="最大工具调用次数。")
+    max_step_retries: int = Field(default=3, ge=1, description="单步最大重试次数。")
+    max_replan_count: int = Field(default=2, ge=0, description="最大 replan 次数。")
+    max_time_ms: int = Field(default=300000, ge=1, description="最大执行时间（毫秒）。")
+
+    def is_exhausted(self) -> bool:
+        """判断预算是否已耗尽。
+
+        做什么：检查任意维度是否超出上限。
+        返回: True 表示预算已耗尽。
+        """
+        return (
+            self.tool_calls_used >= self.max_tool_calls
+            or self.replan_count >= self.max_replan_count
+            or self.time_used_ms >= self.max_time_ms
+        )
+
+
+class AgentMemoryState(BaseModel):
+    """Agent 记忆态 — 稳定信息。
+
+    做什么：存储 Agent Loop 中可复用的稳定信息，不存临时噪音。
+    为什么这样做：对应 agent loop.md 的 MemoryState。
+    """
+
+    reusable_patterns: list[str] = Field(
+        default_factory=list,
+        description="可复用的执行模式。",
+    )
+    failure_patterns: list[str] = Field(
+        default_factory=list,
+        description="失败模式，供 Repair/Replan 参考。",
+    )
+    step_summaries: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="已完成步骤的摘要列表，供后续步骤参考。",
+    )
+
+
+class AgentLoopState(BaseModel):
+    """Agent Loop 引擎全局状态 — 替代 DagEngineState。
+
+    做什么：承载 Agent Loop 的全部运行时数据。
+    设计原则：严格对应 agent loop.md 的 5 核心状态对象。
+    """
+
+    # === 1. GoalState（只写一次）===
+    goal: GoalState = Field(default_factory=lambda: GoalState(global_goal=""))
+
+    # === 2. PlanState（可变，版本化）===
+    plan: PlanState = Field(default_factory=PlanState)
+
+    # === 3. ExecutionState（实时快照）===
+    execution: ExecutionState = Field(default_factory=ExecutionState)
+
+    # === 4. BudgetState（集中管理）===
+    budget: AgentBudgetState = Field(default_factory=AgentBudgetState)
+
+    # === 5. MemoryState（稳定信息）===
+    memory: AgentMemoryState = Field(default_factory=AgentMemoryState)
+
+    # === 运行时上下文（从 ChatWorkflowState 注入）===
+    disambiguated_text: str = ""
+    unresolved_pronouns: list[dict[str, Any]] = Field(default_factory=list)
+    session_context: dict[str, Any] = Field(default_factory=dict)
+    user_profile: dict[str, Any] = Field(default_factory=dict)
+    memory_context: str = ""
+    skill_briefs: list[dict[str, Any]] = Field(default_factory=list)
+
+    # === 终止信息 ===
+    terminated: bool = False
+    termination_reason: str = ""
+    termination_step_id: str = ""
+
+    # === 最终验收结果 ===
+    final_verification: dict[str, Any] = Field(
+        default_factory=dict,
+        description="FinalVerifyNode 输出的验收结果。",
+    )
+    plan_summary: dict[str, Any] = Field(
+        default_factory=dict,
+        description="PlanResultSummaryNode 输出的汇总结果。",
+    )
+
+    # === Gating 审批挂起（Phase 13 保留）===
+    gating_suspended: bool = False
+    gating_pending_node_ids: list[str] = Field(default_factory=list)
+
+    # === 原始工作流状态引用 ===
+    workflow_state: dict[str, Any] = Field(default_factory=dict)

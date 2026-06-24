@@ -337,5 +337,82 @@ class ChatGraphFactory:
         )
         return compiled
 
+    def build_agent_loop_graph(self):
+        """
+        构建 agent_loop.default.v1 Agent Loop 智能规划链路图。
+
+        做什么：构建 Agent Loop 架构的完整路径图。
+                流程：会话上下文加载 -> 简化输入重构 -> Agent Loop DAG 引擎
+                      （GoalLock -> GlobalPlanner -> StepLoop -> FinalVerify）
+                      -> 上下文治理 -> Prompt 装配 -> 主 Chat LLM
+                      -> 响应持久化 -> 最终化。
+        为什么这样做：Agent Loop 是独立的第四种模式，
+                      实现 Goal-Stable / Plan-Mutable 的 6 层架构，
+                      与原 plan_state_node 模式（Plan + Cursor）并存。
+        """
+        graph = StateGraph(ChatWorkflowState)
+
+        # 定义 Agent Loop 专用活动节点
+        active_nodes = [
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD,
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED,
+            # Agent Loop DAG 引擎节点（GoalLock -> GlobalPlanner -> StepLoop -> FinalVerify）
+            ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE,
+            ChatWorkflowGraphNodeName.FINALIZE,
+        ]
+        for node_name in active_nodes:
+            graph.add_node(node_name.value, self.registry.get_node(node_name))
+
+        # 入口点：会话上下文加载
+        graph.set_entry_point(ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value)
+
+        # 会话上下文加载 -> 简化输入重构
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED.value,
+        )
+
+        # 简化输入重构 -> Agent Loop DAG 引擎
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED.value,
+            ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value,
+        )
+
+        # Agent Loop DAG 引擎 -> 上下文治理
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value,
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+        )
+
+        # 以下与 daily_chat / plan_state_node 共享相同的后半段链路
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value,
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value,
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
+        )
+        graph.add_edge(
+            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value,
+            ChatWorkflowGraphNodeName.FINALIZE.value,
+        )
+
+        compiled = graph.compile()
+        logger.info(
+            "agent_loop 万能循环图构建完成 | active_nodes=%d | entry_point=%s",
+            len(active_nodes),
+            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+        )
+        return compiled
+
 
 from app.logger import logger

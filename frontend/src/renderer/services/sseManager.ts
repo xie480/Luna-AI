@@ -680,112 +680,162 @@ class SSEManager {
         // Phase 9：DAG 工作流事件处理
         // ============================================================
 
-        case DAG_WORKFLOW_EVENT_TYPE.PLAN_CREATED: {
-          const dagStore = import('../stores/dagWorkflowStore');
-          dagStore.then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onPlanCreated(
-              msg.payload as DagPlanCreatedPayload,
-              msg.trace_id,
+        // ─── DAG 工作流事件（同时分发到 dagWorkflowStore 和 agentLoopStore）───
+
+        case DAG_WORKFLOW_EVENT_TYPE.GOAL_LOCKED: {
+          // Agent Loop 专属：目标锁定
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            useAgentLoopStore.getState().onGoalLocked(
+              msg.payload as Record<string, unknown>, msg.trace_id || '',
             );
           });
           break;
         }
 
+        case DAG_WORKFLOW_EVENT_TYPE.PLAN_CREATED: {
+          // 通过 payload 中是否包含 non_goals 判断是 Agent Loop 还是 Plan + Cursor
+          const _pcPayload = msg.payload as Record<string, unknown>;
+          if (_pcPayload && typeof _pcPayload === 'object' && 'non_goals' in _pcPayload) {
+            import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+              useAgentLoopStore.getState().onPlanCreated(_pcPayload, msg.trace_id || '');
+            });
+          } else {
+            import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+              useDagWorkflowStore.getState().onPlanCreated(msg.payload as DagPlanCreatedPayload, msg.trace_id);
+            });
+          }
+          break;
+        }
+
         case DAG_WORKFLOW_EVENT_TYPE.STATE_STARTED: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onStateStarted(
-              msg.payload as DagStateStartedPayload,
-            );
+            useDagWorkflowStore.getState().onStateStarted(msg.payload as DagStateStartedPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.SKILL_SCREENING: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onSkillScreening(
-              msg.payload as DagSkillScreeningPayload,
-            );
+            useDagWorkflowStore.getState().onSkillScreening(msg.payload as DagSkillScreeningPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.STEP_PLAN_GENERATED: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onStepPlanGenerated(
-              msg.payload as DagStepPlanPayload,
-            );
+            useDagWorkflowStore.getState().onStepPlanGenerated(msg.payload as DagStepPlanPayload);
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_THINKING: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            useAgentLoopStore.getState().onStepThinking(msg.payload as Record<string, unknown>);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.NODE_STARTED: {
+          // 同时分发：有 activeLoop 则处理，否则忽略
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) s.onNodeStarted(msg.payload as Record<string, unknown>);
+          });
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onNodeStarted(
-              msg.payload as DagNodeStartedPayload,
-            );
+            useDagWorkflowStore.getState().onNodeStarted(msg.payload as DagNodeStartedPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.NODE_COMPLETED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) s.onNodeCompleted(msg.payload as Record<string, unknown>);
+          });
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onNodeCompleted(
-              msg.payload as DagNodeCompletedPayload,
-            );
+            useDagWorkflowStore.getState().onNodeCompleted(msg.payload as DagNodeCompletedPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.NODE_GATING: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onNodeGating(
-              msg.payload as DagNodeGatingPayload,
-            );
+            useDagWorkflowStore.getState().onNodeGating(msg.payload as DagNodeGatingPayload);
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_OBSERVED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            useAgentLoopStore.getState().onStepObserved(msg.payload as Record<string, unknown>);
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_EVALUATED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            useAgentLoopStore.getState().onStepEvaluated(msg.payload as Record<string, unknown>);
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_REPAIRED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            useAgentLoopStore.getState().onStepRepaired(msg.payload as Record<string, unknown>);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.STATE_EVALUATED: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onStateEvaluated(
-              msg.payload as DagStateEvaluatedPayload,
-            );
+            useDagWorkflowStore.getState().onStateEvaluated(msg.payload as DagStateEvaluatedPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.PLAN_REPLANNED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) s.onPlanReplanned(msg.payload as Record<string, unknown>);
+          });
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onPlanReplanned(
-              msg.payload as DagPlanReplannedPayload,
-            );
+            useDagWorkflowStore.getState().onPlanReplanned(msg.payload as DagPlanReplannedPayload);
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.FINAL_VERIFIED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            useAgentLoopStore.getState().onFinalVerified(msg.payload as Record<string, unknown>);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.PLAN_COMPLETED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) s.onPlanCompleted(msg.payload as Record<string, unknown>);
+          });
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onPlanCompleted(
-              msg.payload as DagPlanCompletedPayload,
-            );
+            useDagWorkflowStore.getState().onPlanCompleted(msg.payload as DagPlanCompletedPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.PLAN_TERMINATED: {
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) s.onPlanTerminated(msg.payload as Record<string, unknown>);
+          });
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onPlanTerminated(
-              msg.payload as DagPlanTerminatedPayload,
-            );
+            useDagWorkflowStore.getState().onPlanTerminated(msg.payload as DagPlanTerminatedPayload);
           });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.BUDGET_EXHAUSTED: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-            useDagWorkflowStore.getState().onBudgetExhausted(
-              msg.payload as DagBudgetExhaustedPayload,
-            );
+            useDagWorkflowStore.getState().onBudgetExhausted(msg.payload as DagBudgetExhaustedPayload);
           });
           break;
         }

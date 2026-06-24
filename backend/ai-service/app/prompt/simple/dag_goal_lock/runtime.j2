@@ -1,0 +1,22 @@
+{# Phase 9：目标锁定 Prompt — 运行时槽位 #}
+## 当前任务上下文
+
+**用户输入（已消歧）**：{{ disambiguated_text }}
+
+{% if unresolved_pronouns %}
+**未解析代词**：{{ unresolved_pronouns }}
+{% endif %}
+
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
+## 输出要求
+请输出 JSON，包含 global_goal、goal_definition、acceptance_criteria、non_goals 和 constraints 字段：
+{
+  "global_goal": "一句话概括全局目标，简明扼要地描述用户最终想要什么",
+  "goal_definition": "目标的详细描述，补充 global_goal 中未涵盖的细节和边界说明",
+  "acceptance_criteria": ["验收标准1：可量化的完成条件，用于最终判断任务是否成功", "验收标准2"],
+  "non_goals": ["非目标1：明确声明本次任务不做什么，防止目标漂移", "非目标2"],
+  "constraints": ["约束条件1：执行过程中必须遵守的限制，如时间、格式、范围等", "约束条件2"]
+}

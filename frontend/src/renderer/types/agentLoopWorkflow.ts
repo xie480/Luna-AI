@@ -1,0 +1,250 @@
+/**
+ * Agent Loop 工作流前端投影类型定义。
+ *
+ * 做什么：定义 Agent Loop 万能循环模式前端面板所需的全部数据投影结构，
+ *         涵盖 Goal → Plan → Step Loop（Think → Execute → Observe → Evaluate → Repair/Replan）→ FinalVerify。
+ * 为什么这样做：Agent Loop 的数据结构（Goal 锁定 + 可变 Plan + 步进 Step Loop）与
+ *               Plan-State-Node 的四层嵌套完全不同，需要独立类型以避免污染 dagWorkflowStore。
+ * 输入输出：由 agentLoopStore 维护，AgentLoopPanel 及子组件消费。
+ * 边界条件：所有字段都可能为空或 undefined，渲染时必须做空值保护。
+ * 异常行为：无。
+ */
+
+// ============================================================
+// 目标层级（GoalState — 只写一次）
+// ============================================================
+
+/**
+ * 全局目标投影。
+ * 做什么：存储锁定后的全局目标、验收标准、非目标声明。
+ * 为什么这样做：Agent Loop 面板顶部需要展示目标信息，且支持收起/展开。
+ */
+export interface AgentLoopGoal {
+  /** 任务 ID */
+  taskId: string;
+  /** 全局总目标描述 */
+  globalGoal: string;
+  /** 目标详细描述 */
+  goalDefinition: string;
+  /** 验收标准列表 */
+  acceptanceCriteria: string[];
+  /** 非目标声明 */
+  nonGoals: string[];
+  /** 约束条件 */
+  constraints: string[];
+  /** 是否已锁定 */
+  locked: boolean;
+  /** 锁定时间戳 */
+  lockedAtMs: number;
+}
+
+// ============================================================
+// 计划层级（PlanState — 可变，版本化）
+// ============================================================
+
+/**
+ * Agent Loop 步骤状态。
+ */
+export type AgentStepStatus = 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+
+/**
+ * Agent Loop 计划投影。
+ * 做什么：存储当前全局步骤序列，支持版本化和 replan 历史。
+ */
+export interface AgentLoopPlan {
+  /** 计划版本号 */
+  planVersion: number;
+  /** 步骤列表 */
+  steps: AgentStepProjection[];
+  /** 当前执行到第几步 */
+  currentStepIndex: number;
+  /** replan 历史 */
+  replanHistory: AgentReplanRecord[];
+}
+
+/**
+ * Replan 历史记录。
+ */
+export interface AgentReplanRecord {
+  fromVersion: number;
+  toVersion: number;
+  reason: string;
+  failedStepId: string;
+  changedStepIds: string[];
+  timestampMs: number;
+}
+
+/**
+ * 单步投影。
+ * 做什么：描述一个可执行步骤的元信息和运行时状态。
+ */
+export interface AgentStepProjection {
+  stepId: string;
+  title: string;
+  intent: string;
+  dependencies: string[];
+  expectedOutput: string;
+  status: AgentStepStatus;
+  riskNotes: string;
+  rollbackHint: string;
+
+  // === 执行详情（Agent Loop 特有）===
+  /** StepThinkNode 输出的思考结果 */
+  lastThought: string;
+  /** 规划的工具调用列表 */
+  toolCalls: AgentToolCall[];
+  /** 工具执行结果 */
+  toolResults: AgentToolResult[];
+  /** ObserveNode 输出的结构化观察 */
+  lastObservation: string;
+  /** StepEvaluateNode 的评估结果 */
+  evaluationResult?: AgentStepEvaluation;
+  /** StepRepairNode 的修复次数 */
+  repairCount: number;
+  /** 重试次数 */
+  retryCount: number;
+
+  // === 时间 ===
+  startedAtMs?: number;
+  endedAtMs?: number;
+  latencyMs?: number;
+}
+
+/**
+ * 工具调用投影。
+ */
+export interface AgentToolCall {
+  toolName: string;
+  skillName: string;
+  parameters: Record<string, unknown>;
+  purpose: string;
+}
+
+/**
+ * 工具执行结果投影。
+ */
+export interface AgentToolResult {
+  nodeId: string;
+  toolName: string;
+  success: boolean;
+  toolOutput: string;
+  errorMessage: string;
+  latencyMs: number;
+  retryCount: number;
+}
+
+/**
+ * Step 评估结果投影。
+ */
+export interface AgentStepEvaluation {
+  /** 评估结论 */
+  verdict: 'pass' | 'fail' | 'partial' | 'needs_replan';
+  /** 评估理由 */
+  evaluationReason: string;
+  /** 差距分析 */
+  gapAnalysis: string;
+  /** 改进建议 */
+  suggestion: string;
+  /** 完成条件检查清单 */
+  criteriaChecklist: { criterion: string; met: boolean; evidence: string }[];
+}
+
+// ============================================================
+// 预算层级（BudgetState）
+// ============================================================
+
+/**
+ * 预算投影。
+ */
+export interface AgentBudgetState {
+  tokenUsed: number;
+  toolCallsUsed: number;
+  stepRetriesUsed: number;
+  replanCount: number;
+  timeUsedMs: number;
+  maxToolCalls: number;
+  maxStepRetries: number;
+  maxReplanCount: number;
+  maxTimeMs: number;
+}
+
+// ============================================================
+// 最终验收
+// ============================================================
+
+/**
+ * 最终验收投影。
+ */
+export interface AgentFinalVerification {
+  status: 'completed' | 'completed_with_gaps' | 'failed';
+  report: string;
+  allCriteriaMet: boolean;
+  criteriaVerification: { criterion: string; met: boolean; evidence: string }[];
+}
+
+// ============================================================
+// 顶层 Plan 投影
+// ============================================================
+
+/**
+ * Agent Loop 整体状态。
+ */
+export type AgentLoopStatus =
+  | 'goal_locking'
+  | 'planning'
+  | 'executing'
+  | 'replanning'
+  | 'verifying'
+  | 'completed'
+  | 'completed_with_gaps'
+  | 'terminated'
+  | 'budget_exhausted';
+
+/**
+ * Agent Loop 状态中文标签映射。
+ */
+export const AGENT_LOOP_STATUS_LABEL: Record<AgentLoopStatus, string> = {
+  goal_locking: '目标锁定中',
+  planning: '计划生成中',
+  executing: '步进执行中',
+  replanning: '重新规划中',
+  verifying: '最终验收中',
+  completed: '已完成',
+  completed_with_gaps: '部分完成',
+  terminated: '已终止',
+  budget_exhausted: '预算耗尽',
+};
+
+/**
+ * Agent Loop 投影视图 — 顶层。
+ * 做什么：保存当前活跃的 Agent Loop 计划的完整投影。
+ */
+export interface AgentLoopProjection {
+  /** 计划 ID */
+  planId: string;
+  /** 会话 ID */
+  sessionId: string;
+  /** 追踪 ID */
+  traceId: string;
+  /** 整体状态 */
+  status: AgentLoopStatus;
+  /** 聊天模式 */
+  chatMode: 'agent_loop';
+
+  // 全局目标
+  goal: AgentLoopGoal;
+
+  // 计划
+  plan: AgentLoopPlan;
+
+  // 预算
+  budget: AgentBudgetState;
+
+  // 最终验收
+  finalVerification?: AgentFinalVerification;
+
+  // 时间
+  startedAtMs: number;
+  endedAtMs?: number;
+  elapsedMs?: number;
+}

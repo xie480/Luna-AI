@@ -1,4 +1,9 @@
-"""Phase 8.5 Chat Workflow 节点注册表。"""
+"""Phase 8.5 + Agent Loop Chat Workflow 节点注册表。
+
+做什么：注册所有 LangGraph 节点，包括日常聊天、闲聊、
+        原 Plan + Cursor 智能规划和新 Agent Loop 智能规划四种模式的节点。
+为什么这样做：集中管理节点创建和依赖注入，避免散落在各处。
+"""
 
 from __future__ import annotations
 
@@ -50,19 +55,21 @@ class ChatWorkflowNodeRegistry:
             ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value: MainChatLlmNode(dependencies),
             ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value: ResponsePersistenceNode(dependencies),
             ChatWorkflowGraphNodeName.FINALIZE.value: FinalizeNode(dependencies),
-            # --- Phase 9 新增：DAG 引擎节点 ---
+            # --- Phase 9 新增：原 Plan + Cursor DAG 引擎节点 ---
             ChatWorkflowGraphNodeName.DAG_ENGINE.value: self._build_dag_engine_node(dependencies),
+            # --- Agent Loop 新增：Agent Loop DAG 引擎节点 ---
+            ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value: self._build_agent_loop_engine_node(dependencies),
             # --- Phase 9 新增：简化输入重构节点 ---
             ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED.value: self._build_simplified_input_reconstruction_node(dependencies),
         }
 
     def _build_dag_engine_node(self, dependencies: WorkflowDependencies):
-        """构建 DAG 引擎节点（Plan + Cursor 子图版本）。
+        """构建 DAG 引擎节点（原 Plan + Cursor 子图版本）。
 
         做什么：创建 Plan + Cursor 子图并包装为 LangGraph 外层节点。
-        为什么这样做：Phase 9 重构将 DagEngine 单体引擎拆分为 4 个独立 LangGraph 节点，
-                      子图通过 build_plan_cursor_subgraph() 工厂函数构建，
-                      DagEngineNode 负责调用子图的 ainvoke() 方法。
+        为什么这样做：Phase 9 将 DagEngine 单体引擎拆分为 4 个独立 LangGraph 节点，
+                      子图通过 build_plan_cursor_subgraph() 工厂函数构建。
+                      保留此方法以维持 plan_state_node 模式的完整功能。
         """
         from app.llm.client import llm_client as _llm_client
         from app.workflow.dag.engine import build_plan_cursor_subgraph
@@ -77,7 +84,7 @@ class ChatWorkflowNodeRegistry:
         from app.workflow.dag.nodes.step_plan import StepPlanNode
         from app.workflow.nodes.impl.dag_engine_node import DagEngineNode
 
-        # 创建子节点实例（与原 DagEngine.__init__ 中完全一致）
+        # 创建子节点实例
         plan_generation = PlanGenerationNode(
             prompt_manager=dependencies.prompt_manager,
             llm_client=_llm_client,
@@ -147,6 +154,99 @@ class ChatWorkflowNodeRegistry:
 
         return DagEngineNode(
             plan_cursor_subgraph=subgraph,
+            event_publisher=dependencies.event_publisher,
+            chat_status_publisher=dependencies.chat_status_publisher,
+        )
+
+    def _build_agent_loop_engine_node(self, dependencies: WorkflowDependencies):
+        """构建 Agent Loop DAG 引擎节点。
+
+        做什么：创建 Agent Loop 子图并包装为 LangGraph 外层节点。
+        为什么这样做：agent-loop-langgraph-design.md 将原 Plan + Cursor 双层子图
+                      重构为 Goal-Stable / Plan-Mutable 的 6 层 Agent Loop 架构。
+                      作为独立的第四种模式（agent_loop）与原 plan_state_node 并存。
+        """
+        from app.llm.client import llm_client as _llm_client
+        from app.workflow.dag.agent_loop_engine import (
+            AgentFinalVerifyNode,
+            AgentReplanNode,
+            AgentStepEvaluateNode,
+            AgentToolExecuteNode,
+            GlobalPlannerNode,
+            GoalLockNode,
+            ObserveNode,
+            StepRepairNode,
+            StepThinkNode,
+            build_agent_loop_subgraph,
+        )
+        from app.workflow.nodes.impl.dag_engine_node import DagEngineNode
+
+        # 创建 Agent Loop 各节点实例
+        goal_lock = GoalLockNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+        global_planner = GlobalPlannerNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+        step_think = StepThinkNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+        tool_execute = AgentToolExecuteNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            mcp_tool_registry=dependencies.mcp_tool_registry,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+            gating_service=dependencies.gating_service,
+            snapshot_manager=dependencies.snapshot_manager,
+        )
+        observe = ObserveNode()
+        step_evaluate = AgentStepEvaluateNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+        step_repair = StepRepairNode()
+        replan = AgentReplanNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+        final_verify = AgentFinalVerifyNode(
+            prompt_manager=dependencies.prompt_manager,
+            llm_client=_llm_client,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+
+        # 构建 Agent Loop 子图
+        subgraph = build_agent_loop_subgraph(
+            goal_lock=goal_lock,
+            global_planner=global_planner,
+            step_think=step_think,
+            tool_execute=tool_execute,
+            observe=observe,
+            step_evaluate=step_evaluate,
+            step_repair=step_repair,
+            replan=replan,
+            final_verify=final_verify,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+
+        return DagEngineNode(
+            agent_loop_subgraph=subgraph,
             event_publisher=dependencies.event_publisher,
             chat_status_publisher=dependencies.chat_status_publisher,
         )

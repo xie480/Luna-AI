@@ -1,0 +1,17 @@
+{# Phase 9：目标锁定 Prompt — 记忆槽位 #}
+-当前会话背景开始-
+核心梗概：
+{{ CORE_SUMMARY }}
+关键事实：
+{{ KEY_FACTS }}
+-当前会话背景结束-
+
+-记忆片段开始-
+{{ MEMORY_SNIPPETS }}
+-记忆片段结束-
+
+{% if memory_context %}
+-长期记忆开始-
+{{ memory_context }}
+-长期记忆结束-
+{% endif %}

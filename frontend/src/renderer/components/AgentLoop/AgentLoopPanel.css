@@ -1,0 +1,539 @@
+/* ============================================================
+ * AgentLoopPanel — Agent Loop 万能循环模式主面板样式
+ * ============================================================ */
+
+.al-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: rgba(10, 10, 20, 0.95);
+  color: #e0e0e0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  overflow-y: auto;
+}
+
+.al-panel--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.al-panel-empty-text {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 14px;
+}
+
+/* ─── 工具栏 ─── */
+.al-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(20, 20, 40, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.al-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.al-toolbar-icon {
+  font-size: 16px;
+}
+
+.al-toolbar-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.al-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+.al-toolbar-time {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.al-toolbar-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  line-height: 1;
+}
+.al-toolbar-close:hover {
+  color: #fff;
+}
+
+/* ─── 全局目标区域 ─── */
+.al-goal-section {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.al-goal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+}
+.al-goal-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.al-goal-chevron {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.al-goal-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.al-goal-title {
+  flex: 1;
+  font-weight: 500;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.al-goal-locked {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.al-goal-details {
+  padding: 0 16px 12px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.al-goal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.al-goal-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.al-goal-value {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.al-goal-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+}
+.al-goal-list--neg li {
+  color: rgba(255, 150, 150, 0.7);
+}
+
+.al-goal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.al-goal-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ─── 预算状态栏 ─── */
+.al-budget-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(30, 30, 50, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Courier New', monospace;
+}
+
+/* ─── 步骤列表 ─── */
+.al-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  flex: 1;
+}
+
+.al-step-card {
+  background: rgba(20, 20, 35, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.al-step-card--current {
+  border-color: rgba(79, 195, 247, 0.3);
+}
+.al-step-card--expanded {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.al-step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  color: #e0e0e0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 12px;
+}
+.al-step-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.al-step-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.al-step-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.al-step-title {
+  flex: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.al-step-status-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.al-step-time {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.al-step-retry,
+.al-step-repair {
+  font-size: 11px;
+}
+
+.al-step-chevron {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  width: 12px;
+  flex-shrink: 0;
+}
+
+/* ─── 步骤详情 ─── */
+.al-step-details {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.al-step-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.al-step-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.al-step-value {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
+}
+
+/* ─── 可折叠区域 ─── */
+.al-step-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.al-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.al-section-header:hover {
+  color: #fff;
+}
+.al-section-header--static {
+  cursor: default;
+}
+
+.al-section-content {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.al-thought {
+  border-left: 3px solid rgba(79, 195, 247, 0.3);
+}
+
+.al-observation {
+  border-left: 3px solid rgba(255, 183, 77, 0.3);
+}
+
+.al-evaluation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.al-eval-field {
+  display: flex;
+  gap: 8px;
+}
+
+.al-eval-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 40px;
+  flex-shrink: 0;
+}
+
+.al-verdict-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: #fff;
+  margin-left: auto;
+}
+
+/* ─── 工具列表 ─── */
+.al-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.al-tool-item {
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  border-left: 3px solid rgba(255, 255, 255, 0.1);
+}
+.al-tool-item--success {
+  border-left-color: #66bb6a;
+}
+.al-tool-item--fail {
+  border-left-color: #ef5350;
+}
+
+.al-tool-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.al-tool-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.al-tool-purpose {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 400;
+}
+
+.al-tool-result {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.al-tool-output {
+  margin: 0;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.al-tool-error {
+  font-size: 11px;
+  color: #ef5350;
+}
+
+.al-tool-time {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* ─── 最终验收 ─── */
+.al-final-section {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(20, 20, 40, 0.6);
+}
+
+.al-final-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.al-final-icon {
+  font-size: 18px;
+}
+
+.al-final-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+}
+
+.al-final-status {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: auto;
+  text-transform: uppercase;
+}
+
+.al-final-report {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+}
+
+/* ─── Replan 历史 ─── */
+.al-replan-section {
+  padding: 8px 16px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.al-replan-header {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 6px;
+}
+
+.al-replan-record {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.al-replan-version {
+  font-family: 'Courier New', monospace;
+  color: #ff9800;
+  flex-shrink: 0;
+}
+
+.al-replan-reason {
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

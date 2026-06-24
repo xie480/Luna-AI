@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useChatWorkflowStore } from '../../stores/chatWorkflowStore';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
+import { useAgentLoopStore } from '../../stores/agentLoopStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { CHAT_MODE, CHAT_WORKFLOW_NODE_TYPE, DAG_NODE_STATUS, CHAT_WORKFLOW_NODE_LABEL } from '../../../shared/enum';
 import { HolographicNode } from './HolographicNode';
@@ -23,8 +24,15 @@ import { DagStateNode } from '../DagWorkflow/DagStateNode';
 import { DagIconChevronDown, DagIconChevronRight } from '../DagWorkflow/DagIcons';
 import type { ChatNodeStatus } from '../../../shared/types';
 import type { ChatNodeProjection } from '../../types/chatWorkflow';
+import { AgentLoopPanel } from '../AgentLoop/AgentLoopPanel';
 import type { DagPlanProjection, DagStateProjection } from '../../types/dagWorkflow';
 import './HolographicWorkflowSidebar.css';
+
+/**
+ * AgentLoopPanelEmbedded — 将 AgentLoopPanel 嵌入侧边栏的包装组件。
+ * 做什么：在侧边栏内部渲染 AgentLoopPanel，使其占据整个可滚动区域。
+ */
+const AgentLoopPanelEmbedded: React.FC = () => <AgentLoopPanel />;
 
 const MIN_WIDTH = 260;
 const DEFAULT_WIDTH = 320;
@@ -64,6 +72,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isDagMode = chatMode === CHAT_MODE.PLAN_STATE_NODE;
+  const isAgentLoopMode = chatMode === CHAT_MODE.AGENT_LOOP;
+
+  // Agent Loop 数据
+  const agentLoopActiveLoop = useAgentLoopStore((state) => state.activeLoop);
+  const agentLoopPanelVisible = useAgentLoopStore((state) => state.isPanelVisible);
 
   /**
    * 预 DAG 阶段的节点类型集合。
@@ -155,9 +168,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [isDragging]);
 
   // 是否有活跃 Plan
-  const hasPlan = isDagMode
-    ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && preDagNodes.length > 0)
-    : chatActivePlan !== null;
+  const hasPlan = isAgentLoopMode
+    ? (agentLoopActiveLoop !== null && agentLoopPanelVisible)
+    : isDagMode
+      ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && preDagNodes.length > 0)
+      : chatActivePlan !== null;
 
   // Auto Scroll — 追踪最新活跃节点
   // 注意：全局目标已移至固定区域，不再参与滚动追踪
@@ -328,6 +343,13 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         <HolographicConnections nodes={connectionNodes} activeNodeId={activeNodeId} width={width} />
         
         <div className="node-list">
+            {/* ═══ Agent Loop 模式：嵌入独立面板 ═══ */}
+            {isAgentLoopMode && agentLoopActiveLoop ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <AgentLoopPanelEmbedded />
+              </div>
+            ) : null}
+
             {/* ═══ DAG 模式：预DAG节点 + State 节点 ═══ */}
             {isDagMode && dagActivePlan ? (
               <>
