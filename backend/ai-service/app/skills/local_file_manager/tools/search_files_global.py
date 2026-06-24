@@ -39,6 +39,28 @@ EVERYTHING_REQUEST_DATE_MODIFIED = 0x00000040
 
 everything_dll = None
 
+# Everything IPC 窗口类名，用于检测 Everything 搜索服务是否正在运行
+_EVERYTHING_IPC_WINDOW_CLASS = "EVERYTHING_TASKBAR_NOTIFICATION"
+
+
+def _check_everything_service_running() -> bool:
+    """
+    通过 Windows API 检测 Everything 搜索服务是否正在运行。
+
+    Everything SDK 通过 IPC（窗口消息）与 Everything.exe 进程通信。
+    如果 Everything.exe 未启动，DLL 可以加载成功但所有查询将返回 0 结果。
+    本函数通过查找 Everything 的 IPC 通知窗口判断服务状态。
+
+    返回:
+        bool: Everything 服务正在运行返回 True，否则返回 False。
+    """
+    try:
+        hwnd = ctypes.windll.user32.FindWindowW(_EVERYTHING_IPC_WINDOW_CLASS, None)
+        return hwnd != 0
+    except Exception:
+        return False
+
+
 if platform.system() == "Windows":
     try:
         everything_dll = ctypes.WinDLL(EVERYTHING_DLL_PATH)
@@ -57,7 +79,18 @@ if platform.system() == "Windows":
         everything_dll.Everything_GetResultDateModified.argtypes = [
             ctypes.wintypes.DWORD, ctypes.POINTER(ctypes.c_uint64)
         ]
-        logger.info("Everything SDK 动态库加载成功。")
+
+        # DLL 加载成功后，检测 Everything 搜索服务是否正在运行
+        if _check_everything_service_running():
+            logger.info("Everything SDK 动态库加载成功，搜索服务运行中。")
+        else:
+            # 服务未运行时禁用 SDK，直接回退到 scandir 引擎
+            # 避免无意义的 SDK 调用（QueryW 会静默返回 0 结果）
+            logger.warning(
+                "Everything SDK 动态库加载成功，但 Everything 搜索服务未运行，"
+                "将回退为内置 scandir 引擎。请启动 Everything.exe 以启用极速搜索。"
+            )
+            everything_dll = None
     except Exception as e:
         logger.warning(f"Everything SDK 加载失败，将回退为内置搜索: {e}")
         everything_dll = None
@@ -112,13 +145,36 @@ async def handle_search_files_global(
 
     try:
         if everything_dll:
+            # 优先使用 Everything 极速引擎
             logger.info(f"使用 Everything 极速引擎 trace_id={trace_id}")
             engine_name = "Everything 极速引擎"
             search_results = await asyncio.wait_for(
                 asyncio.to_thread(_search_everything_sync, pattern, DEFAULT_SEARCH_MAX_RESULTS, drive),
                 timeout=DEFAULT_SEARCH_TIMEOUT,
             )
+
+            # Everything 返回空结果时自动降级到 scandir 引擎
+            # 原因：Everything 服务可能在模块加载后被用户关闭，
+            #       _search_everything_sync 检测到服务不可用时返回空列表
+            if not search_results:
+                logger.warning(
+                    f"Everything 引擎返回空结果，自动降级到 scandir 引擎 "
+                    f"trace_id={trace_id} pattern={pattern}"
+                )
+                engine_name = "scandir 内置引擎（Everything 降级）"
+                search_results = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _scandir_fallback_sync,
+                        search_roots=search_roots,
+                        pattern=pattern,
+                        excluded_dirs=excluded_dirs,
+                        max_depth=DEFAULT_SEARCH_MAX_DEPTH,
+                        max_results=DEFAULT_SEARCH_MAX_RESULTS,
+                    ),
+                    timeout=DEFAULT_SEARCH_TIMEOUT,
+                )
         else:
+            # Everything 不可用，直接使用 scandir 引擎
             logger.info(f"使用 scandir 内置引擎 trace_id={trace_id}")
             engine_name = "scandir 内置引擎"
             search_results = await asyncio.wait_for(
@@ -151,14 +207,24 @@ def _search_everything_sync(pattern: str, max_results: int, drive: str) -> list[
     if not everything_dll:
         return []
 
+    # 运行时再次检测 Everything 服务是否仍然在运行
+    # 服务可能在模块加载后被用户关闭，此时需要降级而非返回空结果
+    if not _check_everything_service_running():
+        logger.warning("Everything 搜索服务已停止运行，本次搜索将使用降级引擎。")
+        return []
+
     # 组装 Everything 查询语法
+    # Everything SDK 搜索语法要求盘符后必须带反斜杠，如 "E:\ *.py"
     search_query = pattern
     if drive:
         drive_letter = drive.rstrip("\\/").upper()
         if not drive_letter.endswith(":"):
             drive_letter += ":"
-        search_query = f"{drive_letter} {pattern}"
+        # 盘符后必须保留反斜杠，Everything SDK 以此区分盘符过滤与普通文本
+        drive_prefix = f"{drive_letter}\\"
+        search_query = f"{drive_prefix} {pattern}"
 
+    logger.debug(f"Everything 查询语句: {search_query}")
     everything_dll.Everything_SetSearchW(search_query)
     everything_dll.Everything_SetRequestFlags(
         EVERYTHING_REQUEST_FULL_PATH_AND_FILE_NAME |
@@ -168,7 +234,12 @@ def _search_everything_sync(pattern: str, max_results: int, drive: str) -> list[
     everything_dll.Everything_SetMax(max_results)
 
     # 阻塞查询（通常耗时极短，依赖外部服务）
-    if not everything_dll.Everything_QueryW(True):
+    query_ok = everything_dll.Everything_QueryW(True)
+    if not query_ok:
+        logger.warning(
+            f"Everything QueryW 调用失败（返回 False），"
+            f"搜索语句: {search_query}，服务可能已断开连接。"
+        )
         return []
 
     num_results = everything_dll.Everything_GetNumResults()

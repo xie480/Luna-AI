@@ -196,11 +196,11 @@ def validate_path_safety(path: str, allow_nonexistent: bool = False) -> str:
     except (OSError, ValueError) as exc:
         raise ValueError(f"路径格式非法: {exc!s}") from exc
 
-    # 检查路径穿越
-    if ".." in path_stripped.split(os.sep):
-        real_parent = os.path.abspath(os.path.join(abs_path, ".."))
-        if not abs_path.startswith(real_parent) and abs_path != real_parent:
-            raise ValueError("路径包含非法穿越符（..），已拒绝操作")
+    # 检查路径穿越：统一将正斜杠替换为 os.sep 后拆分，
+    # 防止用户用 "C:/Users/../Windows" 绕过 os.sep（反斜杠）拆分检测。
+    normalized_for_check = path_stripped.replace("/", os.sep)
+    if ".." in normalized_for_check.split(os.sep):
+        raise ValueError("路径包含非法穿越符（..），已拒绝操作")
 
     if is_protected_path(abs_path):
         raise ValueError(f"路径位于操作系统保护区，已拒绝操作: {abs_path}")
