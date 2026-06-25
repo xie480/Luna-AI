@@ -121,7 +121,7 @@ const MODE_DISPLAY: Record<ChatMode, ModeConfig> = {
     title: '万能循环模式',
     description: 'Luna 会锁定你的目标，制定全局计划，逐步执行并在失败时自动修复或重新规划。适合长程、复杂、需要反复修正的深度任务。',
     IconComponent: AgentLoopIcon,
-    themeColor: '#a855f7',
+    themeColor: '#10b981',
   },
   [CHAT_MODE.PLAN_STATE_NODE]: {
     label: '深度',

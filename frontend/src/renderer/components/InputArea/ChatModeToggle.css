@@ -145,6 +145,45 @@
 }
 
 /* =========================================
+   万能循环模式（翠绿 Emerald Green）
+   Agent Loop 架构模式，Goal-Stable / Plan-Mutable 的 6 层循环
+   主题色：#10b981 对应 rgba(16, 185, 129, ...)
+   ========================================= */
+.chat-mode-capsule.mode-agent-loop {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: rgba(16, 185, 129, 0.9);
+  text-shadow: 0 0 6px rgba(16, 185, 129, 0.3);
+}
+
+.chat-mode-capsule.mode-agent-loop:hover,
+.chat-mode-capsule.mode-agent-loop.capsule-active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.2), inset 0 0 10px rgba(16, 185, 129, 0.05);
+}
+
+.chat-mode-capsule.mode-agent-loop:focus-visible {
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.5);
+}
+
+.chat-mode-capsule.mode-agent-loop::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(16, 185, 129, 0.12) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scanlineMove 2s infinite linear;
+}
+
+/* 输入框失焦时覆盖 .mode-agent-loop 的边框 */
+.input-area:not(:focus-within) .chat-mode-capsule.mode-agent-loop {
+  border-color: rgba(16, 185, 129, 0.12);
+}
+
+/* =========================================
    智能规划模式（橙红 Orange-Red）
    Phase 9 新增：Plan-State-Node DAG 工作流模式
    ========================================= */
@@ -468,6 +507,12 @@
   background: rgba(200, 80, 255, 0.06);
   border-color: rgba(200, 80, 255, 0.25);
   color: rgba(200, 80, 255, 0.8);
+}
+
+[data-theme="dark"] .chat-mode-capsule.mode-agent-loop {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: rgba(16, 185, 129, 0.8);
 }
 
 /* =========================================

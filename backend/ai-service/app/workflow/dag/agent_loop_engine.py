@@ -648,11 +648,13 @@ class StepThinkNode:
         llm_client: Any,
         chat_status_publisher: ChatStatusPublisher,
         event_publisher: ChatWorkflowEventPublisher | None = None,
+        mcp_tool_registry: Any = None,
     ):
         self.prompt_manager = prompt_manager
         self.llm_client = llm_client
         self.chat_status_publisher = chat_status_publisher
         self.event_publisher = event_publisher
+        self._mcp_tool_registry = mcp_tool_registry
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """LangGraph 节点入口 — 执行步骤思考。
@@ -686,10 +688,29 @@ class StepThinkNode:
             # 构建上一步观察上下文（重试场景）
             retry_context = ""
             if agent_loop.execution.last_observation:
+                # 获取系统中实际可用的工具列表（用于帮助 LLM 选择正确的工具）
+                # 为什么这样做：当上一步因工具不存在/已禁用而失败时，注入可用工具列表
+                #              可以引导 LLM 选择正确的工具名，避免再次幻觉出不存在的工具。
+                available_tools_text = ""
+                try:
+                    registry = self._get_tool_registry()
+                    if registry:
+                        tool_list = registry.list_tools(include_disabled=False)
+                        if tool_list:
+                            tool_names = [t.get("name", "") for t in tool_list if t.get("name")]
+                            available_tools_text = (
+                                "\n[当前系统中可用的工具列表]\n"
+                                + "\n".join(f"  - {name}" for name in sorted(tool_names))
+                            )
+                except Exception:
+                    # 获取工具列表失败时不阻塞流程
+                    available_tools_text = ""
+
                 retry_context = (
                     f"\n\n[上一次观察结果]\n{agent_loop.execution.last_observation}\n"
                     f"[上一次错误]\n{agent_loop.execution.last_error}\n"
                     f"[重试次数] {agent_loop.execution.retry_count}"
+                    f"{available_tools_text}"
                 )
 
             # 构建已完成步骤摘要
@@ -822,6 +843,23 @@ class StepThinkNode:
             return json.loads(text)
         except (json.JSONDecodeError, ValueError):
             return {"thought": str(response), "tool_calls": []}
+
+    def _get_tool_registry(self) -> Any | None:
+        """获取 MCP 工具注册表实例。
+
+        做什么：优先使用构造函数注入的 registry，兜底从 FastAPI app.state 获取。
+        为什么这样做：与 AgentToolExecuteNode 的 gating 依赖恢复模式保持一致，
+                     避免构造函数必须传入 registry 的强依赖。
+        返回:
+            MCPToolRegistry 实例，或 None（获取失败时）。
+        """
+        if self._mcp_tool_registry:
+            return self._mcp_tool_registry
+        try:
+            from app.main import app as _fastapi_app
+            return getattr(_fastapi_app.state, "mcp_tool_registry", None)
+        except Exception:
+            return None
 
 
 # ===========================================================================
@@ -1222,13 +1260,38 @@ class AgentStepEvaluateNode:
                 )
 
             if all_failed:
-                # 全部失败，直接判定 fail
-                eval_result = StepEvaluationResult(
-                    verdict=StepEvaluationVerdict.FAIL,
-                    evaluation_reason="所有工具调用均失败",
-                    gap_analysis="无法获取任何有效输出",
-                    suggestion="检查工具参数或网络连接",
+                # 检查是否是不可重试的错误（工具不存在或已禁用）
+                # 为什么这样做：工具不存在/已禁用无法通过重试修复（重试也不会让工具凭空出现），
+                #              必须升级为 needs_replan，让 replan 阶段重新选择可用工具。
+                #              常见场景：LLM 幻觉生成了不存在的工具名、工具被管理员禁用。
+                non_retryable_errors = [
+                    "不存在", "已禁用", "not found", "disabled"
+                ]
+                has_non_retryable_error = any(
+                    any(err in str(out.get("error_message", ""))
+                        for err in non_retryable_errors)
+                    for out in outputs.values()
+                    if isinstance(out, dict)
                 )
+
+                if has_non_retryable_error:
+                    # 不可重试错误：工具不存在或已禁用 → 直接 needs_replan
+                    # 为什么不是 fail：fail 会进入 StepRepairNode → StepThinkNode 重试循环，
+                    #                但工具不存在无法通过重试修复，必须通过 replan 重新规划。
+                    eval_result = StepEvaluationResult(
+                        verdict=StepEvaluationVerdict.NEEDS_REPLAN,
+                        evaluation_reason="所有工具调用均失败：工具不存在或已禁用，无法通过重试修复",
+                        gap_analysis="选择的工具在当前系统中不可用，需要重新规划工具选择路径",
+                        suggestion="在 replan 阶段检查工具名称正确性，或选择系统中实际可用的替代工具",
+                    )
+                else:
+                    # 可重试错误：参数错误、网络超时等 → 判定 fail，进入修复重试循环
+                    eval_result = StepEvaluationResult(
+                        verdict=StepEvaluationVerdict.FAIL,
+                        evaluation_reason="所有工具调用均失败",
+                        gap_analysis="无法获取任何有效输出",
+                        suggestion="检查工具参数或网络连接",
+                    )
             else:
 
                 # 调用 LLM 做深度评估

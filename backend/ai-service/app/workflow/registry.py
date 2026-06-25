@@ -199,6 +199,7 @@ class ChatWorkflowNodeRegistry:
             llm_client=_llm_client,
             chat_status_publisher=dependencies.chat_status_publisher,
             event_publisher=dependencies.event_publisher,
+            mcp_tool_registry=dependencies.mcp_tool_registry,
         )
         tool_execute = AgentToolExecuteNode(
             prompt_manager=dependencies.prompt_manager,
