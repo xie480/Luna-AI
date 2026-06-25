@@ -216,7 +216,9 @@ class ChatWorkflowNodeRegistry:
             chat_status_publisher=dependencies.chat_status_publisher,
             event_publisher=dependencies.event_publisher,
         )
-        step_repair = StepRepairNode()
+        step_repair = StepRepairNode(
+            event_publisher=dependencies.event_publisher,
+        )
         replan = AgentReplanNode(
             prompt_manager=dependencies.prompt_manager,
             llm_client=_llm_client,

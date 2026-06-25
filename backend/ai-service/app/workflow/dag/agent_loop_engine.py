@@ -1296,6 +1296,17 @@ class StepRepairNode:
     为什么这样做：agent loop.md 要求三级容错中的第一级 Repair。
     """
 
+    def __init__(
+        self,
+        event_publisher: ChatWorkflowEventPublisher | None = None,
+    ):
+        """初始化局部修复节点。
+
+        做什么：注入事件发布器，用于发布修复相关事件。
+        为什么这样做：与其他 Agent Loop 节点保持一致的依赖注入模式。
+        """
+        self.event_publisher = event_publisher
+
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """LangGraph 节点入口 — 执行局部修复。
 
