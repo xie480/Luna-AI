@@ -209,7 +209,9 @@ class ChatWorkflowNodeRegistry:
             gating_service=dependencies.gating_service,
             snapshot_manager=dependencies.snapshot_manager,
         )
-        observe = ObserveNode()
+        observe = ObserveNode(
+            event_publisher=dependencies.event_publisher,
+        )
         step_evaluate = AgentStepEvaluateNode(
             prompt_manager=dependencies.prompt_manager,
             llm_client=_llm_client,

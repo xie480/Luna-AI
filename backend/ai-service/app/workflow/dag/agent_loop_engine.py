@@ -922,6 +922,8 @@ class AgentToolExecuteNode:
             try:
                 # 调用 MCP 工具执行
                 from app.workflow.dag.nodes.tool_execute import ToolExecuteNode as BaseToolExecutor
+                from app.workflow.dag.types import AtomicNodeDefinition, DagNodeType
+
                 tool_executor = BaseToolExecutor(
                     prompt_manager=self.prompt_manager,
                     llm_client=self.llm_client,
@@ -933,12 +935,20 @@ class AgentToolExecuteNode:
                     f"[TraceID:{trace_id}] ToolExecuteNode: 调用工具 {tool_name}"
                 )
 
-                result = await tool_executor.execute_tool(
-                    trace_id=trace_id,
+                # 构造 AtomicNodeDefinition 适配 execute 方法签名
+                node_def = AtomicNodeDefinition(
+                    node_id=tc_id,
+                    node_type=DagNodeType.TOOL_EXECUTE,
                     tool_name=tool_name,
                     skill_name=skill_name,
                     parameter_hint=json.dumps(parameters, ensure_ascii=False)
                         if parameters else "",
+                    gating_required=False,
+                )
+
+                result = await tool_executor.execute(
+                    trace_id=trace_id,
+                    node_def=node_def,
                     state_context={
                         "session_id": session_id,
                         "trace_id": trace_id,
@@ -946,8 +956,6 @@ class AgentToolExecuteNode:
                         "snapshot_manager": snap_mgr,
                         "skill_registry": self.mcp_tool_registry,
                     },
-                    node_id=tc_id,
-                    gating_required=False,
                 )
 
                 logger.info(
@@ -1016,6 +1024,17 @@ class ObserveNode:
     为什么这样做：agent loop.md 要求工具返回 → 结构化 Observation。
     实现方式：轻量规则校验优先，LLM 校验降级。
     """
+
+    def __init__(
+        self,
+        event_publisher: ChatWorkflowEventPublisher | None = None,
+    ):
+        """初始化观察节点。
+
+        参数:
+            event_publisher: 工作流事件发布器，用于推送观察事件到前端。
+        """
+        self.event_publisher = event_publisher
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """LangGraph 节点入口 — 生成结构化观察。
