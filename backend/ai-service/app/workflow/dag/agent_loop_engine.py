@@ -213,12 +213,16 @@ class GoalLockNode:
                 },
             )
 
+            logger.info(f"[Agent Loop] 锁定目标 Prompt: {prompt_text}")
+
             # 调用 LLM 提取目标
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
                 prompt=prompt_text,
                 schema=self._build_goal_schema(),
             )
+
+            logger.info(f"[Agent Loop] 锁定目标 LLM 响应: {llm_response}")
 
             goal_data = self._parse_goal_response(llm_response)
 
@@ -422,10 +426,18 @@ class GlobalPlannerNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] GlobalPlannerNode: 开始生成全局计划, prompt_text: {prompt_text}"
+            )
+
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
                 prompt=prompt_text,
                 schema=self._build_plan_schema(),
+            )
+
+            logger.info(
+                f"[TraceID:{trace_id}] GlobalPlannerNode: LLM 输出: {llm_response}"
             )
 
             plan_data = self._parse_plan_response(llm_response)
@@ -715,11 +727,15 @@ class StepThinkNode:
                 },
             )
 
+            logger.info(f"[DAG_STEP_THINK] DAG思考节点： {prompt_text}")
+
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
                 prompt=prompt_text,
                 schema=self._build_think_schema(),
             )
+
+            logger.info(f"[TraceID:{trace_id}] LLM 输出： {llm_response}")
 
             think_data = self._parse_think_response(llm_response)
 
@@ -913,6 +929,10 @@ class AgentToolExecuteNode:
                     chat_status_publisher=self.chat_status_publisher,
                 )
 
+                logger.info(
+                    f"[TraceID:{trace_id}] ToolExecuteNode: 调用工具 {tool_name}"
+                )
+
                 result = await tool_executor.execute_tool(
                     trace_id=trace_id,
                     tool_name=tool_name,
@@ -928,6 +948,11 @@ class AgentToolExecuteNode:
                     },
                     node_id=tc_id,
                     gating_required=False,
+                )
+
+                logger.info(
+                    f"[TraceID:{trace_id}] ToolExecuteNode: 工具 {tool_name} "
+                    f"执行完毕，结果：{result}"
                 )
 
                 partitioned_outputs[tc_id] = result
@@ -1158,6 +1183,7 @@ class AgentStepEvaluateNode:
                     suggestion="检查工具参数或网络连接",
                 )
             else:
+
                 # 调用 LLM 做深度评估
                 prompt_text = await self.prompt_manager.render(
                     category=PromptCategory.DAG_STEP_EVALUATE,
@@ -1175,10 +1201,22 @@ class AgentStepEvaluateNode:
                     },
                 )
 
+                logger.info(
+                    f"[TraceID:{trace_id}] EvaluateNode 输入: "
+                    f"step_id={agent_loop.execution.current_step_id}, "
+                    f"prompt={prompt_text}"
+                )
+
                 llm_response = await self.llm_client.invoke_structured(
                     trace_id=trace_id,
                     prompt=prompt_text,
                     schema=self._build_evaluate_schema(),
+                )
+
+                logger.info(
+                    f"[TraceID:{trace_id}] EvaluateNode 输出: "
+                    f"step_id={agent_loop.execution.current_step_id}, "
+                    f"llm_response={llm_response}"
                 )
 
                 eval_data = self._parse_evaluate_response(llm_response)
@@ -1486,10 +1524,21 @@ class AgentReplanNode:
                 },
             )
 
+            logger.info(
+                f"[TraceID:{trace_id}] ReplanNode: "
+                f"开始重规划步骤，当前步骤索引：{agent_loop.plan.current_step_index}"
+                f"prompt_text={prompt_text}"
+            )
+
             llm_response = await self.llm_client.invoke_structured(
                 trace_id=trace_id,
                 prompt=prompt_text,
                 schema=self._build_replan_schema(),
+            )
+
+            logger.info(
+                f"[TraceID:{trace_id}] ReplanNode: "
+                f"LLM 响应：{llm_response}"
             )
 
             replan_data = self._parse_replan_response(llm_response)
@@ -1743,11 +1792,15 @@ class AgentFinalVerifyNode:
                     },
                 )
 
+                logger.info(f"[TraceID:{trace_id}] FinalVerifyNode LLM 调用: {prompt_text}")
+
                 llm_response = await self.llm_client.invoke_structured(
                     trace_id=trace_id,
                     prompt=prompt_text,
                     schema=self._build_verify_schema(),
                 )
+
+                logger.info(f"[TraceID:{trace_id}] FinalVerifyNode LLM 输出: {llm_response}")
 
                 verify_data = self._parse_verify_response(llm_response)
 
