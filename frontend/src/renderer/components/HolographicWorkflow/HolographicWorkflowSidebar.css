@@ -250,6 +250,11 @@
 .dag-objective-fixed-area.expanded {
   max-height: 400px;
 }
+/* Agent Loop 固定区域展开高度更大（目标 + 计划 + 预算） */
+.agent-loop-objective.expanded {
+  max-height: 600px;
+  overflow-y: auto;
+}
 
 /* 收起状态 — 仅保留摘要行高度 */
 .dag-objective-fixed-area.collapsed {
@@ -383,6 +388,42 @@
 .dag-objective-fixed-details .node-type-dag-objective {
   width: 100%;
   max-width: none;
+}
+
+/* ============================================================
+ * Agent Loop 模式：固定目标区域紫色主题覆盖
+ * 做什么：Agent Loop 复用 dag-objective-fixed-area 布局，但使用紫色主题色。
+ * 为什么这样做：Agent Loop 主色调为 #a855f7（紫色），与 DAG 模式的橙色区分。
+ * ============================================================ */
+.agent-loop-objective::before {
+  border-bottom-color: rgba(168, 85, 247, 0.15);
+}
+.agent-loop-objective::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.5) 50%, transparent 100%);
+}
+
+/* Agent Loop 固定区域内的子组件样式适配 */
+.agent-loop-objective .dag-objective-fixed-details {
+  padding: 0;
+}
+.agent-loop-objective .dag-objective-fixed-details .al-goal-section {
+  border-bottom: none;
+}
+.agent-loop-objective .dag-objective-fixed-details .al-goal-header {
+  padding: 8px 0;
+}
+.agent-loop-objective .dag-objective-fixed-details .al-goal-details {
+  padding: 0 0 8px 24px;
+}
+.agent-loop-objective .dag-objective-fixed-details .al-plan-header {
+  padding: 6px 0;
+  border-bottom: none;
+  background: none;
+}
+.agent-loop-objective .dag-objective-fixed-details .al-budget-bar {
+  padding: 6px 0 0;
+  border-bottom: none;
+  background: none;
 }
 
 /* ============================================================

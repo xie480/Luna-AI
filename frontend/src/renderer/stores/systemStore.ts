@@ -270,10 +270,20 @@ function loadTheme(): 'dark' | 'light' | 'cyberpunk' {
  * 从 localStorage 读取聊天模式，不存在时返回默认深度日常助理模式。
  * 为什么这样做：用户偏好应跨会话持久化，避免每次启动都重置为默认值。
  */
+/**
+ * 从 localStorage 读取聊天模式，不存在时返回默认深度日常助理模式。
+ * 为什么这样做：用户偏好应跨会话持久化，避免每次启动都重置为默认值。
+ * 边界条件：新增模式时必须在此处同步添加校验，否则切换后重启会丢失偏好。
+ */
 function loadChatMode(): ChatMode {
   try {
     const raw = localStorage.getItem('luna:chatMode');
-    if (raw === CHAT_MODE.DAILY_CHAT || raw === CHAT_MODE.CASUAL_CHAT || raw === CHAT_MODE.PLAN_STATE_NODE) {
+    if (
+      raw === CHAT_MODE.DAILY_CHAT ||
+      raw === CHAT_MODE.CASUAL_CHAT ||
+      raw === CHAT_MODE.PLAN_STATE_NODE ||
+      raw === CHAT_MODE.AGENT_LOOP
+    ) {
       return raw as ChatMode;
     }
   } catch (e) {

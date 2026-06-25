@@ -25,6 +25,9 @@ import { DagIconChevronDown, DagIconChevronRight } from '../DagWorkflow/DagIcons
 import type { ChatNodeStatus } from '../../../shared/types';
 import type { ChatNodeProjection } from '../../types/chatWorkflow';
 import { AgentLoopPanel } from '../AgentLoop/AgentLoopPanel';
+import { AgentGoalCard } from '../AgentLoop/AgentGoalCard';
+import { AgentPlanHeader } from '../AgentLoop/AgentPlanHeader';
+import { AgentBudgetBar } from '../AgentLoop/AgentBudgetBar';
 import type { DagPlanProjection, DagStateProjection } from '../../types/dagWorkflow';
 import './HolographicWorkflowSidebar.css';
 
@@ -82,10 +85,12 @@ export const HolographicWorkflowSidebar: React.FC = () => {
    * 预 DAG 阶段的节点类型集合。
    * 做什么：定义 DAG 引擎之前执行的 Chat Workflow 节点。
    * 为什么这样做：这些节点在 DAG 引擎启动前就需要渲染。
+   * 注意：Agent Loop 模式使用 INPUT_RECONSTRUCTION_SIMPLIFIED，需要同时包含。
    */
   const PRE_DAG_NODE_TYPES = new Set([
     CHAT_WORKFLOW_NODE_TYPE.SESSION_CONTEXT_LOAD,
     CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION,
+    CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION_SIMPLIFIED,
   ]);
 
   /**
@@ -109,24 +114,26 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [chatInteractionId, nodesByInteractionId]);
 
   /**
-   * 在智能规划模式下，构建预 DAG 节点列表。
-   * 为什么这样做：预 DAG 节点在 DAG 引擎之前执行，需要即时显示。
+   * 在智能规划/Agent Loop 模式下，构建预 DAG 节点列表。
+   * 为什么这样做：预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION 等）
+   *               在 DAG/Agent Loop 引擎之前执行，需要即时显示。
+   * Agent Loop 模式使用 INPUT_RECONSTRUCTION_SIMPLIFIED 代替 INPUT_RECONSTRUCTION。
    */
   const preDagNodes = useMemo(() => {
-    if (!isDagMode) return [];
+    if (!isDagMode && !isAgentLoopMode) return [];
     return chatNodes.filter((n) => PRE_DAG_NODE_TYPES.has(n.nodeType));
-  }, [isDagMode, chatNodes]);
+  }, [isDagMode, isAgentLoopMode, chatNodes]);
 
   /**
-   * 在智能规划模式下，构建后 DAG 节点列表。
-   * 做什么：提取 DAG 引擎之后执行的 Chat Workflow 节点。
-   * 为什么这样做：DAG 引擎完成后，上下文治理、Prompt 装配、LLM 推理、响应持久化等
+   * 在智能规划/Agent Loop 模式下，构建后 DAG 节点列表。
+   * 做什么：提取 DAG/Agent Loop 引擎之后执行的 Chat Workflow 节点。
+   * 为什么这样做：引擎执行完成后，上下文治理、Prompt 装配、LLM 推理、响应持久化等
    *               后半段链路节点需要在侧边栏中作为普通节点正常渲染。
    */
   const postDagNodes = useMemo(() => {
-    if (!isDagMode) return [];
+    if (!isDagMode && !isAgentLoopMode) return [];
     return chatNodes.filter((n) => POST_DAG_NODE_TYPES.has(n.nodeType));
-  }, [isDagMode, chatNodes]);
+  }, [isDagMode, isAgentLoopMode, chatNodes]);
 
   // 统一数据源
   const interactionId = isDagMode ? dagActivePlan?.planId : chatActivePlan?.interactionId;
@@ -168,8 +175,10 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   }, [isDragging]);
 
   // 是否有活跃 Plan
+  // Agent Loop 模式：有 activeLoop 时显示 AgentLoopPanel，否则回退显示 Chat Workflow 节点
+  // （后端发送 EVT_DAG_GOAL_LOCKED 之前，前端需要先展示预处理阶段的 Chat Workflow 节点）
   const hasPlan = isAgentLoopMode
-    ? (agentLoopActiveLoop !== null && agentLoopPanelVisible)
+    ? (agentLoopActiveLoop !== null && agentLoopPanelVisible) || (chatActivePlan !== null)
     : isDagMode
       ? (dagActivePlan !== null && dagPanelVisible) || (chatActivePlan !== null && preDagNodes.length > 0)
       : chatActivePlan !== null;
@@ -282,9 +291,9 @@ export const HolographicWorkflowSidebar: React.FC = () => {
       </div>
       
       <div className="holographic-header">
-        <div className="header-title">{isDagMode ? 'DAG Flow' : 'Orbital Flow'}</div>
+        <div className="header-title">{isAgentLoopMode ? 'Agent Loop' : isDagMode ? 'DAG Flow' : 'Orbital Flow'}</div>
         <div className="header-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {hasPlan && <div className={`global-status-indicator ${isDagMode ? (dagActivePlan?.status === 'executing' ? 'running' : dagActivePlan?.status || '') : chatActivePlan?.status || ''}`}></div>}
+          {hasPlan && <div className={`global-status-indicator ${isAgentLoopMode && agentLoopActiveLoop ? (agentLoopActiveLoop.status === 'executing' ? 'running' : agentLoopActiveLoop.status) : isDagMode ? (dagActivePlan?.status === 'executing' ? 'running' : dagActivePlan?.status || '') : chatActivePlan?.status || ''}`}></div>}
           <button
             onClick={() => setIsVisible(false)}
             style={{
@@ -304,12 +313,52 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* ═══ 全局目标固定区域（仅 DAG 模式）
+      {/* ═══ 全局目标固定区域（DAG 模式 + Agent Loop 模式）
        * 做什么：将全局目标固定在侧边栏标题栏下方，不随画布滚动。
        * 为什么这样做：全局目标是用户理解当前 Plan 的关键入口，
        *               固定后用户无需滚动画布即可查看任务总览。
        * 视觉约束：通过发光边框和背景色与下方可滚动画布明确区分。
        */}
+      {/* Agent Loop 模式：显示全局目标、验收标准、预算（固定区域） */}
+      {isAgentLoopMode && agentLoopActiveLoop && (
+        <div className={`dag-objective-fixed-area agent-loop-objective ${objectiveExpanded ? 'expanded' : 'collapsed'}`}>
+          <div className="dag-objective-fixed-header">
+            <span className="dag-objective-fixed-label">全局目标</span>
+            <span className="dag-objective-fixed-goal">
+              {agentLoopActiveLoop.goal.globalGoal || '（目标待生成）'}
+            </span>
+            <button
+              className={`dag-objective-toggle-btn ${objectiveExpanded ? 'is-expanded' : ''}`}
+              onClick={() => setObjectiveExpanded((prev) => !prev)}
+              aria-label={objectiveExpanded ? '收起全局目标详情' : '展开全局目标详情'}
+              type="button"
+            >
+              <span className="dag-objective-toggle-text">
+                {objectiveExpanded ? '收起' : '展开'}
+              </span>
+              {objectiveExpanded
+                ? <DagIconChevronDown width="12" height="12" />
+                : <DagIconChevronRight width="12" height="12" />
+              }
+            </button>
+          </div>
+          {objectiveExpanded && (
+            <div className="dag-objective-fixed-details">
+              <AgentGoalCard
+                goal={agentLoopActiveLoop.goal}
+                expanded={true}
+                onToggle={() => {}}
+              />
+              <AgentPlanHeader
+                plan={agentLoopActiveLoop.plan}
+                completedSteps={agentLoopActiveLoop.plan.steps.filter((s) => s.status === 'passed').length}
+              />
+              <AgentBudgetBar budget={agentLoopActiveLoop.budget} />
+            </div>
+          )}
+        </div>
+      )}
+
       {isDagMode && dagActivePlan && (
         <div className={`dag-objective-fixed-area ${objectiveExpanded ? 'expanded' : 'collapsed'}`}>
           <div className="dag-objective-fixed-header">
@@ -343,15 +392,70 @@ export const HolographicWorkflowSidebar: React.FC = () => {
         <HolographicConnections nodes={connectionNodes} activeNodeId={activeNodeId} width={width} />
         
         <div className="node-list">
-            {/* ═══ Agent Loop 模式：嵌入独立面板 ═══ */}
-            {isAgentLoopMode && agentLoopActiveLoop ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                <AgentLoopPanelEmbedded />
-              </div>
-            ) : null}
+            {/* ═══ 互斥条件分支：Agent Loop > DAG > 日常聊天 ═══ */}
+            {isAgentLoopMode ? (
+              /* ═══ Agent Loop 模式：pre-nodes → AgentLoopPanel（特殊渲染）→ post-nodes ═══ */
+              <>
+                {/* 预 Agent Loop 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION_SIMPLIFIED） */}
+                {preDagNodes.map((node) => (
+                  <HolographicNode
+                    key={node.nodeType}
+                    type={getUINodeType(node.nodeType)}
+                    nodeType={node.nodeType}
+                    status={node.status}
+                    isActive={node.nodeType === activeNodeId}
+                    onToggleAR={(e) => toggleARPanel(node.nodeType, e)}
+                    interactionId={interactionId}
+                    customLabel={'customLabel' in node ? (node as any).customLabel : undefined}
+                  />
+                ))}
 
-            {/* ═══ DAG 模式：预DAG节点 + State 节点 ═══ */}
-            {isDagMode && dagActivePlan ? (
+                {/* Agent Loop 引擎节点 — 特殊渲染（类似 DAG 模式的 State 节点） */}
+                {agentLoopActiveLoop ? (
+                  <div style={{ minHeight: 200 }}>
+                    <AgentLoopPanelEmbedded />
+                  </div>
+                ) : (
+                  <HolographicNode
+                    type="normal"
+                    nodeType={CHAT_WORKFLOW_NODE_TYPE.DAG_ENGINE_AGENT_LOOP}
+                    status={chatActivePlan?.status === 'completed' ? 'succeeded' : chatActivePlan?.status === 'failed' ? 'failed' : 'running'}
+                    isActive={true}
+                  />
+                )}
+
+                {/* 后 Agent Loop 节点（CONTEXT_GOVERNANCE → PROMPT_ASSEMBLY → MAIN_CHAT_LLM → ...） */}
+                {postDagNodes.map((node) => (
+                  <HolographicNode
+                    key={node.nodeType}
+                    type={getUINodeType(node.nodeType)}
+                    nodeType={node.nodeType}
+                    status={node.status}
+                    isActive={node.nodeType === activeNodeId}
+                    onToggleAR={(e) => toggleARPanel(node.nodeType, e)}
+                    interactionId={interactionId}
+                    customLabel={'customLabel' in node ? (node as any).customLabel : undefined}
+                  />
+                ))}
+
+                {/* End Node */}
+                {hasPlan && (
+                  <HolographicNode
+                    type="end"
+                    nodeType="workflow_end"
+                    status={(() => {
+                      if (agentLoopActiveLoop?.status === 'completed' || agentLoopActiveLoop?.status === 'completed_with_gaps') return 'succeeded';
+                      if (agentLoopActiveLoop?.status === 'terminated' || agentLoopActiveLoop?.status === 'budget_exhausted') return 'failed';
+                      if (chatActivePlan?.status === 'completed') return 'succeeded';
+                      if (chatActivePlan?.status === 'failed') return 'failed';
+                      return 'pending';
+                    })()}
+                    isActive={false}
+                  />
+                )}
+              </>
+            ) : isDagMode && dagActivePlan ? (
+              /* ═══ DAG 模式：预DAG节点 + State 节点 ═══ */
               <>
 
                 {/* 预 DAG 节点（SESSION_CONTEXT_LOAD、INPUT_RECONSTRUCTION） */}
@@ -400,11 +504,11 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                 />
               </>
             ) : (
-              /* ═══ 日常聊天/极速闲聊模式 ═══ */
+              /* ═══ 日常聊天/极速闲聊模式（以及 Agent Loop 无 activeLoop 时的回退） ═══ */
               <>
-                <HolographicNode 
-                    type="start" 
-                    nodeType={CHAT_WORKFLOW_NODE_TYPE.MESSAGE_INGRESS} 
+                <HolographicNode
+                    type="start"
+                    nodeType={CHAT_WORKFLOW_NODE_TYPE.MESSAGE_INGRESS}
                     status="succeeded"
                     isActive={false}
                 />

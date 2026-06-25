@@ -320,6 +320,10 @@ export const CHAT_WORKFLOW_NODE_TYPE = {
   MCP_INTENT_JUDGE: 'mcp_intent_judge',
   /** Phase 12 新增：MCP 技能执行节点（原 mcp_tool_execution 升级）。 */
   MCP_SKILL_EXECUTION: 'mcp_skill_execution',
+  /** Agent Loop 新增：简化输入重构节点（代词消歧，不做路由决策）。 */
+  INPUT_RECONSTRUCTION_SIMPLIFIED: 'input_reconstruction_simplified',
+  /** Agent Loop 新增：Agent Loop DAG 引擎节点（GoalLock -> GlobalPlanner -> StepLoop -> FinalVerify）。 */
+  DAG_ENGINE_AGENT_LOOP: 'dag_engine_agent_loop',
 } as const;
 
 /**
@@ -383,6 +387,8 @@ export const CHAT_WORKFLOW_NODE_LABEL: Record<
   [CHAT_WORKFLOW_NODE_TYPE.MCP_TOOL_EXECUTION]: '外挂义体接管',
   [CHAT_WORKFLOW_NODE_TYPE.MCP_INTENT_JUDGE]: '外挂义体权限校验',
   [CHAT_WORKFLOW_NODE_TYPE.MCP_SKILL_EXECUTION]: '外挂义体驱动接管',
+  [CHAT_WORKFLOW_NODE_TYPE.INPUT_RECONSTRUCTION_SIMPLIFIED]: '轻量指令解构',
+  [CHAT_WORKFLOW_NODE_TYPE.DAG_ENGINE_AGENT_LOOP]: '万能循环引擎',
 };
 
 /** Chat 节点状态中文标签。 */

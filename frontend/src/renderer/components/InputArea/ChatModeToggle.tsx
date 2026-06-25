@@ -72,6 +72,38 @@ const DeepChatIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 
 /**
+ * 万能循环模式图标：无限循环箭头 + 目标锚点。
+ * 做什么：为 Agent Loop 模式提供赛博朋克风格的 SVG 图标。
+ * 为什么这样做：agent.md 明确禁止使用 emoji，所有图标必须使用 SVG 实现。
+ */
+const AgentLoopIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    {/* 外层循环箭头 */}
+    <path
+      d="M12 2a10 10 0 0 1 7.07 2.93"
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+    />
+    <path
+      d="M19.07 4.93L22 2M19.07 4.93L22 8"
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+    />
+    <path
+      d="M12 22a10 10 0 0 1-7.07-2.93"
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+    />
+    <path
+      d="M4.93 19.07L2 22M4.93 19.07L2 16"
+      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+    />
+    {/* 中心目标锚点 */}
+    <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.5" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" />
+    {/* 装饰性虚线圆 */}
+    <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="0.8" strokeDasharray="2 3" opacity="0.4" />
+  </svg>
+);
+
+/**
  * 胶囊按钮的 CSS class 名映射。
  * 做什么：将 chatMode 值映射为对应的 CSS class 后缀。
  * 为什么这样做：避免简单字符串替换导致 daily_chat → mode-daily-chat（应为 mode-daily）。
@@ -80,9 +112,17 @@ const CAPSULE_MODE_CLASS: Record<ChatMode, string> = {
   [CHAT_MODE.DAILY_CHAT]: 'mode-daily',
   [CHAT_MODE.CASUAL_CHAT]: 'mode-casual',
   [CHAT_MODE.PLAN_STATE_NODE]: 'mode-plan-state-node',
+  [CHAT_MODE.AGENT_LOOP]: 'mode-agent-loop',
 };
 
 const MODE_DISPLAY: Record<ChatMode, ModeConfig> = {
+  [CHAT_MODE.AGENT_LOOP]: {
+    label: '万能',
+    title: '万能循环模式',
+    description: 'Luna 会锁定你的目标，制定全局计划，逐步执行并在失败时自动修复或重新规划。适合长程、复杂、需要反复修正的深度任务。',
+    IconComponent: AgentLoopIcon,
+    themeColor: '#a855f7',
+  },
   [CHAT_MODE.PLAN_STATE_NODE]: {
     label: '深度',
     title: '深度分析模式',

@@ -981,3 +981,188 @@ export interface DagBudgetExhaustedPayload {
   /** 上限量 */
   limit: number;
 }
+
+// ============================================================
+// Agent Loop：万能循环模式事件 Payload 类型定义
+// ============================================================
+
+/**
+ * Agent Loop 目标锁定事件 Payload — 对应后端 EVT_DAG_GOAL_LOCKED。
+ * 做什么：承载后端 GoalLockNode 完成后推送的全局目标信息。
+ * 为什么这样做：前端 AgentLoopPanel 需要初始化 Goal 区域并展示锁定态。
+ * 输入输出：由后端推送，前端 agentLoopStore.onGoalLocked 消费。
+ * 边界条件：acceptance_criteria / non_goals / constraints 可能为空数组。
+ * 异常行为：无。
+ */
+export interface AgentGoalLockedPayload {
+  /** 任务 ID */
+  task_id: string;
+  /** 全局总目标 */
+  global_goal: string;
+  /** 目标详细定义 */
+  goal_definition: string;
+  /** 验收标准列表 */
+  acceptance_criteria: string[];
+  /** 非目标声明 */
+  non_goals: string[];
+  /** 约束条件 */
+  constraints: string[];
+  /** 锁定时间戳（毫秒） */
+  locked_at_ms: number;
+}
+
+/**
+ * Agent Loop 步骤思考事件 Payload — 对应后端 EVT_DAG_STEP_THINKING。
+ * 做什么：承载后端 StepThinkNode 输出的思考结果和工具规划。
+ * 为什么这样做：前端需要实时展示当前步骤的思考过程。
+ * 输入输出：由后端推送，前端 agentLoopStore.onStepThinking 消费。
+ * 边界条件：planned_tool_calls 可能为空数组。
+ * 异常行为：无。
+ */
+export interface AgentStepThinkingPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 步骤索引 */
+  step_index: number;
+  /** 思考文本 */
+  thought: string;
+  /** 规划的工具调用列表 */
+  planned_tool_calls: Array<{ tool_name: string; purpose: string }>;
+}
+
+/**
+ * Agent Loop 步骤观察事件 Payload — 对应后端 EVT_DAG_STEP_OBSERVED。
+ * 做什么：承载后端 ObserveNode 输出的结构化观察和工具执行结果。
+ * 为什么这样做：前端需要展示工具执行后的观察总结。
+ * 输入输出：由后端推送，前端 agentLoopStore.onStepObserved 消费。
+ * 边界条件：tool_results 可能为空数组。
+ * 异常行为：无。
+ */
+export interface AgentStepObservedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 步骤索引 */
+  step_index: number;
+  /** 观察文本 */
+  observation: string;
+  /** 观察预览（截断后） */
+  observation_preview: string;
+  /** 工具执行结果列表 */
+  tool_results: Array<{
+    tool_name: string;
+    success: boolean;
+    output_preview: string;
+    error_message: string;
+    latency_ms: number;
+  }>;
+}
+
+/**
+ * Agent Loop 步骤评估事件 Payload — 对应后端 EVT_DAG_STEP_EVALUATED。
+ * 做什么：承载后端 StepEvaluateNode 的评估结论。
+ * 为什么这样做：前端需要展示步骤是否通过及差距分析。
+ * 输入输出：由后端推送，前端 agentLoopStore.onStepEvaluated 消费。
+ * 边界条件：criteria_checklist 可能为空数组。
+ * 异常行为：无。
+ */
+export interface AgentStepEvaluatedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 步骤索引 */
+  step_index: number;
+  /** 评估结论 */
+  verdict: 'pass' | 'fail' | 'partial' | 'needs_replan';
+  /** 评估理由 */
+  evaluation_reason: string;
+  /** 差距分析 */
+  gap_analysis: string;
+  /** 改进建议 */
+  suggestion: string;
+  /** 完成条件检查清单 */
+  criteria_checklist: Array<{ criterion: string; met: boolean; evidence: string }>;
+}
+
+/**
+ * Agent Loop 步骤修复事件 Payload — 对应后端 EVT_DAG_STEP_REPAIRED。
+ * 做什么：承载后端 StepRepairNode 的修复信息。
+ * 为什么这样做：前端需要递增修复计数并高亮修复变更。
+ * 输入输出：由后端推送，前端 agentLoopStore.onStepRepaired 消费。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface AgentStepRepairedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 步骤索引 */
+  step_index: number;
+  /** 修复次数 */
+  repair_count: number;
+  /** 修复原因 */
+  repair_reason: string;
+  /** 变更描述 */
+  changes: string;
+}
+
+/**
+ * Agent Loop 计划重规划事件 Payload — 对应后端 EVT_DAG_PLAN_REPLANNED（Agent Loop 模式）。
+ * 做什么：承载后端 ReplanNode 推送的计划变更信息。
+ * 为什么这样做：前端需要更新步骤列表、递增版本号并追加 Replan 历史。
+ * 输入输出：由后端推送，前端 agentLoopStore.onPlanReplanned 消费。
+ * 边界条件：modified_states 包含全量步骤列表（非增量）。
+ * 异常行为：无。
+ */
+export interface AgentPlanReplannedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 原版本号 */
+  from_version: number;
+  /** 新版本号 */
+  to_version: number;
+  /** 重规划原因 */
+  replan_reason: string;
+  /** 导致失败的步骤 ID */
+  failed_step_id: string;
+  /** 修改后的步骤列表（全量） */
+  modified_states: Array<Record<string, unknown>>;
+  /** 目标未变更标识（始终为 true） */
+  preserved_goal: boolean;
+  /** 计划版本号 */
+  plan_version: number;
+}
+
+/**
+ * Agent Loop 最终验收事件 Payload — 对应后端 EVT_DAG_FINAL_VERIFIED。
+ * 做什么：承载后端 FinalVerifyNode 的验收结果。
+ * 为什么这样做：前端需要展示验收报告和逐条条件检查结果。
+ * 输入输出：由后端推送，前端 agentLoopStore.onFinalVerified 消费。
+ * 边界条件：criteria_verification 可能为空数组。
+ * 异常行为：无。
+ */
+export interface AgentFinalVerifiedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 验收状态 */
+  verification_status: 'completed' | 'completed_with_gaps' | 'failed';
+  /** 验收报告预览 */
+  report_preview: string;
+  /** 所有条件是否满足 */
+  all_criteria_met: boolean;
+  /** 条件逐条检查结果 */
+  criteria_verification: Array<{ criterion: string; met: boolean; evidence: string }>;
+  /** 总步骤数 */
+  total_steps: number;
+  /** 成功步骤数 */
+  succeeded_steps: number;
+  /** 失败步骤数 */
+  failed_steps: number;
+  /** 总耗时（毫秒） */
+  total_elapsed_ms: number;
+}

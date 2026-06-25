@@ -1,7 +1,23 @@
 /* ============================================================
  * AgentLoopPanel — Agent Loop 万能循环模式主面板样式
+ *
+ * 赛博朋克视觉语言，严格沿用 HolographicWorkflow 风格。
+ * 禁止使用 emoji，所有图标为 SVG 内联。
+ * 主色调：#a855f7（紫色）
  * ============================================================ */
 
+/* ─── 脉冲动画（running 状态节点） ─── */
+@keyframes al-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(6, 182, 212, 0); }
+}
+
+@keyframes al-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── 面板容器 ─── */
 .al-panel {
   display: flex;
   flex-direction: column;
@@ -13,15 +29,41 @@
   overflow-y: auto;
 }
 
+/* 内嵌模式：作为侧边栏特殊节点，不占满全高，高度由内容决定 */
+.al-panel--embedded {
+  height: auto;
+  min-height: 120px;
+  background: rgba(15, 15, 30, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 8px;
+  overflow: visible;
+}
+
 .al-panel--empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+}
+
+.al-panel-empty-icon {
+  color: rgba(168, 85, 247, 0.3);
+  animation: al-pulse 2s ease-in-out infinite;
 }
 
 .al-panel-empty-text {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.4);
   font-size: 14px;
+  font-weight: 500;
+}
+
+.al-panel-empty-hint {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+  max-width: 260px;
 }
 
 /* ─── 工具栏 ─── */
@@ -31,7 +73,7 @@
   justify-content: space-between;
   padding: 10px 16px;
   background: rgba(20, 20, 40, 0.9);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(168, 85, 247, 0.15);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -44,7 +86,9 @@
 }
 
 .al-toolbar-icon {
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  color: #a855f7;
 }
 
 .al-toolbar-title {
@@ -55,7 +99,8 @@
 }
 
 .al-status-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
   border-radius: 10px;
   font-size: 11px;
@@ -65,27 +110,41 @@
 }
 
 .al-toolbar-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: 'Courier New', monospace;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
 }
 
 .al-toolbar-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: none;
   color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  font-size: 16px;
   padding: 4px;
   line-height: 1;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
 }
 .al-toolbar-close:hover {
   color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* ─── 全局目标区域 ─── */
 .al-goal-section {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.3s;
+}
+
+.al-goal-section--locked {
+  background: rgba(124, 58, 237, 0.06);
+  border-left: 3px solid #7c3aed;
 }
 
 .al-goal-header {
@@ -100,20 +159,24 @@
   cursor: pointer;
   text-align: left;
   font-size: 13px;
+  transition: background 0.2s;
 }
 .al-goal-header:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 
 .al-goal-chevron {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
   color: rgba(255, 255, 255, 0.3);
   width: 12px;
   flex-shrink: 0;
 }
 
 .al-goal-icon {
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  color: #a855f7;
   flex-shrink: 0;
 }
 
@@ -127,7 +190,9 @@
 }
 
 .al-goal-locked {
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  color: #7c3aed;
   flex-shrink: 0;
 }
 
@@ -136,6 +201,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  animation: al-fade-in 0.2s ease;
 }
 
 .al-goal-field {
@@ -145,6 +211,9 @@
 }
 
 .al-goal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
   text-transform: uppercase;
@@ -166,6 +235,8 @@
 }
 .al-goal-list--neg li {
   color: rgba(255, 150, 150, 0.7);
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 150, 150, 0.3);
 }
 
 .al-goal-tags {
@@ -177,43 +248,232 @@
 .al-goal-tag {
   display: inline-block;
   padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.2);
   border-radius: 4px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* ─── 预算状态栏 ─── */
-.al-budget-bar {
+/* ─── 计划头部 ─── */
+.al-plan-header {
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(20, 20, 40, 0.4);
+}
+
+.al-plan-header-main {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  background: rgba(30, 30, 50, 0.6);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  justify-content: space-between;
+}
+
+.al-plan-version {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a855f7;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.al-plan-version-text {
   font-family: 'Courier New', monospace;
 }
 
-/* ─── 步骤列表 ─── */
-.al-steps-container {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px;
-  flex: 1;
+.al-plan-progress {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
 }
 
+.al-plan-progress-count {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.al-plan-progress-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* ─── Replan 历史 ─── */
+.al-replan-section {
+  margin-top: 6px;
+}
+
+.al-replan-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 0;
+  transition: color 0.2s;
+}
+.al-replan-header:hover {
+  color: #f59e0b;
+}
+
+.al-replan-list {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 18px;
+  animation: al-fade-in 0.2s ease;
+}
+
+.al-replan-record {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.al-replan-version {
+  font-family: 'Courier New', monospace;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.al-replan-reason {
+  color: rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── 预算状态栏 ─── */
+.al-budget-bar {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(30, 30, 50, 0.6);
+}
+
+.al-budget-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.al-budget-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.al-budget-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.al-budget-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.al-budget-item-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.al-budget-item-count {
+  font-family: 'Courier New', monospace;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 10px;
+}
+
+.al-budget-item-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.al-budget-item-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease-out;
+}
+
+/* ─── 步骤列表容器 ─── */
+.al-steps-container {
+  flex: 1;
+  padding: 8px;
+}
+
+/* ─── 时间线 ─── */
+.al-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.al-timeline-item {
+  display: flex;
+  gap: 0;
+}
+
+.al-timeline-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.al-timeline-line {
+  width: 2px;
+  flex: 1;
+  min-height: 8px;
+}
+
+.al-timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.al-timeline-dot--pulse {
+  animation: al-pulse 1.5s ease-in-out infinite;
+}
+
+.al-timeline-content {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.al-timeline-item--past .al-timeline-content {
+  opacity: 0.7;
+}
+
+/* ─── 步骤卡片 ─── */
 .al-step-card {
   background: rgba(20, 20, 35, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 6px;
   overflow: hidden;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.2s;
 }
 .al-step-card--current {
-  border-color: rgba(79, 195, 247, 0.3);
+  border-color: rgba(168, 85, 247, 0.3);
+  background: rgba(168, 85, 247, 0.04);
 }
 .al-step-card--expanded {
   border-color: rgba(255, 255, 255, 0.1);
@@ -231,6 +491,7 @@
   cursor: pointer;
   text-align: left;
   font-size: 12px;
+  transition: background 0.2s;
 }
 .al-step-header:hover {
   background: rgba(255, 255, 255, 0.03);
@@ -243,17 +504,17 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(168, 85, 247, 0.15);
   font-size: 10px;
   font-weight: 600;
+  color: #a855f7;
   flex-shrink: 0;
 }
 
-.al-step-status-dot {
-  width: 8px;
-  height: 8px;
+.al-step-pulse {
+  display: inline-flex;
+  animation: al-pulse 1.5s ease-in-out infinite;
   border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .al-step-title {
@@ -266,24 +527,33 @@
 
 .al-step-status-text {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .al-step-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-family: 'Courier New', monospace;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
 }
 
-.al-step-retry,
-.al-step-repair {
+.al-step-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
 }
 
 .al-step-chevron {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
   color: rgba(255, 255, 255, 0.3);
   width: 12px;
   flex-shrink: 0;
@@ -296,6 +566,7 @@
   flex-direction: column;
   gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
+  animation: al-fade-in 0.2s ease;
 }
 
 .al-step-field {
@@ -305,6 +576,9 @@
 }
 
 .al-step-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
@@ -335,6 +609,7 @@
   cursor: pointer;
   font-size: 12px;
   text-align: left;
+  transition: color 0.2s;
 }
 .al-section-header:hover {
   color: #fff;
@@ -358,11 +633,11 @@
 }
 
 .al-thought {
-  border-left: 3px solid rgba(79, 195, 247, 0.3);
+  border-left: 3px solid rgba(6, 182, 212, 0.4);
 }
 
 .al-observation {
-  border-left: 3px solid rgba(255, 183, 77, 0.3);
+  border-left: 3px solid rgba(245, 158, 11, 0.4);
 }
 
 .al-evaluation {
@@ -385,14 +660,37 @@
   flex-shrink: 0;
 }
 
+.al-eval-criteria {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.al-eval-criterion {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.al-eval-evidence {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .al-verdict-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 1px 6px;
   border-radius: 8px;
   font-size: 10px;
   font-weight: 500;
   color: #fff;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 /* ─── 工具列表 ─── */
@@ -409,10 +707,10 @@
   border-left: 3px solid rgba(255, 255, 255, 0.1);
 }
 .al-tool-item--success {
-  border-left-color: #66bb6a;
+  border-left-color: #22c55e;
 }
 .al-tool-item--fail {
-  border-left-color: #ef5350;
+  border-left-color: #ef4444;
 }
 
 .al-tool-name {
@@ -421,11 +719,6 @@
   gap: 6px;
   font-size: 12px;
   font-weight: 500;
-}
-
-.al-tool-icon {
-  font-size: 12px;
-  flex-shrink: 0;
 }
 
 .al-tool-purpose {
@@ -456,10 +749,13 @@
 
 .al-tool-error {
   font-size: 11px;
-  color: #ef5350;
+  color: #ef4444;
 }
 
 .al-tool-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-family: 'Courier New', monospace;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.3);
@@ -468,19 +764,21 @@
 /* ─── 最终验收 ─── */
 .al-final-section {
   padding: 12px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(168, 85, 247, 0.15);
   background: rgba(20, 20, 40, 0.6);
+  animation: al-fade-in 0.3s ease;
 }
 
 .al-final-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .al-final-icon {
-  font-size: 18px;
+  display: flex;
+  align-items: center;
 }
 
 .al-final-title {
@@ -494,9 +792,25 @@
   color: rgba(255, 255, 255, 0.4);
   margin-left: auto;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .al-final-report {
+  margin-bottom: 10px;
+}
+
+.al-final-report-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.al-final-report-text {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   line-height: 1.5;
@@ -505,35 +819,92 @@
   border-radius: 4px;
 }
 
-/* ─── Replan 历史 ─── */
-.al-replan-section {
-  padding: 8px 16px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+.al-final-criteria {
+  margin-bottom: 10px;
 }
 
-.al-replan-header {
+.al-final-criteria-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin-bottom: 6px;
 }
 
-.al-replan-record {
+.al-final-criterion {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.al-final-criterion-icon {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 11px;
-}
-
-.al-replan-version {
-  font-family: 'Courier New', monospace;
-  color: #ff9800;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
-.al-replan-reason {
-  color: rgba(255, 255, 255, 0.5);
+.al-final-criterion-text {
+  flex: 1;
+}
+
+.al-final-criterion-evidence {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: auto;
+  flex-shrink: 0;
+  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ─── 执行统计 ─── */
+.al-final-stats {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.al-final-stats-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.al-final-stats-grid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.al-final-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.al-final-stat-value {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.al-final-stat-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
