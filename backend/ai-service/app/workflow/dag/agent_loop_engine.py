@@ -1060,10 +1060,14 @@ class ObserveNode:
             outputs = agent_loop.execution.partitioned_outputs
 
             if not outputs:
-                # 无工具输出（纯思考步骤）
+                # 无工具输出（纯思考步骤）：将思考内容作为步骤产出
+                # 为什么这样做：纯思考步骤（如问候回应、推理总结）的思考内容本身就是
+                #               步骤的输出，不应仅声明"无工具输出"而丢失实际产出。
+                #               观察层应如实反映步骤产出，使评估层能正确判断完成度。
+                thought_content = agent_loop.execution.last_thought or ""
                 agent_loop.execution.last_observation = (
-                    f"步骤 '{agent_loop.execution.last_thought[:100]}' "
-                    f"为纯思考步骤，无工具输出。"
+                    f"本步骤为纯思考步骤（无工具调用）。思考过程即为本步骤的产出。\n\n"
+                    f"## 思考内容\n{thought_content}"
                 )
             else:
                 # 规则校验：收集成功和失败的工具
@@ -1992,7 +1996,117 @@ class AgentFinalVerifyNode:
 
 
 # ===========================================================================
-# Step Router 路由函数（评估结果路由）
+# 节点 9: FastPassNode — 纯思考步骤快速通过
+# ===========================================================================
+
+
+class FastPassNode:
+    """Agent Loop — 纯思考步骤快速通过节点。
+
+    做什么：当 StepThinkNode 返回空 tool_calls 时，跳过 Execute/Observe/Evaluate，
+            直接将 thought 内容作为步骤产出，标记为 PASSED 并推进到下一步。
+    为什么这样做：纯思考步骤（如问候回应、推理总结）的思考内容本身就是步骤输出，
+                  无需经过工具执行和评估验证，避免浪费 3 次 LLM 调用（Observe 无 LLM
+                  但 StepEvaluate 需要 LLM）和 token。
+                  思考结果通过 step_summaries 流入 FinalVerifyNode 的汇总管道，
+                  最终注入 MainChatLlmNode 生成面向用户的回复。
+    输入输出：
+        - 输入：AgentLoopState（含 execution.last_thought）
+        - 输出：更新后的 AgentLoopState（step 标记 PASSED，index 推进，execution 重置）
+    边界条件：
+        - agent_loop 为空时静默返回。
+        - 无当前步骤时静默返回。
+    """
+
+    def __init__(
+        self,
+        event_publisher: ChatWorkflowEventPublisher | None = None,
+    ):
+        """初始化纯思考步骤快速通过节点。
+
+        参数:
+            event_publisher: 工作流事件发布器，用于推送步骤完成事件到前端。
+        """
+        self.event_publisher = event_publisher
+
+    async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
+        """LangGraph 节点入口 — 执行纯思考步骤快速通过。
+
+        做什么：
+        1. 读取当前步骤和 thought 内容
+        2. 将 thought 作为步骤摘要写入 memory.step_summaries
+        3. 标记当前步骤为 PASSED
+        4. 推进 current_step_index
+        5. 重置执行状态（准备下一步）
+        6. 发布 EVT_DAG_STEP_EVALUATED 事件（verdict=pass，由快速通道）
+        """
+        chat_state, agent_loop = _extract_agent_loop_state(state)
+        if agent_loop is None:
+            return chat_state.as_graph_state()
+
+        trace_id = chat_state.runtime.trace_id
+        session_id = chat_state.runtime.session_id
+
+        if agent_loop.terminated:
+            return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
+        idx = agent_loop.plan.current_step_index
+        if idx >= len(agent_loop.plan.steps):
+            return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
+        current_step = agent_loop.plan.steps[idx]
+        thought_content = agent_loop.execution.last_thought or ""
+
+        try:
+            # 将 thought 作为步骤摘要写入记忆（与 route_by_step_evaluation 的 pass 路径一致）
+            agent_loop.memory.step_summaries.append({
+                "step_id": current_step.step_id,
+                "title": current_step.title,
+                "summary": thought_content[:500],
+            })
+
+            # 标记步骤完成
+            current_step.status = StepStatusEnum.PASSED
+
+            # 推进到下一步
+            agent_loop.plan.current_step_index += 1
+
+            # 重置执行状态（准备下一步，与 route_by_step_evaluation 的 pass 路径一致）
+            agent_loop.execution = ExecutionState()
+
+            # 发布评估事件（verdict=pass，标记为快速通道）
+            await _emit_dag_event(
+                DagWorkflowEventType.EVT_DAG_STEP_EVALUATED,
+                trace_id, session_id,
+                {
+                    "plan_id": agent_loop.goal.task_id,
+                    "step_id": current_step.step_id,
+                    "step_index": idx,
+                    "verdict": "pass",
+                    "evaluation_reason": "纯思考步骤快速通过：无工具调用，thought 即为产出",
+                    "fast_pass": True,
+                },
+                self.event_publisher,
+            )
+
+            logger.info(
+                f"[TraceID:{trace_id}] FastPassNode 完成: "
+                f"step_id={current_step.step_id}, "
+                f"thought_len={len(thought_content)}"
+            )
+
+        except Exception as exc:
+            logger.error(f"[TraceID:{trace_id}] FastPassNode 异常: {exc}")
+            # 异常时仍标记通过，避免阻塞流程
+            current_step.status = StepStatusEnum.PASSED
+            agent_loop.plan.current_step_index += 1
+            agent_loop.execution = ExecutionState()
+
+        return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
+
+# ===========================================================================
+# Step Router 路由函数（评估结果路由 + 思考后路由）
 # ===========================================================================
 
 
@@ -2041,6 +2155,37 @@ def route_by_step_evaluation(state: dict[str, Any]) -> str:
 
 
 # ===========================================================================
+# Step 思考后路由函数
+# ===========================================================================
+
+# 思考后路由结果常量（与 AgentStepLoopSubGraphNodeName 值对齐）
+_AFTER_THINK_TOOL_EXECUTE = "tool_execute"
+_AFTER_THINK_FAST_PASS = "fast_pass"
+
+
+def route_after_think(state: dict[str, Any]) -> str:
+    """步骤思考后路由函数。
+
+    做什么：根据 StepThinkNode 的 tool_calls 输出决定执行路径。
+    路由逻辑：
+        - tool_calls 非空 → tool_execute（正常工具执行路径）
+        - tool_calls 为空 → fast_pass（纯思考步骤快速通过，跳过 Execute/Observe/Evaluate）
+    为什么这样做：纯思考步骤（如问候回应、推理总结）的思考内容本身就是步骤输出，
+                  无需经过工具执行和三步评估循环，节省 LLM 调用和 token 消耗。
+    """
+    _, agent_loop = _extract_agent_loop_state(state)
+    if agent_loop is None:
+        return _AFTER_THINK_TOOL_EXECUTE
+
+    # tool_calls 非空 → 走正常工具执行路径
+    if agent_loop.execution.last_tool_calls:
+        return _AFTER_THINK_TOOL_EXECUTE
+
+    # tool_calls 为空 → 纯思考步骤，走快速通过路径
+    return _AFTER_THINK_FAST_PASS
+
+
+# ===========================================================================
 # Step Loop 子图工厂
 # ===========================================================================
 
@@ -2052,16 +2197,19 @@ def build_step_loop_subgraph(
     step_evaluate: AgentStepEvaluateNode,
     step_repair: StepRepairNode,
     replan: AgentReplanNode,
+    fast_pass: FastPassNode,
     event_publisher: ChatWorkflowEventPublisher | None = None,
 ) -> Any:
     """构建 Step Loop 内层子图。
 
-    做什么：创建 7 节点 LangGraph 子图，实现步进执行循环。
+    做什么：创建 8 节点 LangGraph 子图，实现步进执行循环。
     拓扑：
-        step_router → step_think → tool_execute → observe → step_evaluate
-            ├─ pass → step_router（循环）
-            ├─ fail → step_repair → step_think（重试）
-            └─ needs_replan → replan → step_router（重规划后循环）
+        step_router → step_think →（条件路由）
+            ├─ tool_calls 非空 → tool_execute → observe → step_evaluate
+            │       ├─ pass → step_router（循环）
+            │       ├─ fail → step_repair → step_think（重试）
+            │       └─ needs_replan → replan → step_router（重规划后循环）
+            └─ tool_calls 为空 → fast_pass → step_router（快速通过循环）
     返回:
         CompiledGraph: 编译后的子图。
     """
@@ -2070,7 +2218,7 @@ def build_step_loop_subgraph(
     # 创建无操作路由节点
     step_router = StepRouterNode()
 
-    # 注册节点
+    # 注册节点（8 个节点，含 fast_pass）
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_ROUTER.value, step_router)
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_THINK.value, step_think)
     graph.add_node(AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value, tool_execute)
@@ -2078,6 +2226,7 @@ def build_step_loop_subgraph(
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_EVALUATE.value, step_evaluate)
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_REPAIR.value, step_repair)
     graph.add_node(AgentStepLoopSubGraphNodeName.REPLAN.value, replan)
+    graph.add_node(AgentStepLoopSubGraphNodeName.FAST_PASS.value, fast_pass)
 
     # 入口 → step_router
     graph.set_entry_point(AgentStepLoopSubGraphNodeName.STEP_ROUTER.value)
@@ -2094,11 +2243,19 @@ def build_step_loop_subgraph(
         },
     )
 
-    # step_think → tool_execute → observe → step_evaluate
-    graph.add_edge(
+    # step_think → 条件路由：有工具调用走 tool_execute，无工具调用走 fast_pass
+    graph.add_conditional_edges(
         AgentStepLoopSubGraphNodeName.STEP_THINK.value,
-        AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value,
+        route_after_think,
+        {
+            _AFTER_THINK_TOOL_EXECUTE:
+                AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value,
+            _AFTER_THINK_FAST_PASS:
+                AgentStepLoopSubGraphNodeName.FAST_PASS.value,
+        },
     )
+
+    # tool_execute → observe → step_evaluate（工具执行完整路径）
     graph.add_edge(
         AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value,
         AgentStepLoopSubGraphNodeName.OBSERVE.value,
@@ -2134,6 +2291,12 @@ def build_step_loop_subgraph(
         AgentStepLoopSubGraphNodeName.STEP_ROUTER.value,
     )
 
+    # fast_pass → step_router（纯思考步骤快速通过后回到路由推进下一步）
+    graph.add_edge(
+        AgentStepLoopSubGraphNodeName.FAST_PASS.value,
+        AgentStepLoopSubGraphNodeName.STEP_ROUTER.value,
+    )
+
     return graph.compile()
 
 
@@ -2161,13 +2324,18 @@ def build_agent_loop_subgraph(
     拓扑：
         goal_lock → global_planner → step_loop_subgraph → final_verify → END
     其中 step_loop_subgraph 内部：
-        step_router → step_think → tool_execute → observe → step_evaluate
-            ├─ pass → step_router（循环）
-            ├─ fail → step_repair → step_think（重试）
-            └─ needs_replan → replan → step_router（重规划后循环）
+        step_router → step_think →（条件路由）
+            ├─ tool_calls 非空 → tool_execute → observe → step_evaluate
+            │       ├─ pass → step_router（循环）
+            │       ├─ fail → step_repair → step_think（重试）
+            │       └─ needs_replan → replan → step_router（重规划后循环）
+            └─ tool_calls 为空 → fast_pass → step_router（快速通过循环）
     返回:
         CompiledGraph: 编译后的子图，可被 DagEngineNode 作为 ainvoke 调用。
     """
+    # 创建纯思考步骤快速通过节点
+    fast_pass = FastPassNode(event_publisher=event_publisher)
+
     # === 构建 Step Loop 内层子图 ===
     step_loop_subgraph = build_step_loop_subgraph(
         step_think=step_think,
@@ -2176,6 +2344,7 @@ def build_agent_loop_subgraph(
         step_evaluate=step_evaluate,
         step_repair=step_repair,
         replan=replan,
+        fast_pass=fast_pass,
         event_publisher=event_publisher,
     )
 

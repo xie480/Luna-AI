@@ -145,8 +145,8 @@ class AgentLoopSubGraphNodeName(str, Enum):
 class AgentStepLoopSubGraphNodeName(str, Enum):
     """Agent Step Loop 子图内部节点名。
 
-    做什么：定义 Step Loop 内层子图的 7 个节点名。
-    为什么这样做：对应 agent loop.md 的 StepLoop = Think → Execute → Observe → Evaluate → (Pass/Repair/Replan)。
+    做什么：定义 Step Loop 内层子图的 8 个节点名。
+    为什么这样做：对应 agent loop.md 的 StepLoop = Think → Execute → Observe → Evaluate → (Pass/Repair/Replan/FastPass)。
     """
 
     STEP_ROUTER = "agent_step_router"
@@ -156,6 +156,7 @@ class AgentStepLoopSubGraphNodeName(str, Enum):
     STEP_EVALUATE = "agent_step_evaluate"
     STEP_REPAIR = "agent_step_repair"
     REPLAN = "agent_replan"
+    FAST_PASS = "agent_fast_pass"
 
 
 class AgentStepRoute(str, Enum):
