@@ -57,8 +57,11 @@ export const AgentLoopPanel: React.FC = () => {
   /** 失败步骤数 */
   const failedSteps = plan.steps.filter((s) => s.status === 'failed').length;
 
+  /** 是否正在执行中（用于触发发光边框动画） */
+  const isRunning = activeLoop.status === 'executing' || activeLoop.status === 'replanning' || activeLoop.status === 'verifying';
+
   return (
-    <div className="al-panel al-panel--embedded">
+    <div className={`al-panel al-panel--embedded${isRunning ? ' al-panel--running' : ''}`}>
       {/* ═══ Step 时间线 ═══ */}
       <div className="al-steps-container">
         <AgentStepTimeline

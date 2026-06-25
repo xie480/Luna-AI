@@ -28,13 +28,13 @@ import {
 // 常量映射
 // ============================================================
 
-/** 步骤状态颜色映射 */
+/** 步骤状态颜色映射（与赛博朋克全息流程图对齐） */
 const STATUS_COLOR: Record<AgentStepStatus, string> = {
-  pending: '#6b7280',
-  running: '#06b6d4',
-  passed: '#22c55e',
-  failed: '#ef4444',
-  skipped: '#6b7280',
+  pending: 'rgba(255, 255, 255, 0.25)',
+  running: '#00ffff',
+  passed: '#00fa9a',
+  failed: '#ff003c',
+  skipped: 'rgba(255, 255, 255, 0.15)',
 };
 
 /** 步骤状态中文标签 */
@@ -67,12 +67,12 @@ const StatusIcon: React.FC<{ status: AgentStepStatus }> = ({ status }) => {
   }
 };
 
-/** 评估结论颜色映射 */
+/** 评估结论颜色映射（赛博朋克色系） */
 const VERDICT_COLOR: Record<string, string> = {
-  pass: '#22c55e',
-  fail: '#ef4444',
-  partial: '#f59e0b',
-  needs_replan: '#ff9800',
+  pass: '#00fa9a',
+  fail: '#ff003c',
+  partial: '#ffaa00',
+  needs_replan: '#ffaa00',
 };
 
 /** 评估结论中文标签 */

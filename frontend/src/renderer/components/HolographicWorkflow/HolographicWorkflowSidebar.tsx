@@ -187,18 +187,29 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   // 注意：全局目标已移至固定区域，不再参与滚动追踪
   useEffect(() => {
     if (!scrollRef.current || !hasPlan) return;
-    const allNodeTypes = isDagMode && dagActivePlan
-      ? [
-          ...preDagNodes.map(n => n.nodeType),
-          ...dagActivePlan.states.map(s => s.stateId),
-          ...postDagNodes.map(n => n.nodeType),
-        ]
-      : nodes.map(n => n.nodeType);
+    let allNodeTypes: string[];
+    if (isDagMode && dagActivePlan) {
+      // DAG 模式：预DAG → State → 后DAG
+      allNodeTypes = [
+        ...preDagNodes.map(n => n.nodeType),
+        ...dagActivePlan.states.map(s => s.stateId),
+        ...postDagNodes.map(n => n.nodeType),
+      ];
+    } else if (isAgentLoopMode) {
+      // Agent Loop 模式：预处理 → Agent Loop 引擎 → 后处理
+      allNodeTypes = [
+        ...preDagNodes.map(n => n.nodeType),
+        CHAT_WORKFLOW_NODE_TYPE.DAG_ENGINE_AGENT_LOOP,
+        ...postDagNodes.map(n => n.nodeType),
+      ];
+    } else {
+      allNodeTypes = nodes.map(n => n.nodeType);
+    }
     const activeNode = allNodeTypes[allNodeTypes.length - 1];
     if (activeNode) {
       setActiveNodeId(activeNode);
     }
-  }, [nodes, hasPlan, dagActivePlan, postDagNodes]);
+  }, [nodes, hasPlan, dagActivePlan, postDagNodes, isAgentLoopMode, isDagMode, preDagNodes]);
 
   // AR Panel
   const toggleARPanel = useCallback((nodeType: string, event: React.MouseEvent) => {
@@ -222,38 +233,50 @@ export const HolographicWorkflowSidebar: React.FC = () => {
     return () => { window.removeEventListener('click', handleClickOutside); };
   }, [arPanelData]);
 
-  // 计算 DAG 模式下的节点列表（用于 HolographicConnections）
+  // 计算 DAG/Agent Loop 模式下的节点列表（用于 HolographicConnections）
   // 注意：全局目标节点已从可滚动区域移除，不再参与连线计算
   const dagConnectionNodes: ChatNodeProjection[] = useMemo(() => {
-    if (!isDagMode || !dagActivePlan) return preDagNodes as ChatNodeProjection[];
+    if (!isDagMode && !isAgentLoopMode) return preDagNodes as ChatNodeProjection[];
     // 构建虚拟 node 列表供 HolographicConnections 计算连线
     const virtualNodes: ChatNodeProjection[] = [];
     // 预 DAG 节点
     for (const n of preDagNodes) {
       virtualNodes.push(n as ChatNodeProjection);
     }
-    // State 节点
-    for (const s of dagActivePlan.states) {
+
+    // Agent Loop 模式：将 Agent Loop 引擎作为单个节点加入连线列表
+    if (isAgentLoopMode) {
       virtualNodes.push({
-        nodeType: s.stateId,
-        status: (() => {
-          if (s.status === DAG_NODE_STATUS.SUCCEEDED) return 'succeeded';
-          if (s.status === DAG_NODE_STATUS.FAILED) return 'failed';
-          if (s.status === DAG_NODE_STATUS.RUNNING) return 'running';
-          if (s.status === DAG_NODE_STATUS.DEGRADED) return 'degraded';
-          return 'pending';
-        })(),
+        nodeType: CHAT_WORKFLOW_NODE_TYPE.DAG_ENGINE_AGENT_LOOP,
+        status: agentLoopActiveLoop
+          ? (agentLoopActiveLoop.status === 'executing' ? 'running' : agentLoopActiveLoop.status === 'completed' ? 'succeeded' : agentLoopActiveLoop.status === 'terminated' ? 'failed' : 'pending')
+          : (chatActivePlan?.status === 'completed' ? 'succeeded' : chatActivePlan?.status === 'failed' ? 'failed' : 'running'),
       } as ChatNodeProjection);
+    } else if (isDagMode && dagActivePlan) {
+      // DAG 模式：State 节点
+      for (const s of dagActivePlan.states) {
+        virtualNodes.push({
+          nodeType: s.stateId,
+          status: (() => {
+            if (s.status === DAG_NODE_STATUS.SUCCEEDED) return 'succeeded';
+            if (s.status === DAG_NODE_STATUS.FAILED) return 'failed';
+            if (s.status === DAG_NODE_STATUS.RUNNING) return 'running';
+            if (s.status === DAG_NODE_STATUS.DEGRADED) return 'degraded';
+            return 'pending';
+          })(),
+        } as ChatNodeProjection);
+      }
     }
+
     // 后 DAG 节点（上下文治理、Prompt 装配、LLM、响应持久化等）
     for (const n of postDagNodes) {
       virtualNodes.push(n as ChatNodeProjection);
     }
     return virtualNodes;
-  }, [isDagMode, dagActivePlan, preDagNodes, postDagNodes]);
+  }, [isDagMode, isAgentLoopMode, dagActivePlan, preDagNodes, postDagNodes, agentLoopActiveLoop, chatActivePlan]);
 
   // HolographicConnections 使用的节点列表
-  const connectionNodes = isDagMode ? dagConnectionNodes : chatNodes;
+  const connectionNodes = (isDagMode || isAgentLoopMode) ? dagConnectionNodes : chatNodes;
 
   return (
     <>
@@ -410,9 +433,15 @@ export const HolographicWorkflowSidebar: React.FC = () => {
                   />
                 ))}
 
-                {/* Agent Loop 引擎节点 — 特殊渲染（类似 DAG 模式的 State 节点） */}
+                {/* Agent Loop 引擎节点 — 特殊渲染（类似 DAG 模式的 State 节点）
+                 * data-node-type 用于 HolographicConnections 自动检测连线目标。
+                 * agent-loop-node-wrapper CSS 类确保左右边距与全局目标面板一致。 */}
                 {agentLoopActiveLoop ? (
-                  <div style={{ minHeight: 200 }}>
+                  <div
+                    className="agent-loop-node-wrapper"
+                    data-node-type={CHAT_WORKFLOW_NODE_TYPE.DAG_ENGINE_AGENT_LOOP}
+                    style={{ minHeight: 200 }}
+                  >
                     <AgentLoopPanelEmbedded />
                   </div>
                 ) : (

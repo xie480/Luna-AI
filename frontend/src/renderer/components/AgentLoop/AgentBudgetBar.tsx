@@ -28,8 +28,8 @@ const BudgetItem: React.FC<{
 }> = ({ label, used, max }) => {
   /** 计算消耗百分比，避免除零 */
   const pct = max > 0 ? Math.min((used / max) * 100, 100) : 0;
-  /** 状态色：正常为紫色主色调，超过 80% 为琥珀色警告，达到 100% 为红色 */
-  const barColor = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#a855f7';
+  /** 状态色：正常为青色主色调（赛博朋克），超过 80% 为琥珀色警告，达到 100% 为红色 */
+  const barColor = pct >= 100 ? '#ff003c' : pct >= 80 ? '#ffaa00' : '#00ffff';
 
   return (
     <div className="al-budget-item">

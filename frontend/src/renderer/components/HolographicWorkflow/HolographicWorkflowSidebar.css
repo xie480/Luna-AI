@@ -244,6 +244,11 @@
   overflow: hidden;
   transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
+  /* 与背景面板容器保留左右边距，避免完全铺满宽度 */
+  margin: 0 12px;
+  border-radius: 8px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 /* 展开状态 — 允许内容完全展开 */
@@ -274,13 +279,13 @@
   opacity: 0.4;
 }
 
-/* 底部发光装饰线 */
+/* 底部发光装饰线（考虑容器左右边距） */
 .dag-objective-fixed-area::after {
   content: '';
   position: absolute;
   bottom: 0;
-  left: 12px;
-  right: 12px;
+  left: 8px;
+  right: 8px;
   height: 1px;
   background: linear-gradient(
     90deg,
@@ -293,12 +298,12 @@
   pointer-events: none;
 }
 
-/* 全局目标摘要行（始终可见） */
+/* 全局目标摘要行（始终可见）— padding 与外部 margin 叠加 */
 .dag-objective-fixed-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 12px;
   position: relative;
   z-index: 2;
 }
@@ -370,7 +375,7 @@
 .dag-objective-fixed-details {
   position: relative;
   z-index: 2;
-  padding: 0 16px 10px;
+  padding: 0 12px 10px;
   overflow: hidden;
   opacity: 1;
   transition: opacity 0.25s ease, padding 0.3s ease;
@@ -391,37 +396,39 @@
 }
 
 /* ============================================================
- * Agent Loop 模式：固定目标区域紫色主题覆盖
- * 做什么：Agent Loop 复用 dag-objective-fixed-area 布局，但使用紫色主题色。
- * 为什么这样做：Agent Loop 主色调为 #a855f7（紫色），与 DAG 模式的橙色区分。
+ * Agent Loop 模式：固定目标区域赛博朋克主题覆盖
+ * 做什么：Agent Loop 复用 dag-objective-fixed-area 布局，
+ *         统一使用青色（#00ffff）主题色，与全息流程图侧边栏保持一致。
+ * 为什么这样做：Agent Loop 的 UI 必须融入赛博朋克全息视觉语言，
+ *               网格叠加、发光边框、等宽字体三位一体。
  * ============================================================ */
 .agent-loop-objective::before {
-  border-bottom-color: rgba(168, 85, 247, 0.15);
+  border-bottom-color: rgba(0, 255, 255, 0.15);
 }
 .agent-loop-objective::after {
-  background: linear-gradient(90deg, transparent 0%, rgba(168, 85, 247, 0.5) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 255, 255, 0.5) 50%, transparent 100%);
 }
 
 /* Agent Loop 固定区域内的子组件样式适配 */
 .agent-loop-objective .dag-objective-fixed-details {
-  padding: 0;
+  padding: 0 4px 8px;
 }
 .agent-loop-objective .dag-objective-fixed-details .al-goal-section {
   border-bottom: none;
 }
 .agent-loop-objective .dag-objective-fixed-details .al-goal-header {
-  padding: 8px 0;
+  padding: 6px 0;
 }
 .agent-loop-objective .dag-objective-fixed-details .al-goal-details {
-  padding: 0 0 8px 24px;
+  padding: 0 0 6px 24px;
 }
 .agent-loop-objective .dag-objective-fixed-details .al-plan-header {
-  padding: 6px 0;
+  padding: 4px 0;
   border-bottom: none;
   background: none;
 }
 .agent-loop-objective .dag-objective-fixed-details .al-budget-bar {
-  padding: 6px 0 0;
+  padding: 4px 0 0;
   border-bottom: none;
   background: none;
 }
@@ -481,4 +488,18 @@
   stroke: rgba(0, 255, 255, 0.15);
   stroke-width: 2;
   fill: none;
+}
+
+/* ============================================================
+ * Agent Loop 模式：特殊 loop 节点（内嵌面板）边距
+ * 做什么：为 Agent Loop 引擎节点在侧边栏中保留左右边距，
+ *         避免与背景面板容器完全相同的宽度。
+ * 为什么这样做：与全局目标面板保持一致的视觉节奏，
+ *               左右边距让用户能感知到面板嵌套层级。
+ * ============================================================ */
+.node-list .agent-loop-node-wrapper {
+  /* 与背景面板容器保留左右边距 */
+  margin: 0 12px;
+  border-radius: 8px;
+  overflow: visible;
 }

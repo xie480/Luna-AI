@@ -693,17 +693,23 @@ class SSEManager {
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.PLAN_CREATED: {
-          // 通过 payload 中是否包含 non_goals 判断是 Agent Loop 还是 Plan + Cursor
+          // 通过 agentLoopStore.activeLoop 是否存在判断是 Agent Loop 还是 Plan + Cursor。
+          // 为什么这样做：GOAL_LOCKED 事件会先于 PLAN_CREATED 到达并设置 activeLoop，
+          //               后端 PLAN_CREATED 载荷中不包含 non_goals 字段，
+          //               因此不能用 payload 内容区分两种模式。
           const _pcPayload = msg.payload as Record<string, unknown>;
-          if (_pcPayload && typeof _pcPayload === 'object' && 'non_goals' in _pcPayload) {
-            import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
-              useAgentLoopStore.getState().onPlanCreated(_pcPayload, msg.trace_id || '');
-            });
-          } else {
-            import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-              useDagWorkflowStore.getState().onPlanCreated(msg.payload as DagPlanCreatedPayload, msg.trace_id);
-            });
-          }
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const agentLoopState = useAgentLoopStore.getState();
+            if (agentLoopState.activeLoop) {
+              // Agent Loop 模式：目标已锁定，计划待填充
+              agentLoopState.onPlanCreated(_pcPayload, msg.trace_id || '');
+            } else {
+              // DAG 模式（Plan + Cursor）
+              import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+                useDagWorkflowStore.getState().onPlanCreated(msg.payload as DagPlanCreatedPayload, msg.trace_id);
+              });
+            }
+          });
           break;
         }
 

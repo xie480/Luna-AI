@@ -38,9 +38,9 @@ function formatMs(ms: number): string {
  * 做什么：根据验收状态返回对应的图标和颜色。
  */
 const STATUS_CONFIG: Record<string, { Icon: React.FC<React.SVGProps<SVGSVGElement>>; color: string; label: string }> = {
-  completed: { Icon: IconCheck, color: '#22c55e', label: '验收通过' },
-  completed_with_gaps: { Icon: IconWarning, color: '#f59e0b', label: '部分标准未满足' },
-  failed: { Icon: IconXCircle, color: '#ef4444', label: '验收失败' },
+  completed: { Icon: IconCheck, color: '#00fa9a', label: '验收通过' },
+  completed_with_gaps: { Icon: IconWarning, color: '#ffaa00', label: '部分标准未满足' },
+  failed: { Icon: IconXCircle, color: '#ff003c', label: '验收失败' },
 };
 
 /**
@@ -92,9 +92,9 @@ export const AgentFinalVerifyCard: React.FC<AgentFinalVerifyCardProps> = ({
             <div key={i} className="al-final-criterion">
               <span className="al-final-criterion-icon">
                 {c.met ? (
-                  <IconCheck width="12" height="12" style={{ color: '#22c55e' }} />
+                  <IconCheck width="12" height="12" style={{ color: '#00fa9a' }} />
                 ) : (
-                  <IconXCircle width="12" height="12" style={{ color: '#ef4444' }} />
+                  <IconXCircle width="12" height="12" style={{ color: '#ff003c' }} />
                 )}
               </span>
               <span className="al-final-criterion-text">{c.criterion}</span>
@@ -118,11 +118,11 @@ export const AgentFinalVerifyCard: React.FC<AgentFinalVerifyCardProps> = ({
             <span className="al-final-stat-label">总步骤</span>
           </div>
           <div className="al-final-stat">
-            <span className="al-final-stat-value" style={{ color: '#22c55e' }}>{succeededSteps}</span>
+            <span className="al-final-stat-value" style={{ color: '#00fa9a' }}>{succeededSteps}</span>
             <span className="al-final-stat-label">成功</span>
           </div>
           <div className="al-final-stat">
-            <span className="al-final-stat-value" style={{ color: '#ef4444' }}>{failedSteps}</span>
+            <span className="al-final-stat-value" style={{ color: '#ff003c' }}>{failedSteps}</span>
             <span className="al-final-stat-label">失败</span>
           </div>
           {elapsedMs !== undefined && (

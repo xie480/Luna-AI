@@ -15,13 +15,13 @@ import { AgentStepCard } from './AgentStepCard';
 // 常量
 // ============================================================
 
-/** 步骤状态颜色映射（与 AgentStepCard 保持一致） */
+/** 步骤状态颜色映射（与赛博朋克全息流程图对齐） */
 const STATUS_COLOR: Record<AgentStepStatus, string> = {
-  pending: '#6b7280',
-  running: '#06b6d4',
-  passed: '#22c55e',
-  failed: '#ef4444',
-  skipped: '#6b7280',
+  pending: 'rgba(255, 255, 255, 0.25)',
+  running: '#00ffff',
+  passed: '#00fa9a',
+  failed: '#ff003c',
+  skipped: 'rgba(255, 255, 255, 0.15)',
 };
 
 // ============================================================
