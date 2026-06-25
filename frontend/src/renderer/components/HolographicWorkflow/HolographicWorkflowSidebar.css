@@ -245,7 +245,7 @@
   transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
   /* 与背景面板容器保留左右边距，避免完全铺满宽度 */
-  margin: 0 12px;
+  margin: 0 18px;
   border-radius: 8px;
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
@@ -499,7 +499,7 @@
  * ============================================================ */
 .node-list .agent-loop-node-wrapper {
   /* 与背景面板容器保留左右边距 */
-  margin: 0 12px;
+  margin: 0 18px;
   border-radius: 8px;
   overflow: visible;
 }

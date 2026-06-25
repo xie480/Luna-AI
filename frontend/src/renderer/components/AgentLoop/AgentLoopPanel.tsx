@@ -37,6 +37,8 @@ export const AgentLoopPanel: React.FC = () => {
   const toggleObservationExpanded = useAgentLoopStore((s) => s.toggleObservationExpanded);
   const expandedEvaluations = useAgentLoopStore((s) => s.expandedEvaluations);
   const toggleEvaluationExpanded = useAgentLoopStore((s) => s.toggleEvaluationExpanded);
+  const expandedIterations = useAgentLoopStore((s) => s.expandedIterations);
+  const toggleIterationExpanded = useAgentLoopStore((s) => s.toggleIterationExpanded);
 
   // ── 空状态 ──
   if (!activeLoop) {
@@ -71,10 +73,12 @@ export const AgentLoopPanel: React.FC = () => {
           expandedThoughts={expandedThoughts}
           expandedObservations={expandedObservations}
           expandedEvaluations={expandedEvaluations}
+          expandedIterations={expandedIterations}
           onToggleStep={toggleStepExpanded}
           onToggleThought={toggleThoughtExpanded}
           onToggleObservation={toggleObservationExpanded}
           onToggleEvaluation={toggleEvaluationExpanded}
+          onToggleIteration={toggleIterationExpanded}
         />
       </div>
 

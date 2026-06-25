@@ -743,7 +743,18 @@ class StepThinkNode:
             agent_loop.execution.last_tool_calls = think_data.get("tool_calls", [])
             agent_loop.execution.last_error = ""
 
-            # 发布思考事件
+            # 发布思考事件（含完整工具调用规划详情和循环迭代索引）
+            # 循环迭代索引 = retry_count + 1，首次执行为 1，修复后重试递增
+            loop_iteration_index = agent_loop.execution.retry_count + 1
+            # 序列化工具调用列表，包含 purpose、parameters 等详情
+            tool_calls_detail = []
+            for tc_item in agent_loop.execution.last_tool_calls:
+                tool_calls_detail.append({
+                    "tool_name": tc_item.get("tool_name", ""),
+                    "skill_name": tc_item.get("skill_name", ""),
+                    "parameters": tc_item.get("parameters", {}),
+                    "purpose": tc_item.get("purpose", ""),
+                })
             await _emit_dag_event(
                 DagWorkflowEventType.EVT_DAG_STEP_THINKING,
                 trace_id, session_id,
@@ -751,8 +762,10 @@ class StepThinkNode:
                     "plan_id": agent_loop.goal.task_id,
                     "step_id": current_step.step_id,
                     "step_index": agent_loop.plan.current_step_index,
-                    "thought": agent_loop.execution.last_thought[:200],
+                    "thought": agent_loop.execution.last_thought[:500],
                     "tool_calls_count": len(agent_loop.execution.last_tool_calls),
+                    "tool_calls": tool_calls_detail,
+                    "loop_iteration_index": loop_iteration_index,
                 },
                 self.event_publisher,
             )
@@ -905,7 +918,8 @@ class AgentToolExecuteNode:
                 }
                 continue
 
-            # 发布 NODE_STARTED 事件
+            # 发布 NODE_STARTED 事件（含工具调用详情：purpose、parameters、skill_name）
+            purpose = tc.get("purpose", "")
             await _emit_dag_event(
                 DagWorkflowEventType.EVT_DAG_NODE_STARTED,
                 trace_id, session_id,
@@ -915,6 +929,9 @@ class AgentToolExecuteNode:
                     "node_id": tc_id,
                     "node_type": "tool_execute",
                     "tool_name": tool_name,
+                    "skill_name": skill_name,
+                    "purpose": purpose,
+                    "parameters": parameters,
                 },
                 self.event_publisher,
             )
@@ -946,6 +963,8 @@ class AgentToolExecuteNode:
                     gating_required=False,
                 )
 
+                # 记录工具执行开始时间，用于计算单个工具调用耗时
+                tc_start_time = time.time()
                 result = await tool_executor.execute(
                     trace_id=trace_id,
                     node_def=node_def,
@@ -957,16 +976,18 @@ class AgentToolExecuteNode:
                         "skill_registry": self.mcp_tool_registry,
                     },
                 )
+                # 计算单个工具调用耗时（毫秒）
+                tc_latency_ms = int((time.time() - tc_start_time) * 1000)
 
                 logger.info(
                     f"[TraceID:{trace_id}] ToolExecuteNode: 工具 {tool_name} "
-                    f"执行完毕，结果：{result}"
+                    f"执行完毕，耗时 {tc_latency_ms}ms，结果：{result}"
                 )
 
                 partitioned_outputs[tc_id] = result
                 agent_loop.budget.tool_calls_used += 1
 
-                # 发布 NODE_COMPLETED 事件
+                # 发布 NODE_COMPLETED 事件（含 tool_name 和单个工具调用耗时）
                 await _emit_dag_event(
                     DagWorkflowEventType.EVT_DAG_NODE_COMPLETED,
                     trace_id, session_id,
@@ -975,6 +996,7 @@ class AgentToolExecuteNode:
                         "step_id": agent_loop.execution.current_step_id,
                         "node_id": tc_id,
                         "node_type": "tool_execute",
+                        "tool_name": tool_name,
                         "success": result.get("success", False),
                         "outputs": {
                             k: v for k, v in result.items()
@@ -982,6 +1004,7 @@ class AgentToolExecuteNode:
                         },
                         "error_message": result.get("error_message", "")
                             if not result.get("success", True) else None,
+                        "latency_ms": tc_latency_ms,
                     },
                     self.event_publisher,
                 )
@@ -1109,7 +1132,7 @@ class ObserveNode:
 
                 agent_loop.execution.last_observation = "\n".join(observation_parts)
 
-            # 发布观察事件
+            # 发布观察事件（含循环迭代索引）
             await _emit_dag_event(
                 DagWorkflowEventType.EVT_DAG_STEP_OBSERVED,
                 trace_id, session_id,
@@ -1117,6 +1140,7 @@ class ObserveNode:
                     "plan_id": agent_loop.goal.task_id,
                     "step_id": agent_loop.execution.current_step_id,
                     "observation_preview": agent_loop.execution.last_observation[:300],
+                    "loop_iteration_index": agent_loop.execution.retry_count + 1,
                 },
                 self.event_publisher,
             )
@@ -1270,7 +1294,7 @@ class AgentStepEvaluateNode:
 
             agent_loop.execution.evaluation_result = eval_result
 
-            # 发布评估事件
+            # 发布评估事件（含循环迭代索引）
             await _emit_dag_event(
                 DagWorkflowEventType.EVT_DAG_STEP_EVALUATED,
                 trace_id, session_id,
@@ -1282,6 +1306,7 @@ class AgentStepEvaluateNode:
                     "evaluation_reason": eval_result.evaluation_reason,
                     "gap_analysis": eval_result.gap_analysis,
                     "suggestion": eval_result.suggestion,
+                    "loop_iteration_index": agent_loop.execution.retry_count + 1,
                 },
                 self.event_publisher,
             )

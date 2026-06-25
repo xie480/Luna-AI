@@ -247,5 +247,30 @@ export const IconStats: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg viewBox="0 0 24 24" fill="none" {...props}>
     <path d="M21.21 15.89A10 10 0 1 1 8 2.83" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     <path d="M22 12A10 10 0 0 0 12 2v10z" stroke="currentColor" strokeWidth="1.5" />
-  </svg>
-);
+    </svg>
+  );
+  
+  /**
+   * 循环迭代图标：循环箭头（用于 Loop Iteration 标识）。
+   * 做什么：在步骤卡片中标识循环迭代次数和迭代区块标题。
+   */
+  export const IconLoop: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path
+        d="M17 2l4 4-4 4"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path
+        d="M3 11V9a4 4 0 0 1 4-4h14"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+      />
+      <path
+        d="M7 22l-4-4 4-4"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+      />
+      <path
+        d="M21 13v2a4 4 0 0 1-4 4H3"
+        stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
+      />
+    </svg>
+  );

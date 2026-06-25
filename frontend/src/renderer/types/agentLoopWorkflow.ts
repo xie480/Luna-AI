@@ -104,9 +104,50 @@ export interface AgentStepProjection {
   /** 重试次数 */
   retryCount: number;
 
+  // === 循环迭代记录（万能循环核心）===
+  /**
+   * 已完成的循环迭代列表。
+   * 做什么：记录每个 Step 中 Think → Execute → Observe → Evaluate 的完整循环迭代。
+   * 为什么这样做：一个步骤可能经历多次循环（fail → repair → re-think → re-execute），
+   *               每次迭代的历史必须完整保留，而不是被覆盖。
+   * 边界条件：当步骤正在进行中时，当前活跃迭代不在此列表中（从 live 字段读取）。
+   */
+  loopIterations: AgentLoopIteration[];
+  /** 当前正在执行的循环迭代索引（从 1 开始，用于展示标签） */
+  currentIterationIndex: number;
+
   // === 时间 ===
   startedAtMs?: number;
   endedAtMs?: number;
+  latencyMs?: number;
+}
+
+/**
+ * 单次循环迭代快照。
+ * 做什么：记录 Step 内一次 Think → Execute → Observe → Evaluate 的完整快照。
+ * 为什么这样做：一个 Step 可能经历多次循环（fail → repair → re-think → re-execute），
+ *               每次迭代的历史必须完整保留，供前端展示完整的循环过程。
+ * 边界条件：toolCalls 和 toolResults 可能为空数组（纯思考步骤走 fast_pass 路径）。
+ * 异常行为：无。
+ */
+export interface AgentLoopIteration {
+  /** 迭代索引（从 1 开始） */
+  iterationIndex: number;
+  /** 思考结果 */
+  thought: string;
+  /** 规划的工具调用列表 */
+  toolCalls: AgentToolCall[];
+  /** 工具执行结果 */
+  toolResults: AgentToolResult[];
+  /** 观察结果 */
+  observation: string;
+  /** 评估结果 */
+  evaluationResult?: AgentStepEvaluation;
+  /** 迭代开始时间戳 */
+  startedAtMs?: number;
+  /** 迭代结束时间戳 */
+  endedAtMs?: number;
+  /** 迭代总耗时（毫秒） */
   latencyMs?: number;
 }
 
@@ -117,6 +158,7 @@ export interface AgentToolCall {
   toolName: string;
   skillName: string;
   parameters: Record<string, unknown>;
+  /** 调用原因 / 用途说明 */
   purpose: string;
 }
 

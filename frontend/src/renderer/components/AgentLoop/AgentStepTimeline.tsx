@@ -41,6 +41,8 @@ interface AgentStepTimelineProps {
   expandedObservations: Record<string, boolean>;
   /** Evaluate 展开状态 */
   expandedEvaluations: Record<string, boolean>;
+  /** 循环迭代展开状态，key 为 `${stepId}_${iterationIndex}` */
+  expandedIterations: Record<string, boolean>;
   /** 切换步骤展开 */
   onToggleStep: (stepId: string) => void;
   /** 切换 Think 展开 */
@@ -49,6 +51,8 @@ interface AgentStepTimelineProps {
   onToggleObservation: (stepId: string) => void;
   /** 切换 Evaluate 展开 */
   onToggleEvaluation: (stepId: string) => void;
+  /** 切换循环迭代展开 */
+  onToggleIteration: (stepId: string, iterationIndex: number) => void;
 }
 
 // ============================================================
@@ -70,10 +74,12 @@ export const AgentStepTimeline: React.FC<AgentStepTimelineProps> = ({
   expandedThoughts,
   expandedObservations,
   expandedEvaluations,
+  expandedIterations,
   onToggleStep,
   onToggleThought,
   onToggleObservation,
   onToggleEvaluation,
+  onToggleIteration,
 }) => {
   /** 自动滚动到当前执行步骤的引用 */
   const currentStepRef = useRef<HTMLDivElement>(null);
@@ -138,10 +144,12 @@ export const AgentStepTimeline: React.FC<AgentStepTimelineProps> = ({
                 isThoughtExpanded={!!expandedThoughts[step.stepId]}
                 isObservationExpanded={!!expandedObservations[step.stepId]}
                 isEvaluationExpanded={!!expandedEvaluations[step.stepId]}
+                expandedIterations={expandedIterations}
                 onToggle={() => onToggleStep(step.stepId)}
                 onToggleThought={() => onToggleThought(step.stepId)}
                 onToggleObservation={() => onToggleObservation(step.stepId)}
                 onToggleEvaluation={() => onToggleEvaluation(step.stepId)}
+                onToggleIteration={onToggleIteration}
               />
             </div>
           </div>

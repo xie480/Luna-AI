@@ -597,6 +597,23 @@
   flex-shrink: 0;
 }
 
+/* 循环迭代次数标记（步骤头部） */
+.al-step-loop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  background: rgba(138, 43, 226, 0.15);
+  border: 1px solid rgba(138, 43, 226, 0.3);
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 500;
+  color: #a855f7;
+  font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
 .al-step-chevron {
   display: flex;
   align-items: center;
@@ -809,6 +826,198 @@
   font-family: 'Courier New', Courier, monospace;
   font-size: 9px;
   color: rgba(255, 255, 255, 0.25);
+}
+
+/* 工具名称文本 */
+.al-tool-name-text {
+  flex-shrink: 0;
+}
+
+/* 工具 Skill 名称徽章 */
+.al-tool-skill-badge {
+  display: inline-block;
+  padding: 0 4px;
+  background: rgba(138, 43, 226, 0.12);
+  border: 1px solid rgba(138, 43, 226, 0.25);
+  border-radius: 2px;
+  font-size: 8px;
+  color: rgba(168, 85, 247, 0.8);
+  font-weight: 400;
+  flex-shrink: 0;
+}
+
+/* 工具调用原因行 */
+.al-tool-purpose-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.al-tool-purpose-label {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.al-tool-purpose-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+/* 工具调用参数行 */
+.al-tool-params-row {
+  margin-top: 2px;
+}
+
+.al-tool-params {
+  margin: 0;
+  padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.3);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+/* 工具执行结果元信息（耗时 + 重试） */
+.al-tool-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.al-tool-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  color: rgba(255, 170, 0, 0.5);
+}
+
+/* ─── 循环迭代容器 ─── */
+.al-iterations-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.al-iterations-container--active {
+  border-top: 1px dashed rgba(0, 255, 255, 0.12);
+  padding-top: 8px;
+}
+
+.al-iterations-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 4px;
+}
+
+/* 当前迭代运行中的脉冲点 */
+.al-iteration-running-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00ffff;
+  margin-left: 4px;
+  animation: al-pulse 1.5s ease-in-out infinite;
+}
+
+/* ─── 单次循环迭代卡片 ─── */
+.al-iteration {
+  background: rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(138, 43, 226, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.al-iteration--latest {
+  border-color: rgba(0, 255, 255, 0.2);
+  background: rgba(0, 255, 255, 0.02);
+}
+
+.al-iteration-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  text-align: left;
+  font-size: 10px;
+  font-family: 'Courier New', Courier, monospace;
+  transition: background 0.2s, color 0.2s;
+}
+.al-iteration-header:hover {
+  background: rgba(138, 43, 226, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.al-iteration-label {
+  flex: 1;
+  font-weight: 500;
+  color: #a855f7;
+  letter-spacing: 0.3px;
+}
+
+/* "当前" 标记 */
+.al-iteration-latest-badge {
+  display: inline-block;
+  padding: 0 4px;
+  margin-left: 4px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid rgba(0, 255, 255, 0.25);
+  border-radius: 2px;
+  font-size: 8px;
+  color: #00ffff;
+  font-weight: 400;
+  letter-spacing: 0.3px;
+}
+
+/* 迭代详情展开区 */
+.al-iteration-details {
+  padding: 0 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: al-fade-in 0.2s ease;
+}
+
+/* 迭代内紧凑版区块 */
+.al-step-section--compact {
+  gap: 2px;
+}
+
+.al-thought--compact,
+.al-observation--compact {
+  font-size: 9px;
+  max-height: 150px;
+}
+
+/* 小尺寸 verdict 徽章 */
+.al-verdict-badge--sm {
+  font-size: 8px;
+  padding: 0 4px;
+  margin-left: auto;
 }
 
 /* ─── 最终验收 ─── */

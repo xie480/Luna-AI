@@ -16,6 +16,7 @@ import type {
   AgentToolResult,
   AgentStepEvaluation,
   AgentBudgetState,
+  AgentLoopIteration,
 } from '../types/agentLoopWorkflow';
 
 // ============================================================
@@ -34,6 +35,8 @@ interface AgentLoopStoreState {
   expandedThoughts: Record<string, boolean>;
   expandedObservations: Record<string, boolean>;
   expandedEvaluations: Record<string, boolean>;
+  /** 循环迭代展开状态，key 为 `${stepId}_${iterationIndex}` */
+  expandedIterations: Record<string, boolean>;
 
   // === 事件处理方法 ===
   onGoalLocked: (payload: Record<string, unknown>, traceId: string) => void;
@@ -57,6 +60,7 @@ interface AgentLoopStoreState {
   toggleThoughtExpanded: (stepId: string) => void;
   toggleObservationExpanded: (stepId: string) => void;
   toggleEvaluationExpanded: (stepId: string) => void;
+  toggleIterationExpanded: (stepId: string, iterationIndex: number) => void;
   clearLoop: () => void;
 }
 
@@ -97,6 +101,7 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
   expandedThoughts: {},
   expandedObservations: {},
   expandedEvaluations: {},
+  expandedIterations: {},
 
   // ============================================================
   // 事件处理方法
@@ -172,6 +177,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
           lastObservation: '',
           repairCount: 0,
           retryCount: 0,
+          loopIterations: [],
+          currentIterationIndex: 1,
         })),
         currentStepIndex: 0,
       };
@@ -183,7 +190,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理步骤思考事件。
-   * 做什么：更新当前步骤的思考结果和工具调用规划。
+   * 做什么：更新当前步骤的思考结果和工具调用规划，
+   *         同时根据 loopIterationIndex 更新当前循环迭代索引。
    */
   onStepThinking: (payload) => {
     set((state) => {
@@ -194,11 +202,25 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
       if (step) {
         const idx = loop.plan.steps.indexOf(step);
         const updatedSteps = [...loop.plan.steps];
+        const iterationIndex = (payload.loop_iteration_index as number) || step.currentIterationIndex || 1;
+        // 将后端推送的完整 tool_calls 列表解析为 AgentToolCall[]
+        const rawToolCalls = (payload.tool_calls as Array<Record<string, unknown>>) || [];
+        const toolCalls: AgentToolCall[] = rawToolCalls.map((tc) => ({
+          toolName: (tc.tool_name as string) || '',
+          skillName: (tc.skill_name as string) || '',
+          parameters: (tc.parameters as Record<string, unknown>) || {},
+          purpose: (tc.purpose as string) || '',
+        }));
         updatedSteps[idx] = {
           ...step,
           status: 'running',
           lastThought: (payload.thought as string) || '',
+          toolCalls,
+          toolResults: [],
+          lastObservation: '',
+          evaluationResult: undefined,
           startedAtMs: step.startedAtMs || Date.now(),
+          currentIterationIndex: iterationIndex,
         };
         loop.plan = { ...loop.plan, steps: updatedSteps };
       }
@@ -208,7 +230,7 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理节点启动事件。
-   * 做什么：记录工具调用开始。
+   * 做什么：记录工具调用开始，包含完整的 purpose、parameters、skill_name 详情。
    */
   onNodeStarted: (payload) => {
     set((state) => {
@@ -221,9 +243,9 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
         const updatedSteps = [...loop.plan.steps];
         const toolCall: AgentToolCall = {
           toolName: (payload.tool_name as string) || '',
-          skillName: '',
-          parameters: {},
-          purpose: '',
+          skillName: (payload.skill_name as string) || '',
+          parameters: (payload.parameters as Record<string, unknown>) || {},
+          purpose: (payload.purpose as string) || '',
         };
         updatedSteps[idx] = {
           ...step,
@@ -237,7 +259,7 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理节点完成事件。
-   * 做什么：记录工具执行结果。
+   * 做什么：记录工具执行结果，包含 tool_name 和单个工具调用耗时。
    */
   onNodeCompleted: (payload) => {
     set((state) => {
@@ -250,7 +272,7 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
         const updatedSteps = [...loop.plan.steps];
         const result: AgentToolResult = {
           nodeId: (payload.node_id as string) || '',
-          toolName: (payload.node_type as string) || '',
+          toolName: (payload.tool_name as string) || (payload.node_type as string) || '',
           success: (payload.success as boolean) ?? true,
           toolOutput: JSON.stringify(payload.outputs || {}),
           errorMessage: (payload.error_message as string) || '',
@@ -297,7 +319,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理评估事件。
-   * 做什么：更新当前步骤的评估结果。
+   * 做什么：更新当前步骤的评估结果，
+   *         并将当前循环迭代快照保存到 loopIterations 历史中。
    */
   onStepEvaluated: (payload) => {
     set((state) => {
@@ -317,11 +340,25 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
           suggestion: (payload.suggestion as string) || '',
           criteriaChecklist: [],
         };
+        // 将当前迭代快照保存到 loopIterations 历史
+        const iterationIndex = step.currentIterationIndex || (payload.loop_iteration_index as number) || 1;
+        const iterationSnapshot: AgentLoopIteration = {
+          iterationIndex,
+          thought: step.lastThought,
+          toolCalls: [...step.toolCalls],
+          toolResults: [...step.toolResults],
+          observation: step.lastObservation,
+          evaluationResult: evalResult,
+          startedAtMs: step.startedAtMs,
+          endedAtMs: Date.now(),
+          latencyMs: step.startedAtMs ? Date.now() - step.startedAtMs : undefined,
+        };
         updatedSteps[idx] = {
           ...step,
           evaluationResult: evalResult,
-          endedAtMs: Date.now(),
+          endedAtMs: verdict === 'pass' || verdict === 'partial' ? Date.now() : step.endedAtMs,
           latencyMs: step.startedAtMs ? Date.now() - step.startedAtMs : undefined,
+          loopIterations: [...step.loopIterations, iterationSnapshot],
         };
         // 如果通过，推进到下一步
         if (verdict === 'pass' || verdict === 'partial') {
@@ -341,7 +378,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理修复事件。
-   * 做什么：递增当前步骤的修复和重试计数。
+   * 做什么：递增当前步骤的修复和重试计数，清空当前迭代的实时数据准备重新思考。
+   * 注意：loopIterations 历史已经在 onStepEvaluated 中保存，此处无需再快照。
    */
   onStepRepaired: (payload) => {
     set((state) => {
@@ -360,6 +398,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
           toolCalls: [],    // 清空工具调用，准备重新规划
           toolResults: [],
           lastObservation: '',
+          evaluationResult: undefined,
+          currentIterationIndex: (payload.repair_count as number) || step.repairCount + 1,
         };
         loop.plan = { ...loop.plan, steps: updatedSteps };
         loop.budget = {
@@ -396,6 +436,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
         lastObservation: '',
         repairCount: 0,
         retryCount: 0,
+        loopIterations: [],
+        currentIterationIndex: 1,
       }));
       loop.plan = {
         planVersion: newVersion,
@@ -492,5 +534,10 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
     set((state) => ({ expandedObservations: { ...state.expandedObservations, [stepId]: !state.expandedObservations[stepId] } })),
   toggleEvaluationExpanded: (stepId) =>
     set((state) => ({ expandedEvaluations: { ...state.expandedEvaluations, [stepId]: !state.expandedEvaluations[stepId] } })),
-  clearLoop: () => set({ activeLoop: null, isPanelVisible: false, expandedSteps: {}, expandedThoughts: {}, expandedObservations: {}, expandedEvaluations: {} }),
+  toggleIterationExpanded: (stepId, iterationIndex) =>
+    set((state) => {
+      const key = `${stepId}_${iterationIndex}`;
+      return { expandedIterations: { ...state.expandedIterations, [key]: !state.expandedIterations[key] } };
+    }),
+  clearLoop: () => set({ activeLoop: null, isPanelVisible: false, expandedSteps: {}, expandedThoughts: {}, expandedObservations: {}, expandedEvaluations: {}, expandedIterations: {} }),
 }));
