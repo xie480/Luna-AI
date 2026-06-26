@@ -116,18 +116,44 @@ class PlanReplanNode:
                 f"{prompt_text}"
             )
 
-            # 调用 LLM 重构 Plan
-            llm_response = await self.llm_client.invoke_structured(
-                trace_id=trace_id,
-                prompt=prompt_text,
-                schema=self._build_replan_schema(),
-            )
+            # 重试机制：Pydantic 参数校验失败时最多重试 2 次（共 3 次尝试）
+            from pydantic import ValidationError
 
-            # 解析重构结果
-            replan_data = self._parse_replan_response(llm_response)
+            max_retries = 3
+            replan_data: dict[str, Any] = {}
 
-            # 更新 Plan 中的 State 列表
-            self._apply_replan(dag_state, replan_data)
+            for attempt in range(max_retries):
+                try:
+                    # 调用 LLM 重构 Plan
+                    llm_response = await self.llm_client.invoke_structured(
+                        trace_id=trace_id,
+                        prompt=prompt_text,
+                        schema=self._build_replan_schema(),
+                    )
+
+                    # 解析重构结果
+                    replan_data = self._parse_replan_response(llm_response)
+
+                    # 更新 Plan 中的 State 列表（可能抛出 ValidationError）
+                    self._apply_replan(dag_state, replan_data)
+                    break  # 成功应用，退出重试循环
+
+                except ValidationError as ve:
+                    logger.warning(
+                        f"[TraceID:{trace_id}] Plan 重构参数校验失败 "
+                        f"(attempt {attempt+1}/{max_retries}): {ve}"
+                    )
+                    if attempt < max_retries - 1:
+                        # 追加错误反馈到 prompt，引导 LLM 修正输出格式
+                        prompt_text += (
+                            f"\n\n## 前一次输出校验失败，请修正\n"
+                            f"错误信息: {ve}\n"
+                            f"请确保 selected_skills 中每个元素都是包含 "
+                            f"skill_name 和 relevance_reason 的字典对象，"
+                            f"不要使用纯字符串。"
+                        )
+                        continue
+                    raise  # 最后一次重试也失败，向上抛出
 
             # 递增重构计数
             dag_state.plan_replan_count += 1

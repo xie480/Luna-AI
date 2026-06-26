@@ -430,51 +430,82 @@ class GlobalPlannerNode:
                 f"[TraceID:{trace_id}] GlobalPlannerNode: 开始生成全局计划, prompt_text: {prompt_text}"
             )
 
-            llm_response = await self.llm_client.invoke_structured(
-                trace_id=trace_id,
-                prompt=prompt_text,
-                schema=self._build_plan_schema(),
-            )
+            # 重试机制：Pydantic 参数校验失败时最多重试 2 次（共 3 次尝试）
+            from pydantic import ValidationError
 
-            logger.info(
-                f"[TraceID:{trace_id}] GlobalPlannerNode: LLM 输出: {llm_response}"
-            )
+            from app.workflow.dag.types import CompletionCriterion
 
-            plan_data = self._parse_plan_response(llm_response)
+            max_retries = 3
+            last_error: Exception | None = None
+            steps: list[AgentStepState] = []
+            plan_data: dict[str, Any] = {}
 
-            # 构建 PlanState
-            steps = []
-            for i, step_data in enumerate(plan_data.get("steps", [])):
-                from app.workflow.dag.types import CompletionCriterion
-                criteria = []
-                for c in step_data.get("completion_criteria", []):
-                    criteria.append(CompletionCriterion(
-                        field=c.get("field", ""),
-                        operator=c.get("operator", "not_empty"),
-                        value=c.get("value", True),
-                    ))
-                # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
-                raw_deps = step_data.get("dependencies", [])
-                coerced_deps = [str(d) for d in raw_deps]
-                steps.append(AgentStepState(
-                    step_id=generate_string_id(),
-                    title=step_data.get("title", f"步骤 {i + 1}"),
-                    intent=step_data.get("intent", ""),
-                    dependencies=coerced_deps,
-                    expected_output=step_data.get("expected_output", ""),
-                    completion_criteria=criteria,
-                    status=StepStatusEnum.PENDING,
-                    risk_notes=step_data.get("risk_notes", ""),
-                    rollback_hint=step_data.get("rollback_hint", ""),
-                    pre_allocated_skills=step_data.get("pre_allocated_skills", []),
-                ))
+            for attempt in range(max_retries):
+                try:
+                    llm_response = await self.llm_client.invoke_structured(
+                        trace_id=trace_id,
+                        prompt=prompt_text,
+                        schema=self._build_plan_schema(),
+                    )
 
-            agent_loop.plan = PlanState(
-                plan_version=1,
-                steps=steps,
-                current_step_index=0,
-                replan_history=[],
-            )
+                    logger.info(
+                        f"[TraceID:{trace_id}] GlobalPlannerNode: "
+                        f"LLM 输出 (attempt {attempt+1}/{max_retries}): {llm_response}"
+                    )
+
+                    plan_data = self._parse_plan_response(llm_response)
+
+                    # 构建 PlanState
+                    steps = []
+                    for i, step_data in enumerate(plan_data.get("steps", [])):
+                        criteria = []
+                        for c in step_data.get("completion_criteria", []):
+                            criteria.append(CompletionCriterion(
+                                field=c.get("field", ""),
+                                operator=c.get("operator", "not_empty"),
+                                value=c.get("value", True),
+                            ))
+                        # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
+                        raw_deps = step_data.get("dependencies", [])
+                        coerced_deps = [str(d) for d in raw_deps]
+                        steps.append(AgentStepState(
+                            step_id=generate_string_id(),
+                            title=step_data.get("title", f"步骤 {i + 1}"),
+                            intent=step_data.get("intent", ""),
+                            dependencies=coerced_deps,
+                            expected_output=step_data.get("expected_output", ""),
+                            completion_criteria=criteria,
+                            status=StepStatusEnum.PENDING,
+                            risk_notes=step_data.get("risk_notes", ""),
+                            rollback_hint=step_data.get("rollback_hint", ""),
+                            pre_allocated_skills=step_data.get("pre_allocated_skills", []),
+                        ))
+
+                    agent_loop.plan = PlanState(
+                        plan_version=1,
+                        steps=steps,
+                        current_step_index=0,
+                        replan_history=[],
+                    )
+                    break  # 成功构建，退出重试循环
+
+                except ValidationError as ve:
+                    last_error = ve
+                    logger.warning(
+                        f"[TraceID:{trace_id}] GlobalPlannerNode 参数校验失败 "
+                        f"(attempt {attempt+1}/{max_retries}): {ve}"
+                    )
+                    if attempt < max_retries - 1:
+                        # 追加错误反馈到 prompt，引导 LLM 修正输出格式
+                        prompt_text += (
+                            f"\n\n## 前一次输出校验失败，请修正\n"
+                            f"错误信息: {ve}\n"
+                            f"请确保 selected_skills 中每个元素都是包含 "
+                            f"skill_name 和 relevance_reason 的字典对象，"
+                            f"不要使用纯字符串。"
+                        )
+                        continue
+                    raise  # 最后一次重试也失败，向上抛出
 
             # 发布计划创建事件
             await _emit_dag_event(
@@ -1644,45 +1675,75 @@ class AgentReplanNode:
                 f"prompt_text={prompt_text}"
             )
 
-            llm_response = await self.llm_client.invoke_structured(
-                trace_id=trace_id,
-                prompt=prompt_text,
-                schema=self._build_replan_schema(),
-            )
+            # 重试机制：Pydantic 参数校验失败时最多重试 2 次（共 3 次尝试）
+            from pydantic import ValidationError
 
-            logger.info(
-                f"[TraceID:{trace_id}] ReplanNode: "
-                f"LLM 响应：{llm_response}"
-            )
+            from app.workflow.dag.types import CompletionCriterion
 
-            replan_data = self._parse_replan_response(llm_response)
+            max_retries = 3
+            last_error: Exception | None = None
+            new_steps: list[AgentStepState] = []
+            replan_data: dict[str, Any] = {}
 
-            # 构建新的步骤列表
-            new_steps = []
-            for i, step_data in enumerate(replan_data.get("revised_states", [])):
-                from app.workflow.dag.types import CompletionCriterion
-                criteria = []
-                for c in step_data.get("completion_criteria", []):
-                    criteria.append(CompletionCriterion(
-                        field=c.get("field", ""),
-                        operator=c.get("operator", "not_empty"),
-                        value=c.get("value", True),
-                    ))
-                # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
-                raw_deps = step_data.get("dependencies", [])
-                coerced_deps = [str(d) for d in raw_deps]
-                new_steps.append(AgentStepState(
-                    step_id=generate_string_id(),
-                    title=step_data.get("title", f"步骤 {i + 1}"),
-                    intent=step_data.get("intent", ""),
-                    dependencies=coerced_deps,
-                    expected_output=step_data.get("expected_output", ""),
-                    completion_criteria=criteria,
-                    status=StepStatusEnum.PENDING,
-                    risk_notes=step_data.get("risk_notes", ""),
-                    rollback_hint=step_data.get("rollback_hint", ""),
-                    pre_allocated_skills=step_data.get("pre_allocated_skills", []),
-                ))
+            for attempt in range(max_retries):
+                try:
+                    llm_response = await self.llm_client.invoke_structured(
+                        trace_id=trace_id,
+                        prompt=prompt_text,
+                        schema=self._build_replan_schema(),
+                    )
+
+                    logger.info(
+                        f"[TraceID:{trace_id}] ReplanNode: "
+                        f"LLM 响应 (attempt {attempt+1}/{max_retries}): {llm_response}"
+                    )
+
+                    replan_data = self._parse_replan_response(llm_response)
+
+                    # 构建新的步骤列表
+                    new_steps = []
+                    for i, step_data in enumerate(replan_data.get("revised_states", [])):
+                        criteria = []
+                        for c in step_data.get("completion_criteria", []):
+                            criteria.append(CompletionCriterion(
+                                field=c.get("field", ""),
+                                operator=c.get("operator", "not_empty"),
+                                value=c.get("value", True),
+                            ))
+                        # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
+                        raw_deps = step_data.get("dependencies", [])
+                        coerced_deps = [str(d) for d in raw_deps]
+                        new_steps.append(AgentStepState(
+                            step_id=generate_string_id(),
+                            title=step_data.get("title", f"步骤 {i + 1}"),
+                            intent=step_data.get("intent", ""),
+                            dependencies=coerced_deps,
+                            expected_output=step_data.get("expected_output", ""),
+                            completion_criteria=criteria,
+                            status=StepStatusEnum.PENDING,
+                            risk_notes=step_data.get("risk_notes", ""),
+                            rollback_hint=step_data.get("rollback_hint", ""),
+                            pre_allocated_skills=step_data.get("pre_allocated_skills", []),
+                        ))
+                    break  # 成功构建，退出重试循环
+
+                except ValidationError as ve:
+                    last_error = ve
+                    logger.warning(
+                        f"[TraceID:{trace_id}] ReplanNode 参数校验失败 "
+                        f"(attempt {attempt+1}/{max_retries}): {ve}"
+                    )
+                    if attempt < max_retries - 1:
+                        # 追加错误反馈到 prompt，引导 LLM 修正输出格式
+                        prompt_text += (
+                            f"\n\n## 前一次输出校验失败，请修正\n"
+                            f"错误信息: {ve}\n"
+                            f"请确保 selected_skills 中每个元素都是包含 "
+                            f"skill_name 和 relevance_reason 的字典对象，"
+                            f"不要使用纯字符串。"
+                        )
+                        continue
+                    raise  # 最后一次重试也失败，向上抛出
 
             # 校验：目标不可变
             assert agent_loop.goal.global_goal == original_goal, (

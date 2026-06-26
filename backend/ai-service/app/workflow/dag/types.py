@@ -195,6 +195,27 @@ class OverallState(BaseModel):
                     "将跳过 LLM 调用，直接使用预分配结果，以减少 token 消耗。"
                     "由 Plan 生成 Agent 在生成 Plan 时同步输出。",
     )
+
+    @field_validator("pre_allocated_skills", mode="before")
+    @classmethod
+    def _coerce_pre_allocated_skills(cls, v: Any) -> list[dict[str, Any]]:
+        """防御性校验：LLM 可能返回纯字符串名称（如 'web_search'）而非字典格式，
+           需要自动规整为标准字典格式（{"skill_name": "web_search", "relevance_reason": ""}）。
+        """
+        if not isinstance(v, list):
+            return []
+        coerced: list[dict[str, Any]] = []
+        for item in v:
+            if isinstance(item, dict):
+                coerced.append(item)
+            elif isinstance(item, str):
+                # LLM 返回了纯字符串，包装为标准格式
+                coerced.append({"skill_name": item, "relevance_reason": ""})
+            else:
+                # 兜底：跳过无法识别的类型
+                continue
+        return coerced
+
     budget: StateBudget = Field(default_factory=StateBudget)
 
 
@@ -861,6 +882,26 @@ class AgentStepState(BaseModel):
         default_factory=list,
         description="Plan 阶段预分配的 Skill 筛选结果列表。",
     )
+
+    @field_validator("pre_allocated_skills", mode="before")
+    @classmethod
+    def _coerce_pre_allocated_skills(cls, v: Any) -> list[dict[str, Any]]:
+        """防御性校验：LLM 可能返回纯字符串名称（如 'web_search'）而非字典格式，
+           需要自动规整为标准字典格式（{"skill_name": "web_search", "relevance_reason": ""}）。
+        """
+        if not isinstance(v, list):
+            return []
+        coerced: list[dict[str, Any]] = []
+        for item in v:
+            if isinstance(item, dict):
+                coerced.append(item)
+            elif isinstance(item, str):
+                # LLM 返回了纯字符串，包装为标准格式
+                coerced.append({"skill_name": item, "relevance_reason": ""})
+            else:
+                # 兜底：跳过无法识别的类型
+                continue
+        return coerced
 
 
 class PlanState(BaseModel):

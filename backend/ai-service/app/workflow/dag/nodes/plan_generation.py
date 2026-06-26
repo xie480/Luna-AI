@@ -116,23 +116,50 @@ class PlanGenerationNode:
                 f"prompt_text={prompt_text}"
             )
 
-            # 调用 LLM 生成 Plan
-            llm_response = await self.llm_client.invoke_structured(
-                trace_id=trace_id,
-                prompt=prompt_text,
-                schema=self._build_plan_schema(),
-            )
+            # 重试机制：Pydantic 参数校验失败时最多重试 2 次（共 3 次尝试）
+            from pydantic import ValidationError
 
-            # 解析 LLM 输出
-            plan_data = self._parse_plan_response(llm_response)
+            max_retries = 3
+            plan: PlanDefinition | None = None
+            plan_data: dict[str, Any] = {}
 
-            # 构建 PlanDefinition
-            plan = self._build_plan_definition(
-                plan_data=plan_data,
-                session_id=session_id,
-                trace_id=trace_id,
-                existing_global_objective=dag_state.global_objective,
-            )
+            for attempt in range(max_retries):
+                try:
+                    # 调用 LLM 生成 Plan
+                    llm_response = await self.llm_client.invoke_structured(
+                        trace_id=trace_id,
+                        prompt=prompt_text,
+                        schema=self._build_plan_schema(),
+                    )
+
+                    # 解析 LLM 输出
+                    plan_data = self._parse_plan_response(llm_response)
+
+                    # 构建 PlanDefinition（可能抛出 ValidationError）
+                    plan = self._build_plan_definition(
+                        plan_data=plan_data,
+                        session_id=session_id,
+                        trace_id=trace_id,
+                        existing_global_objective=dag_state.global_objective,
+                    )
+                    break  # 成功构建，退出重试循环
+
+                except ValidationError as ve:
+                    logger.warning(
+                        f"[TraceID:{trace_id}] 全局 Plan 参数校验失败 "
+                        f"(attempt {attempt+1}/{max_retries}): {ve}"
+                    )
+                    if attempt < max_retries - 1:
+                        # 追加错误反馈到 prompt，引导 LLM 修正输出格式
+                        prompt_text += (
+                            f"\n\n## 前一次输出校验失败，请修正\n"
+                            f"错误信息: {ve}\n"
+                            f"请确保 selected_skills 中每个元素都是包含 "
+                            f"skill_name 和 relevance_reason 的字典对象，"
+                            f"不要使用纯字符串。"
+                        )
+                        continue
+                    raise  # 最后一次重试也失败，向上抛出
 
             # 更新 DAG 状态
             dag_state.plan = plan
