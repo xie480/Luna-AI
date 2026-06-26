@@ -713,6 +713,102 @@ _CHAT_STATUS_TEXTS: dict[tuple[ChatStatusStage, ChatStatusState], list[str]] = {
         "好啦，Luna转换好了~",
         "嗯嗯，数据处理完成！",
     ],
+
+    # ================================================================
+    # Agent Loop 专用阶段 — 步骤思考（StepThinkNode）
+    #     文案方向：Luna 在决定当前步骤应该怎么做、用什么工具
+    #     ================================================================
+    (ChatStatusStage.DAG_AGENT_STEP_THINK, ChatStatusState.RUNNING): [
+        "让Luna想想这一步该怎么做……",
+        "嗯……Luna在琢磨当前步骤~",
+        "让Luna决定一下这一步用什么工具……",
+        "唔……Luna在规划这一步的执行方式~",
+        "Luna在考虑这一步的最佳方案~",
+    ],
+    (ChatStatusStage.DAG_AGENT_STEP_THINK, ChatStatusState.COMPLETED): [
+        "想好了，Luna知道这一步怎么做了！",
+        "好啦，Luna有思路了~",
+        "嗯嗯，Luna决定了！",
+        "行，Luna知道这一步该怎么办了~",
+        "搞定，Luna有方案了！",
+    ],
+    (ChatStatusStage.DAG_AGENT_STEP_THINK, ChatStatusState.ERROR): [
+        "唔……Luna想不出这步该怎么做……",
+        "哎……Luna卡在这一步了……",
+        "这一步让Luna有点头疼……",
+    ],
+
+    # ================================================================
+    # Agent Loop 专用阶段 — 观察执行结果（ObserveNode）
+    #     文案方向：Luna 在检查工具返回了什么信息
+    #     ================================================================
+    (ChatStatusStage.DAG_AGENT_OBSERVE, ChatStatusState.RUNNING): [
+        "让Luna看看工具返回了什么……",
+        "嗯……Luna检查一下执行结果~",
+        "Luna看看拿到了什么信息……",
+        "唔……Luna在读取工具的输出~",
+        "让Luna瞅瞅工具干得怎么样……",
+    ],
+    (ChatStatusStage.DAG_AGENT_OBSERVE, ChatStatusState.COMPLETED): [
+        "Luna看到结果了！",
+        "好啦，Luna知道工具返回了什么~",
+        "嗯嗯，Luna看完了~",
+        "行，Luna清楚了！",
+        "看到了看到了！",
+    ],
+    (ChatStatusStage.DAG_AGENT_OBSERVE, ChatStatusState.ERROR): [
+        "唔……工具返回的内容Luna没看懂……",
+        "哎……结果有点奇怪……",
+        "工具返回的数据不太对劲……",
+    ],
+
+    # ================================================================
+    # Agent Loop 专用阶段 — 步骤修复重试（StepRepairNode）
+    #     文案方向：Luna 在纠正错误并重试当前步骤
+    #     ================================================================
+    (ChatStatusStage.DAG_AGENT_STEP_REPAIR, ChatStatusState.RUNNING): [
+        "唔……刚才没搞好，让Luna再试一次……",
+        "嗯……Luna调整一下重新来~",
+        "等一下，Luna修一下再试试……",
+        "这条路好像不对……Luna换个方式重来",
+        "哼……Luna就不信搞不定！",
+    ],
+    (ChatStatusStage.DAG_AGENT_STEP_REPAIR, ChatStatusState.COMPLETED): [
+        "好啦，Luna重新搞好了！",
+        "嗯嗯，这次应该没问题了~",
+        "搞定！Luna修正了~",
+        "行，Luna重试成功了！",
+        "哼，还不是被Luna搞定了！",
+    ],
+    (ChatStatusStage.DAG_AGENT_STEP_REPAIR, ChatStatusState.ERROR): [
+        "唔……又失败了……Luna再想想别的办法",
+        "哎……重试也搞不定……",
+        "这个方法试了好多遍都不行……",
+    ],
+
+    # ================================================================
+    # Agent Loop 专用阶段 — 纯思考快速通过（FastPassNode）
+    #     文案方向：Luna 纯思考步骤快速完成
+    #     ================================================================
+    (ChatStatusStage.DAG_AGENT_STEP_FAST_PASS, ChatStatusState.RUNNING): [
+        "这步不用动手，Luna想想就行~",
+        "嗯……这步Luna思考一下就好了~",
+        "让Luna想想就够了，不用动工具~",
+        "唔……Luna动动脑子就行了~",
+        "这步简单，Luna想想就有答案~",
+    ],
+    (ChatStatusStage.DAG_AGENT_STEP_FAST_PASS, ChatStatusState.COMPLETED): [
+        "好啦，Luna想明白了！",
+        "嗯嗯，Luna想到了~",
+        "搞定，不用动手的步骤Luna最擅长了！",
+        "行啦，想完了~",
+        "好了好了，Luna知道了！",
+    ],
+    (ChatStatusStage.DAG_AGENT_STEP_FAST_PASS, ChatStatusState.ERROR): [
+        "唔……连想都没想到……",
+        "哎……Luna脑子短路了……",
+        "思考步骤出问题了……",
+    ],
 }
 
 # ================================================================

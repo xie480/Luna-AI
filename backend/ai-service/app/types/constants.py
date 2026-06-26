@@ -357,6 +357,12 @@ class ChatStatusStage(str, Enum):
     DAG_TOOL_EXECUTE = "dag_tool_execute"                   # 工具执行
     DAG_DATA_TRANSFORM = "dag_data_transform"               # 数据转换
 
+    # --- Agent Loop 专用阶段（Phase 9 Agent Loop 重构新增） ---
+    DAG_AGENT_STEP_THINK = "dag_agent_step_think"                     # Agent 步骤思考
+    DAG_AGENT_OBSERVE = "dag_agent_observe"                           # Agent 观察执行结果
+    DAG_AGENT_STEP_REPAIR = "dag_agent_step_repair"                   # Agent 步骤修复重试
+    DAG_AGENT_STEP_FAST_PASS = "dag_agent_step_fast_pass"             # Agent 纯思考快速通过
+
 
 class ChatStatusState(str, Enum):
     """Chat 主链路状态枚举，标识当前阶段的执行状态。

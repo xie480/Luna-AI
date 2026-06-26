@@ -124,6 +124,51 @@ def _save_agent_loop_state_to_graph(
     return chat_state.as_graph_state()
 
 
+async def _publish_chat_status_for_state(
+    publisher: ChatStatusPublisher | None,
+    chat_state: ChatWorkflowState,
+    stage: ChatStatusStage,
+    status: ChatStatusState,
+    display_text: str,
+    is_visible: bool = True,
+    is_terminal: bool = False,
+    error: str = "",
+) -> None:
+    """从 ChatWorkflowState 提取 trace_id/session_id 并发布 chat status 事件。
+
+    做什么：统一为 Agent Loop 各节点提供 chat status 发布能力。
+            与 Chat Workflow 其他 Node 的 _publish_chat_status 模式保持一致。
+    参数:
+        publisher: ChatStatusPublisher 实例。
+        chat_state: ChatWorkflowState 实例（已从 LangGraph 图状态反序列化）。
+        stage: Chat 主链路阶段枚举。
+        status: 当前阶段状态（RUNNING / COMPLETED / ERROR）。
+        display_text: 前端展示的拟人化文本。
+        is_visible: 是否在前端展示。
+        is_terminal: 是否终结状态。
+        error: 错误详情。
+    异常行为：内部捕获所有异常并记录警告日志，不向上抛出。
+    """
+    if publisher is None:
+        return
+    try:
+        await publisher.publish(
+            trace_id=chat_state.runtime.trace_id,
+            session_id=chat_state.runtime.session_id,
+            message_id=chat_state.generation_state.assistant_message_id,
+            stage=stage,
+            state=status,
+            display_text=display_text,
+            is_visible=is_visible,
+            is_terminal=is_terminal,
+            error=error,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"发布 chat status 失败: stage={stage.value}, status={status.value}, error={exc}"
+        )
+
+
 # ===========================================================================
 # 节点 1: GoalLockNode — 目标锁定
 # ===========================================================================
@@ -253,6 +298,17 @@ class GoalLockNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_PLAN_GENERATION COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_GENERATION,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] GoalLockNode 完成: "
                 f"global_goal={agent_loop.goal.global_goal[:100]}, "
@@ -261,6 +317,17 @@ class GoalLockNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] GoalLockNode 异常: {exc}")
+            # 发布 DAG_PLAN_GENERATION ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_GENERATION,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             agent_loop.terminated = True
             agent_loop.termination_reason = f"目标锁定失败: {exc}"
 
@@ -385,6 +452,15 @@ class GlobalPlannerNode:
 
         trace_id = chat_state.runtime.trace_id
         session_id = chat_state.runtime.session_id
+
+        # 发布 DAG_PLAN_GENERATION RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_PLAN_GENERATION,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.RUNNING),
+        )
 
         # 安全守卫：目标未锁定时跳过
         if not agent_loop.goal.locked:
@@ -538,6 +614,17 @@ class GlobalPlannerNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_PLAN_GENERATION COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_GENERATION,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] GlobalPlannerNode 完成: "
                 f"steps={len(steps)}, "
@@ -546,6 +633,17 @@ class GlobalPlannerNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] GlobalPlannerNode 异常: {exc}")
+            # 发布 DAG_PLAN_GENERATION ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_GENERATION,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_GENERATION, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             agent_loop.terminated = True
             agent_loop.termination_reason = f"全局计划生成失败: {exc}"
 
@@ -718,6 +816,15 @@ class StepThinkNode:
         current_step.status = StepStatusEnum.RUNNING
         agent_loop.execution.current_step_id = current_step.step_id
 
+        # 发布 DAG_AGENT_STEP_THINK RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_AGENT_STEP_THINK,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_AGENT_STEP_THINK, ChatStatusState.RUNNING),
+        )
+
         try:
             # 构建上一步观察上下文（重试场景）
             retry_context = ""
@@ -825,6 +932,17 @@ class StepThinkNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_AGENT_STEP_THINK COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_STEP_THINK,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_STEP_THINK, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] StepThinkNode 完成: "
                 f"step_id={current_step.step_id}, "
@@ -833,6 +951,17 @@ class StepThinkNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] StepThinkNode 异常: {exc}")
+            # 发布 DAG_AGENT_STEP_THINK ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_STEP_THINK,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_STEP_THINK, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             agent_loop.execution.last_error = str(exc)
             agent_loop.execution.last_thought = f"思考异常: {exc}"
 
@@ -946,6 +1075,15 @@ class AgentToolExecuteNode:
 
         if agent_loop.terminated:
             return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
+        # 发布 DAG_TOOL_EXECUTE RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_TOOL_EXECUTE,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_TOOL_EXECUTE, ChatStatusState.RUNNING),
+        )
 
         tool_calls = agent_loop.execution.last_tool_calls
         if not tool_calls:
@@ -1092,6 +1230,17 @@ class AgentToolExecuteNode:
                     "tool_name": tool_name,
                 }
 
+        # 发布 DAG_TOOL_EXECUTE COMPLETED 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_TOOL_EXECUTE,
+            status=ChatStatusState.COMPLETED,
+            display_text=get_chat_status_text(
+                ChatStatusStage.DAG_TOOL_EXECUTE, ChatStatusState.COMPLETED
+            ),
+        )
+
         agent_loop.execution.partitioned_outputs = partitioned_outputs
 
         # 检查是否有工具返回了 gating_pending
@@ -1122,13 +1271,16 @@ class ObserveNode:
 
     def __init__(
         self,
+        chat_status_publisher: ChatStatusPublisher,
         event_publisher: ChatWorkflowEventPublisher | None = None,
     ):
         """初始化观察节点。
 
         参数:
+            chat_status_publisher: Chat 状态发布器。
             event_publisher: 工作流事件发布器，用于推送观察事件到前端。
         """
+        self.chat_status_publisher = chat_status_publisher
         self.event_publisher = event_publisher
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -1150,6 +1302,15 @@ class ObserveNode:
 
         if agent_loop.terminated:
             return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
+        # 发布 DAG_AGENT_OBSERVE RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_AGENT_OBSERVE,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_AGENT_OBSERVE, ChatStatusState.RUNNING),
+        )
 
         try:
             outputs = agent_loop.execution.partitioned_outputs
@@ -1217,6 +1378,17 @@ class ObserveNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_AGENT_OBSERVE COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_OBSERVE,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_OBSERVE, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] ObserveNode 完成: "
                 f"step_id={agent_loop.execution.current_step_id}, "
@@ -1225,6 +1397,17 @@ class ObserveNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] ObserveNode 异常: {exc}")
+            # 发布 DAG_AGENT_OBSERVE ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_OBSERVE,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_OBSERVE, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             agent_loop.execution.last_observation = f"观察生成异常: {exc}"
 
         return _save_agent_loop_state_to_graph(chat_state, agent_loop)
@@ -1281,6 +1464,15 @@ class AgentStepEvaluateNode:
             return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 
         current_step = agent_loop.plan.steps[idx]
+
+        # 发布 DAG_STATE_EVALUATION RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_STATE_EVALUATION,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_STATE_EVALUATION, ChatStatusState.RUNNING),
+        )
 
         try:
             # 机械层预检：检查工具是否全部失败
@@ -1408,6 +1600,17 @@ class AgentStepEvaluateNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_STATE_EVALUATION COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_STATE_EVALUATION,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_STATE_EVALUATION, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] StepEvaluateNode 完成: "
                 f"step_id={current_step.step_id}, "
@@ -1416,6 +1619,17 @@ class AgentStepEvaluateNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] StepEvaluateNode 异常: {exc}")
+            # 发布 DAG_STATE_EVALUATION ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_STATE_EVALUATION,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_STATE_EVALUATION, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             # 评估异常时默认通过，避免阻塞流程
             agent_loop.execution.evaluation_result = StepEvaluationResult(
                 verdict=StepEvaluationVerdict.PASS,
@@ -1481,13 +1695,15 @@ class StepRepairNode:
 
     def __init__(
         self,
+        chat_status_publisher: ChatStatusPublisher,
         event_publisher: ChatWorkflowEventPublisher | None = None,
     ):
         """初始化局部修复节点。
 
-        做什么：注入事件发布器，用于发布修复相关事件。
+        做什么：注入事件发布器和 Chat 状态发布器，用于发布修复相关事件和状态。
         为什么这样做：与其他 Agent Loop 节点保持一致的依赖注入模式。
         """
+        self.chat_status_publisher = chat_status_publisher
         self.event_publisher = event_publisher
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -1506,6 +1722,15 @@ class StepRepairNode:
 
         trace_id = chat_state.runtime.trace_id
         session_id = chat_state.runtime.session_id
+
+        # 发布 DAG_AGENT_STEP_REPAIR RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_AGENT_STEP_REPAIR,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_AGENT_STEP_REPAIR, ChatStatusState.RUNNING),
+        )
 
         try:
             eval_result = agent_loop.execution.evaluation_result
@@ -1543,6 +1768,17 @@ class StepRepairNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_AGENT_STEP_REPAIR COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_STEP_REPAIR,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_STEP_REPAIR, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] StepRepairNode 完成: "
                 f"step_id={agent_loop.execution.current_step_id}, "
@@ -1551,6 +1787,17 @@ class StepRepairNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] StepRepairNode 异常: {exc}")
+            # 发布 DAG_AGENT_STEP_REPAIR ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_STEP_REPAIR,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_STEP_REPAIR, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
 
         return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 
@@ -1598,6 +1845,15 @@ class AgentReplanNode:
 
         trace_id = chat_state.runtime.trace_id
         session_id = chat_state.runtime.session_id
+
+        # 发布 DAG_PLAN_REPLAN RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_PLAN_REPLAN,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_PLAN_REPLAN, ChatStatusState.RUNNING),
+        )
 
         # 检查 replan 预算
         if agent_loop.budget.replan_count >= agent_loop.budget.max_replan_count:
@@ -1803,6 +2059,17 @@ class AgentReplanNode:
                 self.event_publisher,
             )
 
+            # 发布 DAG_PLAN_REPLAN COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_REPLAN,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_REPLAN, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] ReplanNode 完成: "
                 f"plan_version={agent_loop.plan.plan_version}, "
@@ -1814,6 +2081,17 @@ class AgentReplanNode:
             raise ae
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] ReplanNode 异常: {exc}")
+            # 发布 DAG_PLAN_REPLAN ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_REPLAN,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_REPLAN, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             agent_loop.terminated = True
             agent_loop.termination_reason = f"重规划失败: {exc}"
             agent_loop.termination_step_id = agent_loop.execution.current_step_id
@@ -1924,6 +2202,15 @@ class AgentFinalVerifyNode:
         trace_id = chat_state.runtime.trace_id
         session_id = chat_state.runtime.session_id
         started_at_ms = agent_loop.workflow_state.get("dag_engine_started_at_ms", 0)
+
+        # 发布 DAG_PLAN_SUMMARY RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_PLAN_SUMMARY,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_PLAN_SUMMARY, ChatStatusState.RUNNING),
+        )
 
         try:
             # 收集步骤结果摘要
@@ -2058,6 +2345,17 @@ class AgentFinalVerifyNode:
                     self.event_publisher,
                 )
 
+            # 发布 DAG_PLAN_SUMMARY COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_SUMMARY,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_SUMMARY, ChatStatusState.COMPLETED
+                ),
+            )
+
             logger.info(
                 f"[TraceID:{trace_id}] FinalVerifyNode 完成: "
                 f"status={verification.get('status', '')}, "
@@ -2067,6 +2365,17 @@ class AgentFinalVerifyNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] FinalVerifyNode 异常: {exc}")
+            # 发布 DAG_PLAN_SUMMARY ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_PLAN_SUMMARY,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_PLAN_SUMMARY, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             agent_loop.terminated = True
             agent_loop.termination_reason = f"最终验收异常: {exc}"
 
@@ -2186,13 +2495,16 @@ class FastPassNode:
 
     def __init__(
         self,
+        chat_status_publisher: ChatStatusPublisher,
         event_publisher: ChatWorkflowEventPublisher | None = None,
     ):
         """初始化纯思考步骤快速通过节点。
 
         参数:
+            chat_status_publisher: Chat 状态发布器。
             event_publisher: 工作流事件发布器，用于推送步骤完成事件到前端。
         """
+        self.chat_status_publisher = chat_status_publisher
         self.event_publisher = event_publisher
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -2223,6 +2535,15 @@ class FastPassNode:
         current_step = agent_loop.plan.steps[idx]
         thought_content = agent_loop.execution.last_thought or ""
 
+        # 发布 DAG_AGENT_STEP_FAST_PASS RUNNING 状态
+        await _publish_chat_status_for_state(
+            publisher=self.chat_status_publisher,
+            chat_state=chat_state,
+            stage=ChatStatusStage.DAG_AGENT_STEP_FAST_PASS,
+            status=ChatStatusState.RUNNING,
+            display_text=get_chat_status_text(ChatStatusStage.DAG_AGENT_STEP_FAST_PASS, ChatStatusState.RUNNING),
+        )
+
         try:
             # 将 thought 作为步骤摘要写入记忆（与 route_by_step_evaluation 的 pass 路径一致）
             agent_loop.memory.step_summaries.append({
@@ -2239,6 +2560,17 @@ class FastPassNode:
 
             # 重置执行状态（准备下一步，与 route_by_step_evaluation 的 pass 路径一致）
             agent_loop.execution = ExecutionState()
+
+            # 发布 DAG_AGENT_STEP_FAST_PASS COMPLETED 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_STEP_FAST_PASS,
+                status=ChatStatusState.COMPLETED,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_STEP_FAST_PASS, ChatStatusState.COMPLETED
+                ),
+            )
 
             # 发布评估事件（verdict=pass，标记为快速通道）
             await _emit_dag_event(
@@ -2263,6 +2595,17 @@ class FastPassNode:
 
         except Exception as exc:
             logger.error(f"[TraceID:{trace_id}] FastPassNode 异常: {exc}")
+            # 发布 DAG_AGENT_STEP_FAST_PASS ERROR 状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_AGENT_STEP_FAST_PASS,
+                status=ChatStatusState.ERROR,
+                display_text=get_chat_status_text(
+                    ChatStatusStage.DAG_AGENT_STEP_FAST_PASS, ChatStatusState.ERROR
+                ),
+                error=str(exc),
+            )
             # 异常时仍标记通过，避免阻塞流程
             current_step.status = StepStatusEnum.PASSED
             agent_loop.plan.current_step_index += 1
@@ -2500,7 +2843,10 @@ def build_agent_loop_subgraph(
         CompiledGraph: 编译后的子图，可被 DagEngineNode 作为 ainvoke 调用。
     """
     # 创建纯思考步骤快速通过节点
-    fast_pass = FastPassNode(event_publisher=event_publisher)
+    fast_pass = FastPassNode(
+        chat_status_publisher=chat_status_publisher,
+        event_publisher=event_publisher,
+    )
 
     # === 构建 Step Loop 内层子图 ===
     step_loop_subgraph = build_step_loop_subgraph(
