@@ -10,7 +10,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.utils.snowflake import generate_string_id
 
@@ -836,6 +836,13 @@ class AgentStepState(BaseModel):
         default_factory=list,
         description="依赖的前置步骤 ID 列表。",
     )
+
+    @field_validator("dependencies", mode="before")
+    @classmethod
+    def _coerce_dependencies(cls, v: list) -> list[str]:
+        """防御性校验：LLM 可能返回整数索引而非字符串 ID，需强制转为 str。"""
+        return [str(item) for item in v]
+
     expected_output: str = Field(
         default="",
         description="预期输出描述，用于 StepEvaluateNode 判断是否完成。",

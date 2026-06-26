@@ -453,11 +453,14 @@ class GlobalPlannerNode:
                         operator=c.get("operator", "not_empty"),
                         value=c.get("value", True),
                     ))
+                # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
+                raw_deps = step_data.get("dependencies", [])
+                coerced_deps = [str(d) for d in raw_deps]
                 steps.append(AgentStepState(
                     step_id=generate_string_id(),
                     title=step_data.get("title", f"步骤 {i + 1}"),
                     intent=step_data.get("intent", ""),
-                    dependencies=step_data.get("dependencies", []),
+                    dependencies=coerced_deps,
                     expected_output=step_data.get("expected_output", ""),
                     completion_criteria=criteria,
                     status=StepStatusEnum.PENDING,
@@ -1665,11 +1668,14 @@ class AgentReplanNode:
                         operator=c.get("operator", "not_empty"),
                         value=c.get("value", True),
                     ))
+                # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
+                raw_deps = step_data.get("dependencies", [])
+                coerced_deps = [str(d) for d in raw_deps]
                 new_steps.append(AgentStepState(
                     step_id=generate_string_id(),
                     title=step_data.get("title", f"步骤 {i + 1}"),
                     intent=step_data.get("intent", ""),
-                    dependencies=step_data.get("dependencies", []),
+                    dependencies=coerced_deps,
                     expected_output=step_data.get("expected_output", ""),
                     completion_criteria=criteria,
                     status=StepStatusEnum.PENDING,
