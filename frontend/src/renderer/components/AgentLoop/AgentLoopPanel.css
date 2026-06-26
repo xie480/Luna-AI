@@ -921,7 +921,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.4);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -963,7 +963,7 @@
   color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   text-align: left;
-  font-size: 10px;
+  font-size: 12px;
   font-family: 'Courier New', Courier, monospace;
   transition: background 0.2s, color 0.2s;
 }
@@ -987,7 +987,7 @@
   background: rgba(0, 255, 255, 0.1);
   border: 1px solid rgba(0, 255, 255, 0.25);
   border-radius: 2px;
-  font-size: 8px;
+  font-size: 10px;
   color: #00ffff;
   font-weight: 400;
   letter-spacing: 0.3px;
@@ -1009,13 +1009,13 @@
 
 .al-thought--compact,
 .al-observation--compact {
-  font-size: 9px;
+  font-size: 11px;
   max-height: 150px;
 }
 
 /* 小尺寸 verdict 徽章 */
 .al-verdict-badge--sm {
-  font-size: 8px;
+  font-size: 10px;
   padding: 0 4px;
   margin-left: auto;
 }

@@ -521,6 +521,10 @@ class ToolExecuteNode:
             # 解析参数
             params = self._parse_params(response_text)
 
+            # 参数规范化：自动修正常见的 LLM 类型包装错误
+            # 例如：query: ['关键词'] → query: '关键词'
+            params = self._normalize_params(params, tool_schema)
+
             # 机械层 Schema 校验
             validation_error = self._validate_params_against_schema(
                 params, tool_schema
@@ -599,6 +603,83 @@ class ToolExecuteNode:
             },
             "required": ["parameters"],
         }
+
+    def _normalize_params(
+        self,
+        params: dict[str, Any],
+        tool_schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        """规范化 LLM 输出的参数，自动修正常见的类型包装错误。
+
+        做什么：LLM 有时会将标量值包装为单元素数组返回（如 query: ['关键词']
+        而非 query: '关键词'）。此方法根据 Schema 中定义的预期类型，自动将
+        单元素数组拆包为标量值，避免后续 jsonschema 校验失败。
+
+        为什么这样做：LLM 输出格式不稳定是常见问题，与其每次都重试浪费 Token，
+        不如在机械层自动修正这类低风险类型错误。
+
+        参数:
+            params: LLM 返回的原始参数字典。
+            tool_schema: 工具的 parameters_schema，用于判断预期类型。
+        返回:
+            dict: 规范化后的参数字典。
+        """
+        if not tool_schema or not params:
+            return params
+
+        properties = tool_schema.get("properties", {})
+        normalized = dict(params)
+
+        for field_name, field_value in normalized.items():
+            if field_name not in properties:
+                continue
+            expected_type = properties[field_name].get("type", "")
+
+            # 自动修正：Schema 期望 string 但 LLM 返回单元素数组
+            # 例如：query: ['2026-06-26 世界杯'] → query: '2026-06-26 世界杯'
+            if expected_type == "string" and isinstance(field_value, list):
+                if len(field_value) == 1 and isinstance(field_value[0], str):
+                    normalized[field_name] = field_value[0]
+                    logger.info(
+                        f"参数自动规范化: {field_name} 从 list 拆包为 string，"
+                        f"值='{field_value[0]}'"
+                    )
+                elif len(field_value) > 1 and all(isinstance(v, str) for v in field_value):
+                    # 多元素数组：用逗号拼接为字符串
+                    normalized[field_name] = ", ".join(field_value)
+                    logger.info(
+                        f"参数自动规范化: {field_name} 从多元素 list 拼接为 string，"
+                        f"值='{normalized[field_name]}'"
+                    )
+
+            # 自动修正：Schema 期望 array 但 LLM 返回单个值
+            elif expected_type == "array" and isinstance(field_value, str):
+                normalized[field_name] = [field_value]
+                logger.info(
+                    f"参数自动规范化: {field_name} 从 string 包装为 array"
+                )
+
+            # 自动修正：Schema 期望 integer 但 LLM 返回字符串数字
+            elif expected_type == "integer" and isinstance(field_value, str):
+                try:
+                    normalized[field_name] = int(field_value)
+                    logger.info(
+                        f"参数自动规范化: {field_name} 从 string 转换为 integer"
+                    )
+                except ValueError:
+                    pass
+
+            # 自动修正：Schema 期望 number 但 LLM 返回字符串数字
+            elif expected_type == "number" and isinstance(field_value, str):
+                try:
+                    normalized[field_name] = float(field_value)
+                    logger.info(
+                        f"参数自动规范化: {field_name} 从 string 转换为 number"
+                    )
+                except ValueError:
+                    pass
+
+        return normalized
 
     def _parse_params(self, llm_response: str | dict) -> dict[str, Any]:
         """解析 LLM 输出的参数。

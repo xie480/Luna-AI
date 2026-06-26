@@ -321,6 +321,8 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
    * 处理评估事件。
    * 做什么：更新当前步骤的评估结果，
    *         并将当前循环迭代快照保存到 loopIterations 历史中。
+   *         评估完成后清空当前迭代的实时数据（已快照到 loopIterations），
+   *         防止"循环迭代历史"和"当前活跃迭代"两个区块重复渲染相同的工具调用。
    */
   onStepEvaluated: (payload) => {
     set((state) => {
@@ -359,6 +361,12 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
           endedAtMs: verdict === 'pass' || verdict === 'partial' ? Date.now() : step.endedAtMs,
           latencyMs: step.startedAtMs ? Date.now() - step.startedAtMs : undefined,
           loopIterations: [...step.loopIterations, iterationSnapshot],
+          // 清空当前迭代的实时数据，防止与 loopIterations 历史重复渲染
+          // 数据已通过 iterationSnapshot 完整保存在 loopIterations 中
+          lastThought: '',
+          toolCalls: [],
+          toolResults: [],
+          lastObservation: '',
         };
         // 如果通过，推进到下一步
         if (verdict === 'pass' || verdict === 'partial') {

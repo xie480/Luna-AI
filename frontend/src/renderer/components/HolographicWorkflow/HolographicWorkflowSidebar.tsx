@@ -80,6 +80,8 @@ export const HolographicWorkflowSidebar: React.FC = () => {
   // Agent Loop 数据
   const agentLoopActiveLoop = useAgentLoopStore((state) => state.activeLoop);
   const agentLoopPanelVisible = useAgentLoopStore((state) => state.isPanelVisible);
+  const agentLoopGoalExpanded = useAgentLoopStore((state) => state.goalExpanded);
+  const agentLoopToggleGoalExpanded = useAgentLoopStore((state) => state.toggleGoalExpanded);
 
   /**
    * 预 DAG 阶段的节点类型集合。
@@ -369,8 +371,8 @@ export const HolographicWorkflowSidebar: React.FC = () => {
             <div className="dag-objective-fixed-details">
               <AgentGoalCard
                 goal={agentLoopActiveLoop.goal}
-                expanded={true}
-                onToggle={() => {}}
+                expanded={agentLoopGoalExpanded}
+                onToggle={agentLoopToggleGoalExpanded}
               />
               <AgentPlanHeader
                 plan={agentLoopActiveLoop.plan}
