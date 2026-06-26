@@ -190,8 +190,11 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理步骤思考事件。
-   * 做什么：更新当前步骤的思考结果和工具调用规划，
+   * 做什么：更新当前步骤的思考结果，清空当前迭代的工具调用和结果（新迭代开始），
    *         同时根据 loopIterationIndex 更新当前循环迭代索引。
+   * 为什么不从 payload.tool_calls 填充 toolCalls：
+   *         工具调用列表由后续的 onNodeStarted 事件逐个构建，
+   *         如果在此处也填充会导致同一个工具调用重复出现两次。
    */
   onStepThinking: (payload) => {
     set((state) => {
@@ -203,19 +206,12 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
         const idx = loop.plan.steps.indexOf(step);
         const updatedSteps = [...loop.plan.steps];
         const iterationIndex = (payload.loop_iteration_index as number) || step.currentIterationIndex || 1;
-        // 将后端推送的完整 tool_calls 列表解析为 AgentToolCall[]
-        const rawToolCalls = (payload.tool_calls as Array<Record<string, unknown>>) || [];
-        const toolCalls: AgentToolCall[] = rawToolCalls.map((tc) => ({
-          toolName: (tc.tool_name as string) || '',
-          skillName: (tc.skill_name as string) || '',
-          parameters: (tc.parameters as Record<string, unknown>) || {},
-          purpose: (tc.purpose as string) || '',
-        }));
         updatedSteps[idx] = {
           ...step,
           status: 'running',
           lastThought: (payload.thought as string) || '',
-          toolCalls,
+          // 清空工具调用列表，由后续 onNodeStarted 事件逐个追加
+          toolCalls: [],
           toolResults: [],
           lastObservation: '',
           evaluationResult: undefined,
