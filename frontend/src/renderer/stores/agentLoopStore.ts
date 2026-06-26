@@ -467,19 +467,30 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
 
   /**
    * 处理最终验收事件。
+   *
+   * 做什么：将后端推送的最终验收结果映射为前端投影。
+   *         无论 pass/fail，整体循环状态都设为 'verifying'，
+   *         因为后续仍有主 Chat LLM 汇总节点需要执行。
+   *         前端渲染 AgentFinalVerifyCard 时根据 status 显示
+   *         'pass'（绿色"通过"）或 'fail'（红色"失败"）。
    */
   onFinalVerified: (payload) => {
     set((state) => {
       if (!state.activeLoop) return state;
       const loop = { ...state.activeLoop };
+      const verificationStatus = (payload.verification_status as string) || 'pass';
       const allMet = payload.all_criteria_met as boolean;
+      // 标准化为二值：pass=通过，fail=失败
+      const normalizedStatus: 'pass' | 'fail' = verificationStatus === 'pass' ? 'pass' : 'fail';
       loop.finalVerification = {
-        status: (payload.verification_status as string as AgentLoopProjection['finalVerification'])?.status || 'completed',
+        status: normalizedStatus,
         report: (payload.report_preview as string) || '',
-        allCriteriaMet: allMet ?? true,
+        allCriteriaMet: allMet ?? (normalizedStatus === 'pass'),
         criteriaVerification: [],
       };
-      loop.status = allMet ? 'verifying' : 'completed_with_gaps';
+      // 无论 pass 还是 fail，整体循环状态都设为 verifying，
+      // 因为后续仍有主 Chat LLM 汇总节点需要执行
+      loop.status = 'verifying';
       return { activeLoop: loop };
     });
   },

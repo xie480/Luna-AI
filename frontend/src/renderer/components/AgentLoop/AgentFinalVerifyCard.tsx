@@ -34,13 +34,18 @@ function formatMs(ms: number): string {
 }
 
 /**
- * 验收状态配置映射。
- * 做什么：根据验收状态返回对应的图标和颜色。
+ * 验收状态配置映射（二值化）。
+ *
+ * 做什么：根据最终验收的 pass/fail 结果返回对应的图标和颜色。
+ *         pass=通过（绿色），fail=失败（红色）。
+ *         无论 pass 还是 fail，后续都会进入主 Chat LLM 汇总节点，
+ *         前端仅在此卡片的视觉渲染上做区分。
+ * 为什么这样做：后端 FinalVerifyNode 的输出已统一为二值，
+ *               前端不再需要区分 3 值枚举（completed/completed_with_gaps/failed）。
  */
 const STATUS_CONFIG: Record<string, { Icon: React.FC<React.SVGProps<SVGSVGElement>>; color: string; label: string }> = {
-  completed: { Icon: IconCheck, color: '#00fa9a', label: '验收通过' },
-  completed_with_gaps: { Icon: IconWarning, color: '#ffaa00', label: '部分标准未满足' },
-  failed: { Icon: IconXCircle, color: '#ff003c', label: '验收失败' },
+  pass: { Icon: IconCheck, color: '#00fa9a', label: '通过 ✓' },
+  fail: { Icon: IconXCircle, color: '#ff003c', label: '失败 ✗' },
 };
 
 /**
@@ -56,11 +61,13 @@ export const AgentFinalVerifyCard: React.FC<AgentFinalVerifyCardProps> = ({
   elapsedMs,
   planVersion,
 }) => {
-  const config = STATUS_CONFIG[verification.status] || STATUS_CONFIG.failed;
+  const config = STATUS_CONFIG[verification.status] || STATUS_CONFIG.fail;
   const { Icon: StatusIcon, color: statusColor, label: statusLabel } = config;
+  // 二值化 CSS class：pass 时显示绿色边框 + 淡绿色背景，fail 时显示红色边框 + 淡红色背景
+  const finalClass = verification.status === 'pass' ? 'al-final-section--pass' : 'al-final-section--fail';
 
   return (
-    <div className="al-final-section">
+    <div className={`al-final-section ${finalClass}`}>
       {/* 验收头部 */}
       <div className="al-final-header">
         <span className="al-final-icon" style={{ color: statusColor }}>

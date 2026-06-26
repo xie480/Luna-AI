@@ -216,9 +216,14 @@ export interface AgentBudgetState {
 
 /**
  * 最终验收投影。
+ *
+ * 做什么：定义最终验收结果的二值化状态。
+ * 为什么这样做：无论验收是否通过，路由都进入主 Chat LLM 汇总节点，
+ *               前端渲染时根据 pass/fail 分别显示"通过"（绿色）或"失败"（红色）。
+ *               pass=全部标准满足；fail=存在未满足标准或异常。
  */
 export interface AgentFinalVerification {
-  status: 'completed' | 'completed_with_gaps' | 'failed';
+  status: 'pass' | 'fail';
   report: string;
   allCriteriaMet: boolean;
   criteriaVerification: { criterion: string; met: boolean; evidence: string }[];

@@ -1882,7 +1882,8 @@ class AgentFinalVerifyNode:
                 })
 
             # 调用 LLM 做最终验收
-            verification = {"status": "completed", "report": ""}
+            # 初始化最终验收结果，二值化：pass=通过，fail=失败
+            verification = {"status": "pass", "report": ""}
 
             try:
                 from datetime import datetime
@@ -1922,7 +1923,7 @@ class AgentFinalVerifyNode:
                 verify_data = self._parse_verify_response(llm_response)
 
                 verification = {
-                    "status": verify_data.get("status", "completed"),
+                    "status": verify_data.get("status", "pass"),
                     "report": verify_data.get("report", ""),
                     "criteria_verification": verify_data.get("criteria_verification", []),
                     "all_criteria_met": verify_data.get("all_criteria_met", True),
@@ -1930,8 +1931,9 @@ class AgentFinalVerifyNode:
 
             except Exception as exc:
                 logger.error(f"[TraceID:{trace_id}] FinalVerifyNode LLM 调用异常: {exc}")
+                # LLM 异常时标记为失败，但流程仍继续进入主 Chat LLM 汇总
                 verification = {
-                    "status": "completed_with_gaps",
+                    "status": "fail",
                     "report": f"验收过程异常: {exc}",
                     "all_criteria_met": False,
                 }
@@ -2047,13 +2049,22 @@ class AgentFinalVerifyNode:
         return chat_state.as_graph_state()
 
     def _build_verify_schema(self) -> dict[str, Any]:
-        """构建最终验收的 JSON Schema。"""
+        """构建最终验收的 JSON Schema。
+
+        做什么：定义 LLM 最终验收的结构化输出格式。
+                状态简化为二值："pass"（正常/通过）和 "fail"（错误/失败）。
+                无论 pass 还是 fail，路由都进入主 Chat LLM 汇总节点，
+                前端渲染时根据 pass/fail 分别显示绿色"通过"或红色"失败"。
+        为什么这样做：增加结果区分度引入 3 值枚举（completed/completed_with_gaps/failed）
+                     导致前端展示模糊。统一为二值信号，前端渲染更清晰。
+        """
         return {
             "type": "object",
             "properties": {
                 "status": {
                     "type": "string",
-                    "enum": ["completed", "completed_with_gaps", "failed"],
+                    "enum": ["pass", "fail"],
+                    "description": "最终验收结论。pass=通过（全部标准满足），fail=失败（存在未满足标准或异常）。",
                 },
                 "report": {
                     "type": "string",
@@ -2086,7 +2097,7 @@ class AgentFinalVerifyNode:
                 text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
             return json.loads(text)
         except (json.JSONDecodeError, ValueError):
-            return {"status": "completed", "report": str(response), "all_criteria_met": True}
+            return {"status": "pass", "report": str(response), "all_criteria_met": True}
 
 
 # ===========================================================================

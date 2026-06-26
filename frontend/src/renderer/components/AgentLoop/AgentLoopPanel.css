@@ -1028,6 +1028,22 @@
   animation: al-fade-in 0.3s ease;
 }
 
+/* 验收通过 — 绿色边框 + 淡绿色背景 */
+.al-final-section--pass {
+  border-top: 1px solid rgba(0, 250, 154, 0.3);
+  border-left: 3px solid #00fa9a;
+  background: rgba(0, 250, 154, 0.04);
+  box-shadow: inset 2px 0 8px rgba(0, 250, 154, 0.06);
+}
+
+/* 验收失败 — 红色边框 + 淡红色背景 */
+.al-final-section--fail {
+  border-top: 1px solid rgba(255, 0, 60, 0.3);
+  border-left: 3px solid #ff003c;
+  background: rgba(255, 0, 60, 0.04);
+  box-shadow: inset 2px 0 8px rgba(255, 0, 60, 0.06);
+}
+
 .al-final-header {
   display: flex;
   align-items: center;
