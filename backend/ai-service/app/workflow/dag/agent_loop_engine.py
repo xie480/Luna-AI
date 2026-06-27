@@ -1565,10 +1565,10 @@ class AgentStepEvaluateNode:
 
                 eval_result = StepEvaluationResult(
                     verdict=verdict,
-                    evaluation_reason=eval_data.get("evaluation_reason", ""),
-                    gap_analysis=eval_data.get("gap_analysis", ""),
-                    suggestion=eval_data.get("suggestion", ""),
-                    criteria_checklist=eval_data.get("criteria_checklist", []),
+                    evaluation_reason=eval_data.get("evaluation_reason", "") or "",
+                    gap_analysis=eval_data.get("gap_analysis", "") or "",
+                    suggestion=eval_data.get("suggestion", "") or "",
+                    criteria_checklist=eval_data.get("criteria_checklist", []) or [],
                 )
 
             # 重试阈值判断：fail 次数过多则升级为 needs_replan
@@ -1667,15 +1667,34 @@ class AgentStepEvaluateNode:
         }
 
     def _parse_evaluate_response(self, response: str) -> dict[str, Any]:
-        """解析 LLM 步骤评估输出。"""
+        """解析 LLM 步骤评估输出。
+
+        做什么：将 LLM 的文本响应解析为结构化字典。
+        为什么这样做：LLM 返回的 JSON 中可选字段可能为 null，
+                       需要将 None 值清洗为空字符串，避免下游 Pydantic 校验失败。
+        """
         try:
             if isinstance(response, dict):
-                return response
-            text = str(response).strip()
-            if text.startswith("```"):
-                lines = text.split("\n")
-                text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
-            return json.loads(text)
+                data = response
+            else:
+                text = str(response).strip()
+                if text.startswith("```"):
+                    lines = text.split("\n")
+                    text = "\n".join(lines[1:-1]) if len(lines) > 2 else text
+                data = json.loads(text)
+
+            # 清洗 None 值：将所有值为 None 的字符串字段替换为空字符串
+            # 为什么这样做：LLM structured output 返回的 JSON 中，
+            #               可选字段可能显式返回 null（而非省略），
+            #               导致 .get("key", "") 返回 None 而非默认值。
+            string_fields = [
+                "verdict", "evaluation_reason", "gap_analysis", "suggestion",
+            ]
+            for field in string_fields:
+                if field in data and data[field] is None:
+                    data[field] = ""
+
+            return data
         except (json.JSONDecodeError, ValueError):
             return {"verdict": "pass", "evaluation_reason": str(response)}
 

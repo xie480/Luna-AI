@@ -109,11 +109,11 @@ class StateEvaluationNode:
             eval_data = self._parse_evaluation_response(llm_response)
             result = StateEvaluationResult(
                 state_satisfied=eval_data.get("state_satisfied", False),
-                evaluation_reason=eval_data.get("evaluation_reason", ""),
-                gap_analysis=eval_data.get("gap_analysis", ""),
-                suggestion=eval_data.get("suggestion", ""),
-                criteria_checklist=eval_data.get("criteria_checklist", []),
-                check=eval_data.get("check", ""),
+                evaluation_reason=eval_data.get("evaluation_reason", "") or "",
+                gap_analysis=eval_data.get("gap_analysis", "") or "",
+                suggestion=eval_data.get("suggestion", "") or "",
+                criteria_checklist=eval_data.get("criteria_checklist", []) or [],
+                check=eval_data.get("check", "") or "",
             )
 
             logger.info(
