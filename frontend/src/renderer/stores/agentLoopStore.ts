@@ -60,7 +60,8 @@ interface AgentLoopStoreState {
   toggleThoughtExpanded: (stepId: string) => void;
   toggleObservationExpanded: (stepId: string) => void;
   toggleEvaluationExpanded: (stepId: string) => void;
-  toggleIterationExpanded: (stepId: string, iterationIndex: number) => void;
+  /** 切换循环迭代展开/评估展开，suffix 为可选后缀（如 '_eval'） */
+  toggleIterationExpanded: (stepId: string, iterationIndex: number, suffix?: string) => void;
   clearLoop: () => void;
 }
 
@@ -549,9 +550,10 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
     set((state) => ({ expandedObservations: { ...state.expandedObservations, [stepId]: !state.expandedObservations[stepId] } })),
   toggleEvaluationExpanded: (stepId) =>
     set((state) => ({ expandedEvaluations: { ...state.expandedEvaluations, [stepId]: !state.expandedEvaluations[stepId] } })),
-  toggleIterationExpanded: (stepId, iterationIndex) =>
+  /** 切换循环迭代展开/评估展开。suffix 用于区分迭代本身展开（无后缀）和评估展开（'_eval' 后缀）。 */
+  toggleIterationExpanded: (stepId, iterationIndex, suffix) =>
     set((state) => {
-      const key = `${stepId}_${iterationIndex}`;
+      const key = `${stepId}_${iterationIndex}${suffix || ''}`;
       return { expandedIterations: { ...state.expandedIterations, [key]: !state.expandedIterations[key] } };
     }),
   clearLoop: () => set({ activeLoop: null, isPanelVisible: false, expandedSteps: {}, expandedThoughts: {}, expandedObservations: {}, expandedEvaluations: {}, expandedIterations: {} }),

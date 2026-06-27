@@ -413,8 +413,8 @@ interface AgentStepCardProps {
   onToggleObservation: () => void;
   /** 切换 Evaluate 展开 */
   onToggleEvaluation: () => void;
-  /** 切换循环迭代展开 */
-  onToggleIteration: (stepId: string, iterationIndex: number) => void;
+  /** 切换循环迭代展开，suffix 用于区分迭代本身展开和评估展开 */
+  onToggleIteration: (stepId: string, iterationIndex: number, suffix?: string) => void;
 }
 
 // ============================================================
@@ -541,7 +541,7 @@ export const AgentStepCard: React.FC<AgentStepCardProps> = ({
                     isExpanded={!!expandedIterations[iterKey]}
                     isEvalExpanded={!!expandedIterations[`${iterKey}_eval`]}
                     onToggle={() => onToggleIteration(step.stepId, iteration.iterationIndex)}
-                    onToggleEval={() => onToggleIteration(step.stepId, -(iteration.iterationIndex))}
+                    onToggleEval={() => onToggleIteration(step.stepId, iteration.iterationIndex, '_eval')}
                   />
                 );
               })}
