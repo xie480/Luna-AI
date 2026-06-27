@@ -1636,6 +1636,31 @@ class AgentStepEvaluateNode:
                 evaluation_reason=f"评估异常，自动通过: {exc}",
             )
 
+        # === 步骤推进逻辑（仅在评估通过时执行） ===
+        # 为什么在这里推进：LangGraph 条件路由函数（route_by_step_evaluation）
+        #   仅返回路由字符串，其内部对 agent_loop 的修改不会被持久化到图状态。
+        #   因此步骤推进（标记完成、递增索引、重置执行状态）必须在节点函数中
+        #   完成，通过 _save_agent_loop_state_to_graph 写回图状态，
+        #   确保下游 route_by_step 能读到正确的 current_step_index。
+        #   放在 try/except 之后确保正常路径和异常默认通过路径都能执行。
+        eval_verdict = agent_loop.execution.evaluation_result.verdict
+        if eval_verdict in (
+            StepEvaluationVerdict.PASS,
+            StepEvaluationVerdict.PARTIAL,
+        ):
+            if idx < len(agent_loop.plan.steps):
+                agent_loop.plan.steps[idx].status = StepStatusEnum.PASSED
+                # 记录步骤摘要到记忆
+                agent_loop.memory.step_summaries.append({
+                    "step_id": agent_loop.plan.steps[idx].step_id,
+                    "title": agent_loop.plan.steps[idx].title,
+                    "summary": agent_loop.execution.last_observation[:500]
+                        if agent_loop.execution.last_observation else "",
+                })
+            agent_loop.plan.current_step_index += 1
+            # 重置执行状态（准备下一步）
+            agent_loop.execution = ExecutionState()
+
         return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 
     def _build_evaluate_schema(self) -> dict[str, Any]:
@@ -2658,19 +2683,10 @@ def route_by_step_evaluation(state: dict[str, Any]) -> str:
     verdict = eval_result.verdict
 
     if verdict == StepEvaluationVerdict.PASS or verdict == StepEvaluationVerdict.PARTIAL:
-        # 通过或部分通过：标记步骤完成，推进到下一步
-        idx = agent_loop.plan.current_step_index
-        if idx < len(agent_loop.plan.steps):
-            agent_loop.plan.steps[idx].status = StepStatusEnum.PASSED
-            # 记录步骤摘要到记忆
-            agent_loop.memory.step_summaries.append({
-                "step_id": agent_loop.plan.steps[idx].step_id,
-                "title": agent_loop.plan.steps[idx].title,
-                "summary": agent_loop.execution.last_observation[:500],
-            })
-        agent_loop.plan.current_step_index += 1
-        # 重置执行状态（准备下一步）
-        agent_loop.execution = ExecutionState()
+        # 通过或部分通过：步骤推进逻辑已在 AgentStepEvaluateNode 中完成，
+        # 此处仅做纯路由，不做任何状态修改。
+        # 为什么这样做：LangGraph 条件路由函数对 agent_loop 的修改不会被持久化，
+        #               步骤推进已在节点函数中通过 _save_agent_loop_state_to_graph 写回。
         return StepEvaluationRoute.PASS.value
 
     if verdict == StepEvaluationVerdict.FAIL:
