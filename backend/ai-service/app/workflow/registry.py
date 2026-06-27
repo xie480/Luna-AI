@@ -211,6 +211,7 @@ class ChatWorkflowNodeRegistry:
             snapshot_manager=dependencies.snapshot_manager,
         )
         observe = ObserveNode(
+            chat_status_publisher=dependencies.chat_status_publisher,
             event_publisher=dependencies.event_publisher,
         )
         step_evaluate = AgentStepEvaluateNode(
@@ -220,6 +221,7 @@ class ChatWorkflowNodeRegistry:
             event_publisher=dependencies.event_publisher,
         )
         step_repair = StepRepairNode(
+            chat_status_publisher=dependencies.chat_status_publisher,
             event_publisher=dependencies.event_publisher,
         )
         replan = AgentReplanNode(
