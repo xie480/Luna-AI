@@ -847,18 +847,17 @@ async def lifespan(app: FastAPI):
 
         mcp_registry = MCPToolRegistry()
 
-        # concurrent_requests 为固定常量，与 Prompt 模板中硬编码的 minItems/maxItems 保持一致
-        # 如需修改并发数，需同步更新 web_search_prompt.j2 中的 output 格式示例
+        # 构建搜索工具 Schema（一维搜索词数组，多策略并发由 handler 层自动处理）
         web_search_schema = build_web_search_schema()
 
         # 注册 SearXNG 网络搜索工具（L0 级低危只读工具，通过环境变量配置 SearXNG 地址）
-        # 新增 memory_schema 字段支持多轮策略搜索
+        # 支持 memory_schema 多轮搜索记忆 + 多策略并发搜索（中文通用、中文新闻、英文通用）
         mcp_registry.register(
             name="web_search",
             schema=MCPToolSchema(
                 name="web_search",
                 description="通过 SearXNG 元搜索引擎执行网络搜索，获取最新互联网信息。"
-                            "支持分类筛选、语言过滤和并发搜索。",
+                            "自动以多策略（中文通用、中文新闻、英文通用）并发搜索，结果去重合并。",
                 core_purpose="搜索互联网获取最新信息",
                 final_deliverable="格式化的搜索结果列表，包含标题、摘要、来源 URL 和引擎信息，"
                                  "以及知识卡片和相关搜索建议",
@@ -877,7 +876,7 @@ async def lifespan(app: FastAPI):
             ),
             handler=handle_searxng_search,
         )
-        logger.info("MCP 内置工具注册完成（web_search concurrent_requests={}）", 3)
+        logger.info("MCP 内置工具注册完成（web_search 多策略并发）")
 
         # 从 PG 加载已注册的工具（如果在 PG 中有额外的动态注册工具）
         if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:

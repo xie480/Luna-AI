@@ -45,7 +45,6 @@ CONFIG_KEY_SAFE_SEARCH_LEVEL: str = "safe_search_level"             # 安全搜�
 # ============================================================
 
 _SEARXNG_DEFAULT_TIMEOUT: float = 15.0
-_DEFAULT_CONCURRENT_REQUESTS: int = 3
 _DEFAULT_RESULTS_PER_REQUEST: int = 10
 _DEFAULT_MAX_URL_FETCH_LENGTH: int = 8192
 _DEFAULT_SAFE_SEARCH_LEVEL: int = 1
@@ -64,11 +63,7 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
         },
         "previous_query": {
             "type": "string",
-            "description": "刚尝试搜索的关键词"
-        },
-        "previous_categories": {
-            "type": "string",
-            "description": "上一轮使用的分类"
+            "description": "刚尝试搜索的关键词列表"
         },
         "previous_time_range": {
             "type": "string",
@@ -100,10 +95,7 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
         },
         "this_query": {
             "type": "string",
-            "description": "下一轮建议使用的搜索词"
-        },
-        "category_adjust_reason": {
-            "type": "string"
+            "description": "下一轮建议使用的搜索词列表"
         },
         "time_range_adjust_reason": {
             "type": "string"
@@ -113,20 +105,57 @@ WEB_SEARCH_MEMORY_SCHEMA: dict[str, Any] = {
 
 
 # ============================================================
+# ============================================================
+# 搜索策略模板定义
+# ============================================================
+# 做什么：定义 3 种差异化搜索策略，每个搜索词会同时以这 3 种策略并发执行。
+#         结果全局去重合并后返回。
+# 为什么这样做：
+#   1. 降低 LLM 输出复杂度 — LLM 只需输出一维搜索词列表，不需关心并发分组和搜索策略。
+#   2. 保证结果多样性 — 3 个策略在 categories 和 language 两个维度正交，
+#      从中文通用、中文新闻、英文通用三个角度覆盖同一主题，最大化信息获取质量。
+#   3. 行为确定性 — 搜索策略由代码层控制，不依赖 LLM 的"理解"，一致性 100%。
+#
+# 三个策略的定位：
+#   - zh_general: 中文通用搜索（全引擎覆盖），覆盖面最广，是主力搜索路径。
+#   - zh_news:    中文新闻搜索（新闻专用引擎），针对新闻/时事内容，
+#                  Google News、Bing News 等返回的结果包含发布日期和来源媒体。
+#   - en_general: 英文通用搜索（补充覆盖），很多技术、学术、国际事件的高质量信息
+#                  只有英文来源。
+_SEARCH_STRATEGIES: list[dict[str, str]] = [
+    {
+        "name": "zh_general",
+        "description": "中文通用搜索（全引擎覆盖）",
+        "categories": "",
+        "language": "zh-CN",
+    },
+    {
+        "name": "zh_news",
+        "description": "中文新闻搜索（新闻专用引擎）",
+        "categories": "news",
+        "language": "zh-CN",
+    },
+    {
+        "name": "en_general",
+        "description": "英文通用搜索（补充覆盖）",
+        "categories": "",
+        "language": "en",
+    },
+]
+
+
 # 搜索工具的 parameters_schema 构建函数
 # ============================================================
 
 
-def build_web_search_schema(concurrent_requests: int = _DEFAULT_CONCURRENT_REQUESTS) -> dict[str, Any]:
+def build_web_search_schema() -> dict[str, Any]:
     """
     构建搜索工具的 parameters_schema。
 
-    做什么：根据并发请求数量动态设置 query 外层数组的长度约束。
-            外层数组有 concurrent_requests 个子数组，每个子数组包含该并发请求要同时搜索的多个关键词。
-    为什么这样做：query 外层数组长度必须与 concurrent_requests 配置值严格相等，
-                通过 Schema 级别的 minItems/maxItems 约束可以在调用方就完成校验。
-    参数:
-        concurrent_requests: 并发请求数量，同时也是 query 外层数组的期望长度。
+    做什么：定义一维搜索词数组 Schema。LLM 只需输出搜索词列表，
+            工具 handler 会自动对每个搜索词执行多策略并发搜索。
+    为什么这样做：简化 LLM 输出结构为一维数组，将"搜索策略多样化"这个
+                工程策略下沉到代码层自动执行，消除嵌套数组导致的格式错误。
     返回:
         dict: 包含参数约束的 JSON Schema。
     """
@@ -136,37 +165,18 @@ def build_web_search_schema(concurrent_requests: int = _DEFAULT_CONCURRENT_REQUE
             "query": {
                 "type": "array",
                 "items": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 500,
-                    },
-                    "minItems": 1,
-                    "maxItems": 50,
-                    "description": "该并发请求要同时使用的多个搜索词。"
-                                   "例如：['2024年诺贝尔奖获得者', 'Nobel Prize winners 2024']。",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500,
                 },
-                "minItems": concurrent_requests,
-                "maxItems": concurrent_requests,
+                "minItems": 1,
+                "maxItems": 10,
                 "description": (
-                    f"搜索查询关键词外层数组。必填。外层数组数量必须为 {concurrent_requests}，"
-                    f"其中每个内层数组包含该并发请求要同时使用的多个搜索词。"
+                    "搜索查询关键词列表（一维数组）。必填。工具会自动对每个关键词执行"
+                    "多策略并发搜索（中文通用、中文新闻、英文通用），结果自动去重合并。"
+                    "建议提供 2-5 个不同角度的搜索词。"
+                    "示例：['2026世界杯 赛程', 'FIFA World Cup 2026', '世界杯 战报']。"
                 ),
-            },
-            "categories": {
-                "type": "string",
-                "description": "搜索分类筛选，可选。多个分类用逗号分隔。留空则使用 SearXNG 内部配置的默认引擎。"
-                               "可选值：general, news, images, videos, files, music, it, science, social media。"
-                               "强烈建议默认留空，仅在需要特定媒体类型时才指定。例如：'general,news'。",
-                "default": "",
-            },
-            "language": {
-                "type": "string",
-                "description": "搜索语言过滤，可选。强烈建议根据搜索词的语言指定。"
-                               "中文搜索词请使用 'zh-CN'，英文搜索词请使用 'en'。"
-                               "留空则由 SearXNG 实例默认配置决定，可能导致中文查询返回空结果。",
-                "default": "",
             },
             "time_range": {
                 "type": "string",
@@ -177,14 +187,17 @@ def build_web_search_schema(concurrent_requests: int = _DEFAULT_CONCURRENT_REQUE
                     "year",
                 ],
                 "default": "",
-                "description": "时间范围过滤"
-            }
+                "description": (
+                    "时间范围过滤。可选。"
+                    "'day'=24小时内，'month'=一个月内，'year'=一年内，空字符串=不限。"
+                ),
+            },
         },
         "required": ["query"],
     }
 
 
-# 保留向后兼容的静态常量，默认使用 _DEFAULT_CONCURRENT_REQUESTS 构建
+# 向后兼容的静态常量
 SEARXNG_SEARCH_PARAMETERS_SCHEMA: dict[str, Any] = build_web_search_schema()
 
 
@@ -319,69 +332,8 @@ async def _fetch_for_single_term(
     return term, collected_results, collected_infoboxes
 
 
-async def _fetch_for_request_group(
-    terms: list[str],
-    search_params_template: dict[str, Any],
-    base_url: str,
-    timeout: float,
-    results_per_request: int,
-    trace_id: str,
-    group_index: int,
-) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]]]:
-    """
-    对一个并发请求组进行搜索：组内多个搜索词各自搜索后再合并去重。
-
-    做什么：一个并发请求组包含多个搜索词，逐个搜索这些词，然后将所有结果合并去重后返回。
-            翻页逻辑在单词级别进行（_fetch_for_single_term）。
-    为什么这样做：一个并发请求可以同时使用多个搜索词从不同角度覆盖同一主题，
-                最大化该并发请求的信息获取效率。
-    参数:
-        terms: 该组的多个搜索词，组内顺序搜索并合并。
-        group_index: 当前组在并发数组中的序号，用于日志。
-        其余参数见 _fetch_for_single_term。
-    返回:
-        (group_index, merged_results, merged_infoboxes) 三元组。
-    """
-    group_results: list[dict[str, Any]] = []
-    group_infoboxes: list[dict[str, Any]] = []
-    seen_urls_in_group: set[str] = set()
-    seen_infobox_titles_in_group: set[str] = set()
-
-    # 组内多个搜索词并发搜索，然后合并去重
-    term_tasks = [
-        _fetch_for_single_term(
-            term, search_params_template, base_url, timeout,
-            results_per_request, trace_id,
-        )
-        for term in terms
-    ]
-    term_results_list = await asyncio.gather(*term_tasks, return_exceptions=True)
-
-    for term_item in term_results_list:
-        if isinstance(term_item, Exception):
-            logger.warning(
-                f"SearXNG 请求组内搜索词异常 trace_id={trace_id} "
-                f"group={group_index} error={term_item!s}"
-            )
-            continue
-        _, term_results, term_infoboxes = term_item
-        for r in term_results:
-            url = r.get("url")
-            if url and url not in seen_urls_in_group:
-                seen_urls_in_group.add(url)
-                group_results.append(r)
-
-        for box in term_infoboxes:
-            title = box.get("infobox", box.get("title", ""))
-            if title and title not in seen_infobox_titles_in_group:
-                seen_infobox_titles_in_group.add(title)
-                group_infoboxes.append(box)
-
-    return group_index, group_results, group_infoboxes
-
-
 # ============================================================
-# 工具执行 Handler
+# 工具执行 Handler（多策略并发搜索）
 # ============================================================
 
 
@@ -392,17 +344,15 @@ async def handle_searxng_search(
     """
     通过 SearXNG 执行网络搜索的工具 handler。
 
-    做什么：支持并发和自动翻页的高级 Web 搜索逻辑。query 为外层数组，长度等于 concurrent_requests，
-            每个内层数组包含该并发请求要同时使用的多个搜索词。通过异步并发机制对外层数组的
-            每个子组发起请求；在每个子组内部，按搜索词逐一搜索并合并去重；对每个搜索词，
-            自动递增 pageno（页码）收集足量数据。
-    为什么这样做：通过并行化和自动翻页最大化搜索结果的获取效率，提高信息获取质量。
+    做什么：接收一维搜索词列表，自动对每个搜索词以 3 种差异化策略（中文通用、
+            中文新闻、英文通用）并发执行搜索，所有结果全局去重后合并返回。
+            每个搜索词在每个策略下自动翻页获取足量结果。
+    为什么这样做：将"搜索策略多样化"从 LLM 层下沉到代码层自动执行，
+                降低 LLM 输出复杂度（只需一维数组），同时保证结果多样性和行为确定性。
     参数:
         parameters: 包含以下字段的字典：
-            - query（必填）：外层数组，每个内层数组为一个搜索组，包含该组要同时使用的多个搜索词。
-            - categories（可选）：搜索分类，多个用逗号分隔。
-            - language（可选）：语言过滤代码。
-            - time_range（可选）：时间过滤。
+            - query（必填）：一维搜索词字符串数组，如 ['关键词1', '关键词2']。
+            - time_range（可选）：时间过滤，可选值为 '' / 'day' / 'month' / 'year'。
         trace_id: 全链路追踪 ID。
     返回:
         str: 格式化后的搜索结果文本。
@@ -418,9 +368,6 @@ async def handle_searxng_search(
     tool_config = config_mgr.get_config(TOOL_NAME)
     base_url: str = tool_config.get(CONFIG_KEY_BASE_URL, "")
     timeout = _safe_float(tool_config.get(CONFIG_KEY_TIMEOUT), _SEARXNG_DEFAULT_TIMEOUT)
-    # concurrent_requests 为固定常量，与 Prompt 模板中硬编码的 minItems/maxItems 保持一致
-    # 如需修改并发数，需同步更新 web_search_prompt.j2 中的 output 格式示例
-    concurrent_requests: int = _DEFAULT_CONCURRENT_REQUESTS
     results_per_request = _safe_int(
         tool_config.get(CONFIG_KEY_RESULTS_PER_REQUEST),
         _DEFAULT_RESULTS_PER_REQUEST,
@@ -451,124 +398,102 @@ async def handle_searxng_search(
             "例如：http://localhost:8888"
         )
 
-    # 去除 URL 末尾的斜杠
     base_url = base_url.rstrip("/")
 
     # ============================================================
-    # 提取参数
+    # 提取并清理一维搜索词列表
     # ============================================================
-    # query 为外层数组，长度等于 concurrent_requests
-    # 每个内层数组包含该并发请求要同时使用的多个搜索词
-    query = parameters.get("query")
-    if not query or not isinstance(query, list):
-        return "【搜索参数错误】搜索查询词（query）必须是非空外层数组。"
+    raw_query = parameters.get("query")
+    if not raw_query or not isinstance(raw_query, list):
+        return "【搜索参数错误】搜索查询词（query）必须是非空数组。"
 
-    # 校验外层数组长度必须与并发请求数量一致
-    if len(query) != concurrent_requests:
-        return (
-            f"【搜索参数错误】搜索查询词外层数组长度必须与固定并发数一致。"
-            f"当前外层数组长度: {len(query)}，固定并发请求数量: {concurrent_requests}。"
-            f"请将 query 外层数组调整为 {concurrent_requests} 组搜索词。"
-        )
+    # 清理搜索词：去空、去重、保持顺序
+    query_terms: list[str] = []
+    seen_terms: set[str] = set()
+    for t in raw_query:
+        if isinstance(t, str):
+            t_stripped = t.strip()
+            if t_stripped and t_stripped not in seen_terms:
+                seen_terms.add(t_stripped)
+                query_terms.append(t_stripped)
 
-    # 清理并校验每个内层数组
-    query_groups: list[list[str]] = []
-    for group_idx, group in enumerate(query):
-        if not isinstance(group, list):
-            return (
-                f"【搜索参数错误】query[{group_idx}] 必须是数组。"
-            )
-        cleaned_terms: list[str] = []
-        seen_terms_in_group: set[str] = set()
-        for t in group:
-            if isinstance(t, str):
-                t_stripped = t.strip()
-                if t_stripped and t_stripped not in seen_terms_in_group:
-                    seen_terms_in_group.add(t_stripped)
-                    cleaned_terms.append(t_stripped)
-        if not cleaned_terms:
-            return (
-                f"【搜索参数错误】query[{group_idx}] 内层数组中没有有效的搜索词。"
-            )
-        query_groups.append(cleaned_terms)
+    if not query_terms:
+        return "【搜索参数错误】query 数组中没有有效的搜索词。"
 
-    categories: str = parameters.get("categories", "")
-    language: str = parameters.get("language", "")
     time_range: str = parameters.get("time_range", "")
 
     # ============================================================
-    # 构造核心模板参数
-    # 注意：SearXNG 不接受空字符串参数值，传递空值参数会导致 400 Bad Request。
-    # 因此只在参数有值时加入字典，空值参数不传递。
-    # language 参数必须传递，否则 SearXNG 默认语言配置可能导致中文查询返回空结果。
+    # 构建并发任务：每个搜索词 × 每个策略
     # ============================================================
-    search_params_template: dict[str, Any] = {
-        "format": "json",
-        "safesearch": safe_search_level,
-    }
+    # 为每个策略构建 SearXNG 请求参数模板
+    # 注意：SearXNG 不接受空字符串参数值，传递空值参数会导致 400 Bad Request。
+    # 因此只在参数有值时加入字典。
+    strategy_param_templates: list[dict[str, Any]] = []
+    for strategy in _SEARCH_STRATEGIES:
+        template: dict[str, Any] = {
+            "format": "json",
+            "safesearch": safe_search_level,
+        }
+        if strategy.get("categories"):
+            template["categories"] = strategy["categories"]
+        if strategy.get("language"):
+            template["language"] = strategy["language"]
+        if time_range and time_range.strip():
+            template["time_range"] = time_range.strip()
+        strategy_param_templates.append(template)
 
-    if categories and categories.strip():
-        search_params_template["categories"] = categories.strip()
-
-    if language and language.strip():
-        search_params_template["language"] = language.strip()
-
-    if time_range and time_range.strip():
-        search_params_template["time_range"] = time_range.strip()
+    # 构建并发任务：每个搜索词 × 每个策略 = len(query_terms) * len(_SEARCH_STRATEGIES) 个任务
+    tasks = []
+    task_meta: list[tuple[str, str]] = []  # (term, strategy_name) 用于日志
+    for term in query_terms:
+        for idx, strategy in enumerate(_SEARCH_STRATEGIES):
+            tasks.append(
+                _fetch_for_single_term(
+                    term, strategy_param_templates[idx], base_url, timeout,
+                    results_per_request, trace_id,
+                )
+            )
+            task_meta.append((term, strategy["name"]))
 
     logger.info(
-        f"SearXNG 高级搜索请求 trace_id={trace_id} "
+        f"SearXNG 多策略搜索请求 trace_id={trace_id} "
         f"base_url={base_url} "
-        f"concurrent_groups={concurrent_requests} "
-        f"query_groups={query_groups} "
-        f"search_params_template={search_params_template} "
+        f"query_terms={query_terms} "
+        f"strategies={[s['name'] for s in _SEARCH_STRATEGIES]} "
+        f"total_tasks={len(tasks)} "
         f"results_per_request={results_per_request} "
         f"timeout={timeout} "
-        f"raw_parameters={parameters}"
+        f"time_range={time_range}"
     )
 
-    # ============================================================
-    # 并发请求与自动翻页
-    # ============================================================
-    # 与 concurrent_requests 一致的并发数，每个并发任务处理一个 query 组
-    tasks = [
-        _fetch_for_request_group(
-            terms,
-            search_params_template,
-            base_url,
-            timeout,
-            results_per_request,
-            trace_id,
-            group_idx,
-        )
-        for group_idx, terms in enumerate(query_groups)
-    ]
-
+    # 并发执行所有任务
     results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
     # ============================================================
-    # 合并所有并发组的结果（全局去重）
+    # 全局去重合并
     # ============================================================
     all_results: list[dict[str, Any]] = []
     all_infoboxes: list[dict[str, Any]] = []
     seen_urls_global: set[str] = set()
     seen_infobox_titles_global: set[str] = set()
 
-    for item in results_list:
+    for idx, item in enumerate(results_list):
         if isinstance(item, Exception):
+            term, strategy_name = task_meta[idx] if idx < len(task_meta) else ("?", "?")
             logger.warning(
-                f"SearXNG 并发请求组异常 trace_id={trace_id} error={item!s}"
+                f"SearXNG 任务异常 trace_id={trace_id} "
+                f"term={term} strategy={strategy_name} error={item!s}"
             )
             continue
 
-        _group_idx, group_results, group_infoboxes = item
-        for r in group_results:
+        _term, term_results, term_infoboxes = item
+        for r in term_results:
             url = r.get("url")
             if url and url not in seen_urls_global:
                 seen_urls_global.add(url)
                 all_results.append(r)
 
-        for box in group_infoboxes:
+        for box in term_infoboxes:
             title = box.get("infobox", box.get("title", ""))
             if title and title not in seen_infobox_titles_global:
                 seen_infobox_titles_global.add(title)
@@ -577,22 +502,19 @@ async def handle_searxng_search(
     if not all_results and not all_infoboxes:
         logger.info(
             f"SearXNG 搜索无结果 trace_id={trace_id} "
-            f"query_groups={query_groups}"
+            f"query_terms={query_terms}"
         )
-        # 将所有搜索词展平后显示
-        all_terms = [t for g in query_groups for t in g]
-        return f"【未找到相关结果】\n查询词：{', '.join(all_terms)}\n"
+        return f"【未找到相关结果】\n查询词：{', '.join(query_terms)}\n"
 
     # ============================================================
     # 格式化输出
     # ============================================================
     output_parts: list[str] = []
-    # 将所有搜索词展平以显示
-    all_terms_flat = [t for g in query_groups for t in g]
-    output_parts.append(f"【搜索结果】查询词：{', '.join(all_terms_flat)}")
+    strategy_names = "、".join(s["name"] for s in _SEARCH_STRATEGIES)
+    output_parts.append(f"【搜索结果】查询词：{', '.join(query_terms)}")
     output_parts.append(
-        f"并发 {concurrent_requests} 组搜索，共获取 {len(all_results)} 条常规结果与 "
-        f"{len(all_infoboxes)} 条知识卡片"
+        f"多策略并发搜索（{strategy_names}），共获取 "
+        f"{len(all_results)} 条常规结果与 {len(all_infoboxes)} 条知识卡片"
     )
     output_parts.append("")
 
@@ -628,7 +550,6 @@ async def handle_searxng_search(
 
         output_parts.append(f"{idx}. {title}")
         if content:
-            # 单条内容截断到 300 字符
             content_snippet = content[:300] + ("..." if len(content) > 300 else "")
             output_parts.append(f"   {content_snippet}")
         if url:
@@ -640,11 +561,13 @@ async def handle_searxng_search(
     output_text: str = "\n".join(output_parts)
 
     logger.info(
-        f"SearXNG 搜索成功 trace_id={trace_id} "
-        f"concurrent_groups={concurrent_requests} "
-        f"groups_results={[len(r) if not isinstance(r, Exception) else 0 for r in results_list]}"
-        f" total_results={len(all_results)} "
-        f"total_infoboxes={len(all_infoboxes)} output_length={len(output_text)}"
+        f"SearXNG 多策略搜索成功 trace_id={trace_id} "
+        f"query_terms={query_terms} "
+        f"strategies={[s['name'] for s in _SEARCH_STRATEGIES]} "
+        f"total_tasks={len(tasks)} "
+        f"total_results={len(all_results)} "
+        f"total_infoboxes={len(all_infoboxes)} "
+        f"output_length={len(output_text)}"
     )
 
     return output_text

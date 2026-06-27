@@ -633,7 +633,8 @@ class ToolExecuteNode:
         for field_name, field_value in normalized.items():
             if field_name not in properties:
                 continue
-            expected_type = properties[field_name].get("type", "")
+            field_schema = properties[field_name]
+            expected_type = field_schema.get("type", "")
 
             # 自动修正：Schema 期望 string 但 LLM 返回单元素数组
             # 例如：query: ['2026-06-26 世界杯'] → query: '2026-06-26 世界杯'
