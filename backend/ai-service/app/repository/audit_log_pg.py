@@ -29,6 +29,7 @@ Luna AI 审计日志仓储层。
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -85,6 +86,10 @@ class AuditLogPGRepo:
         try:
             async with self.pg_client.session_factory() as session:
                 now = datetime.now(timezone.utc)
+                # asyncpg 要求 JSONB 参数传入 JSON 字符串而非 Python dict。
+                # PostgreSQL 对 JSONB 列接收合法 JSON 字符串时会自动隐式转换，
+                # 因此无需在 SQL 中显式 CAST，只需保证传入的是 JSON 字符串即可。
+                arguments_json = json.dumps(arguments, ensure_ascii=False) if isinstance(arguments, dict) else arguments
                 query = """
                     INSERT INTO audit_logs (
                         id, user_id, tool_id, tool_name, risk_level,
@@ -92,7 +97,7 @@ class AuditLogPGRepo:
                         status, trace_id, task_id, created_at, updated_at
                     ) VALUES (
                         :id, :user_id, :tool_id, :tool_name, :risk_level,
-                        :reason, CAST(:arguments AS jsonb), :goal, :agent_output,
+                        :reason, :arguments_json, :goal, :agent_output,
                         :status, :trace_id, :task_id, :created_at, :updated_at
                     )
                 """
@@ -105,7 +110,7 @@ class AuditLogPGRepo:
                         "tool_name": tool_name,
                         "risk_level": risk_level,
                         "reason": reason,
-                        "arguments": arguments,
+                        "arguments_json": arguments_json,
                         "goal": goal,
                         "agent_output": agent_output,
                         "status": AuthStatus.PENDING.value,
