@@ -163,31 +163,49 @@ class AuditLogPGRepo:
         try:
             async with self.pg_client.session_factory() as session:
                 now = datetime.now(timezone.utc)
-                query = """
-                    UPDATE audit_logs
-                    SET status = :status,
-                        user_feedback = :user_feedback,
-                        updated_at = :updated_at,
-                        responded_at = CASE
-                            WHEN :responded_at IS NOT NULL AND status = :old_status
-                            THEN :responded_at
-                            ELSE responded_at
-                        END
-                    WHERE id = :id AND status = :old_status
-                """
-                result = await session.execute(
-                    text(query),
-                    {
+                # 做什么：根据是否需要设置 responded_at 动态选择 SQL 模板。
+                # 为什么这样做：当 responded_at 为 None 时，asyncpg 无法推断参数 $4 的
+                #              数据类型（AmbiguousParameterError），因此将 CASE WHEN 逻辑
+                #              提升到 Python 层，避免向 asyncpg 传递 NULL 参数。
+                # 注意：TIMEOUT 也是系统自动"响应"的一种形式，应记录 responded_at。
+                need_responded_at = new_status in (
+                    AuthStatus.APPROVED,
+                    AuthStatus.REJECTED,
+                    AuthStatus.TIMEOUT,
+                )
+                if need_responded_at:
+                    query = """
+                        UPDATE audit_logs
+                        SET status = :status,
+                            user_feedback = :user_feedback,
+                            updated_at = :updated_at,
+                            responded_at = :responded_at
+                        WHERE id = :id AND status = :old_status
+                    """
+                    params = {
                         "id": audit_log_id,
                         "status": new_status.value,
                         "old_status": AuthStatus.PENDING.value,
                         "user_feedback": user_feedback,
                         "updated_at": now,
-                        "responded_at": now
-                        if new_status in (AuthStatus.APPROVED, AuthStatus.REJECTED)
-                        else None,
-                    },
-                )
+                        "responded_at": now,
+                    }
+                else:
+                    query = """
+                        UPDATE audit_logs
+                        SET status = :status,
+                            user_feedback = :user_feedback,
+                            updated_at = :updated_at
+                        WHERE id = :id AND status = :old_status
+                    """
+                    params = {
+                        "id": audit_log_id,
+                        "status": new_status.value,
+                        "old_status": AuthStatus.PENDING.value,
+                        "user_feedback": user_feedback,
+                        "updated_at": now,
+                    }
+                result = await session.execute(text(query), params)
                 await session.commit()
                 if result.rowcount > 0:
                     logger.info(
