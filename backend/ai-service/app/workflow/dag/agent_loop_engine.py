@@ -745,6 +745,16 @@ def route_by_step(state: dict[str, Any]) -> str:
     if agent_loop is None:
         return AgentStepRoute.FINAL_VERIFY.value
 
+    # Phase 13：Gating 审批挂起时，立即退出 step loop 进入 final_verify。
+    # 做什么：检测到 gating_suspended 标志后，路由到 FINAL_VERIFY 退出循环。
+    # 为什么这样做：审批挂起期间不应继续执行后续步骤，必须暂停整个 step loop。
+    if agent_loop.gating_suspended:
+        logger.info(
+            "[TraceID:{}] StepRouter: 检测到 gating_suspended，退出 step loop 进入 final_verify"
+            .format(chat_state.runtime.trace_id)
+        )
+        return AgentStepRoute.FINAL_VERIFY.value
+
     # 终止条件
     if agent_loop.terminated:
         return AgentStepRoute.FINAL_VERIFY.value
@@ -1447,6 +1457,20 @@ class ObserveNode:
         if agent_loop.terminated:
             return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 
+        # Phase 13：Gating 审批挂起时，跳过观察生成，避免浪费 LLM 调用。
+        # 做什么：检测到 gating_pending 标志后，直接生成占位观察并返回。
+        # 为什么这样做：审批挂起不是执行失败，不应触发正常的观察-评估-修复循环。
+        if agent_loop.gating_suspended:
+            agent_loop.execution.last_observation = (
+                "工具执行被 Gating 审批拦截，正在等待用户审批。"
+                f"挂起节点: {agent_loop.gating_pending_node_ids}"
+            )
+            logger.info(
+                f"[TraceID:{trace_id}] ObserveNode: 检测到 gating_suspended，"
+                f"跳过观察生成，pending_nodes={agent_loop.gating_pending_node_ids}"
+            )
+            return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
         # 发布 DAG_AGENT_OBSERVE RUNNING 状态
         await _publish_chat_status_for_state(
             publisher=self.chat_status_publisher,
@@ -1601,6 +1625,26 @@ class AgentStepEvaluateNode:
         session_id = chat_state.runtime.session_id
 
         if agent_loop.terminated:
+            return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
+        # Phase 13：Gating 审批挂起时，跳过 LLM 评估，直接设置 PASS 结论。
+        # 做什么：检测到 gating_suspended 标志后，写入一个 PASS 级别的评估结果。
+        # 为什么这样做：审批挂起不是步骤失败，不应触发修复/重规划循环。
+        #              设置为 PASS 使 route_by_step_evaluation 将流程路由回 step_router，
+        #              再由 route_by_step 检测 gating_suspended 后退出 step loop。
+        if agent_loop.gating_suspended:
+            agent_loop.execution.evaluation_result = StepEvaluationResult(
+                verdict=StepEvaluationVerdict.PASS,
+                evaluation_reason=(
+                    "工具执行被 Gating 审批拦截，正在等待用户审批，步骤暂时通过。"
+                ),
+                gap_analysis="",
+                suggestion="",
+            )
+            logger.info(
+                f"[TraceID:{trace_id}] StepEvaluateNode: 检测到 gating_suspended，"
+                f"跳过 LLM 评估，设置 PASS 退出 step loop"
+            )
             return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 
         idx = agent_loop.plan.current_step_index
@@ -2418,6 +2462,20 @@ class AgentFinalVerifyNode:
             return chat_state.as_graph_state()
 
         trace_id = chat_state.runtime.trace_id
+
+        # Phase 13：Gating 审批挂起时，跳过 LLM 验收，直接返回。
+        # 做什么：检测到 gating_suspended 标志后，保存当前状态并退出。
+        # 为什么这样做：审批挂起期间不应进行最终验收，应保持 DAG 活跃状态等待审批结果。
+        #              is_dag_active=True 确保后续审批结果回来后可以恢复执行。
+        if agent_loop.gating_suspended:
+            logger.info(
+                f"[TraceID:{trace_id}] FinalVerifyNode: 检测到 gating_suspended，"
+                f"跳过 LLM 验收，等待用户审批。"
+                f"pending_nodes={agent_loop.gating_pending_node_ids}"
+            )
+            chat_state.dag_state.is_dag_active = True
+            return _save_agent_loop_state_to_graph(chat_state, agent_loop)
+
         session_id = chat_state.runtime.session_id
         started_at_ms = agent_loop.workflow_state.get("dag_engine_started_at_ms", 0)
 
@@ -2849,6 +2907,12 @@ def route_by_step_evaluation(state: dict[str, Any]) -> str:
     """
     _, agent_loop = _extract_agent_loop_state(state)
     if agent_loop is None:
+        return StepEvaluationRoute.PASS.value
+
+    # Phase 13：Gating 审批挂起时，直接返回 PASS 路由到 step_router。
+    # 做什么：跳过评估结论判断，避免路由到 step_repair 触发修复循环。
+    # 为什么这样做：审批挂起不是失败，不应进入修复路径。
+    if agent_loop.gating_suspended:
         return StepEvaluationRoute.PASS.value
 
     eval_result = agent_loop.execution.evaluation_result

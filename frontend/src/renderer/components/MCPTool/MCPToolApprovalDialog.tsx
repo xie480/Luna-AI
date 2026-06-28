@@ -113,12 +113,7 @@ const MCPToolApprovalOverlayInner: React.FC = () => {
     setFeedback('');
   }, [pendingRequests.length, resetConfirmState]);
 
-  // ===== 队列为空的兜底 =====
-  if (pendingRequests.length === 0) {
-    return null;
-  }
-
-  // ===== 总是展示队列头部的第一条数据 =====
+  // ===== 总是展示队列头部的第一条数据（Hooks 之后才能读取） =====
   const currentReq = pendingRequests[0];
   const queueLength = pendingRequests.length;
   const isDisconnected = connectionStatus !== 'connected';
@@ -151,9 +146,9 @@ const MCPToolApprovalOverlayInner: React.FC = () => {
       try {
         const success = await sendAuthResponse(
           backendUrl,
-          currentReq.audit_log_id,
-          currentReq.trace_id,
-          currentReq.task_id,
+          currentReq?.audit_log_id ?? '',
+          currentReq?.trace_id ?? '',
+          currentReq?.task_id ?? '',
           action,
           feedback,
         );
@@ -218,6 +213,11 @@ const MCPToolApprovalOverlayInner: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
+
+  // ===== 队列为空的兜底（必须在所有 Hooks 调用之后，否则违反 Rules of Hooks） =====
+  if (pendingRequests.length === 0) {
+    return null;
+  }
 
   /**
    * 安全渲染 arguments 参数载荷。
