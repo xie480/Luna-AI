@@ -396,6 +396,25 @@ class ChatDagState(BaseModel):
     termination_reason: str = ""
     partial_results: str = ""
 
+    # === Phase 13: Gating 审批挂起状态 ===
+    # 做什么：当 L2/L3 工具触发 Gating 审批时，由 dag_engine_node 或 agent_loop
+    #         将此标志同步到外层 ChatDagState，供外层图的条件路由使用。
+    # 为什么这样做：Agent Loop 内层子图在 gating 挂起时正确退出（到达 END），
+    #              但外层图的 dag_engine → context_governance 是无条件边，
+    #              如果不加条件路由，外层图会继续执行 LLM 生成，造成"自动同意"假象。
+    # 边界条件：dag_engine_node.py 在子图返回后将 AgentLoopState 中的
+    #          gating_suspended 同步到此处；routers.py 的 route_after_dag_engine
+    #          读取此字段决定跳转到 FINALIZE 还是 CONTEXT_GOVERNANCE。
+    gating_suspended: bool = Field(
+        default=False,
+        description="当前 DAG 是否处于 Gating 审批挂起状态。"
+                    "True 时表示有 L2/L3 工具正在等待用户审批。",
+    )
+    gating_pending_node_ids: list[str] = Field(
+        default_factory=list,
+        description="处于 Gating 审批挂起状态的节点 ID 列表。",
+    )
+
     # === DAG 引擎是否激活 ===
     is_dag_active: bool = Field(
         default=False,

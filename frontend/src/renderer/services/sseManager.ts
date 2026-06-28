@@ -661,7 +661,7 @@ class SSEManager {
           import('./mcpSseHandlers').then(({ handleToolAuthRequired }) => {
             handleToolAuthRequired({
               trace_id: msg.trace_id,
-              task_id: '',
+              task_id: msg.task_id ?? '',
               timestamp: Date.now(),
               payload: msg.payload,
             });

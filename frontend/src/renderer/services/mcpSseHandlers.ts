@@ -282,9 +282,10 @@ export function handlePendingAuthsSync(payload: PendingAuthsSyncPayload): void {
   for (const req of payload.requests) {
     try {
       // 复用 handleToolAuthRequired 的处理逻辑，构造一个消息信封
+      // 从 req 中提取 trace_id 和 task_id（后端 AuthRequestPayload 包含这些字段）
       handleToolAuthRequired({
-        trace_id: req.audit_log_id, // 降级使用
-        task_id: '',
+        trace_id: req.trace_id || req.audit_log_id, // 优先使用后端下发的 trace_id
+        task_id: req.task_id || '',
         timestamp: Date.now(),
         payload: req,
       });
@@ -343,7 +344,9 @@ export async function sendAuthResponse(
   }
 
   // ===== 参数合法性校验 =====
-  if (!auditLogId || !traceId || !taskId) {
+  // 注意：task_id 在后端 AuthResponseRequest 中为可选字段（默认空字符串），
+  // 不强制要求非空，仅 auditLogId 和 traceId 为必填。
+  if (!auditLogId || !traceId) {
     console.error('[GatingHandler] 发送审批响应失败：缺少必填参数', {
       auditLogId,
       traceId,

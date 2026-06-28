@@ -631,6 +631,10 @@ export interface AuthRequiredPayload {
   skill_info?: unknown;
   /** SKILL 执行 Agent 的输出信息 */
   agent_output?: string;
+  /** 全链路追踪 ID（后端 AuthRequestPayload 中包含此字段） */
+  trace_id?: string;
+  /** 关联的 DAG 任务 ID（后端 AuthRequestPayload 中包含此字段） */
+  task_id?: string;
 }
 
 /**
