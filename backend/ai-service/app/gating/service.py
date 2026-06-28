@@ -289,8 +289,10 @@ class GatingService:
         )
 
         # 4. 保存会话级待消费审批结果（供下次工作流的 session_context_load_node 消费）
-        # 做什么：从快照中加载工具信息，执行批准后的工具，将结果写入 Redis。
+        # 做什么：从快照中加载工具信息，保存审批通过的结果到 Redis。
         # 为什么这样做：审批结果是异步发生的，需要在下次工作流执行时注入到上下文中。
+        #         注意：不再在此处执行工具！工具执行由 AgentLoopEngine 的轮询循环负责，
+        #         从快照加载已校验参数后统一执行，避免 GatingService 和轮询循环重复执行。
         # 边界条件：session_id 为空或快照不存在时跳过，不影响主流程。
         if response.session_id:
             try:
@@ -300,19 +302,14 @@ class GatingService:
                 mcp_intent = snapshot.get("mcp_intent", "") if snapshot else ""
                 risk_level = snapshot.get("risk_level", "L2") if snapshot else "L2"
 
-                # 执行批准后的工具，获取输出结果
-                tool_output = await self._execute_approved_tool(
-                    tool_name=tool_name,
-                    tool_parameters=tool_parameters,
-                    trace_id=trace_id,
-                )
-
+                # 不再执行工具，仅保存审批通过信息供 session_context_load_node 消费
+                # 工具的实际执行由 AgentLoopEngine 轮询循环完成
                 await self._snapshot_manager.save_pending_approval_result(
                     session_id=response.session_id,
                     result_type="approved",
                     tool_name=tool_name,
                     tool_parameters=tool_parameters,
-                    tool_output=tool_output,
+                    tool_output="(审批已通过，工具正在由工作流引擎执行)",
                     mcp_intent=mcp_intent,
                     risk_level=risk_level,
                 )
@@ -338,9 +335,11 @@ class GatingService:
         tool_parameters: dict[str, Any],
         trace_id: str,
     ) -> str:
-        """执行审批通过后的工具。
+        """执行审批通过后的工具（保留供外部调用）。
 
         做什么：用户批准后直接执行工具。使用已有的 MCPToolRegistry 注册信息。
+        注意：approve_request 不再调用此方法，工具执行由 AgentLoopEngine 轮询循环统一负责。
+              此方法保留供其他可能的调用方使用（如 MCP Skill 执行节点的轮询路径）。
         输入：
             - tool_name: 工具名称。
             - tool_parameters: 工具参数。

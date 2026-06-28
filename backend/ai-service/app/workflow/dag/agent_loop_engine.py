@@ -863,12 +863,37 @@ class StepThinkNode:
                     # 获取工具列表失败时不阻塞流程
                     available_tools_text = ""
 
+                # 修复问题 5：检测上一步是否有工具被用户拒绝
+                # 做什么：遍历 partitioned_outputs，提取被拒绝的工具名和用户反馈，
+                #         注入到 retry_context 中，明确告知 LLM 不要重复选择被拒绝的工具。
+                # 为什么这样做：用户拒绝是显式的行为信号，LLM 必须知道这是"用户主动拒绝"
+                #              而非技术失败，避免再次选择同一个高危工具导致审批弹窗死循环。
+                gating_rejection_text = ""
+                if agent_loop.execution.partitioned_outputs:
+                    rejected_tools = []
+                    for _nid, _out in agent_loop.execution.partitioned_outputs.items():
+                        if isinstance(_out, dict) and _out.get("gating_rejected", False):
+                            rejected_name = _out.get("tool_name", "未知工具")
+                            rejected_feedback = _out.get("user_feedback", "")
+                            rejected_tools.append(
+                                f"  - 工具 '{rejected_name}' 被用户拒绝"
+                                + (f"，用户反馈: {rejected_feedback}" if rejected_feedback else "")
+                            )
+                    if rejected_tools:
+                        gating_rejection_text = (
+                            "\n\n[⚠️ 用户拒绝的工具调用]\n"
+                            + "\n".join(rejected_tools)
+                            + "\n重要：这些工具被用户明确拒绝，请勿再次选择相同或类似的高危操作。"
+                            + "请寻找替代方案或调整执行策略。"
+                        )
+
                 retry_context = (
                     f"\n\n[上一次观察结果]\n{agent_loop.execution.last_observation}\n"
                     f"[上一次错误]\n{agent_loop.execution.last_error}\n"
                     f"[重试次数] {agent_loop.execution.retry_count}"
                     f"[loop 次数] {agent_loop.execution.loop_count}"
                     f"{available_tools_text}"
+                    f"{gating_rejection_text}"
                 )
 
             # 构建已完成步骤摘要
@@ -1443,8 +1468,9 @@ class AgentToolExecuteNode:
             if redis_client:
                 redis_raw = redis_client.get_client()
 
-                # 构建 audit_log_id → (node_id, tool_name, parameters) 映射
-                pending_map: dict[str, tuple[str, str, dict]] = {}
+                # 构建 audit_log_id → (node_id, tool_name) 映射
+                # 注意：不再从 tool_call_info_map 取参数，审批通过后从快照加载已校验参数
+                pending_map: dict[str, tuple[str, str]] = {}
                 for nid, out in gating_pending_items:
                     audit_log_id = out.get("gating_audit_log_id", "")
                     if audit_log_id:
@@ -1452,7 +1478,6 @@ class AgentToolExecuteNode:
                         pending_map[audit_log_id] = (
                             nid,
                             tc_info.get("tool_name", ""),
-                            tc_info.get("parameters", {}),
                         )
 
                 for _poll_idx in range(max_polls):
@@ -1462,7 +1487,7 @@ class AgentToolExecuteNode:
                     await asyncio.sleep(poll_interval)
 
                     resolved_ids: list[str] = []
-                    for audit_log_id, (node_id, tool_name, tool_params) in list(
+                    for audit_log_id, (node_id, tool_name) in list(
                         pending_map.items()
                     ):
                         decision_key = f"gating:decision:{audit_log_id}"
@@ -1489,11 +1514,42 @@ class AgentToolExecuteNode:
                             pass
 
                         if decision == "approved":
-                            # 审批通过：直接调用工具 handler 重新执行（绕过 Gating 检查）
+                            # ============================================================
+                            # 修复问题 2：从快照加载已校验的参数，而非 tool_call_info_map 的原始参数
+                            # 修复问题 1：执行后判断工具实际返回是否为错误文本
+                            # 修复问题 3：执行后发布 EVT_DAG_NODE_COMPLETED 事件更新前端
+                            # ============================================================
                             logger.info(
                                 f"[TraceID:{trace_id}] ToolExecuteNode: "
-                                f"工具 {tool_name} 审批通过，重新执行"
+                                f"工具 {tool_name} 审批通过，从快照加载参数并重新执行"
                             )
+
+                            # 从快照加载已校验的参数
+                            tool_params: dict[str, Any] = {}
+                            if snap_mgr:
+                                try:
+                                    snapshot = await snap_mgr.load_tool_snapshot(audit_log_id)
+                                    if snapshot:
+                                        tool_params = snapshot.get("tool_parameters", {})
+                                        # 如果快照中有工具名，优先使用快照中的
+                                        snap_tool_name = snapshot.get("tool_name", "")
+                                        if snap_tool_name:
+                                            tool_name = snap_tool_name
+                                        logger.info(
+                                            f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                            f"从快照加载参数成功 tool={tool_name} "
+                                            f"params_keys={list(tool_params.keys())}"
+                                        )
+                                except Exception as snap_exc:
+                                    logger.warning(
+                                        f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                        f"加载快照失败，回退使用 tool_call_info_map 参数: {snap_exc}"
+                                    )
+                            # 回退：如果快照加载失败，使用 tool_call_info_map 中的参数
+                            if not tool_params:
+                                tc_info = tool_call_info_map.get(node_id, {})
+                                tool_params = tc_info.get("parameters", {})
+
                             try:
                                 from app.mcp.registry import MCPToolRegistry
 
@@ -1507,22 +1563,78 @@ class AgentToolExecuteNode:
                                         ),
                                         timeout=30.0,
                                     )
-                                    partitioned_outputs[node_id] = {
-                                        "success": True,
-                                        "tool_output": output_text,
-                                        "error_message": "",
-                                        "tool_parameters": tool_params,
-                                        "gating_pending": False,
-                                        "gating_rejected": False,
-                                    }
-                                    logger.info(
-                                        f"[TraceID:{trace_id}] ToolExecuteNode: "
-                                        f"工具 {tool_name} 审批通过后执行成功"
+                                    # 修复问题 1：判断工具实际返回是否为错误文本
+                                    # 工具 handler 遵循"返回错误文本而非抛异常"模式，
+                                    # 需要检测返回值中的错误标识前缀
+                                    _error_prefixes = (
+                                        "【操作拒绝】", "【操作错误】",
+                                        "【权限错误】", "【系统错误】",
+                                        "【参数错误】",
+                                    )
+                                    is_error_output = any(
+                                        output_text.startswith(prefix)
+                                        for prefix in _error_prefixes
+                                    )
+
+                                    if is_error_output:
+                                        # 工具实际执行失败（返回了错误文本）
+                                        partitioned_outputs[node_id] = {
+                                            "success": False,
+                                            "tool_output": output_text,
+                                            "error_message": output_text,
+                                            "tool_parameters": tool_params,
+                                            "tool_name": tool_name,
+                                            "gating_pending": False,
+                                            "gating_rejected": False,
+                                        }
+                                        logger.warning(
+                                            f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                            f"工具 {tool_name} 审批通过后执行失败（返回错误文本）: "
+                                            f"{output_text[:200]}"
+                                        )
+                                    else:
+                                        # 工具执行成功
+                                        partitioned_outputs[node_id] = {
+                                            "success": True,
+                                            "tool_output": output_text,
+                                            "error_message": "",
+                                            "tool_parameters": tool_params,
+                                            "tool_name": tool_name,
+                                            "gating_pending": False,
+                                            "gating_rejected": False,
+                                        }
+                                        logger.info(
+                                            f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                            f"工具 {tool_name} 审批通过后执行成功"
+                                        )
+
+                                    # 修复问题 3：发布 EVT_DAG_NODE_COMPLETED 事件更新前端
+                                    # 做什么：审批通过后工具重新执行完毕，向前端推送节点级完成事件，
+                                    #         使 DAG 面板中的节点状态从"挂起/失败"更新为最终状态。
+                                    await _emit_dag_event(
+                                        DagWorkflowEventType.EVT_DAG_NODE_COMPLETED,
+                                        trace_id, session_id,
+                                        {
+                                            "plan_id": agent_loop.goal.task_id,
+                                            "step_id": agent_loop.execution.current_step_id,
+                                            "node_id": node_id,
+                                            "node_type": "tool_execute",
+                                            "tool_name": tool_name,
+                                            "success": not is_error_output,
+                                            "outputs": {
+                                                "tool_output": output_text[:500],
+                                            },
+                                            "error_message": output_text[:200]
+                                                if is_error_output else None,
+                                            "gating_approved": True,
+                                        },
+                                        self.event_publisher,
                                     )
                                 else:
                                     partitioned_outputs[node_id] = {
                                         "success": False,
                                         "error_message": f"工具 '{tool_name}' 不存在或已禁用",
+                                        "tool_name": tool_name,
                                         "gating_pending": False,
                                         "gating_rejected": False,
                                     }
@@ -1534,6 +1646,7 @@ class AgentToolExecuteNode:
                                 partitioned_outputs[node_id] = {
                                     "success": False,
                                     "error_message": f"工具 '{tool_name}' 执行超时（30s）",
+                                    "tool_name": tool_name,
                                     "gating_pending": False,
                                     "gating_rejected": False,
                                 }
@@ -1545,6 +1658,7 @@ class AgentToolExecuteNode:
                                 partitioned_outputs[node_id] = {
                                     "success": False,
                                     "error_message": f"工具执行失败: {tool_exc}",
+                                    "tool_name": tool_name,
                                     "gating_pending": False,
                                     "gating_rejected": False,
                                 }
@@ -1562,8 +1676,26 @@ class AgentToolExecuteNode:
                                 "gating_rejected": True,
                                 "user_feedback": user_feedback,
                                 "tool_name": tool_name,
-                                "tool_parameters": tool_params,
                             }
+
+                            # 修复问题 3：拒绝后也发布 EVT_DAG_NODE_COMPLETED 事件
+                            # 做什么：用户拒绝后，前端需要更新节点状态为"已拒绝"
+                            await _emit_dag_event(
+                                DagWorkflowEventType.EVT_DAG_NODE_COMPLETED,
+                                trace_id, session_id,
+                                {
+                                    "plan_id": agent_loop.goal.task_id,
+                                    "step_id": agent_loop.execution.current_step_id,
+                                    "node_id": node_id,
+                                    "node_type": "tool_execute",
+                                    "tool_name": tool_name,
+                                    "success": False,
+                                    "error_message": f"用户拒绝了工具 '{tool_name}' 的调用",
+                                    "gating_rejected": True,
+                                    "user_feedback": user_feedback,
+                                },
+                                self.event_publisher,
+                            )
 
                         elif decision == "timeout":
                             # 超时：保持 gating_pending 状态
