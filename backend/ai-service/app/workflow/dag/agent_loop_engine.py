@@ -533,8 +533,10 @@ class GlobalPlannerNode:
                     plan_data = self._parse_plan_response(llm_response)
 
                     # 构建 PlanState
+                    # 兼容新旧两种字段名：新提示词输出 "states"，旧提示词输出 "steps"
+                    states_data = plan_data.get("states", plan_data.get("steps", []))
                     steps = []
-                    for i, step_data in enumerate(plan_data.get("steps", [])):
+                    for i, step_data in enumerate(states_data):
                         criteria = []
                         for c in step_data.get("completion_criteria", []):
                             criteria.append(CompletionCriterion(
@@ -545,9 +547,11 @@ class GlobalPlannerNode:
                         # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
                         raw_deps = step_data.get("dependencies", [])
                         coerced_deps = [str(d) for d in raw_deps]
+                        # title 字段映射：新提示词用 "responsibility"，旧提示词用 "title"
+                        title = step_data.get("responsibility", step_data.get("title", f"State {i + 1}"))
                         steps.append(AgentStepState(
                             step_id=generate_string_id(),
-                            title=step_data.get("title", f"步骤 {i + 1}"),
+                            title=title,
                             intent=step_data.get("intent", ""),
                             dependencies=coerced_deps,
                             expected_output=step_data.get("expected_output", ""),
@@ -869,7 +873,12 @@ class StepThinkNode:
             available_skills_for_step = agent_loop.skill_briefs
             if hasattr(current_step, "pre_allocated_skills") and current_step.pre_allocated_skills:
                 # 从全局 skill_briefs 中筛选出预分配的 skill
-                allocated_names = set(current_step.pre_allocated_skills)
+                # pre_allocated_skills 是 list[dict]（含 skill_name），需提取 skill_name 构建集合
+                allocated_names = {
+                    s.get("skill_name", "") if isinstance(s, dict) else str(s)
+                    for s in current_step.pre_allocated_skills
+                    if s
+                }
                 filtered = [
                     s for s in agent_loop.skill_briefs
                     if s.get("skill_name") in allocated_names
@@ -2032,9 +2041,11 @@ class AgentReplanNode:
                         # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
                         raw_deps = step_data.get("dependencies", [])
                         coerced_deps = [str(d) for d in raw_deps]
+                        # title 字段映射：新提示词用 "responsibility"，旧提示词用 "title"
+                        title = step_data.get("responsibility", step_data.get("title", f"State {i + 1}"))
                         new_steps.append(AgentStepState(
                             step_id=generate_string_id(),
-                            title=step_data.get("title", f"步骤 {i + 1}"),
+                            title=title,
                             intent=step_data.get("intent", ""),
                             dependencies=coerced_deps,
                             expected_output=step_data.get("expected_output", ""),
