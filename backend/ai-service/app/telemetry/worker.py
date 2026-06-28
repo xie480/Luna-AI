@@ -54,8 +54,13 @@ class TraceSpan(Base):
 
 
 class AuditLog(Base):
-    """审计日志模型"""
-    __tablename__ = "audit_logs"
+    """遥测审计日志模型。
+
+    做什么：记录遥测链路中的审计事件（如上下文压缩、工具调用轨迹等）。
+    为什么这样做：与领域层的 audit_logs 表名解耦，避免 Schema 同步时两个元数据
+                 映射同一表名导致互相覆盖列定义。此表独立承载遥测用途的审计数据。
+    """
+    __tablename__ = "telemetry_audit_logs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     trace_id: Mapped[str] = mapped_column(String(64), index=True)
