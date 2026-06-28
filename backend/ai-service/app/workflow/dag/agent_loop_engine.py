@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any
@@ -1233,12 +1234,20 @@ class AgentToolExecuteNode:
                 pass
 
         partitioned_outputs: dict[str, dict[str, Any]] = {}
+        # 保存每个 tc_id 对应的工具调用信息，供 Gating 审批通过后重新执行工具
+        tool_call_info_map: dict[str, dict[str, Any]] = {}
 
         for tc in tool_calls:
             tool_name = tc.get("tool_name", "")
             skill_name = tc.get("skill_name", "")
             parameters = tc.get("parameters", {})
             tc_id = generate_string_id()
+            # 记录 tc_id -> 工具调用信息映射
+            tool_call_info_map[tc_id] = {
+                "tool_name": tool_name,
+                "parameters": parameters,
+                "skill_name": skill_name,
+            }
 
             # 检查预算
             if agent_loop.budget.tool_calls_used >= agent_loop.budget.max_tool_calls:
@@ -1384,7 +1393,235 @@ class AgentToolExecuteNode:
                     "tool_name": tool_name,
                 }
 
-        # 发布 DAG_TOOL_EXECUTE COMPLETED 状态
+        agent_loop.execution.partitioned_outputs = partitioned_outputs
+
+        # ============================================================
+        # Phase 13：Gating 审批挂起 → 轮询等待用户决策
+        # 做什么：当工具返回 gating_pending=True 时，不立即退出工作流，
+        #         而是在当前节点内轮询 Redis 等待用户审批决策。
+        #         审批通过后直接重新执行工具并更新结果，审批拒绝则标记拒绝。
+        # 为什么这样做：如果直接设置 gating_suspended 并退出，工作流到达
+        #              FINALIZE 后终止，审批通过后没有任何机制恢复执行。
+        #              轮询机制确保工作流保持活跃，审批后立即继续。
+        # 边界条件：
+        #   - 轮询超时（默认 180 秒）后回退到 gating_suspended 退出模式。
+        #   - Redis 不可用时直接回退到 gating_suspended 模式。
+        #   - 工具重新执行失败时不阻断后续流程，标记为失败继续。
+        # ============================================================
+        gating_pending_items = [
+            (nid, out) for nid, out in partitioned_outputs.items()
+            if out.get("gating_pending", False)
+        ]
+
+        if gating_pending_items:
+            logger.info(
+                f"[TraceID:{trace_id}] ToolExecuteNode: 检测到 "
+                f"{len(gating_pending_items)} 个工具进入 Gating 审批挂起，"
+                f"开始轮询等待用户决策"
+            )
+
+            # 发布等待审批的状态
+            await _publish_chat_status_for_state(
+                publisher=self.chat_status_publisher,
+                chat_state=chat_state,
+                stage=ChatStatusStage.DAG_TOOL_EXECUTE,
+                status=ChatStatusState.RUNNING,
+                display_text="等待用户审批工具调用...",
+            )
+
+            # 获取 Redis 客户端
+            redis_client = None
+            try:
+                from app.main import app as _fastapi_app
+                redis_client = getattr(_fastapi_app.state, "redis_client", None)
+            except Exception:
+                pass
+
+            poll_interval = 2   # 秒
+            max_polls = 90      # 最多 180 秒
+
+            if redis_client:
+                redis_raw = redis_client.get_client()
+
+                # 构建 audit_log_id → (node_id, tool_name, parameters) 映射
+                pending_map: dict[str, tuple[str, str, dict]] = {}
+                for nid, out in gating_pending_items:
+                    audit_log_id = out.get("gating_audit_log_id", "")
+                    if audit_log_id:
+                        tc_info = tool_call_info_map.get(nid, {})
+                        pending_map[audit_log_id] = (
+                            nid,
+                            tc_info.get("tool_name", ""),
+                            tc_info.get("parameters", {}),
+                        )
+
+                for _poll_idx in range(max_polls):
+                    if not pending_map:
+                        break
+
+                    await asyncio.sleep(poll_interval)
+
+                    resolved_ids: list[str] = []
+                    for audit_log_id, (node_id, tool_name, tool_params) in list(
+                        pending_map.items()
+                    ):
+                        decision_key = f"gating:decision:{audit_log_id}"
+                        try:
+                            raw_decision = await redis_raw.get(decision_key)
+                        except Exception:
+                            continue
+
+                        if not raw_decision:
+                            continue
+
+                        try:
+                            decision_data = json.loads(raw_decision)
+                        except Exception:
+                            continue
+
+                        decision = decision_data.get("decision", "")
+                        user_feedback = decision_data.get("user_feedback", "")
+
+                        # 清理已消费的决策键
+                        try:
+                            await redis_raw.delete(decision_key)
+                        except Exception:
+                            pass
+
+                        if decision == "approved":
+                            # 审批通过：直接调用工具 handler 重新执行（绕过 Gating 检查）
+                            logger.info(
+                                f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                f"工具 {tool_name} 审批通过，重新执行"
+                            )
+                            try:
+                                from app.mcp.registry import MCPToolRegistry
+
+                                registry = MCPToolRegistry()
+                                registered = registry.get_tool(tool_name)
+                                if registered:
+                                    output_text = await asyncio.wait_for(
+                                        registered.handler(
+                                            parameters=tool_params,
+                                            trace_id=trace_id,
+                                        ),
+                                        timeout=30.0,
+                                    )
+                                    partitioned_outputs[node_id] = {
+                                        "success": True,
+                                        "tool_output": output_text,
+                                        "error_message": "",
+                                        "tool_parameters": tool_params,
+                                        "gating_pending": False,
+                                        "gating_rejected": False,
+                                    }
+                                    logger.info(
+                                        f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                        f"工具 {tool_name} 审批通过后执行成功"
+                                    )
+                                else:
+                                    partitioned_outputs[node_id] = {
+                                        "success": False,
+                                        "error_message": f"工具 '{tool_name}' 不存在或已禁用",
+                                        "gating_pending": False,
+                                        "gating_rejected": False,
+                                    }
+                            except asyncio.TimeoutError:
+                                logger.warning(
+                                    f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                    f"工具 {tool_name} 审批通过后执行超时"
+                                )
+                                partitioned_outputs[node_id] = {
+                                    "success": False,
+                                    "error_message": f"工具 '{tool_name}' 执行超时（30s）",
+                                    "gating_pending": False,
+                                    "gating_rejected": False,
+                                }
+                            except Exception as tool_exc:
+                                logger.warning(
+                                    f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                    f"工具 {tool_name} 审批通过后执行失败: {tool_exc}"
+                                )
+                                partitioned_outputs[node_id] = {
+                                    "success": False,
+                                    "error_message": f"工具执行失败: {tool_exc}",
+                                    "gating_pending": False,
+                                    "gating_rejected": False,
+                                }
+
+                        elif decision == "rejected":
+                            # 审批拒绝：标记为拒绝状态
+                            logger.info(
+                                f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                f"工具 {tool_name} 审批被拒绝 feedback={user_feedback}"
+                            )
+                            partitioned_outputs[node_id] = {
+                                "success": False,
+                                "error_message": f"用户拒绝了工具 '{tool_name}' 的调用",
+                                "gating_pending": False,
+                                "gating_rejected": True,
+                                "user_feedback": user_feedback,
+                                "tool_name": tool_name,
+                                "tool_parameters": tool_params,
+                            }
+
+                        elif decision == "timeout":
+                            # 超时：保持 gating_pending 状态
+                            logger.warning(
+                                f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                f"工具 {tool_name} 审批超时"
+                            )
+
+                        else:
+                            logger.warning(
+                                f"[TraceID:{trace_id}] ToolExecuteNode: "
+                                f"未知审批决策: {decision}"
+                            )
+
+                        resolved_ids.append(audit_log_id)
+
+                    # 移除已解决的项
+                    for rid in resolved_ids:
+                        pending_map.pop(rid, None)
+
+                # 轮询结束后，重新检查是否还有未解决的 gating_pending
+                remaining_pending = [
+                    nid for nid, out in partitioned_outputs.items()
+                    if out.get("gating_pending", False)
+                ]
+                if remaining_pending:
+                    # 仍有未解决的审批，回退到 gating_suspended 模式
+                    agent_loop.gating_suspended = True
+                    agent_loop.gating_pending_node_ids = remaining_pending
+                    logger.info(
+                        f"[TraceID:{trace_id}] ToolExecuteNode: "
+                        f"Gating 轮询超时或未完全解决，"
+                        f"回退到 gating_suspended 模式 "
+                        f"remaining={remaining_pending}"
+                    )
+                else:
+                    # 所有审批已解决，清除 gating_suspended
+                    agent_loop.gating_suspended = False
+                    agent_loop.gating_pending_node_ids = []
+                    logger.info(
+                        f"[TraceID:{trace_id}] ToolExecuteNode: "
+                        f"所有 Gating 审批已解决，继续执行"
+                    )
+            else:
+                # Redis 不可用，回退到 gating_suspended 模式
+                agent_loop.gating_suspended = True
+                agent_loop.gating_pending_node_ids = [
+                    nid for nid, _ in gating_pending_items
+                ]
+                logger.warning(
+                    f"[TraceID:{trace_id}] ToolExecuteNode: "
+                    f"Redis 不可用，回退到 gating_suspended 模式"
+                )
+
+        # 更新 agent_loop 的 partitioned_outputs（可能已被轮询更新）
+        agent_loop.execution.partitioned_outputs = partitioned_outputs
+
+        # 发布 DAG_TOOL_EXECUTE COMPLETED 状态（放在轮询之后，确保状态正确）
         await _publish_chat_status_for_state(
             publisher=self.chat_status_publisher,
             chat_state=chat_state,
@@ -1394,17 +1631,6 @@ class AgentToolExecuteNode:
                 ChatStatusStage.DAG_TOOL_EXECUTE, ChatStatusState.COMPLETED
             ),
         )
-
-        agent_loop.execution.partitioned_outputs = partitioned_outputs
-
-        # 检查是否有工具返回了 gating_pending
-        gating_pending = [
-            nid for nid, out in partitioned_outputs.items()
-            if out.get("gating_pending", False)
-        ]
-        if gating_pending:
-            agent_loop.gating_suspended = True
-            agent_loop.gating_pending_node_ids = gating_pending
 
         return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 

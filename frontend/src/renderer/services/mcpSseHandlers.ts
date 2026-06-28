@@ -20,14 +20,12 @@
 import { useAuthGatingStore } from '../stores/authGatingStore';
 import { useSystemStore } from '../stores/systemStore';
 import { useMCPToolStore } from '../stores/mcpToolStore';
-import { WS_MSG_TYPE } from '../../shared/enum';
 import type {
   ChatStatusPayload,
   ChatNodeStatusPayload,
   ChatConditionEvaluatedPayload,
   AuthRequiredPayload,
   PendingAuthsSyncPayload,
-  AuthResponsePayload,
 } from '../../shared/types';
 
 // ============================================================
@@ -360,20 +358,14 @@ export async function sendAuthResponse(
     return false;
   }
 
-  // ===== 构造响应消息壳 =====
-  const responsePayload: AuthResponsePayload = {
+  // ===== 构造请求体（与后端 AuthResponseRequest 模型对齐） =====
+  const requestBody = {
     audit_log_id: auditLogId,
     action,
     user_feedback: feedback || '',
-  };
-
-  const responseMsg = {
-    schema_version: '1.0',
-    type: WS_MSG_TYPE.CMD_TOOL_AUTH_RESPONSE,
-    trace_id: traceId,
+    tool_id: '',
     task_id: taskId,
-    timestamp: Date.now(),
-    payload: responsePayload,
+    session_id: '',
   };
 
   // ===== 通过 HTTP POST 发送到后端 =====
@@ -381,13 +373,13 @@ export async function sendAuthResponse(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 秒超时
 
-    const resp = await fetch(`${backendUrl}/api/gating/respond`, {
+    const resp = await fetch(`${backendUrl}/api/gating/auth_response`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Trace-ID': traceId,
       },
-      body: JSON.stringify(responseMsg),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
 
