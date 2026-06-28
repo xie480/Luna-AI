@@ -179,9 +179,7 @@ class ChatGraphFactory:
 
         compiled = graph.compile()
         logger.info(
-            "daily_chat 主图构建完成 | active_nodes=%d | entry_point=%s",
-            len(active_nodes),
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            f"daily_chat 主图构建完成 | active_nodes={len(active_nodes)} | entry_point={ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value}"
         )
         return compiled
 
@@ -250,9 +248,7 @@ class ChatGraphFactory:
 
         compiled = graph.compile()
         logger.info(
-            "casual_chat 闲聊图构建完成 | active_nodes=%d | entry_point=%s",
-            len(active_nodes),
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            f"casual_chat 闲聊图构建完成 | active_nodes={len(active_nodes)} | entry_point={ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value}"
         )
         return compiled
 
@@ -311,7 +307,7 @@ class ChatGraphFactory:
         #         dag_engine 完成后检查 gating_suspended，挂起时跳过 LLM 生成。
         graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.DAG_ENGINE.value,
-            self.router.route_after_dag_engine,
+            self.registry.router.route_after_dag_engine,
             {
                 ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value:
                     ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
@@ -340,9 +336,7 @@ class ChatGraphFactory:
 
         compiled = graph.compile()
         logger.info(
-            "plan_state_node 智能规划图构建完成 | active_nodes=%d | entry_point=%s",
-            len(active_nodes),
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            f"plan_state_node 智能规划图构建完成 | active_nodes={len(active_nodes)} | entry_point={ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value}"
         )
         return compiled
 
@@ -400,7 +394,7 @@ class ChatGraphFactory:
         #              主 Chat LLM 会生成回复，造成"自动同意"的假象。
         graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value,
-            self.router.route_after_dag_engine,
+            self.registry.router.route_after_dag_engine,
             {
                 ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value:
                     ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
@@ -429,9 +423,7 @@ class ChatGraphFactory:
 
         compiled = graph.compile()
         logger.info(
-            "agent_loop 万能循环图构建完成 | active_nodes=%d | entry_point=%s",
-            len(active_nodes),
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value,
+            f"agent_loop 万能循环图构建完成 | active_nodes={len(active_nodes)} | entry_point={ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value}"
         )
         return compiled
 
