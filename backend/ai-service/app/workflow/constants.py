@@ -173,9 +173,12 @@ class StepEvaluationRoute(str, Enum):
     """Step 评估路由结果枚举。
 
     做什么：标识 step_evaluate 节点后的路由决策。
+    为什么这样做：支持四种评估结论的路由分发，
+                  其中 partial 表示步骤部分完成，需进入修复循环补齐缺口。
     """
 
     PASS = "pass"                   # 步骤通过，回到 step_router 推进下一步
+    PARTIAL = "partial"             # 部分完成，进入 step_repair 补齐缺口后重试
     FAIL = "fail"                   # 步骤失败，尝试 step_repair
     NEEDS_REPLAN = "needs_replan"   # 需要重规划，触发 replan
 

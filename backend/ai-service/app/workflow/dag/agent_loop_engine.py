@@ -14,6 +14,7 @@
     外层: goal_lock → global_planner → step_loop_subgraph → final_verify → END
     内层: step_router → step_think → tool_execute → observe → step_evaluate
            ├─ pass → step_router
+           ├─ partial → step_repair → step_think
            ├─ fail → step_repair → step_think
            └─ needs_replan → replan → step_router
 """
@@ -1585,8 +1586,13 @@ class AgentStepEvaluateNode:
                     criteria_checklist=eval_data.get("criteria_checklist", []) or [],
                 )
 
-            # 重试阈值判断：fail 次数过多则升级为 needs_replan
-            if eval_result.verdict == StepEvaluationVerdict.FAIL:
+            # 重试阈值判断：fail 或 partial 次数过多则升级为 needs_replan
+            # 为什么这样做：partial 表示步骤部分完成，也需要进入修复循环补齐缺口，
+            #               如果多次 partial 仍无法完成，说明路径不对，应触发重规划。
+            if eval_result.verdict in (
+                StepEvaluationVerdict.FAIL,
+                StepEvaluationVerdict.PARTIAL,
+            ):
                 if agent_loop.execution.retry_count >= agent_loop.budget.max_step_retries:
                     eval_result.verdict = StepEvaluationVerdict.NEEDS_REPLAN
                     eval_result.evaluation_reason += (
@@ -1657,11 +1663,10 @@ class AgentStepEvaluateNode:
         #   完成，通过 _save_agent_loop_state_to_graph 写回图状态，
         #   确保下游 route_by_step 能读到正确的 current_step_index。
         #   放在 try/except 之后确保正常路径和异常默认通过路径都能执行。
+        # 注意：PARTIAL 不推进步骤，它将路由到 step_repair 补齐缺口后重试当前步骤。
+        #       只有 PASS 才标记步骤完成并推进到下一步。
         eval_verdict = agent_loop.execution.evaluation_result.verdict
-        if eval_verdict in (
-            StepEvaluationVerdict.PASS,
-            StepEvaluationVerdict.PARTIAL,
-        ):
+        if eval_verdict == StepEvaluationVerdict.PASS:
             if idx < len(agent_loop.plan.steps):
                 agent_loop.plan.steps[idx].status = StepStatusEnum.PASSED
                 # 记录步骤摘要到记忆
@@ -2683,6 +2688,7 @@ def route_by_step_evaluation(state: dict[str, Any]) -> str:
     做什么：根据 StepEvaluateNode 的评估结果路由到不同处理节点。
     路由逻辑：
         - pass → step_router（推进到下一步）
+        - partial → step_repair（补齐缺口后重试当前步骤）
         - fail → step_repair（尝试修复）
         - needs_replan → replan（重规划）
     """
@@ -2696,12 +2702,19 @@ def route_by_step_evaluation(state: dict[str, Any]) -> str:
 
     verdict = eval_result.verdict
 
-    if verdict == StepEvaluationVerdict.PASS or verdict == StepEvaluationVerdict.PARTIAL:
-        # 通过或部分通过：步骤推进逻辑已在 AgentStepEvaluateNode 中完成，
+    if verdict == StepEvaluationVerdict.PASS:
+        # 通过：步骤推进逻辑已在 AgentStepEvaluateNode 中完成，
         # 此处仅做纯路由，不做任何状态修改。
         # 为什么这样做：LangGraph 条件路由函数对 agent_loop 的修改不会被持久化，
         #               步骤推进已在节点函数中通过 _save_agent_loop_state_to_graph 写回。
         return StepEvaluationRoute.PASS.value
+
+    if verdict == StepEvaluationVerdict.PARTIAL:
+        # 部分完成：步骤未推进，路由到 step_repair 补齐缺口后重试。
+        # 为什么这样做：partial 表示步骤部分完成（如只获取了搜索结果但未生成回复文本），
+        #               需要通过 step_repair 注入 gap_analysis 和 suggestion，
+        #               然后回到 step_think 继续完成剩余工作。
+        return StepEvaluationRoute.PARTIAL.value
 
     if verdict == StepEvaluationVerdict.FAIL:
         return StepEvaluationRoute.FAIL.value
@@ -2764,8 +2777,9 @@ def build_step_loop_subgraph(
     拓扑：
         step_router → step_think →（条件路由）
             ├─ tool_calls 非空 → tool_execute → observe → step_evaluate
-            │       ├─ pass → step_router（循环）
-            │       ├─ fail → step_repair → step_think（重试）
+            │       ├─ pass → step_router（循环，步骤推进）
+            │       ├─ partial → step_repair → step_think（补齐缺口后重试）
+            │       ├─ fail → step_repair → step_think（修复后重试）
             │       └─ needs_replan → replan → step_router（重规划后循环）
             └─ tool_calls 为空 → fast_pass → step_router（快速通过循环）
     返回:
@@ -2824,12 +2838,19 @@ def build_step_loop_subgraph(
     )
 
     # step_evaluate → 路由
+    # 路由逻辑：
+    #   pass → step_router（推进到下一步）
+    #   partial → step_repair（补齐缺口后重试当前步骤）
+    #   fail → step_repair（修复后重试当前步骤）
+    #   needs_replan → replan（重规划后回到路由）
     graph.add_conditional_edges(
         AgentStepLoopSubGraphNodeName.STEP_EVALUATE.value,
         route_by_step_evaluation,
         {
             StepEvaluationRoute.PASS.value:
                 AgentStepLoopSubGraphNodeName.STEP_ROUTER.value,
+            StepEvaluationRoute.PARTIAL.value:
+                AgentStepLoopSubGraphNodeName.STEP_REPAIR.value,
             StepEvaluationRoute.FAIL.value:
                 AgentStepLoopSubGraphNodeName.STEP_REPAIR.value,
             StepEvaluationRoute.NEEDS_REPLAN.value:
@@ -2884,8 +2905,9 @@ def build_agent_loop_subgraph(
     其中 step_loop_subgraph 内部：
         step_router → step_think →（条件路由）
             ├─ tool_calls 非空 → tool_execute → observe → step_evaluate
-            │       ├─ pass → step_router（循环）
-            │       ├─ fail → step_repair → step_think（重试）
+            │       ├─ pass → step_router（循环，步骤推进）
+            │       ├─ partial → step_repair → step_think（补齐缺口后重试）
+            │       ├─ fail → step_repair → step_think（修复后重试）
             │       └─ needs_replan → replan → step_router（重规划后循环）
             └─ tool_calls 为空 → fast_pass → step_router（快速通过循环）
     返回:
