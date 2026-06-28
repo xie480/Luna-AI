@@ -10,6 +10,17 @@
 2. 如果有上一次的观察结果（重试场景），必须参考并改进
 3. 输出规划的工具调用列表，包含 tool_name、parameters 和 purpose
 4. 如果是纯思考步骤（不需要工具），tool_calls 可以为空数组
+5. **工具选择必须基于下方「可用能力参考」中的实际可用工具**，禁止凭空编造不存在的工具名
+
+## 可用能力参考
+
+{% if skill_briefs %}
+{% for skill in skill_briefs %}
+- **{{ skill.skill_name }}**: {{ skill.description }} [工具: {{ skill.tool_names | join(', ') }}]
+{% endfor %}
+{% else %}
+（当前无可用外部技能，优先使用纯推理完成步骤）
+{% endif %}
 
 ## 输出要求
 

@@ -863,6 +863,19 @@ class StepThinkNode:
                 ]
                 completed_steps_text = "\n".join(summaries)
 
+            # 将已筛选的 skill 信息注入 prompt，使 LLM 能选择实际存在的工具
+            # 优先使用 plan 步骤预分配的 skill 信息；若无则回退到全局 skill_briefs
+            available_skills_for_step = agent_loop.skill_briefs
+            if hasattr(current_step, "pre_allocated_skills") and current_step.pre_allocated_skills:
+                # 从全局 skill_briefs 中筛选出预分配的 skill
+                allocated_names = set(current_step.pre_allocated_skills)
+                filtered = [
+                    s for s in agent_loop.skill_briefs
+                    if s.get("skill_name") in allocated_names
+                ]
+                if filtered:
+                    available_skills_for_step = filtered
+
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STEP_THINK,
                 variables={
@@ -886,6 +899,7 @@ class StepThinkNode:
                     "completed_steps": completed_steps_text,
                     "disambiguated_text": agent_loop.disambiguated_text,
                     "memory_context": agent_loop.memory_context,
+                    "skill_briefs": available_skills_for_step,
                 },
             )
 
