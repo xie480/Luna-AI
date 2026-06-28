@@ -856,6 +856,7 @@ class StepThinkNode:
                     f"\n\n[上一次观察结果]\n{agent_loop.execution.last_observation}\n"
                     f"[上一次错误]\n{agent_loop.execution.last_error}\n"
                     f"[重试次数] {agent_loop.execution.retry_count}"
+                    f"[loop 次数] {agent_loop.execution.loop_count}"
                     f"{available_tools_text}"
                 )
 
@@ -930,8 +931,13 @@ class StepThinkNode:
             agent_loop.execution.last_error = ""
 
             # 发布思考事件（含完整工具调用规划详情和循环迭代索引）
-            # 循环迭代索引 = retry_count + 1，首次执行为 1，修复后重试递增
-            loop_iteration_index = agent_loop.execution.retry_count + 1
+            # 循环迭代索引 = retry_count + loop_count + 1，
+            # 首次执行为 1，partial loop 或 fail retry 均递增
+            loop_iteration_index = (
+                agent_loop.execution.retry_count
+                + agent_loop.execution.loop_count
+                + 1
+            )
             # 序列化工具调用列表，包含 purpose、parameters 等详情
             tool_calls_detail = []
             for tc_item in agent_loop.execution.last_tool_calls:
@@ -1397,7 +1403,7 @@ class ObserveNode:
                     "plan_id": agent_loop.goal.task_id,
                     "step_id": agent_loop.execution.current_step_id,
                     "observation_preview": agent_loop.execution.last_observation,
-                    "loop_iteration_index": agent_loop.execution.retry_count + 1,
+                    "loop_iteration_index": agent_loop.execution.retry_count + agent_loop.execution.loop_count + 1,
                 },
                 self.event_publisher,
             )
@@ -1595,18 +1601,26 @@ class AgentStepEvaluateNode:
                     criteria_checklist=eval_data.get("criteria_checklist", []) or [],
                 )
 
-            # 重试阈值判断：fail 或 partial 次数过多则升级为 needs_replan
-            # 为什么这样做：partial 表示步骤部分完成，也需要进入修复循环补齐缺口，
-            #               如果多次 partial 仍无法完成，说明路径不对，应触发重规划。
-            if eval_result.verdict in (
-                StepEvaluationVerdict.FAIL,
-                StepEvaluationVerdict.PARTIAL,
-            ):
+            # 阈值判断：fail 和 partial 分别检查不同的上限
+            # 为什么这样做：fail 是真正的失败重试，受 max_step_retries 限制；
+            #               partial 是正常 loop 延续，受 max_step_loops 限制。
+            #               两条路径独立计数，互不影响。
+            if eval_result.verdict == StepEvaluationVerdict.FAIL:
+                # fail：检查重试次数上限
                 if agent_loop.execution.retry_count >= agent_loop.budget.max_step_retries:
                     eval_result.verdict = StepEvaluationVerdict.NEEDS_REPLAN
                     eval_result.evaluation_reason += (
                         f"（重试次数 {agent_loop.execution.retry_count} "
                         f"已达到上限 {agent_loop.budget.max_step_retries}，"
+                        f"升级为 needs_replan）"
+                    )
+            elif eval_result.verdict == StepEvaluationVerdict.PARTIAL:
+                # partial：检查 loop 次数上限（独立于重试计数）
+                if agent_loop.execution.loop_count >= agent_loop.budget.max_step_loops:
+                    eval_result.verdict = StepEvaluationVerdict.NEEDS_REPLAN
+                    eval_result.evaluation_reason += (
+                        f"（loop 次数 {agent_loop.execution.loop_count} "
+                        f"已达到上限 {agent_loop.budget.max_step_loops}，"
                         f"升级为 needs_replan）"
                     )
 
@@ -1624,7 +1638,7 @@ class AgentStepEvaluateNode:
                     "evaluation_reason": eval_result.evaluation_reason,
                     "gap_analysis": eval_result.gap_analysis,
                     "suggestion": eval_result.suggestion,
-                    "loop_iteration_index": agent_loop.execution.retry_count + 1,
+                    "loop_iteration_index": agent_loop.execution.retry_count + agent_loop.execution.loop_count + 1,
                 },
                 self.event_publisher,
             )
@@ -1816,10 +1830,22 @@ class StepRepairNode:
                 f"[上一次观察] {agent_loop.execution.last_observation}"
             )
 
-            # 递增重试计数
-            agent_loop.execution.retry_count += 1
-            agent_loop.execution.repair_count += 1
-            agent_loop.budget.step_retries_used += 1
+            # 判断是否为 partial（正常 loop 延续）还是 fail（真正的重试）
+            # 为什么这样做：partial 表示步骤部分完成，是正常的多轮执行，
+            #               不应计入重试次数；只有 fail 才算重试。
+            is_partial = (
+                eval_result is not None
+                and eval_result.verdict == StepEvaluationVerdict.PARTIAL
+            )
+
+            if is_partial:
+                # partial：仅递增 loop_count，不计入重试
+                agent_loop.execution.loop_count += 1
+            else:
+                # fail：递增重试计数
+                agent_loop.execution.retry_count += 1
+                agent_loop.execution.repair_count += 1
+                agent_loop.budget.step_retries_used += 1
 
             # 将修复上下文注入到思考上下文中（通过 last_observation 传递）
             agent_loop.execution.last_observation = repair_context
@@ -1836,6 +1862,8 @@ class StepRepairNode:
                     "step_id": agent_loop.execution.current_step_id,
                     "retry_count": agent_loop.execution.retry_count,
                     "repair_count": agent_loop.execution.repair_count,
+                    "loop_count": agent_loop.execution.loop_count,
+                    "is_partial_loop": is_partial,
                 },
                 self.event_publisher,
             )
@@ -1854,7 +1882,9 @@ class StepRepairNode:
             logger.info(
                 f"[TraceID:{trace_id}] StepRepairNode 完成: "
                 f"step_id={agent_loop.execution.current_step_id}, "
-                f"retry_count={agent_loop.execution.retry_count}"
+                f"retry_count={agent_loop.execution.retry_count}, "
+                f"loop_count={agent_loop.execution.loop_count}, "
+                f"is_partial={is_partial}"
             )
 
         except Exception as exc:

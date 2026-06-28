@@ -967,8 +967,9 @@ class ExecutionState(BaseModel):
         description="ObserveNode 输出的结构化观察。",
     )
     last_error: str = Field(default="", description="最近一次错误信息。")
-    retry_count: int = Field(default=0, ge=0, description="当前步骤的重试次数。")
-    repair_count: int = Field(default=0, ge=0, description="当前步骤的修复次数。")
+    retry_count: int = Field(default=0, ge=0, description="当前步骤的重试次数（仅 fail 触发）。")
+    repair_count: int = Field(default=0, ge=0, description="当前步骤的修复次数（仅 fail 触发）。")
+    loop_count: int = Field(default=0, ge=0, description="当前步骤的 loop 次数（partial 触发，正常多轮执行不计入重试）。")
     evaluation_result: StepEvaluationResult | None = Field(
         default=None,
         description="最近一次 Step 评估结果。",
@@ -994,7 +995,8 @@ class AgentBudgetState(BaseModel):
 
     # 上限配置
     max_tool_calls: int = Field(default=50, ge=1, description="最大工具调用次数。")
-    max_step_retries: int = Field(default=3, ge=1, description="单步最大重试次数。")
+    max_step_retries: int = Field(default=3, ge=1, description="单步最大重试次数（仅 fail 触发）。")
+    max_step_loops: int = Field(default=5, ge=1, description="单步最大 loop 次数（partial 触发，正常多轮执行上限）。")
     max_replan_count: int = Field(default=2, ge=0, description="最大 replan 次数。")
     max_time_ms: int = Field(default=300000, ge=1, description="最大执行时间（毫秒）。")
 
