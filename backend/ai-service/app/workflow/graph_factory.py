@@ -306,9 +306,18 @@ class ChatGraphFactory:
         )
 
         # DAG 引擎 -> 上下文治理
-        graph.add_edge(
+        # Plan + Cursor DAG 引擎 -> 条件路由（Phase 13 Gating 审批挂起时跳过 LLM 生成）
+        # 做什么：与 agent_loop 图相同的 gating 条件路由逻辑。
+        #         dag_engine 完成后检查 gating_suspended，挂起时跳过 LLM 生成。
+        graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.DAG_ENGINE.value,
-            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+            self.router.route_after_dag_engine,
+            {
+                ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value:
+                    ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+                ChatWorkflowGraphNodeName.FINALIZE.value:
+                    ChatWorkflowGraphNodeName.FINALIZE.value,
+            },
         )
 
         # 以下与 daily_chat 共享相同的后半段链路
@@ -382,10 +391,22 @@ class ChatGraphFactory:
             ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value,
         )
 
-        # Agent Loop DAG 引擎 -> 上下文治理
-        graph.add_edge(
+        # Agent Loop DAG 引擎 -> 条件路由（Phase 13 Gating 审批挂起时跳过 LLM 生成）
+        # 做什么：dag_engine_agent_loop 完成后，检查 gating_suspended 标志。
+        #         如果 L2/L3 工具触发了 Gating 审批，跳过后续的上下文治理和 LLM 生成，
+        #         直接进入 FINALIZE，等待用户在前端审批面板做出决策。
+        # 为什么这样做：内层 Agent Loop 子图在 gating 挂起时正确退出（到达 END），
+        #              但如果不加条件路由，外层图会继续执行 context_governance → main_chat_llm，
+        #              主 Chat LLM 会生成回复，造成"自动同意"的假象。
+        graph.add_conditional_edges(
             ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value,
-            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+            self.router.route_after_dag_engine,
+            {
+                ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value:
+                    ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value,
+                ChatWorkflowGraphNodeName.FINALIZE.value:
+                    ChatWorkflowGraphNodeName.FINALIZE.value,
+            },
         )
 
         # 以下与 daily_chat / plan_state_node 共享相同的后半段链路

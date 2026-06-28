@@ -313,6 +313,41 @@ class ChatWorkflowRouter:
         except Exception as exc:
             logger.warning(f"条件评估事件发布失败 trace_id={state.runtime.trace_id} error={exc}")
 
+    async def route_after_dag_engine(self, graph_state: dict[str, Any]) -> str:
+        """DAG 引擎节点之后的条件路由。
+
+        做什么：检查 dag_state.gating_suspended 标志，决定外层图的下一步走向。
+                - gating_suspended=True → 跳过 LLM 生成，直接进入 FINALIZE。
+                  前端审批面板已展示，工作流应在此暂停等待用户审批。
+                - gating_suspended=False → 正常进入 CONTEXT_GOVERNANCE 继续执行。
+        为什么这样做：Agent Loop 内层子图在 L2/L3 工具触发 Gating 审批后正确退出，
+                     但外层图的 dag_engine_agent_loop → context_governance 是无条件边，
+                     如果不加条件路由，外层图会继续执行 context_governance → main_chat_llm，
+                     主 Chat LLM 会生成回复，造成"自动同意"的假象。
+        路由逻辑：
+            - gating_suspended → FINALIZE（跳过 LLM 生成）
+            - 否则 → CONTEXT_GOVERNANCE（正常流程）
+        """
+        state = ChatWorkflowState.from_graph_state(graph_state)
+        if state.dag_state.gating_suspended:
+            logger.info(
+                f"[TraceID:{state.runtime.trace_id}] route_after_dag_engine: "
+                f"检测到 gating_suspended，跳过 LLM 生成，直接进入 FINALIZE"
+            )
+            # 发布 CONTEXT_GOVERNANCE SKIPPED 状态，让前端知道该阶段被跳过
+            await self.chat_status_publisher.publish(
+                trace_id=state.runtime.trace_id,
+                session_id=state.runtime.session_id,
+                message_id=state.generation_state.assistant_message_id,
+                stage=ChatStatusStage.CONTEXT_GOVERNANCE,
+                state=ChatStatusState.SKIPPED,
+                display_text="",
+                is_visible=False,
+                is_terminal=True,
+            )
+            return ChatWorkflowGraphNodeName.FINALIZE.value
+        return ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value
+
 
 def _append_not_entered_observation(
     state: ChatWorkflowState,

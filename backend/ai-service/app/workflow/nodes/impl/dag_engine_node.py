@@ -97,6 +97,24 @@ class DagEngineNode:
             # 从子图结果恢复 ChatWorkflowState
             chat_state = ChatWorkflowState.from_graph_state(subgraph_result)
 
+            # Phase 13：将 AgentLoopState 中的 gating_suspended 传播到外层 DagEngineState。
+            # 做什么：子图返回后，检查 dag_engine_state（即序列化的 AgentLoopState）中
+            #         是否包含 gating_suspended=True。如果是，则同步到外层
+            #         chat_state.dag_state.gating_suspended，供外层图的条件路由使用。
+            # 为什么这样做：Agent Loop 内层子图在 gating 挂起时正确退出（到达 END），
+            #              但外层图是无条件边，需要通过此标志让条件路由跳过 LLM 生成。
+            # 边界条件：dag_engine_state 可能为空 dict（非 Agent Loop 模式），安全取值。
+            dag_engine_state = chat_state.dag_state.dag_engine_state or {}
+            if dag_engine_state.get("gating_suspended", False):
+                chat_state.dag_state.gating_suspended = True
+                chat_state.dag_state.gating_pending_node_ids = dag_engine_state.get(
+                    "gating_pending_node_ids", []
+                )
+                logger.info(
+                    f"[TraceID:{trace_id}] DagEngineNode: 检测到 gating_suspended，"
+                    f"传播到外层图状态，pending_nodes={chat_state.dag_state.gating_pending_node_ids}"
+                )
+
             # 发布节点完成事件
             ended_at_ms = _now_ms()
             if self.event_publisher:
