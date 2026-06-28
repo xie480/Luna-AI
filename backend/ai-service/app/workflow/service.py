@@ -84,11 +84,44 @@ class ChatWorkflowService:
             snapshot_manager=snapshot_manager,
         )
         factory = ChatGraphFactory(dependencies)
-        self.daily_chat_graph = factory.build_daily_chat_graph()
-        self.casual_chat_graph = factory.build_casual_chat_graph()
-        self.plan_state_node_graph = factory.build_plan_state_node_graph()
-        self.agent_loop_graph = factory.build_agent_loop_graph()
+        # 做什么：独立构建四种聊天模式图，单个图构建失败不影响其他图。
+        # 为什么这样做：之前四个图共享一个 try/except，任何一个图构建异常
+        #              都会导致整个 ChatWorkflowService 初始化失败（chat_workflow_service = None），
+        #              前端所有 /api/chat 请求都返回 503。
+        #              将每个图的构建独立隔离后，daily_chat（基础图）失败才降级为 None，
+        #              其他图失败仅记录错误日志并设为 None，在 run_graph 中做降级处理。
+        self.daily_chat_graph = self._safe_build_graph(
+            factory.build_daily_chat_graph, "daily_chat"
+        )
+        self.casual_chat_graph = self._safe_build_graph(
+            factory.build_casual_chat_graph, "casual_chat"
+        )
+        self.plan_state_node_graph = self._safe_build_graph(
+            factory.build_plan_state_node_graph, "plan_state_node"
+        )
+        self.agent_loop_graph = self._safe_build_graph(
+            factory.build_agent_loop_graph, "agent_loop"
+        )
         self.tasks: set[asyncio.Task[Any]] = set()
+
+    @staticmethod
+    def _safe_build_graph(build_func, graph_name: str):
+        """安全构建单个图，捕获异常并记录完整堆栈。
+
+        做什么：调用图工厂的构建方法，捕获任何异常。
+        输入：build_func - 图构建函数；graph_name - 图名称（用于日志）。
+        输出：编译后的图对象，或 None（构建失败时）。
+        为什么这样做：防止某个图的构建异常（如缺少依赖、import 错误）导致
+                     整个 ChatWorkflowService 不可用。
+        """
+        try:
+            return build_func()
+        except Exception as e:
+            logger.error(
+                f"[ChatWorkflow] {graph_name} 图构建失败，该模式将不可用 error={e}",
+                exc_info=True,
+            )
+            return None
 
     async def start_daily_chat(
         self,
@@ -190,6 +223,9 @@ class ChatWorkflowService:
                 - PLAN_STATE_NODE_DEFAULT: Phase 9 智能规划链路图（原 Plan + Cursor）
                 - AGENT_LOOP_DEFAULT: Agent Loop 万能循环链路图
                 - 其他: 日常聊天完整链路图
+
+        边界条件：如果目标图构建失败（为 None），自动降级到 daily_chat 图。
+                 如果 daily_chat 图也不可用，发送错误消息给前端。
         """
         try:
             if state.runtime.chat_mode == ChatPlanPreset.CASUAL_CHAT_DEFAULT:
@@ -197,25 +233,48 @@ class ChatWorkflowService:
                     f"闲聊模式图开始执行 trace_id={state.runtime.trace_id} "
                     f"session_id={state.runtime.session_id}"
                 )
-                graph_state = await self.casual_chat_graph.ainvoke(state.as_graph_state())
+                target_graph = self.casual_chat_graph
             elif state.runtime.chat_mode == ChatPlanPreset.PLAN_STATE_NODE_DEFAULT:
                 logger.info(
                     f"智能规划模式图开始执行 trace_id={state.runtime.trace_id} "
                     f"session_id={state.runtime.session_id}"
                 )
-                graph_state = await self.plan_state_node_graph.ainvoke(state.as_graph_state())
+                target_graph = self.plan_state_node_graph
             elif state.runtime.chat_mode == ChatPlanPreset.AGENT_LOOP_DEFAULT:
                 logger.info(
                     f"Agent Loop 万能循环模式图开始执行 trace_id={state.runtime.trace_id} "
                     f"session_id={state.runtime.session_id}"
                 )
-                graph_state = await self.agent_loop_graph.ainvoke(state.as_graph_state())
+                target_graph = self.agent_loop_graph
             else:
                 logger.info(
                     f"日常聊天模式图开始执行 trace_id={state.runtime.trace_id} "
                     f"session_id={state.runtime.session_id}"
                 )
-                graph_state = await self.daily_chat_graph.ainvoke(state.as_graph_state())
+                target_graph = self.daily_chat_graph
+
+            # 如果目标图为 None（构建失败），降级到 daily_chat
+            if target_graph is None:
+                fallback_name = state.runtime.chat_mode.value if hasattr(state.runtime.chat_mode, 'value') else str(state.runtime.chat_mode)
+                logger.warning(
+                    f"[ChatWorkflow] {fallback_name} 图不可用（构建失败），"
+                    f"降级到 daily_chat 模式 trace_id={state.runtime.trace_id}"
+                )
+                target_graph = self.daily_chat_graph
+
+            # 如果 daily_chat 也不可用，发送错误消息
+            if target_graph is None:
+                logger.error(
+                    f"[ChatWorkflow] daily_chat 图也不可用，无法执行工作流"
+                    f" trace_id={state.runtime.trace_id}"
+                )
+                await self.publish_error_chunk(
+                    state,
+                    "聊天服务初始化失败，请检查后端日志并重启服务",
+                )
+                return
+
+            graph_state = await target_graph.ainvoke(state.as_graph_state())
             final_state = ChatWorkflowState.from_graph_state(graph_state)
             await self.write_checkpoint(final_state)
             await self.publish_plan_event(final_state, ChatWorkflowEventType.EVT_CHAT_PLAN_COMPLETED)

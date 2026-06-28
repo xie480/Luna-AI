@@ -180,7 +180,14 @@ async def chat_request(
     if not payload.message:
         raise HTTPException(status_code=400, detail="message is required")
     if not chat_workflow_service:
-        raise HTTPException(status_code=503, detail="ChatWorkflowService 未初始化")
+        logger.error(
+            f"[ChatAPI] ChatWorkflowService 不可用，服务可能初始化失败"
+            f" trace_id={trace_id} sessionId={payload.sessionId}"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="聊天服务未就绪，请检查后端日志并等待服务重启",
+        )
     # 将前端传入的 chatMode 字符串转换为 ChatMode 枚举
     try:
         chat_mode_enum: ChatMode = ChatMode(payload.chatMode)

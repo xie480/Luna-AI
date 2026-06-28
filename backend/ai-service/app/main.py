@@ -791,6 +791,11 @@ async def lifespan(app: FastAPI):
             memory_manager.user_profile_service = user_profile_service
 
     # 13. 初始化 Phase 8.5 Chat Workflow 服务
+    # 做什么：初始化 ChatWorkflowService 及其依赖的四种聊天模式图。
+    # 为什么这样做：使用 try/except 包裹每个图的构建，单个图构建失败不影响其他图。
+    #              之前整个 ChatWorkflowService 初始化被一个 try/except 包裹，
+    #              任何图构建失败都会导致 chat_workflow_service = None，前端收到 503。
+    # 边界条件：至少 daily_chat 图必须构建成功，否则服务降级为 None。
     try:
         from app.workflow.events import ChatWorkflowEventPublisher
         from app.workflow.service import ChatWorkflowService
@@ -810,7 +815,7 @@ async def lifespan(app: FastAPI):
         logger.info("Phase 8.5 ChatWorkflowService 初始化完成")
     except Exception as e:
         app.state.chat_workflow_service = None
-        logger.error(f"Phase 8.5 ChatWorkflowService 初始化失败 error={e}")
+        logger.error(f"Phase 8.5 ChatWorkflowService 初始化失败 error={e}", exc_info=True)
 
     # 14. 启动监控指标收集器
     from app.telemetry.metrics import init_metrics, start_metrics_collector, stop_metrics_collector

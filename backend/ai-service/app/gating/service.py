@@ -446,24 +446,41 @@ class GatingService:
     # 超时处理
     # ============================================================
 
-    def _on_timeout(
+    async def _on_timeout(
         self,
         audit_log_id: str,
         tool_id: str,
         task_id: str,
         trace_id: str,
     ) -> None:
-        """超时内部回调。
+        """超时内部回调（异步）。
 
         做什么：当 GatingTimeoutScheduler 检测到超时记录时调用此方法。
-                触发所有已注册的超时回调。
+                1. 向 snapshot_manager 写入 "timeout" 决策，使轮询中的
+                   _execute_single_tool 能检测到超时并停止等待。
+                2. 触发所有已注册的超时回调。
         输入：审计记录 ID、工具 ID、任务 ID、追踪 ID。
-        为什么这样做：将超时处理与调度器解耦，方便扩展。
+        为什么这样做：将超时处理与调度器解耦。写入 timeout 决策是关键，
+                     否则工作流中的 _execute_single_tool 会无限轮询等待审批结果。
+        边界条件：save_decision 失败不影响后续回调执行。
         """
         logger.warning(
             f"[GatingService] 审批请求超时"
             f" audit_log_id={audit_log_id} tool={tool_id} task_id={task_id}"
         )
+
+        # 写入 "timeout" 决策到 snapshot_manager，
+        # 使 _execute_single_tool 的轮询循环能检测到超时并退出
+        try:
+            await self._snapshot_manager.save_decision(
+                audit_log_id=audit_log_id,
+                decision="timeout",
+                user_feedback="审批请求超时，系统自动标记为 TIMEOUT",
+            )
+        except Exception as e:
+            logger.error(
+                f"[GatingService] 写入超时决策失败 audit_log_id={audit_log_id} error={e}"
+            )
 
         for callback in self._timeout_callbacks:
             try:

@@ -71,6 +71,7 @@ class GatingTimeoutScheduler:
 
         做什么：当检测到超时记录时，调用此回调。
                 回调签名：callback(audit_log_id: str, tool_id: str, task_id: str, trace_id: str)
+                支持同步和异步回调。当回调为协程函数时，调度器会自动 await。
         为什么这样做：将超时检测与业务处理解耦。GatingService 通过此回调
                      通知 DAG 引擎任务超时。
         """
@@ -153,12 +154,16 @@ class GatingTimeoutScheduler:
                             None,
                         )
                         if record:
-                            self._timeout_callback(
+                            # 支持同步和异步回调：如果是协程函数则 await
+                            result = self._timeout_callback(
                                 audit_log_id=record_id,
                                 tool_id=record.get("tool_id", ""),
                                 task_id=record.get("task_id", ""),
                                 trace_id=record.get("trace_id", ""),
                             )
+                            import asyncio as _asyncio
+                            if _asyncio.iscoroutine(result):
+                                await result
                 except Exception as e:
                     logger.error(
                         f"[GatingScheduler] 标记超时失败 audit_log_id={record_id} error={e}"

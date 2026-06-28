@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from app.logger import logger
 from app.workflow.constants import ChatWorkflowGraphNodeName
 from app.workflow.nodes.dependencies import WorkflowDependencies
 from app.workflow.nodes.impl.context_governance_node import ContextGovernanceNode
@@ -34,34 +35,78 @@ class ChatWorkflowNodeRegistry:
             event_publisher=dependencies.event_publisher,
             chat_status_publisher=dependencies.chat_status_publisher,
         )
-        self.nodes = {
-            # --- Phase 12（v3.0）新增：MCP Skill 相关节点 ---
-            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value: MCPSkillExecutionNode(dependencies),
-            ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value: self.router.bypass_mcp_skill,
-            # -------------------------------------------------
-            # --- Phase 12（v3.0）新增：MCP 前置判断相关节点 ---
-            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE.value: MCPIntentJudgeNode(dependencies),
-            ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS.value: self.router.bypass_mcp_intent,
-            # -------------------------------------------------
-            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value: InputReconstructionNode(dependencies),
-            ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value: SessionContextLoadNode(dependencies),
-            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value: LongTermMemoryNode(dependencies),
-            ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value: self.router.bypass_long_term_memory,
-            ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value: UserProfileInjectionNode(dependencies),
-            ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value: KnowledgeRagNode(dependencies),
-            ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value: self.router.bypass_knowledge_rag,
-            ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value: ContextGovernanceNode(dependencies),
-            ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value: PromptAssemblyNode(dependencies),
-            ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value: MainChatLlmNode(dependencies),
-            ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value: ResponsePersistenceNode(dependencies),
-            ChatWorkflowGraphNodeName.FINALIZE.value: FinalizeNode(dependencies),
-            # --- Phase 9 新增：原 Plan + Cursor DAG 引擎节点 ---
-            ChatWorkflowGraphNodeName.DAG_ENGINE.value: self._build_dag_engine_node(dependencies),
-            # --- Agent Loop 新增：Agent Loop DAG 引擎节点 ---
-            ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value: self._build_agent_loop_engine_node(dependencies),
-            # --- Phase 9 新增：简化输入重构节点 ---
-            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED.value: self._build_simplified_input_reconstruction_node(dependencies),
-        }
+        # 做什么：独立注册每个节点，单个节点构建失败不影响其他节点。
+        # 为什么这样做：之前所有节点在一个 dict 字面量中构建，任何一个节点的
+        #              _build_*_node 方法抛出异常（如 import 错误、依赖缺失），
+        #              都会导致整个 self.nodes 字典创建失败，进而导致所有四种
+        #              聊天模式图都无法构建，最终 chat_workflow_service = None，前端收到 503。
+        #              改为逐个构建，失败的节点记录错误日志并跳过，
+        #              图构建时通过 get_node 方法检查节点是否存在。
+        self.nodes: dict[str, object] = {}
+
+        # --- Phase 12（v3.0）：MCP Skill 相关节点 ---
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.MCP_SKILL_EXECUTION.value,
+            lambda: MCPSkillExecutionNode(dependencies),
+        )
+        self.nodes[ChatWorkflowGraphNodeName.MCP_SKILL_BYPASS.value] = self.router.bypass_mcp_skill
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.MCP_INTENT_JUDGE.value,
+            lambda: MCPIntentJudgeNode(dependencies),
+        )
+        self.nodes[ChatWorkflowGraphNodeName.MCP_INTENT_BYPASS.value] = self.router.bypass_mcp_intent
+
+        # --- 日常聊天 / 闲聊核心节点 ---
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION.value,
+            lambda: InputReconstructionNode(dependencies),
+        )
+        self.nodes[ChatWorkflowGraphNodeName.SESSION_CONTEXT_LOAD.value] = SessionContextLoadNode(dependencies)
+        self.nodes[ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_RAG.value] = LongTermMemoryNode(dependencies)
+        self.nodes[ChatWorkflowGraphNodeName.LONG_TERM_MEMORY_BYPASS.value] = self.router.bypass_long_term_memory
+        self.nodes[ChatWorkflowGraphNodeName.USER_PROFILE_INJECTION.value] = UserProfileInjectionNode(dependencies)
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.KNOWLEDGE_RAG.value,
+            lambda: KnowledgeRagNode(dependencies),
+        )
+        self.nodes[ChatWorkflowGraphNodeName.KNOWLEDGE_RAG_BYPASS.value] = self.router.bypass_knowledge_rag
+        self.nodes[ChatWorkflowGraphNodeName.CONTEXT_GOVERNANCE.value] = ContextGovernanceNode(dependencies)
+        self.nodes[ChatWorkflowGraphNodeName.PROMPT_ASSEMBLY.value] = PromptAssemblyNode(dependencies)
+        self.nodes[ChatWorkflowGraphNodeName.MAIN_CHAT_LLM.value] = MainChatLlmNode(dependencies)
+        self.nodes[ChatWorkflowGraphNodeName.RESPONSE_PERSISTENCE.value] = ResponsePersistenceNode(dependencies)
+        self.nodes[ChatWorkflowGraphNodeName.FINALIZE.value] = FinalizeNode(dependencies)
+
+        # --- Phase 9：原 Plan + Cursor DAG 引擎节点 ---
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.DAG_ENGINE.value,
+            lambda: self._build_dag_engine_node(dependencies),
+        )
+        # --- Agent Loop：Agent Loop DAG 引擎节点 ---
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.DAG_ENGINE_AGENT_LOOP.value,
+            lambda: self._build_agent_loop_engine_node(dependencies),
+        )
+        # --- Phase 9：简化输入重构节点 ---
+        self._safe_register_node(
+            ChatWorkflowGraphNodeName.INPUT_RECONSTRUCTION_SIMPLIFIED.value,
+            lambda: self._build_simplified_input_reconstruction_node(dependencies),
+        )
+
+    def _safe_register_node(self, name: str, builder) -> None:
+        """安全注册单个节点，捕获构建异常并记录日志。
+
+        做什么：调用节点构建函数，成功则注册到 self.nodes，失败则记录错误日志并跳过。
+        输入：name - 节点名称；builder - 构建函数（lambda 或 callable）。
+        为什么这样做：防止某个复杂节点（如 agent_loop_engine）的构建失败导致
+                     整个节点注册表崩溃，进而导致所有聊天模式不可用。
+        """
+        try:
+            self.nodes[name] = builder()
+        except Exception as e:
+            logger.error(
+                f"[NodeRegistry] 节点构建失败，已跳过 name={name} error={e}",
+                exc_info=True,
+            )
 
     def _build_dag_engine_node(self, dependencies: WorkflowDependencies):
         """构建 DAG 引擎节点（原 Plan + Cursor 子图版本）。
@@ -307,4 +352,16 @@ class ChatWorkflowNodeRegistry:
         return SimplifiedInputReconstructionImpl(dependencies)
 
     def get_node(self, name: ChatWorkflowGraphNodeName):
-        return self.nodes[name.value]
+        """获取已注册的节点。
+
+        输入：name - 节点名称枚举。
+        输出：节点实例。
+        异常行为：节点不存在时抛出 KeyError 并给出明确提示。
+        """
+        node_key = name.value
+        if node_key not in self.nodes:
+            raise KeyError(
+                f"节点 '{node_key}' 未注册（可能因构建失败被跳过），"
+                f"请检查启动日志中的 [NodeRegistry] 错误信息"
+            )
+        return self.nodes[node_key]
