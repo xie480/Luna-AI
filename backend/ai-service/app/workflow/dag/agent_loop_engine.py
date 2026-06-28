@@ -948,7 +948,7 @@ class StepThinkNode:
                     "plan_id": agent_loop.goal.task_id,
                     "step_id": current_step.step_id,
                     "step_index": agent_loop.plan.current_step_index,
-                    "thought": agent_loop.execution.last_thought[:500],
+                    "thought": agent_loop.execution.last_thought,
                     "tool_calls_count": len(agent_loop.execution.last_tool_calls),
                     "tool_calls": tool_calls_detail,
                     "loop_iteration_index": loop_iteration_index,
@@ -1359,7 +1359,7 @@ class ObserveNode:
                             successes.append({
                                 "node_id": nid,
                                 "tool_name": out.get("tool_name", "unknown"),
-                                "output_preview": str(out.get("tool_output", ""))[:500],
+                                "output_preview": str(out.get("tool_output", "")),
                             })
                         else:
                             failures.append({
@@ -1396,7 +1396,7 @@ class ObserveNode:
                 {
                     "plan_id": agent_loop.goal.task_id,
                     "step_id": agent_loop.execution.current_step_id,
-                    "observation_preview": agent_loop.execution.last_observation[:300],
+                    "observation_preview": agent_loop.execution.last_observation,
                     "loop_iteration_index": agent_loop.execution.retry_count + 1,
                 },
                 self.event_publisher,
@@ -1682,7 +1682,7 @@ class AgentStepEvaluateNode:
                 agent_loop.memory.step_summaries.append({
                     "step_id": agent_loop.plan.steps[idx].step_id,
                     "title": agent_loop.plan.steps[idx].title,
-                    "summary": agent_loop.execution.last_observation[:500]
+                    "summary": agent_loop.execution.last_observation
                         if agent_loop.execution.last_observation else "",
                 })
             agent_loop.plan.current_step_index += 1
@@ -1813,7 +1813,7 @@ class StepRepairNode:
                 f"[评估原因] {eval_result.evaluation_reason if eval_result else ''}\n"
                 f"[差距分析] {eval_result.gap_analysis if eval_result else ''}\n"
                 f"[改进建议] {eval_result.suggestion if eval_result else ''}\n"
-                f"[上一次观察] {agent_loop.execution.last_observation[:500]}"
+                f"[上一次观察] {agent_loop.execution.last_observation}"
             )
 
             # 递增重试计数
@@ -1983,7 +1983,7 @@ class AgentReplanNode:
                         if agent_loop.plan.current_step_index < len(agent_loop.plan.steps)
                         else ""
                     ),
-                    "failed_state_result": agent_loop.execution.last_observation[:1000],
+                    "failed_state_result": agent_loop.execution.last_observation,
                     "evaluation_reason": eval_result.evaluation_reason if eval_result else "",
                     "gap_analysis": eval_result.gap_analysis if eval_result else "",
                     "suggestion": eval_result.suggestion if eval_result else "",
@@ -2393,7 +2393,7 @@ class AgentFinalVerifyNode:
                     "plan_id": agent_loop.goal.task_id,
                     "verification_status": verification.get("status", ""),
                     "all_criteria_met": verification.get("all_criteria_met", True),
-                    "report_preview": verification.get("report", "")[:300],
+                    "report_preview": verification.get("report", ""),
                 },
                 self.event_publisher,
             )
@@ -2623,7 +2623,7 @@ class FastPassNode:
             agent_loop.memory.step_summaries.append({
                 "step_id": current_step.step_id,
                 "title": current_step.title,
-                "summary": thought_content[:500],
+                "summary": thought_content,
             })
 
             # 标记步骤完成
