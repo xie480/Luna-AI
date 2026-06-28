@@ -122,6 +122,8 @@ class DagWorkflowEventType(str, Enum):
     # --- Agent Loop 新增事件 ---
     EVT_DAG_GOAL_LOCKED = "EVT_DAG_GOAL_LOCKED"
     EVT_DAG_STEP_THINKING = "EVT_DAG_STEP_THINKING"
+    EVT_DAG_RESOURCE_LOADED = "EVT_DAG_RESOURCE_LOADED"
+    EVT_DAG_RESOURCE_FAILED = "EVT_DAG_RESOURCE_FAILED"
     EVT_DAG_STEP_OBSERVED = "EVT_DAG_STEP_OBSERVED"
     EVT_DAG_STEP_EVALUATED = "EVT_DAG_STEP_EVALUATED"
     EVT_DAG_STEP_REPAIRED = "EVT_DAG_STEP_REPAIRED"
@@ -145,12 +147,13 @@ class AgentLoopSubGraphNodeName(str, Enum):
 class AgentStepLoopSubGraphNodeName(str, Enum):
     """Agent Step Loop 子图内部节点名。
 
-    做什么：定义 Step Loop 内层子图的 8 个节点名。
-    为什么这样做：对应 agent loop.md 的 StepLoop = Think → Execute → Observe → Evaluate → (Pass/Repair/Replan/FastPass)。
+    做什么：定义 Step Loop 内层子图的 9 个节点名。
+    为什么这样做：对应 agent loop.md 的 StepLoop = Think → ResourceLoad → Execute → Observe → Evaluate → (Pass/Repair/Replan/FastPass)。
     """
 
     STEP_ROUTER = "agent_step_router"
     STEP_THINK = "agent_step_think"
+    RESOURCE_LOAD = "agent_resource_load"
     TOOL_EXECUTE = "agent_tool_execute"
     OBSERVE = "agent_observe"
     STEP_EVALUATE = "agent_step_evaluate"

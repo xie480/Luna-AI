@@ -22,6 +22,16 @@
 （当前无可用外部技能，优先使用纯推理完成步骤）
 {% endif %}
 
+{% if available_resources %}
+## 可用资源列表
+
+以下资源属于当前 Skill，可在需要时加载。每个资源有名称（resource_name）和描述。
+如果你认为某个资源对当前步骤有帮助，请在 tool_calls 的 resources 字段中列出它。
+如果不需要任何资源，resources 字段留空数组 []。
+
+{{ available_resources }}
+{% endif %}
+
 ## 输出要求
 
 以 JSON 格式输出：

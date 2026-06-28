@@ -887,6 +887,11 @@ class StepThinkNode:
                 if filtered:
                     available_skills_for_step = filtered
 
+            # 构建可用资源列表文本（与 skill_briefs 放在一起，供 LLM 了解可加载的资源）
+            available_resources_text = self._build_available_resources_text(
+                available_skills_for_step, current_step
+            )
+
             prompt_text = await self.prompt_manager.render(
                 category=PromptCategory.DAG_STEP_THINK,
                 variables={
@@ -911,6 +916,7 @@ class StepThinkNode:
                     "disambiguated_text": agent_loop.disambiguated_text,
                     "memory_context": agent_loop.memory_context,
                     "skill_briefs": available_skills_for_step,
+                    "available_resources": available_resources_text,
                 },
             )
 
@@ -998,7 +1004,16 @@ class StepThinkNode:
         return _save_agent_loop_state_to_graph(chat_state, agent_loop)
 
     def _build_think_schema(self) -> dict[str, Any]:
-        """构建步骤思考的 JSON Schema。"""
+        """构建步骤思考的 JSON Schema。
+
+        做什么：定义 StepThinkNode 的结构化输出 Schema，包含思考过程和工具调用列表。
+        增强：
+            - tool_calls 中新增 resources 数组字段，支持一个工具调用关联多个资源。
+              每个资源条目包含 resource_name 和 query_text（检索 query 列表）。
+              为什么这样做：
+              1. 支持加载多个文件（一个工具可能需要参考多个文档）
+              2. 将检索 query 的决策权交给 LLM，确保检索意图与当前步骤紧密对齐
+        """
         return {
             "type": "object",
             "properties": {
@@ -1013,6 +1028,36 @@ class StepThinkNode:
                         "properties": {
                             "skill_name": {"type": "string"},
                             "tool_name": {"type": "string"},
+                            "resources": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "resource_name": {
+                                            "type": "string",
+                                            "description": (
+                                                "需要加载的资源名称，"
+                                                "必须来自可用资源列表中的 name 字段。"
+                                            ),
+                                        },
+                                        "query_text": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": (
+                                                "用于检索该资源的 query 列表（Tier 2/3 向量检索）。"
+                                                "建议 2~5 个不同角度的 query 以提高召回率。"
+                                                "小文件（Tier 1 全量加载）可为空数组。"
+                                            ),
+                                        },
+                                    },
+                                    "required": ["resource_name"],
+                                },
+                                "description": (
+                                    "此步需要加载的资源列表。"
+                                    "一个工具调用可关联多个资源文件。"
+                                    "不需要加载资源时为空数组。"
+                                ),
+                            },
                             "parameters": {"type": "object"},
                             "purpose": {"type": "string"},
                         },
@@ -1053,6 +1098,45 @@ class StepThinkNode:
             return getattr(_fastapi_app.state, "mcp_tool_registry", None)
         except Exception:
             return None
+
+    def _build_available_resources_text(
+        self,
+        skill_briefs: list[dict[str, Any]],
+        current_step: Any,
+    ) -> str:
+        """构建可用资源列表文本，供 system.j2 中的「可用资源列表」槽位渲染。
+
+        做什么：从 SkillRegistry 中查找当前步骤关联的 Skill 的资源列表，
+               格式化为文本注入到 prompt 中。
+        为什么这样做：让 LLM 在思考阶段知道有哪些资源可加载，
+                     并在 tool_calls.resources 中引用。
+        参数:
+            skill_briefs: 当前步骤可用的 skill 列表。
+            current_step: 当前步骤定义（含 pre_allocated_skills）。
+        返回:
+            格式化的资源列表文本，空时返回空字符串。
+        """
+        skill_registry = self._get_tool_registry()
+        if not skill_registry or not skill_briefs:
+            return ""
+
+        lines: list[str] = []
+        for brief in skill_briefs:
+            skill_name = brief.get("skill_name", "")
+            if not skill_name:
+                continue
+            # 获取 skill 的资源列表
+            try:
+                resources = skill_registry.get_skill_resources(skill_name)
+                for res in resources:
+                    res_name = res.get("name", "")
+                    res_desc = res.get("description", "")
+                    if res_name:
+                        lines.append(f"- **{res_name}** (Skill: {skill_name}): {res_desc}")
+            except Exception:
+                continue
+
+        return "\n".join(lines) if lines else ""
 
 
 # ===========================================================================
@@ -1193,15 +1277,44 @@ class AgentToolExecuteNode:
                 )
 
                 # 构造 AtomicNodeDefinition 适配 execute 方法签名
+                # 从 resources 数组中提取所有资源名称（支持多资源注入）
+                tc_resources = tc.get("resources", [])
+                resource_names: list[str] = []
+                if isinstance(tc_resources, list):
+                    for res in tc_resources:
+                        if isinstance(res, dict):
+                            rn = str(res.get("resource_name", "")).strip()
+                            if rn:
+                                resource_names.append(rn)
+                # 取第一个资源名作为 node_def.resource_name（向后兼容）
+                primary_resource_name = resource_names[0] if resource_names else ""
                 node_def = AtomicNodeDefinition(
                     node_id=tc_id,
                     node_type=DagNodeType.TOOL_EXECUTE,
                     tool_name=tool_name,
                     skill_name=skill_name,
+                    resource_name=primary_resource_name,
                     parameter_hint=json.dumps(parameters, ensure_ascii=False)
                         if parameters else "",
                     gating_required=False,
                 )
+
+                # 提取当前 tool_call 关联的所有已加载资源内容
+                # 为什么这样做：ResourceLoadNode 已将资源预加载到
+                #               agent_loop.execution.loaded_resources 中，
+                #               此处从 resources 数组提取所有资源名，合并已加载的内容，
+                #               注入到 state_context 使 ToolExecuteNode 能使用资源上下文。
+                resource_context_parts: list[str] = []
+                for rn in resource_names:
+                    if rn in agent_loop.execution.loaded_resources:
+                        content = agent_loop.execution.loaded_resources[rn]
+                        resource_context_parts.append(f"### 资源: {rn}\n{content}")
+                        logger.info(
+                            f"[TraceID:{trace_id}] ToolExecuteNode: "
+                            f"注入已加载资源 {rn} 到工具 {tool_name} 上下文, "
+                            f"内容长度={len(content)}"
+                        )
+                resource_context = "\n\n".join(resource_context_parts)
 
                 # 记录工具执行开始时间，用于计算单个工具调用耗时
                 tc_start_time = time.time()
@@ -1214,6 +1327,7 @@ class AgentToolExecuteNode:
                         "gating_service": gating_svc,
                         "snapshot_manager": snap_mgr,
                         "skill_registry": self.mcp_tool_registry,
+                        "resource_context": resource_context,
                     },
                 )
                 # 计算单个工具调用耗时（毫秒）
@@ -2771,7 +2885,9 @@ def route_by_step_evaluation(state: dict[str, Any]) -> str:
 # ===========================================================================
 
 # 思考后路由结果常量（与 AgentStepLoopSubGraphNodeName 值对齐）
-_AFTER_THINK_TOOL_EXECUTE = "tool_execute"
+# 改动：tool_calls 非空时路由到 resource_load（而非直接 tool_execute），
+# 由 resource_load 完成资源加载后再进入 tool_execute。
+_AFTER_THINK_RESOURCE_LOAD = "resource_load"
 _AFTER_THINK_FAST_PASS = "fast_pass"
 
 
@@ -2780,18 +2896,21 @@ def route_after_think(state: dict[str, Any]) -> str:
 
     做什么：根据 StepThinkNode 的 tool_calls 输出决定执行路径。
     路由逻辑：
-        - tool_calls 非空 → tool_execute（正常工具执行路径）
+        - tool_calls 非空 → resource_load（资源加载后再到 tool_execute）
         - tool_calls 为空 → fast_pass（纯思考步骤快速通过，跳过 Execute/Observe/Evaluate）
-    为什么这样做：纯思考步骤（如问候回应、推理总结）的思考内容本身就是步骤输出，
-                  无需经过工具执行和三步评估循环，节省 LLM 调用和 token 消耗。
+    为什么这样做：
+        1. 纯思考步骤（如问候回应、推理总结）的思考内容本身就是步骤输出，
+           无需经过工具执行和三步评估循环，节省 LLM 调用和 token 消耗。
+        2. 有工具调用时，先经过 resource_load 节点加载关联资源，
+           再进入 tool_execute 执行工具，确保资源上下文已注入。
     """
     _, agent_loop = _extract_agent_loop_state(state)
     if agent_loop is None:
-        return _AFTER_THINK_TOOL_EXECUTE
+        return _AFTER_THINK_RESOURCE_LOAD
 
-    # tool_calls 非空 → 走正常工具执行路径
+    # tool_calls 非空 → 走资源加载路径（resource_load → tool_execute）
     if agent_loop.execution.last_tool_calls:
-        return _AFTER_THINK_TOOL_EXECUTE
+        return _AFTER_THINK_RESOURCE_LOAD
 
     # tool_calls 为空 → 纯思考步骤，走快速通过路径
     return _AFTER_THINK_FAST_PASS
@@ -2804,6 +2923,7 @@ def route_after_think(state: dict[str, Any]) -> str:
 
 def build_step_loop_subgraph(
     step_think: StepThinkNode,
+    resource_load: Any,
     tool_execute: AgentToolExecuteNode,
     observe: ObserveNode,
     step_evaluate: AgentStepEvaluateNode,
@@ -2814,10 +2934,12 @@ def build_step_loop_subgraph(
 ) -> Any:
     """构建 Step Loop 内层子图。
 
-    做什么：创建 8 节点 LangGraph 子图，实现步进执行循环。
+    做什么：创建 9 节点 LangGraph 子图，实现步进执行循环。
+    改动：在 step_think 和 tool_execute 之间插入 resource_load 节点，
+          实现资源预加载，确保工具执行前资源上下文已注入。
     拓扑：
         step_router → step_think →（条件路由）
-            ├─ tool_calls 非空 → tool_execute → observe → step_evaluate
+            ├─ tool_calls 非空 → resource_load → tool_execute → observe → step_evaluate
             │       ├─ pass → step_router（循环，步骤推进）
             │       ├─ partial → step_repair → step_think（补齐缺口后重试）
             │       ├─ fail → step_repair → step_think（修复后重试）
@@ -2831,9 +2953,10 @@ def build_step_loop_subgraph(
     # 创建无操作路由节点
     step_router = StepRouterNode()
 
-    # 注册节点（8 个节点，含 fast_pass）
+    # 注册节点（9 个节点，含 resource_load 和 fast_pass）
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_ROUTER.value, step_router)
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_THINK.value, step_think)
+    graph.add_node(AgentStepLoopSubGraphNodeName.RESOURCE_LOAD.value, resource_load)
     graph.add_node(AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value, tool_execute)
     graph.add_node(AgentStepLoopSubGraphNodeName.OBSERVE.value, observe)
     graph.add_node(AgentStepLoopSubGraphNodeName.STEP_EVALUATE.value, step_evaluate)
@@ -2856,16 +2979,22 @@ def build_step_loop_subgraph(
         },
     )
 
-    # step_think → 条件路由：有工具调用走 tool_execute，无工具调用走 fast_pass
+    # step_think → 条件路由：有工具调用走 resource_load，无工具调用走 fast_pass
     graph.add_conditional_edges(
         AgentStepLoopSubGraphNodeName.STEP_THINK.value,
         route_after_think,
         {
-            _AFTER_THINK_TOOL_EXECUTE:
-                AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value,
+            _AFTER_THINK_RESOURCE_LOAD:
+                AgentStepLoopSubGraphNodeName.RESOURCE_LOAD.value,
             _AFTER_THINK_FAST_PASS:
                 AgentStepLoopSubGraphNodeName.FAST_PASS.value,
         },
+    )
+
+    # resource_load → tool_execute（资源加载完成后进入工具执行）
+    graph.add_edge(
+        AgentStepLoopSubGraphNodeName.RESOURCE_LOAD.value,
+        AgentStepLoopSubGraphNodeName.TOOL_EXECUTE.value,
     )
 
     # tool_execute → observe → step_evaluate（工具执行完整路径）
@@ -2929,6 +3058,7 @@ def build_agent_loop_subgraph(
     goal_lock: GoalLockNode,
     global_planner: GlobalPlannerNode,
     step_think: StepThinkNode,
+    resource_load: Any,
     tool_execute: AgentToolExecuteNode,
     observe: ObserveNode,
     step_evaluate: AgentStepEvaluateNode,
@@ -2941,11 +3071,12 @@ def build_agent_loop_subgraph(
     """构建 Agent Loop 子图。
 
     做什么：创建 6 层 Agent Loop 的 LangGraph 子图。
+    改动：在 step_think 和 tool_execute 之间插入 resource_load 节点。
     拓扑：
         goal_lock → global_planner → step_loop_subgraph → final_verify → END
     其中 step_loop_subgraph 内部：
         step_router → step_think →（条件路由）
-            ├─ tool_calls 非空 → tool_execute → observe → step_evaluate
+            ├─ tool_calls 非空 → resource_load → tool_execute → observe → step_evaluate
             │       ├─ pass → step_router（循环，步骤推进）
             │       ├─ partial → step_repair → step_think（补齐缺口后重试）
             │       ├─ fail → step_repair → step_think（修复后重试）
@@ -2963,6 +3094,7 @@ def build_agent_loop_subgraph(
     # === 构建 Step Loop 内层子图 ===
     step_loop_subgraph = build_step_loop_subgraph(
         step_think=step_think,
+        resource_load=resource_load,
         tool_execute=tool_execute,
         observe=observe,
         step_evaluate=step_evaluate,

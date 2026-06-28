@@ -978,6 +978,15 @@ class ExecutionState(BaseModel):
         default_factory=dict,
         description="当前步骤的分区输出。",
     )
+    # === 新增：资源加载结果 ===
+    loaded_resources: dict[str, str] = Field(
+        default_factory=dict,
+        description="已加载的资源内容。key 为 resource_name，value 为加载的内容（全量文本或检索结果）。",
+    )
+    resource_load_errors: dict[str, str] = Field(
+        default_factory=dict,
+        description="资源加载失败记录。key 为 resource_name，value 为错误信息。",
+    )
 
 
 class AgentBudgetState(BaseModel):

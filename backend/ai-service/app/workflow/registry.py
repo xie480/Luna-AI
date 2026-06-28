@@ -165,6 +165,7 @@ class ChatWorkflowNodeRegistry:
         为什么这样做：agent-loop-langgraph-design.md 将原 Plan + Cursor 双层子图
                       重构为 Goal-Stable / Plan-Mutable 的 6 层 Agent Loop 架构。
                       作为独立的第四种模式（agent_loop）与原 plan_state_node 并存。
+        改动：新增 ResourceTierService 和 ResourceLoadNode，实现资源预加载。
         """
         from app.llm.client import llm_client as _llm_client
         from app.workflow.dag.agent_loop_engine import (
@@ -201,6 +202,37 @@ class ChatWorkflowNodeRegistry:
             event_publisher=dependencies.event_publisher,
             mcp_tool_registry=dependencies.mcp_tool_registry,
         )
+
+        # 创建 ResourceTierService 和 ResourceLoadNode
+        # 为什么这样做：在 step_think 和 tool_execute 之间插入资源加载环节，
+        #               根据资源大小自动选择 Tier 1/2/3 策略。
+        # 降级：Qdrant 客户端和 Embedding 服务通过 app.state 获取，
+        #       不可用时 ResourceTierService 自动降级为 Tier 1 全量加载。
+        from app.mcp.resource_tier_service import ResourceTierService
+        from app.workflow.dag.nodes.resource_load import ResourceLoadNode
+
+        # 尝试获取 Qdrant 客户端和 Embedding 服务（延迟注入，启动时可能不可用）
+        _qdrant_client = None
+        _embedding_service = None
+        try:
+            from app.main import app as _fastapi_app
+            _qdrant_client = getattr(_fastapi_app.state, "qdrant_client", None)
+            _embedding_service = getattr(_fastapi_app.state, "embedding_service", None)
+        except Exception:
+            # FastAPI app 未初始化时（如测试环境），跳过
+            pass
+
+        resource_tier_service = ResourceTierService(
+            qdrant_client=_qdrant_client,
+            embedding_service=_embedding_service,
+            skill_registry=dependencies.mcp_tool_registry,
+        )
+        resource_load = ResourceLoadNode(
+            resource_tier_service=resource_tier_service,
+            chat_status_publisher=dependencies.chat_status_publisher,
+            event_publisher=dependencies.event_publisher,
+        )
+
         tool_execute = AgentToolExecuteNode(
             prompt_manager=dependencies.prompt_manager,
             llm_client=_llm_client,
@@ -237,11 +269,12 @@ class ChatWorkflowNodeRegistry:
             event_publisher=dependencies.event_publisher,
         )
 
-        # 构建 Agent Loop 子图
+        # 构建 Agent Loop 子图（传递 resource_load 节点）
         subgraph = build_agent_loop_subgraph(
             goal_lock=goal_lock,
             global_planner=global_planner,
             step_think=step_think,
+            resource_load=resource_load,
             tool_execute=tool_execute,
             observe=observe,
             step_evaluate=step_evaluate,

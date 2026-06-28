@@ -392,3 +392,245 @@ class SkillRegistry:
 
         del self._skills[skill_id]
         logger.info(f"Skill 删除完成 skill_id={skill_id}")
+
+    # ---- 资源加载 ----
+
+    async def load_resource_file(
+        self,
+        resource_uri: str,
+        resource_type: str = "file",
+    ) -> str:
+        """加载指定资源的文件内容。
+
+        做什么：根据资源 URI 和类型读取文件内容。
+        为什么这样做：ResourceTierService 和旧 DAG 引擎的 ResourceLoadingNode
+                      都需要通过此方法获取资源原始内容。
+        参数:
+            resource_uri: 资源 URI（本地文件路径或 URL）。
+            resource_type: 资源类型（file / url）。
+        返回:
+            文件内容字符串。
+        抛出:
+            FileNotFoundError: 文件不存在时。
+            ValueError: 资源类型不支持时。
+        边界条件：
+            - 仅支持 file 类型的本地文件读取。
+            - URL 类型暂不支持，抛出 ValueError。
+        异常行为：
+            - 文件读取失败时向上抛出，由调用方处理。
+        """
+        import os
+
+        if not resource_uri:
+            raise ValueError("resource_uri 不能为空")
+
+        if resource_type != "file":
+            raise ValueError(f"暂不支持的资源类型: {resource_type}")
+
+        # 处理相对路径（相对于 ai-service 根目录）
+        if not os.path.isabs(resource_uri):
+            # ai-service/app/mcp/skill_registry.py -> ai-service/
+            base_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            resource_uri = os.path.join(base_dir, resource_uri)
+
+        if not os.path.exists(resource_uri):
+            raise FileNotFoundError(f"资源文件不存在: {resource_uri}")
+
+        with open(resource_uri, encoding="utf-8") as f:
+            return f.read()
+
+    async def _preprocess_resource_chunks(
+        self,
+        skill_id: str,
+        resource_def: dict[str, Any],
+        qdrant_client: Any = None,
+        embedding_service: Any = None,
+    ) -> None:
+        """预处理资源：对大文件进行 chunk + embedding 写入向量库。
+
+        做什么：
+        1. 读取资源文件
+        2. 如果 token 数 > TIER1_MAX_TOKENS，按 512 token + 64 重叠进行 chunk
+        3. 对每个 chunk 生成 embedding
+        4. 写入 Qdrant（collection: skill_resource_chunks）
+        5. 记录 chunk_count 到资源元数据
+
+        为什么这样做：将 IO + embedding 成本前移到注册阶段，
+                      运行时只需向量检索，极大降低延迟。
+
+        参数:
+            skill_id: 技能 ID。
+            resource_def: 资源定义字典（name, resource_type, uri, description）。
+            qdrant_client: Qdrant 客户端包装器。
+            embedding_service: Embedding 推理服务。
+
+        边界条件：
+            - Qdrant 或 Embedding 服务不可用时跳过预处理（降级为全量加载）。
+            - 文件读取失败时跳过该资源。
+            - 非 file 类型的资源跳过预处理。
+        """
+        from app.mcp.resource_tier_service import (
+            QDRANT_COLLECTION_SKILL_RESOURCE_CHUNKS,
+            DEFAULT_VECTOR_SIZE,
+            ResourceTierService,
+        )
+        from app.utils.snowflake import generate_string_id
+
+        resource_uri = resource_def.get("uri", "")
+        resource_name = resource_def.get("name", "")
+        resource_type = resource_def.get("resource_type", "file")
+        section_title = resource_def.get("description", "")
+
+        if resource_type != "file" or not resource_uri:
+            return
+
+        if not qdrant_client or not embedding_service:
+            logger.info(
+                f"资源预处理跳过（Qdrant 或 Embedding 服务不可用）: "
+                f"skill_id={skill_id}, resource={resource_name}"
+            )
+            return
+
+        try:
+            # 读取资源文件
+            content = await self.load_resource_file(resource_uri, resource_type)
+
+            # 估算 token 数
+            tier_service = ResourceTierService()
+            estimated_tokens = tier_service._estimate_tokens(content)
+
+            if estimated_tokens <= ResourceTierService.TIER1_MAX_TOKENS:
+                # 小文件无需 chunk，运行时直接全量加载
+                logger.info(
+                    f"资源预处理跳过（小文件 {estimated_tokens} token）: "
+                    f"resource={resource_name}"
+                )
+                return
+
+            # chunk 切分
+            chunks = self._split_text_to_chunks(
+                content,
+                chunk_size_chars=ResourceTierService.CHUNK_SIZE_TOKENS * 4,
+                overlap_chars=ResourceTierService.CHUNK_OVERLAP_TOKENS * 4,
+            )
+
+            if not chunks:
+                return
+
+            # 确保 Qdrant 集合存在
+            await qdrant_client.ensure_collection(
+                QDRANT_COLLECTION_SKILL_RESOURCE_CHUNKS,
+                DEFAULT_VECTOR_SIZE,
+            )
+
+            # 生成 embedding 并写入 Qdrant
+            from app.infrastructure.qdrant import UpsertPoint
+
+            points: list[Any] = []
+            for i, chunk_text in enumerate(chunks):
+                try:
+                    vector = await embedding_service.get_embedding_vector(chunk_text)
+                    point_id = generate_string_id()
+                    # 将字符串 ID 转换为整数（Qdrant 要求）
+                    point_id_int = int(point_id) if point_id.isdigit() else hash(point_id) % (10**15)
+                    points.append(UpsertPoint(
+                        id=point_id_int,
+                        vector=vector,
+                        payload={
+                            "skill_id": skill_id,
+                            "resource_name": resource_name,
+                            "resource_uri": resource_uri,
+                            "chunk_index": i,
+                            "chunk_text": chunk_text,
+                            "section_title": section_title,
+                            "char_offset_start": i * (len(chunk_text) - ResourceTierService.CHUNK_OVERLAP_TOKENS * 4) if i > 0 else 0,
+                            "char_offset_end": 0,
+                            "token_count": tier_service._estimate_tokens(chunk_text),
+                        },
+                    ))
+                except Exception as exc:
+                    logger.warning(
+                        f"Chunk embedding 生成失败: resource={resource_name}, "
+                        f"chunk_index={i}, error={exc}"
+                    )
+                    continue
+
+            if points:
+                await qdrant_client.upsert(
+                    QDRANT_COLLECTION_SKILL_RESOURCE_CHUNKS,
+                    points,
+                )
+                logger.info(
+                    f"资源预处理完成: resource={resource_name}, "
+                    f"chunks={len(points)}, "
+                    f"total_tokens={estimated_tokens}"
+                )
+
+        except FileNotFoundError:
+            logger.warning(f"资源文件不存在，跳过预处理: uri={resource_uri}")
+        except Exception as exc:
+            logger.error(
+                f"资源预处理异常: skill_id={skill_id}, "
+                f"resource={resource_name}, error={exc}"
+            )
+
+    def _split_text_to_chunks(
+        self,
+        text: str,
+        chunk_size_chars: int = 2048,
+        overlap_chars: int = 256,
+    ) -> list[str]:
+        """将文本按字符数切分为 chunk。
+
+        做什么：按固定字符数切分文本，支持重叠。
+        为什么这样做：为向量检索提供 chunk 级别的索引单元。
+        参数:
+            text: 输入文本。
+            chunk_size_chars: 每个 chunk 的字符数。
+            overlap_chars: chunk 之间的重叠字符数。
+        返回:
+            chunk 列表。
+        """
+        if not text:
+            return []
+
+        chunks: list[str] = []
+        start = 0
+        text_len = len(text)
+
+        while start < text_len:
+            end = min(start + chunk_size_chars, text_len)
+            chunk = text[start:end]
+            if chunk.strip():
+                chunks.append(chunk)
+            start += chunk_size_chars - overlap_chars
+
+        return chunks
+
+    def get_skill_resources(self, skill_name: str) -> list[dict[str, Any]]:
+        """获取指定 skill 的资源列表。
+
+        做什么：从内存缓存中查找指定 skill 的所有资源定义。
+        为什么这样做：StepThinkNode 需要知道当前 skill 有哪些资源可用，
+                      才能在 prompt 中引导 LLM 选择正确的 resource_name。
+        参数:
+            skill_name: 技能名称。
+        返回:
+            资源定义列表，每个 dict 包含 name, resource_type, uri, description。
+        边界条件：
+            - skill_name 不存在时返回空列表。
+        """
+        for _skill_id, detail in self._skills.items():
+            if detail.name == skill_name:
+                return [
+                    {
+                        "name": r.get("name", ""),
+                        "resource_type": r.get("resource_type", "file"),
+                        "uri": r.get("uri", ""),
+                        "description": r.get("description", ""),
+                    }
+                    for r in detail.resources
+                ]
+        return []
