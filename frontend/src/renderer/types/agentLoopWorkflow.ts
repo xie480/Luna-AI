@@ -160,6 +160,19 @@ export interface AgentToolCall {
   parameters: Record<string, unknown>;
   /** 调用原因 / 用途说明 */
   purpose: string;
+  /**
+   * Gating 审批状态。
+   * 做什么：记录该工具调用在权限审批流程中的当前状态。
+   * 为什么这样做：用户在审批弹窗中做出决策后，需要在 Agent Loop 的工具调用卡片中
+   *               实时展示审批结果（橙色等待 / 绿色通过 / 红色拒绝），
+   *               而不是仅在弹窗关闭后丢失审批上下文。
+   * 边界条件：
+   *   - undefined 表示该工具不需要审批或审批流程尚未开始。
+   *   - 'awaiting_approval' 表示正在等待用户决策（橙色高亮）。
+   *   - 'approved' 表示用户已同意，工具正在执行或已执行完成。
+   *   - 'rejected' 表示用户已拒绝，工具不会被执行。
+   */
+  approvalStatus?: 'awaiting_approval' | 'approved' | 'rejected';
 }
 
 /**

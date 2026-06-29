@@ -249,6 +249,18 @@ export const IconStats: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     <path d="M22 12A10 10 0 0 0 12 2v10z" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
+
+/**
+ * 问号图标：圆圈内问号。
+ * 用于工具调用等待审批状态（替代叉叉，表示"需要用户决策"）。
+ */
+export const IconQuestion: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" {...props}>
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M9 9a3 3 0 0 1 5.12 2.13c0 2-3 2.5-3 4.37" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="12" cy="18" r="0.8" fill="currentColor" />
+  </svg>
+);
   
   /**
    * 循环迭代图标：循环箭头（用于 Loop Iteration 标识）。

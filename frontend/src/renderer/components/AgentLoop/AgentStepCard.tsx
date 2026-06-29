@@ -34,6 +34,7 @@ import {
   IconPending,
   IconClock,
   IconLoop,
+  IconQuestion,
 } from './icons';
 
 // ============================================================
@@ -149,14 +150,29 @@ const ToolCallList: React.FC<ToolCallListProps> = ({ toolCalls, toolResults }) =
         {toolCalls.map((tc, i) => {
           const result = toolResults[i];
           const isSuccess = result?.success;
+          const approval = tc.approvalStatus;
+          // 构建工具项的 CSS 类名：优先显示审批状态，其次显示执行结果
+          const itemClass = [
+            'al-tool-item',
+            approval === 'awaiting_approval' ? 'al-tool-item--awaiting-approval' : '',
+            approval === 'approved' ? 'al-tool-item--approved' : '',
+            approval === 'rejected' ? 'al-tool-item--rejected' : '',
+            !approval && isSuccess ? 'al-tool-item--success' : '',
+            !approval && result && !isSuccess ? 'al-tool-item--fail' : '',
+          ].filter(Boolean).join(' ');
           return (
-            <div
-              key={i}
-              className={`al-tool-item ${isSuccess ? 'al-tool-item--success' : result ? 'al-tool-item--fail' : ''}`}
-            >
+            <div key={i} className={itemClass}>
               {/* 工具名 + 状态图标 */}
               <div className="al-tool-name">
-                {isSuccess ? (
+                {approval === 'awaiting_approval' ? (
+                  <span className="al-tool-approval-pulse">
+                    <IconQuestion width="12" height="12" style={{ color: '#ff8c00' }} />
+                  </span>
+                ) : approval === 'approved' ? (
+                  <IconCheck width="12" height="12" style={{ color: '#22c55e' }} />
+                ) : approval === 'rejected' ? (
+                  <IconXCircle width="12" height="12" style={{ color: '#ef4444' }} />
+                ) : isSuccess ? (
                   <IconCheck width="12" height="12" style={{ color: '#22c55e' }} />
                 ) : result ? (
                   <IconXCircle width="12" height="12" style={{ color: '#ef4444' }} />
@@ -166,6 +182,16 @@ const ToolCallList: React.FC<ToolCallListProps> = ({ toolCalls, toolResults }) =
                 <span className="al-tool-name-text">{tc.toolName || '未知工具'}</span>
                 {tc.skillName && (
                   <span className="al-tool-skill-badge">{tc.skillName}</span>
+                )}
+                {/* 审批状态标签 */}
+                {approval === 'awaiting_approval' && (
+                  <span className="al-tool-approval-badge al-tool-approval-badge--awaiting">等待审批</span>
+                )}
+                {approval === 'approved' && (
+                  <span className="al-tool-approval-badge al-tool-approval-badge--approved">已放行</span>
+                )}
+                {approval === 'rejected' && (
+                  <span className="al-tool-approval-badge al-tool-approval-badge--rejected">用户拒绝</span>
                 )}
               </div>
 

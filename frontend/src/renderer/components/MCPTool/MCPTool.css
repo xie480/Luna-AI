@@ -261,7 +261,8 @@
  * Phase 13：权限治理与前端 Gating 样式
  * ============================================================
  * 通过固定定位 + Z-Index 999999 确保浮层处于一切 UI 之上。
- * 暗黑毛玻璃背景阻断底层面板交互，霓虹红色边框形成视觉威慑。
+ * 暗黑毛玻璃背景阻断底层面板交互，霓虹橙色边框形成询问式视觉引导。
+ * 主题色从红色调整为橙色，传达"需要确认"而非"危险警告"的语义。
  */
 
 /* -- 全屏遮罩层 -- */
@@ -288,11 +289,11 @@
   max-width: 92vw;
   max-height: 88vh;
   overflow-y: auto;
-  border: 2px solid #ff003c;
-  background: linear-gradient(135deg, #0d0d12 0%, #1a0a0e 100%);
+  border: 2px solid #ff8c00;
+  background: linear-gradient(135deg, #0d0d12 0%, #1a120a 100%);
   box-shadow:
-    0 0 40px rgba(255, 0, 60, 0.35),
-    inset 0 0 30px rgba(255, 0, 60, 0.06);
+    0 0 40px rgba(255, 140, 0, 0.35),
+    inset 0 0 30px rgba(255, 140, 0, 0.06);
   padding: 28px 32px;
   border-radius: 10px;
   color: #e8e8e8;
@@ -317,27 +318,27 @@
   letter-spacing: 0.3px;
 }
 
-/* -- 头部警告区域 -- */
+/* -- 头部询问区域 -- */
 .gating-header {
   display: flex;
   align-items: center;
   gap: 10px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 0, 60, 0.25);
+  border-bottom: 1px solid rgba(255, 140, 0, 0.25);
 }
 
 .gating-warning-icon {
   font-size: 28px;
-  animation: gating-pulse-danger 1.8s ease-in-out infinite;
-  filter: drop-shadow(0 0 8px rgba(255, 0, 0, 0.5));
+  animation: gating-pulse-orange 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(255, 140, 0, 0.5));
 }
 
 .gating-title {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: #ff3b5c;
-  text-shadow: 0 0 12px rgba(255, 0, 60, 0.3);
+  color: #ff8c00;
+  text-shadow: 0 0 12px rgba(255, 140, 0, 0.3);
   letter-spacing: 0.5px;
 }
 
@@ -367,7 +368,7 @@
 }
 
 .gating-tool-name {
-  color: #ff6b8a;
+  color: #ffb366;
   font-weight: 600;
 }
 
@@ -388,7 +389,7 @@
 }
 
 .gating-reason {
-  color: #ff9a6a;
+  color: #ffb366;
   font-weight: 500;
 }
 
@@ -421,7 +422,7 @@
 .gating-risk-badge.level-l3 {
   background-color: #c62828;
   color: #fff;
-  animation: gating-pulse-danger 1.2s ease-in-out infinite;
+  animation: gating-pulse-orange 1.2s ease-in-out infinite;
   box-shadow: 0 0 14px rgba(198, 40, 40, 0.5);
 }
 
@@ -473,8 +474,8 @@
 }
 
 .gating-cyber-input:focus {
-  border-color: #ff3b5c;
-  box-shadow: 0 0 8px rgba(255, 0, 60, 0.15);
+  border-color: #ff8c00;
+  box-shadow: 0 0 8px rgba(255, 140, 0, 0.15);
 }
 
 .gating-cyber-input::placeholder {
@@ -597,18 +598,18 @@
   }
 }
 
-@keyframes gating-pulse-danger {
+@keyframes gating-pulse-orange {
   0% {
     opacity: 1;
-    text-shadow: 0 0 8px red;
+    text-shadow: 0 0 8px #ff8c00;
   }
   50% {
     opacity: 0.75;
-    text-shadow: 0 0 20px #ff003c;
+    text-shadow: 0 0 20px #ff8c00;
   }
   100% {
     opacity: 1;
-    text-shadow: 0 0 8px red;
+    text-shadow: 0 0 8px #ff8c00;
   }
 }
 
@@ -634,12 +635,12 @@
 }
 
 .gating-modal-cyberpunk::-webkit-scrollbar-thumb {
-  background: rgba(255, 0, 60, 0.25);
+  background: rgba(255, 140, 0, 0.25);
   border-radius: 3px;
 }
 
 .gating-modal-cyberpunk::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 0, 60, 0.4);
+  background: rgba(255, 140, 0, 0.4);
 }
 
 .gating-json-block::-webkit-scrollbar {

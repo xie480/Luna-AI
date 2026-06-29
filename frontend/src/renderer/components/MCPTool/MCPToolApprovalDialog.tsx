@@ -28,6 +28,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthGatingStore } from '../../stores/authGatingStore';
 import { useSystemStore } from '../../stores/systemStore';
+import { useAgentLoopStore } from '../../stores/agentLoopStore';
 import { sendAuthResponse } from '../../services/mcpSseHandlers';
 import { AI_SERVICE_BASE_URL } from '../../appConfig';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
@@ -156,6 +157,21 @@ const MCPToolApprovalOverlayInner: React.FC = () => {
         if (!success) {
           setSendError('发送审批结果失败，请等待网络恢复后重试');
           // 注意：不清除队列，等待重连同步机制处理
+        } else {
+          // ===== 发送成功后，同步更新 Agent Loop 面板中工具调用的审批状态 =====
+          // 做什么：根据用户决策（APPROVE/REJECT）更新 Agent Loop 步骤卡片中
+          //         对应工具调用的 approvalStatus。
+          // 为什么这样做：审批弹窗即将关闭，但 Agent Loop 面板需要保留审批结果的视觉反馈：
+          //               - APPROVE → 'approved'（绿色，表示工具将继续执行）
+          //               - REJECT  → 'rejected'（红色，表示用户拒绝了该工具执行）
+          const agentLoopStore = useAgentLoopStore.getState();
+          const toolName = currentReq?.tool_name ?? '';
+          if (toolName) {
+            agentLoopStore.updateToolApprovalStatus(
+              toolName,
+              action === 'APPROVE' ? 'approved' : 'rejected',
+            );
+          }
         }
         // 发送成功时，sendAuthResponse 内部已调用 removeRequest
         // 队列更新后，组件会自然切换到下一条或关闭
@@ -249,11 +265,13 @@ const MCPToolApprovalOverlayInner: React.FC = () => {
           </div>
         )}
 
-        {/* ===== 头部警告区域 ===== */}
+        {/* ===== 头部警告区域（SVG 图标替代 emoji） ===== */}
         <div className="gating-header">
-          <span className="gating-warning-icon" aria-hidden="true">
-            ⚠️
-          </span>
+          <svg className="gating-warning-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" width="28" height="28">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+            <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="17" r="1" fill="currentColor" />
+          </svg>
           <h2 className="gating-title">Luna 想要执行以下高风险操作</h2>
         </div>
 

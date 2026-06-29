@@ -18,6 +18,7 @@
  * 异常行为：非法的鉴权事件（缺少必填字段）会被记录错误日志并忽略。
  */
 import { useAuthGatingStore } from '../stores/authGatingStore';
+import { useAgentLoopStore } from '../stores/agentLoopStore';
 import { useSystemStore } from '../stores/systemStore';
 import { useMCPToolStore } from '../stores/mcpToolStore';
 import type {
@@ -247,6 +248,13 @@ export function handleToolAuthRequired(message: {
   };
 
   useAuthGatingStore.getState().enqueueRequest(authRequest);
+
+  // ===== 同步更新 Agent Loop 面板中对应工具调用的审批状态为"等待审批" =====
+  // 做什么：当 Agent Loop 模式下工具触发 Gating 时，在步骤卡片中将该工具调用标记为
+  //         橙色"等待审批"状态，让用户在面板中也能直观看到哪些工具正在等待确认。
+  // 为什么这样做：审批弹窗是全局阻断的，但 Agent Loop 面板中的工具调用列表也需要
+  //               同步反映审批状态，避免"弹窗关闭后面板中看不到审批结果"的信息断层。
+  useAgentLoopStore.getState().updateToolApprovalStatus(tool_name, 'awaiting_approval');
 
   systemStore.addSystemLog(
     `收到鉴权挂起事件: tool=${tool_name}, level=${risk_level}, audit_log_id=${audit_log_id}`

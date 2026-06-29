@@ -63,6 +63,29 @@ interface AgentLoopStoreState {
   /** 切换循环迭代展开/评估展开，suffix 为可选后缀（如 '_eval'） */
   toggleIterationExpanded: (stepId: string, iterationIndex: number, suffix?: string) => void;
   clearLoop: () => void;
+
+  /**
+   * 更新当前运行步骤中最后一个待处理工具调用的 Gating 审批状态。
+   *
+   * 做什么：当后端推送 EVT_TOOL_AUTH_REQUIRED 或用户在审批弹窗中做出决策后，
+   *         在 Agent Loop 的当前步骤中找到匹配的工具调用并更新其 approvalStatus。
+   * 为什么这样做：审批状态需要实时反映在 Agent Loop 面板的工具调用卡片上，
+   *               让用户在面板中也能看到哪些工具正在等待审批、已被同意或已被拒绝。
+   * 输入输出：
+   *   @param toolName     工具名称，用于匹配当前步骤中的工具调用。
+   *   @param status       要设置的审批状态。
+   *   @param auditLogId   可选的审计日志 ID，用于精确匹配（暂不使用，预留）。
+   * 边界条件：
+   *   - 当 activeLoop 为 null 时静默忽略。
+   *   - 当找不到匹配的工具调用时静默忽略。
+   *   - 匹配策略：查找当前运行步骤中最后一个 toolName 匹配且尚无对应 result 的工具调用。
+   * 异常行为：无。
+   */
+  updateToolApprovalStatus: (
+    toolName: string,
+    status: 'awaiting_approval' | 'approved' | 'rejected',
+    auditLogId?: string,
+  ) => void;
 }
 
 // ============================================================
@@ -557,4 +580,44 @@ export const useAgentLoopStore = create<AgentLoopStoreState>((set, get) => ({
       return { expandedIterations: { ...state.expandedIterations, [key]: !state.expandedIterations[key] } };
     }),
   clearLoop: () => set({ activeLoop: null, isPanelVisible: false, expandedSteps: {}, expandedThoughts: {}, expandedObservations: {}, expandedEvaluations: {}, expandedIterations: {} }),
+
+  /**
+   * 更新当前运行步骤中匹配工具调用的 Gating 审批状态。
+   *
+   * 做什么：遍历当前运行步骤的 toolCalls 列表，找到最后一个与 toolName 匹配且
+   *         尚无对应 toolResult 的工具调用，更新其 approvalStatus。
+   * 为什么这样做：审批弹窗关闭后，Agent Loop 面板中的工具调用卡片需要
+   *               根据用户的审批决策显示对应的视觉状态。
+   * 匹配策略：从后往前遍历 toolCalls，找到第一个 toolName 匹配且索引 >= toolResults.length 的调用。
+   *           这是因为 toolResults 按顺序追加，尚未有 result 的工具调用就是正在等待审批的那个。
+   */
+  updateToolApprovalStatus: (toolName, status) => {
+    set((state) => {
+      if (!state.activeLoop) return state;
+      const loop = { ...state.activeLoop };
+      // 找到当前运行中的步骤
+      const runningStep = loop.plan.steps.find((s) => s.status === 'running');
+      if (!runningStep) return state;
+
+      const stepIndex = loop.plan.steps.indexOf(runningStep);
+      const updatedSteps = [...loop.plan.steps];
+      const updatedToolCalls = [...runningStep.toolCalls];
+
+      // 从后往前查找：最后一个 toolName 匹配且尚无对应 result 的工具调用
+      let matched = false;
+      for (let i = updatedToolCalls.length - 1; i >= 0; i--) {
+        if (updatedToolCalls[i].toolName === toolName && i >= runningStep.toolResults.length) {
+          updatedToolCalls[i] = { ...updatedToolCalls[i], approvalStatus: status };
+          matched = true;
+          break;
+        }
+      }
+
+      if (!matched) return state;
+
+      updatedSteps[stepIndex] = { ...runningStep, toolCalls: updatedToolCalls };
+      loop.plan = { ...loop.plan, steps: updatedSteps };
+      return { activeLoop: loop };
+    });
+  },
 }));
