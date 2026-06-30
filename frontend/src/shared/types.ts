@@ -1170,3 +1170,86 @@ export interface AgentFinalVerifiedPayload {
   /** 总耗时（毫秒） */
   total_elapsed_ms: number;
 }
+
+// ============================================================
+// 并行执行：DAG 并行事件 Payload 类型定义
+// ============================================================
+
+/**
+ * DAG 并行步骤调度事件 Payload — 对应后端 EVT_DAG_PARALLEL_STEPS_DISPATCHED。
+ * 做什么：承载后端 ReadyQueue 计算出就绪步骤后，通知前端有多个步骤被并行调度。
+ * 为什么这样做：前端 DAG 面板需要展示多步骤同时执行的并行视图。
+ * 输入输出：由后端推送，前端 agentLoopStore.onParallelStepsDispatched 消费。
+ * 边界条件：dispatched_steps 至少包含 1 个步骤。
+ * 异常行为：无。
+ */
+export interface DagParallelStepsDispatchedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 被并行调度的步骤列表 */
+  dispatched_steps: Array<{
+    step_id: string;
+    title: string;
+    execution_mode: 'sequential' | 'parallel';
+  }>;
+  /** 并发数 */
+  concurrency: number;
+  /** 就绪队列大小 */
+  ready_queue_size: number;
+  /** 待处理步骤数 */
+  pending_count: number;
+  /** 运行中步骤数 */
+  running_count: number;
+  /** 已完成步骤数 */
+  completed_count: number;
+}
+
+/**
+ * DAG 步骤完成事件 Payload — 对应后端 EVT_DAG_STEP_COMPLETED。
+ * 做什么：承载后端单个 Step 并行执行完成时的结果摘要。
+ * 为什么这样做：前端需要实时更新已完成 Step 的状态和结果摘要。
+ */
+export interface DagStepCompletedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 步骤标题 */
+  title: string;
+  /** 结果摘要（截断后） */
+  result_summary: string;
+}
+
+/**
+ * DAG 步骤失败事件 Payload — 对应后端 EVT_DAG_STEP_FAILED。
+ * 做什么：承载后端单个 Step 并行执行失败时的错误信息。
+ * 为什么这样做：前端需要标记失败 Step 并展示错误原因。
+ */
+export interface DagStepFailedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 步骤标题 */
+  title: string;
+  /** 错误描述 */
+  error: string;
+}
+
+/**
+ * DAG 并行工具调度事件 Payload — 对应后端 EVT_DAG_TOOLS_PARALLEL_DISPATCHED。
+ * 做什么：承载后端 ParallelToolExecutor 并行调度一批工具时的通知。
+ * 为什么这样做：前端需要感知工具正在并行执行，而非逐个串行。
+ */
+export interface DagToolsParallelDispatchedPayload {
+  /** 计划 ID */
+  plan_id: string;
+  /** 步骤 ID */
+  step_id: string;
+  /** 工具调用数量 */
+  tool_calls_count: number;
+  /** 执行层数 */
+  layers: number;
+  /** 最大并发数 */
+  max_concurrency: number;
+}

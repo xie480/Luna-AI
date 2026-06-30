@@ -8,7 +8,7 @@
  * 异常行为：无。
  */
 import { create } from 'zustand';
-import { DAG_NODE_STATUS } from '../../shared/enum';
+import { DAG_NODE_STATUS, DAG_WORKFLOW_EVENT_TYPE } from '../../shared/enum';
 import type {
   DagPlanCreatedPayload,
   DagStateStartedPayload,
@@ -22,6 +22,10 @@ import type {
   DagPlanCompletedPayload,
   DagPlanTerminatedPayload,
   DagBudgetExhaustedPayload,
+  DagParallelStepsDispatchedPayload,
+  DagStepCompletedPayload,
+  DagStepFailedPayload,
+  DagToolsParallelDispatchedPayload,
 } from '../../shared/types';
 import type {
   DagPlanProjection,
@@ -87,6 +91,16 @@ interface DagWorkflowStoreState {
   onPlanTerminated: (payload: DagPlanTerminatedPayload) => void;
   /** 处理预算耗尽事件 */
   onBudgetExhausted: (payload: DagBudgetExhaustedPayload) => void;
+
+  // === 并行执行事件处理方法 ===
+  /** 处理并行步骤调度事件 */
+  onParallelStepsDispatched: (payload: DagParallelStepsDispatchedPayload) => void;
+  /** 处理并行步骤完成事件 */
+  onStepCompleted: (payload: DagStepCompletedPayload) => void;
+  /** 处理并行步骤失败事件 */
+  onStepFailed: (payload: DagStepFailedPayload) => void;
+  /** 处理并行工具调度事件 */
+  onToolsParallelDispatched: (payload: DagToolsParallelDispatchedPayload) => void;
 
   // === UI 操作方法 ===
   /** 设置面板可见性 */
@@ -738,6 +752,99 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
       }
       return { activePlan: plan };
     });
+  },
+
+  // ============================================================
+  // 并行执行事件处理方法
+  // ============================================================
+
+  /**
+   * 处理并行步骤调度事件。
+   * 做什么：更新 DAG 面板展示并行步骤的执行状态，标记被调度的步骤为 RUNNING。
+   */
+  onParallelStepsDispatched: (payload) => {
+    const { activePlan } = get();
+    if (!activePlan || activePlan.planId !== payload.plan_id) return;
+
+    set((state) => {
+      const plan = { ...state.activePlan! };
+      const updatedStates = plan.states.map((st) => {
+        // 找到匹配的 State（通过 step_id 匹配）
+        const dispatched = payload.dispatched_steps.find(
+          (ds) => ds.step_id === st.stateId || ds.step_id === st.intent
+        );
+        if (dispatched) {
+          return { ...st, status: DAG_NODE_STATUS.RUNNING as const };
+        }
+        return st;
+      });
+      return {
+        activePlan: { ...plan, states: updatedStates },
+      };
+    });
+  },
+
+  /**
+   * 处理并行步骤完成事件。
+   * 做什么：将对应步骤的状态更新为 SUCCEEDED。
+   */
+  onStepCompleted: (payload) => {
+    const { activePlan } = get();
+    if (!activePlan || activePlan.planId !== payload.plan_id) return;
+    set((state) => {
+      const plan = { ...state.activePlan! };
+      const updatedStates = plan.states.map((st) => {
+        if (st.stateId === payload.step_id || st.intent === payload.step_id) {
+          return { ...st, status: DAG_NODE_STATUS.SUCCEEDED as const };
+        }
+        return st;
+      });
+      return {
+        activePlan: {
+          ...plan,
+          states: updatedStates,
+          completedStates: updatedStates.filter(
+            (s) => s.status === DAG_NODE_STATUS.SUCCEEDED
+          ).length,
+        },
+      };
+    });
+  },
+
+  /**
+   * 处理并行步骤失败事件。
+   * 做什么：将对应步骤的状态更新为 FAILED。
+   */
+  onStepFailed: (payload) => {
+    const { activePlan } = get();
+    if (!activePlan || activePlan.planId !== payload.plan_id) return;
+    set((state) => {
+      const plan = { ...state.activePlan! };
+      const updatedStates = plan.states.map((st) => {
+        if (st.stateId === payload.step_id || st.intent === payload.step_id) {
+          return { ...st, status: DAG_NODE_STATUS.FAILED as const };
+        }
+        return st;
+      });
+      return {
+        activePlan: {
+          ...plan,
+          states: updatedStates,
+          failedStates: updatedStates.filter(
+            (s) => s.status === DAG_NODE_STATUS.FAILED
+          ).length,
+        },
+      };
+    });
+  },
+
+  /**
+   * 处理并行工具调度事件。
+   * 做什么：记录工具并行调度的统计信息（仅日志记录，无 UI 变更）。
+   */
+  onToolsParallelDispatched: (_payload) => {
+    // 当前版本仅做日志记录，不做 UI 变更
+    // 后续版本可在此更新工具并行调度的可视化展示
   },
 
   // ============================================================

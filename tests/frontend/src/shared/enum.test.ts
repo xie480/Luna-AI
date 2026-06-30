@@ -7,6 +7,7 @@ import {
   CHAT_WORKFLOW_NODE_LABEL,
   CHAT_WORKFLOW_NODE_TYPE,
   CHAT_WORKFLOW_SCHEMA_VERSION,
+  DAG_WORKFLOW_EVENT_TYPE,
   ErrorCode,
   WS_MSG_TYPE,
 } from '../../../../frontend/src/shared/enum';
@@ -30,5 +31,26 @@ describe('shared enum constants', () => {
     expect(CHAT_NODE_STATUS_LABEL[CHAT_NODE_STATUS.DEGRADED]).toBe('已降级');
     expect(WS_MSG_TYPE.EVT_CHAT_PLAN_COMPLETED).toBe('EVT_CHAT_PLAN_COMPLETED');
     expect(WS_MSG_TYPE.EVT_CHAT_CONDITION_EVALUATED).toBe('EVT_CHAT_CONDITION_EVALUATED');
+  });
+
+  // === DAG 工作流并行事件 ===
+  describe('DAG_WORKFLOW_EVENT_TYPE (parallel extensions)', () => {
+    it('should define all parallel step dispatch events', () => {
+      expect(DAG_WORKFLOW_EVENT_TYPE.PARALLEL_STEPS_DISPATCHED).toBe('EVT_DAG_PARALLEL_STEPS_DISPATCHED');
+      expect(DAG_WORKFLOW_EVENT_TYPE.STEP_COMPLETED).toBe('EVT_DAG_STEP_COMPLETED');
+      expect(DAG_WORKFLOW_EVENT_TYPE.STEP_FAILED).toBe('EVT_DAG_STEP_FAILED');
+      expect(DAG_WORKFLOW_EVENT_TYPE.STATE_JOIN_READY).toBe('EVT_DAG_STATE_JOIN_READY');
+    });
+
+    it('should define all parallel tool dispatch events', () => {
+      expect(DAG_WORKFLOW_EVENT_TYPE.TOOLS_PARALLEL_DISPATCHED).toBe('EVT_DAG_TOOLS_PARALLEL_DISPATCHED');
+      expect(DAG_WORKFLOW_EVENT_TYPE.TOOL_BATCH_COMPLETED).toBe('EVT_DAG_TOOL_BATCH_COMPLETED');
+    });
+
+    it('should keep existing DAG events unchanged', () => {
+      expect(DAG_WORKFLOW_EVENT_TYPE.PLAN_CREATED).toBe('EVT_DAG_PLAN_CREATED');
+      expect(DAG_WORKFLOW_EVENT_TYPE.GOAL_LOCKED).toBe('EVT_DAG_GOAL_LOCKED');
+      expect(DAG_WORKFLOW_EVENT_TYPE.FINAL_VERIFIED).toBe('EVT_DAG_FINAL_VERIFIED');
+    });
   });
 });

@@ -38,6 +38,10 @@ import {
   DagPlanCompletedPayload,
   DagPlanTerminatedPayload,
   DagBudgetExhaustedPayload,
+  DagParallelStepsDispatchedPayload,
+  DagStepCompletedPayload,
+  DagStepFailedPayload,
+  DagToolsParallelDispatchedPayload,
 } from '../../shared/types';
 
 /**
@@ -843,6 +847,55 @@ class SSEManager {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
             useDagWorkflowStore.getState().onBudgetExhausted(msg.payload as DagBudgetExhaustedPayload);
           });
+          break;
+        }
+
+        // === 并行执行事件处理 ===
+        case DAG_WORKFLOW_EVENT_TYPE.PARALLEL_STEPS_DISPATCHED: {
+          // 并行步骤调度事件：向前端系统日志添加记录，dagWorkflowStore 可选择性消费
+          systemStore.addSystemLog(
+            `[并行调度] 收到: ${(msg.payload as DagParallelStepsDispatchedPayload).dispatched_steps?.length || 0} 个步骤并行执行`
+          );
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_COMPLETED: {
+          // 并行步骤完成事件：更新 Agent Loop 面板中的步骤状态
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) {
+              const payload = msg.payload as DagStepCompletedPayload;
+              s.onNodeCompleted({
+                step_id: payload.step_id,
+                success: true,
+                outputs: { result_summary: payload.result_summary },
+              } as Record<string, unknown>);
+            }
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.STEP_FAILED: {
+          // 并行步骤失败事件：更新 Agent Loop 面板中的步骤状态为失败
+          import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
+            const s = useAgentLoopStore.getState();
+            if (s.activeLoop) {
+              const payload = msg.payload as DagStepFailedPayload;
+              s.onNodeCompleted({
+                step_id: payload.step_id,
+                success: false,
+                error_message: payload.error,
+              } as Record<string, unknown>);
+            }
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.TOOLS_PARALLEL_DISPATCHED: {
+          // 工具并行调度事件：记录日志，供前端 DevTools 展示并行工具调用信息
+          systemStore.addSystemLog(
+            `[工具并行] ${(msg.payload as DagToolsParallelDispatchedPayload).tool_calls_count} 个工具并行调用`
+          );
           break;
         }
 
