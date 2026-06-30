@@ -26,6 +26,34 @@ class ReadyQueue:
         ready_steps = ready_queue.compute_ready_steps(steps, completed_ids, running_ids)
     """
 
+    def _resolve_dep_id(
+        self,
+        dep_id: str,
+        steps: list[AgentStepState],
+    ) -> str:
+        """解析依赖 ID：兼容数字索引（如 "0"）和真实 step_id 两种格式。
+
+        做什么：LLM 生成的 plan 中 dependencies 字段可能使用整数索引（如 [0]），
+                经 coerced_deps = [str(d) for d in raw_deps] 转为字符串索引（如 "0"）。
+                但 completed_step_ids 存储的是真实的 step_id（如 "snowflake_12345"），
+                直接比较 dep_id in completed_ids 永远为 False。
+                此函数将数字索引解析为对应的 step_id 后再做比较。
+
+        参数:
+            dep_id: 依赖 ID 字符串（可能是数字索引或真实 step_id）。
+            steps: 全局步骤列表，用于按索引查找 step_id。
+
+        返回:
+            解析后的真实 step_id。如果 dep_id 是数字索引且在 steps 范围内，
+            返回对应步骤的 step_id；否则原样返回 dep_id。
+        """
+        if dep_id.isdigit():
+            idx = int(dep_id)
+            if 0 <= idx < len(steps):
+                resolved = steps[idx].step_id
+                return resolved
+        return dep_id
+
     def compute_ready_steps(
         self,
         steps: list[AgentStepState],
@@ -64,9 +92,13 @@ class ReadyQueue:
                 ready.append(step)
                 continue
 
-            # 有依赖：检查所有前置步骤是否已完成
+            # 有依赖：将数字索引解析为 step_id 后再检查是否已完成
+            # 为什么这样做：LLM 生成的 dependencies 使用整数索引（如 "0"），
+            #               但 completed_step_ids 存储的是真实 step_id。
+            #               _resolve_dep_id 负责将索引转换为 step_id。
             all_deps_met = all(
-                dep_id in completed_ids for dep_id in step.dependencies
+                self._resolve_dep_id(dep_id, steps) in completed_ids
+                for dep_id in step.dependencies
             )
             if all_deps_met:
                 ready.append(step)

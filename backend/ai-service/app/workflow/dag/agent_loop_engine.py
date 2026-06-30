@@ -851,6 +851,8 @@ class StepThinkNode:
         current_step = agent_loop.plan.steps[agent_loop.plan.current_step_index]
         current_step.status = StepStatusEnum.RUNNING
         agent_loop.execution.current_step_id = current_step.step_id
+        # 同步维护 running_step_ids 集合，供 ReadyQueue 依赖检查使用
+        agent_loop.plan.running_step_ids.add(current_step.step_id)
 
         # 发布 DAG_AGENT_STEP_THINK RUNNING 状态
         await _publish_chat_status_for_state(
@@ -2228,6 +2230,9 @@ class AgentStepEvaluateNode:
         if eval_verdict == StepEvaluationVerdict.PASS:
             if idx < len(agent_loop.plan.steps):
                 agent_loop.plan.steps[idx].status = StepStatusEnum.PASSED
+                # 同步维护 completed_step_ids 和 running_step_ids，供 ReadyQueue 依赖检查使用
+                agent_loop.plan.completed_step_ids.add(agent_loop.plan.steps[idx].step_id)
+                agent_loop.plan.running_step_ids.discard(agent_loop.plan.steps[idx].step_id)
                 # 记录步骤摘要到记忆
                 agent_loop.memory.step_summaries.append({
                     "step_id": agent_loop.plan.steps[idx].step_id,
@@ -3208,6 +3213,9 @@ class FastPassNode:
 
             # 标记步骤完成
             current_step.status = StepStatusEnum.PASSED
+            # 同步维护 completed_step_ids 和 running_step_ids，供 ReadyQueue 依赖检查使用
+            agent_loop.plan.completed_step_ids.add(current_step.step_id)
+            agent_loop.plan.running_step_ids.discard(current_step.step_id)
 
             # 推进到下一步
             agent_loop.plan.current_step_index += 1
@@ -3262,6 +3270,9 @@ class FastPassNode:
             )
             # 异常时仍标记通过，避免阻塞流程
             current_step.status = StepStatusEnum.PASSED
+            # 同步维护 completed_step_ids 和 running_step_ids，供 ReadyQueue 依赖检查使用
+            agent_loop.plan.completed_step_ids.add(current_step.step_id)
+            agent_loop.plan.running_step_ids.discard(current_step.step_id)
             agent_loop.plan.current_step_index += 1
             agent_loop.execution = ExecutionState()
 
@@ -3410,6 +3421,9 @@ def build_step_loop_subgraph(
     graph.set_entry_point(AgentStepLoopSubGraphNodeName.STEP_ROUTER.value)
 
     # step_router → step_think（继续）或 END（全部完成）
+    # 并行扩展路由：STEP_PARALLEL_DISPATCH 和 WAIT_FOR_COMPLETION
+    #   都映射到 STEP_THINK（当前架构下单步执行，路由到 step_think
+    #   后由 route_by_step 在下一轮迭代中重新判断）。
     graph.add_conditional_edges(
         AgentStepLoopSubGraphNodeName.STEP_ROUTER.value,
         route_by_step,
@@ -3418,6 +3432,11 @@ def build_step_loop_subgraph(
                 AgentStepLoopSubGraphNodeName.STEP_THINK.value,
             AgentStepRoute.FINAL_VERIFY.value:
                 END,
+            # 并行路由：有就绪步骤或等待运行中步骤 → 都回到 step_think
+            AgentStepRoute.STEP_PARALLEL_DISPATCH.value:
+                AgentStepLoopSubGraphNodeName.STEP_THINK.value,
+            AgentStepRoute.WAIT_FOR_COMPLETION.value:
+                AgentStepLoopSubGraphNodeName.STEP_THINK.value,
         },
     )
 
