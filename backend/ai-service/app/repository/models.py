@@ -766,3 +766,143 @@ class AuditLog(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
         comment="记录最后更新时间戳（带时区）。状态变更时自动刷新。",
     )
+
+
+class TaskSnapshot(Base):
+    """
+    对应 PostgreSQL 中的 task_snapshots 表（任务级状态快照表）。
+
+    做什么：存储 Plan 运行时快照的持久化数据，支持中断恢复和审计回放。
+    为什么这样做：Phase 10 要求将 Plan 运行时快照定期异步持久化到 PostgreSQL，
+                 恢复时加载序列化上下文，实现从断点节点的无缝拉起。
+    输入输出：
+        - id: 雪花算法生成的唯一标识（String(64)）。
+        - task_id: 关联的任务 ID。
+        - session_id: 会话 ID。
+        - trace_id: 追踪 ID。
+        - plan_id: Plan ID。
+        - task_status: 任务状态枚举值（TaskStatus 字符串）。
+        - dag_engine_state: DagEngineState 全量序列化（JSONB）。
+        - executor_runtime: ExecutorRuntimeState 快照（JSONB）。
+        - gating_snapshot: Gating 审批快照（JSONB）。
+        - snapshot_version: 快照版本号，按 task_id 递增。
+        - trigger_event: 触发保存的事件名（TIMEOUT/CRASH/USER_CANCEL 等）。
+        - saved_at_ms: 保存时间戳（毫秒）。
+    边界条件：
+        - (task_id, snapshot_version) 联合唯一。
+        - dag_engine_state 不允许为空。
+        - snapshot_version 从 1 开始，每次保存自动递增。
+    异常行为：违反唯一约束时由外层管理器处理冲突。
+    """
+    __tablename__ = "task_snapshots"
+    __table_args__ = (
+        Index("idx_task_snapshots_task_id", "task_id"),
+        Index("idx_task_snapshots_session_id", "session_id"),
+        Index("idx_task_snapshots_plan_id", "plan_id"),
+        Index("idx_task_snapshots_status", "task_status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, comment="雪花算法生成的快照记录 ID。")
+    task_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, comment="任务 ID。关联的 DAG 任务。",
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="会话 ID。",
+    )
+    trace_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="追踪 ID。全链路追踪。",
+    )
+    plan_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="Plan ID。关联的 DAG Plan。",
+    )
+    task_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, comment="任务状态枚举值：RUNNING / PAUSED / SUCCEEDED / FAILED 等。",
+    )
+    dag_engine_state: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, comment="DagEngineState 全量序列化 JSON。",
+    )
+    executor_runtime: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True, comment="ExecutorRuntimeState 快照（可选）。",
+    )
+    gating_snapshot: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True, comment="Gating 审批快照（可选）。",
+    )
+    snapshot_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, comment="快照版本号，按 task_id 递增。",
+    )
+    trigger_event: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="触发保存的事件名：TIMEOUT/CRASH/USER_CANCEL/EMOTION/GATING/CHECKPOINT。",
+    )
+    saved_at_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="保存时间戳（毫秒）。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), comment="记录创建时间。",
+    )
+
+
+class StateTransitionLog(Base):
+    """
+    对应 PostgreSQL 中的 state_transition_logs 表（状态跃迁审计日志表）。
+
+    做什么：记录所有 WSM（工作状态）和 ESM（情绪状态）的跃迁事件。
+    为什么这样做：agent.md 要求所有状态迁移必须显式记录，
+                 from -> to、触发原因、trace_id、task_id。
+    输入输出：
+        - id: BIGSERIAL 自增主键。
+        - session_id: 会话 ID。
+        - task_id: 任务 ID（可选）。
+        - turn_id: 轮次 ID（可选）。
+        - prev_wsm: 跃迁前的工作状态。
+        - next_wsm: 跃迁后的工作状态。
+        - prev_esm: 跃迁前的情绪状态（可选）。
+        - next_esm: 跃迁后的情绪状态（可选）。
+        - trigger_type: 触发类型。
+        - transition_reason: 跃迁原因描述。
+        - trace_id: 追踪 ID。
+    边界条件：
+        - session_id, task_id, turn_id 至少有一个非空。
+        - trigger_type 限定为预定义枚举。
+    """
+    __tablename__ = "state_transition_logs"
+    __table_args__ = (
+        Index("idx_state_transition_logs_session", "session_id"),
+        Index("idx_state_transition_logs_task", "task_id"),
+        Index("idx_state_transition_logs_trigger", "trigger_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True, comment="自增主键。")
+    session_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="会话 ID。",
+    )
+    task_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="任务 ID（可选）。",
+    )
+    turn_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="轮次 ID（可选）。",
+    )
+    prev_wsm: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="", comment="跃迁前的工作状态（WSM）。",
+    )
+    next_wsm: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="", comment="跃迁后的工作状态（WSM）。",
+    )
+    prev_esm: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="", comment="跃迁前的情绪状态（ESM，可选）。",
+    )
+    next_esm: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="", comment="跃迁后的情绪状态（ESM，可选）。",
+    )
+    trigger_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="NORMAL_ADVANCE",
+        comment="触发类型：NORMAL_ADVANCE / EMOTION_INTERRUPT / RESUME / FALLBACK / TIMEOUT / USER_CANCEL / GATING。",
+    )
+    transition_reason: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", comment="跃迁原因描述文本。",
+    )
+    trace_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="", comment="全链路追踪 ID。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), comment="记录创建时间。",
+    )

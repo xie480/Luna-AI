@@ -1019,6 +1019,61 @@ async def lifespan(app: FastAPI):
             app.state.gating_service = None
             logger.warning(f"[Gating] GatingService 初始化失败（将降级运行）: {e}")
 
+    # ============================================================
+    # Phase 10：任务状态机与中断恢复服务初始化
+    # ============================================================
+    # 做什么：初始化 SnapshotManager、StateTransitionManager 和 RecoveryCoordinator。
+    #         这些服务用于任务级状态管理、快照持久化和中断恢复。
+    # 为什么这样做：Phase 10 要求任务级别生命周期管理，与 DAG 节点级状态分离。
+    # 边界条件：
+    #   - pg_client 存在时使用 PG 持久化，否则仅使用 Redis
+    #   - redis_client 存在时使用 Redis 快速检查点，否则降级
+    #   - 初始化失败不阻断主流程（降级为仅记录警告）
+    # ============================================================
+    try:
+        from app.state import SnapshotManager, StateTransitionManager
+
+        # 初始化快照管理器（Redis + PG 双写）
+        pg_pool_for_state = None
+        if pg_client:
+            # 使用 pg_client.engine 作为连接池
+            pg_pool_for_state = pg_client
+
+        snapshot_manager = SnapshotManager(
+            pg_pool=pg_pool_for_state,
+            redis_client=redis_client,
+            checkpoint_ttl=86400,       # 24h
+            snapshot_ttl=604800,        # 7d
+        )
+
+        # 初始化状态跃迁管理器
+        transition_log_pool = None
+        if pg_client:
+            transition_log_pool = pg_client
+
+        state_transition_manager = StateTransitionManager(
+            pg_pool=transition_log_pool,
+        )
+
+        # 初始化恢复协调器
+        from app.state import RecoveryCoordinator
+        recovery_coordinator = RecoveryCoordinator(
+            snapshot_manager=snapshot_manager,
+            checkpoint_manager=None,  # 需要时由上层注入
+        )
+
+        # 注册到 app.state
+        app.state.snapshot_manager = snapshot_manager
+        app.state.state_transition_manager = state_transition_manager
+        app.state.recovery_coordinator = recovery_coordinator
+
+        logger.info("[Phase 10] 任务状态机与中断恢复服务初始化完成")
+    except Exception as e:
+        app.state.snapshot_manager = None
+        app.state.state_transition_manager = None
+        app.state.recovery_coordinator = None
+        logger.warning(f"[Phase 10] 任务状态机与中断恢复服务初始化失败（将降级运行）: {e}")
+
     # 标记服务已完全就绪
     app.state.is_ready = True
     logger.info("Luna AI Service 所有核心资源初始化完成，服务已就绪")
