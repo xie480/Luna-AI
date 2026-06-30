@@ -100,9 +100,9 @@ class ChatWorkflowEventType(str, Enum):
 class DagWorkflowEventType(str, Enum):
     """Phase 9 DAG 工作流事件类型。
 
-    做什么：定义 DAG 引擎向前端推送的 12 种 SSE 事件类型。
+    做什么：定义 DAG 引擎向前端推送的 SSE 事件类型。
     为什么这样做：前端 dagWorkflowStore 依赖这些事件驱动 DAG 面板渲染，
-                  事件名必须与前端 enum.ts 中的 DAG_WORKFLOW_EVENT_TYPE 完全一致。
+                   事件名必须与前端 enum.ts 中的 DAG_WORKFLOW_EVENT_TYPE 完全一致。
     输入输出：由 DagEngine.run() 中的 _emit_dag_event 发布，经 SSE 通道推送到前端。
     边界条件：新增事件类型时必须同步更新前端 enum.ts 和 sseManager.ts。
     异常行为：无。
@@ -128,6 +128,14 @@ class DagWorkflowEventType(str, Enum):
     EVT_DAG_STEP_EVALUATED = "EVT_DAG_STEP_EVALUATED"
     EVT_DAG_STEP_REPAIRED = "EVT_DAG_STEP_REPAIRED"
     EVT_DAG_FINAL_VERIFIED = "EVT_DAG_FINAL_VERIFIED"
+    # === Level 1 新增：State 并行事件 ===
+    EVT_DAG_PARALLEL_STEPS_DISPATCHED = "EVT_DAG_PARALLEL_STEPS_DISPATCHED"
+    EVT_DAG_STEP_COMPLETED = "EVT_DAG_STEP_COMPLETED"
+    EVT_DAG_STEP_FAILED = "EVT_DAG_STEP_FAILED"
+    EVT_DAG_STATE_JOIN_READY = "EVT_DAG_STATE_JOIN_READY"
+    # === Level 3 新增：Tool 并行事件 ===
+    EVT_DAG_TOOLS_PARALLEL_DISPATCHED = "EVT_DAG_TOOLS_PARALLEL_DISPATCHED"
+    EVT_DAG_TOOL_BATCH_COMPLETED = "EVT_DAG_TOOL_BATCH_COMPLETED"
 
 
 class AgentLoopSubGraphNodeName(str, Enum):
@@ -163,13 +171,16 @@ class AgentStepLoopSubGraphNodeName(str, Enum):
 
 
 class AgentStepRoute(str, Enum):
-    """Step 路由结果枚举。
+    """Step 路由结果枚举（并行版扩展）。
 
     做什么：标识 StepLoop 中 step_router 的路由决策。
     """
 
     STEP_THINK = "step_think"       # 还有未执行步骤，继续思考
     FINAL_VERIFY = "final_verify"   # 全部完成或终止，进入最终验收
+    # === 新增并行路由 ===
+    STEP_PARALLEL_DISPATCH = "step_parallel_dispatch"  # 有就绪步骤，进入并行调度
+    WAIT_FOR_COMPLETION = "wait_for_completion"        # 等待正在运行的步骤完成
 
 
 class StepEvaluationRoute(str, Enum):

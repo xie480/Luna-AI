@@ -732,27 +732,28 @@ class StepRouterNode:
         return {}
 
 
-def route_by_step(state: dict[str, Any]) -> str:
-    """Step Loop 路由函数。
+def      route_by_step(state: dict[str, Any]) -> str:
+    """Step Loop 路由函数（并行版）。
 
     做什么：判断是否有未执行的步骤，返回路由结果。
-    路由逻辑：
+    路由逻辑（并行扩展）：
         - 已终止 → final_verify
         - 预算耗尽 → final_verify
-        - 还有未执行步骤 → step_think
+        - ReadyQueue 中有就绪步骤 → step_parallel_dispatch
+        - 有步骤正在运行 → wait_for_completion
         - 全部完成 → final_verify
     """
     chat_state, agent_loop = _extract_agent_loop_state(state)
     if agent_loop is None:
         return AgentStepRoute.FINAL_VERIFY.value
 
+    trace_id = chat_state.runtime.trace_id
+
     # Phase 13：Gating 审批挂起时，立即退出 step loop 进入 final_verify。
-    # 做什么：检测到 gating_suspended 标志后，路由到 FINAL_VERIFY 退出循环。
-    # 为什么这样做：审批挂起期间不应继续执行后续步骤，必须暂停整个 step loop。
     if agent_loop.gating_suspended:
         logger.info(
             "[TraceID:{}] StepRouter: 检测到 gating_suspended，退出 step loop 进入 final_verify"
-            .format(chat_state.runtime.trace_id)
+            .format(trace_id)
         )
         return AgentStepRoute.FINAL_VERIFY.value
 
@@ -764,13 +765,32 @@ def route_by_step(state: dict[str, Any]) -> str:
     if agent_loop.budget.is_exhausted():
         agent_loop.terminated = True
         agent_loop.termination_reason = "预算耗尽"
-        # 写回状态
         chat_state.dag_state.dag_engine_state = agent_loop.model_dump(mode="json")
         return AgentStepRoute.FINAL_VERIFY.value
 
-    # 还有未执行步骤
-    if agent_loop.plan.current_step_index < len(agent_loop.plan.steps):
-        return AgentStepRoute.STEP_THINK.value
+    # === 并行路由逻辑 ===
+    from app.workflow.dag.ready_queue import ReadyQueue
+
+    ready_queue = ReadyQueue()
+    ready_steps = ready_queue.compute_ready_steps(
+        steps=agent_loop.plan.steps,
+        completed_ids=agent_loop.plan.completed_step_ids,
+        running_ids=agent_loop.plan.running_step_ids,
+    )
+
+    if ready_steps:
+        # 有就绪步骤，进入并行调度
+        logger.info(
+            f"[TraceID:{trace_id}] StepRouter: 发现 {len(ready_steps)} 个就绪步骤，进入并行调度"
+        )
+        return AgentStepRoute.STEP_PARALLEL_DISPATCH.value
+
+    if agent_loop.plan.running_step_ids:
+        # 有正在运行的步骤，等待完成
+        logger.info(
+            f"[TraceID:{trace_id}] StepRouter: 有 {len(agent_loop.plan.running_step_ids)} 个步骤正在运行，等待完成"
+        )
+        return AgentStepRoute.WAIT_FOR_COMPLETION.value
 
     # 全部完成
     return AgentStepRoute.FINAL_VERIFY.value

@@ -292,6 +292,16 @@ class StepDefinition(BaseModel):
     nodes: list[AtomicNodeDefinition] = Field(default_factory=list)
     description: str = ""
 
+    # === 新增：依赖声明 ===
+    depends_on: list[str] = Field(
+        default_factory=list,
+        description="依赖的前置 Step ID 列表。"
+                    "为空时表示可与同级 Step 并行执行。",
+    )
+    execution_mode: str = Field(
+        default="parallel",
+        description="节点内原子节点的执行模式：parallel（gather）/ sequential（逐个）。",
+    )
 
 # ===========================================================================
 # State 运行时状态
@@ -903,13 +913,30 @@ class AgentStepState(BaseModel):
                 continue
         return coerced
 
+    # === 新增：并行执行元数据 ===
+    execution_mode: str = Field(
+        default="sequential",
+        description="执行模式：sequential（串行）/ parallel（可并行）。",
+    )
+    started_at_ms: int = Field(
+        default=0,
+        description="步骤开始执行的时间戳（毫秒）。",
+    )
+    completed_at_ms: int = Field(
+        default=0,
+        description="步骤完成的时间戳（毫秒）。",
+    )
+    result_summary: str = Field(
+        default="",
+        description="步骤执行结果摘要，供下游步骤和 FinalVerify 使用。",
+    )
 
 class PlanState(BaseModel):
     """全局步骤计划 — 可变，版本化。
 
     做什么：存储当前全局步骤序列，每次 replan 产生新版本。
     为什么这样做：agent loop.md 要求 PlanState 是可变的，
-                  每次 replan 都保留版本便于回溯。
+                   每次 replan 都保留版本便于回溯。
     """
 
     plan_version: int = Field(default=1, ge=1, description="计划版本号，replan 时递增。")
@@ -917,7 +944,22 @@ class PlanState(BaseModel):
         default_factory=list,
         description="全局步骤列表，中粒度（3~12 步）。",
     )
+    # current_step_index 保留用于向后兼容，但不再作为主调度依据
     current_step_index: int = Field(default=0, ge=0, description="当前执行到第几步。")
+
+    # === 新增：并行调度状态 ===
+    completed_step_ids: set[str] = Field(
+        default_factory=set,
+        description="已完成的步骤 ID 集合。",
+    )
+    running_step_ids: set[str] = Field(
+        default_factory=set,
+        description="正在执行的步骤 ID 集合（可能有多个同时运行）。",
+    )
+    failed_step_ids: set[str] = Field(
+        default_factory=set,
+        description="失败的步骤 ID 集合。",
+    )
     replan_history: list[ReplanRecord] = Field(
         default_factory=list,
         description="replan 历史记录，每次 replan 追加一条。",
