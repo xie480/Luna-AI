@@ -708,17 +708,30 @@ class SSEManager {
           //               后端 PLAN_CREATED 载荷中不包含 non_goals 字段，
           //               因此不能用 payload 内容区分两种模式。
           const _pcPayload = msg.payload as Record<string, unknown>;
+          const planId = (_pcPayload.plan_id as string) || '';
+          const traceId = msg.trace_id || '';
           import('../stores/agentLoopStore').then(({ useAgentLoopStore }) => {
             const agentLoopState = useAgentLoopStore.getState();
             if (agentLoopState.activeLoop) {
               // Agent Loop 模式：目标已锁定，计划待填充
-              agentLoopState.onPlanCreated(_pcPayload, msg.trace_id || '');
+              agentLoopState.onPlanCreated(_pcPayload, traceId);
             } else {
               // DAG 模式（Plan + Cursor）
               import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
-                useDagWorkflowStore.getState().onPlanCreated(msg.payload as DagPlanCreatedPayload, msg.trace_id);
+                useDagWorkflowStore.getState().onPlanCreated(msg.payload as DagPlanCreatedPayload, traceId);
+                // ★ Phase 10：收到 Plan 创建后，自动展开 DAG 面板以展示工作流和任务控制栏
+                useDagWorkflowStore.getState().setPanelVisible(true);
               });
             }
+          });
+          // ★ Phase 10：初始化任务状态 — 任何 Plan 创建都关联一个活跃任务
+          // 注意：此处 taskId 取值为 msg.trace_id，保证前后端 task_id 一致性
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().setTaskState(
+              traceId, // taskId
+              'RUNNING',
+              planId,
+            );
           });
           break;
         }
@@ -835,6 +848,13 @@ class SSEManager {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
             useDagWorkflowStore.getState().onPlanCompleted(msg.payload as DagPlanCompletedPayload);
           });
+          // ★ Phase 10：Plan 完成 → 标记任务 SUCCEEDED
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().setTaskState(
+              (msg.payload as Record<string, unknown>).plan_id as string || '',
+              'SUCCEEDED',
+            );
+          });
           break;
         }
 
@@ -846,12 +866,26 @@ class SSEManager {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
             useDagWorkflowStore.getState().onPlanTerminated(msg.payload as DagPlanTerminatedPayload);
           });
+          // ★ Phase 10：Plan 终止 → 标记任务 TERMINATED
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().setTaskState(
+              (msg.payload as Record<string, unknown>).plan_id as string || '',
+              'TERMINATED',
+            );
+          });
           break;
         }
 
         case DAG_WORKFLOW_EVENT_TYPE.BUDGET_EXHAUSTED: {
           import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
             useDagWorkflowStore.getState().onBudgetExhausted(msg.payload as DagBudgetExhaustedPayload);
+          });
+          // ★ Phase 10：预算耗尽 → 标记任务 BUDGET_EXHAUSTED
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().setTaskState(
+              (msg.payload as Record<string, unknown>).plan_id as string || '',
+              'BUDGET_EXHAUSTED',
+            );
           });
           break;
         }

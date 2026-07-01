@@ -158,6 +158,7 @@ from app.api.routers.mcp_local import router as mcp_local_router
 from app.api.routers.mcp_market import router as mcp_market_router
 from app.api.routers.mcp_skill import router as mcp_skill_router
 from app.api.routers.tool_config import router as tool_config_router
+from app.api.routers.workflow_command import router as workflow_command_router
 from app.config.crypto import CryptoService
 from app.config.event_bus import event_bus
 from app.config.settings import settings
@@ -1247,6 +1248,7 @@ app.include_router(mcp_local_router)
 app.include_router(mcp_skill_router)
 app.include_router(tool_config_router)
 app.include_router(gating_router)
+app.include_router(workflow_command_router)
 
 # 导入 health 路由 (避免循环导入)
 from app.api.health import router as health_router

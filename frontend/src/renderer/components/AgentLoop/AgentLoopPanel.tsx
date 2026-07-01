@@ -14,6 +14,7 @@ import React from 'react';
 import { useAgentLoopStore } from '../../stores/agentLoopStore';
 import { AgentStepTimeline } from './AgentStepTimeline';
 import { AgentFinalVerifyCard } from './AgentFinalVerifyCard';
+import { TaskControlBar } from '../DagWorkflow/TaskControlBar';
 import { IconAgentLoop } from './icons';
 import './AgentLoopPanel.css';
 
@@ -64,6 +65,9 @@ export const AgentLoopPanel: React.FC = () => {
 
   return (
     <div className={`al-panel al-panel--embedded${isRunning ? ' al-panel--running' : ''}`}>
+      {/* ═══ Phase 10: 任务控制栏 ═══ */}
+      <TaskControlBar />
+
       {/* ═══ Step 时间线 ═══ */}
       <div className="al-steps-container">
         <AgentStepTimeline

@@ -29,6 +29,7 @@ import './DagWorkflowPanel.css';
 export const DagWorkflowPanel: React.FC = () => {
   const activePlan = useDagWorkflowStore((state) => state.activePlan);
   const clearPlan = useDagWorkflowStore((state) => state.clearPlan);
+  const clearTaskState = useTaskStateStore((state) => state.clearTaskState);
 
   /**
    * 全局目标区域的展开/收起状态。
@@ -64,7 +65,10 @@ export const DagWorkflowPanel: React.FC = () => {
         </div>
         <button
           className="dag-panel-close-btn"
-          onClick={clearPlan}
+          onClick={() => {
+            clearPlan();
+            clearTaskState();
+          }}
           aria-label="关闭 DAG 面板"
           type="button"
         >
