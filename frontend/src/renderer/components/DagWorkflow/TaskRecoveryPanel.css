@@ -1,0 +1,178 @@
+/**
+ * Phase 10：任务恢复管理面板样式。
+ * 做什么：定义 TaskRecoveryPanel 组件的布局、进度条、按钮等样式。
+ */
+
+/* 恢复弹窗覆盖层 */
+.task-recovery-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: task-recovery-fade-in 0.2s ease;
+}
+
+@keyframes task-recovery-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 恢复弹窗容器 */
+.task-recovery-dialog {
+  background: #1a1a2e;
+  border: 1px solid rgba(124, 77, 255, 0.3);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: task-recovery-slide-in 0.25s ease;
+}
+
+@keyframes task-recovery-slide-in {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* 弹窗头部 */
+.task-recovery-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.task-recovery-icon {
+  font-size: 24px;
+}
+
+.task-recovery-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 弹窗主体 */
+.task-recovery-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 任务卡片 */
+.task-recovery-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* 进度条区域 */
+.task-recovery-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.task-recovery-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.task-recovery-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c4dff, #00e5ff);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.task-recovery-progress-text {
+  font-size: 11px;
+  font-family: 'Courier New', Courier, monospace;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* 任务详情 */
+.task-recovery-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.task-recovery-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.task-recovery-detail-label {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.task-recovery-detail-value {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.task-recovery-mono {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+}
+
+/* 操作按钮 */
+.task-recovery-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.task-recovery-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.task-recovery-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.task-recovery-btn.recover {
+  background: rgba(124, 77, 255, 0.15);
+  border-color: rgba(124, 77, 255, 0.3);
+  color: #b388ff;
+}
+
+.task-recovery-btn.recover:hover:not(:disabled) {
+  background: rgba(124, 77, 255, 0.25);
+}
+
+.task-recovery-btn.discard {
+  background: transparent;
+  border-color: rgba(255, 0, 60, 0.3);
+  color: #ff5252;
+}
+
+.task-recovery-btn.discard:hover:not(:disabled) {
+  background: rgba(255, 0, 60, 0.1);
+}

@@ -22,9 +22,12 @@ import type { DagNodeStatus, DagNodeType } from '../../shared/enum';
 export type DagPlanStatus =
   | 'planning'         // 全局 Plan 生成中
   | 'executing'        // Plan 执行中
+  | 'paused'           // ★ Phase 10 新增：任务暂停
+  | 'recovering'       // ★ Phase 10 新增：从中断恢复中
   | 'replanning'       // Plan 重构中
   | 'completed'        // 全部完成
   | 'terminated'       // 异常终止
+  | 'timed_out'        // ★ Phase 10 新增：超时终止
   | 'budget_exhausted'; // 预算耗尽
 
 /**
@@ -33,9 +36,12 @@ export type DagPlanStatus =
 export const DAG_PLAN_STATUS_LABEL: Record<DagPlanStatus, string> = {
   planning: '规划中',
   executing: '执行中',
+  paused: '已暂停',
+  recovering: '恢复中',
   replanning: '重新规划',
   completed: '已完成',
   terminated: '已终止',
+  timed_out: '已超时',
   budget_exhausted: '预算耗尽',
 };
 

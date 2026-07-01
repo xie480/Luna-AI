@@ -42,6 +42,12 @@ import {
   DagStepCompletedPayload,
   DagStepFailedPayload,
   DagToolsParallelDispatchedPayload,
+  TaskPausedPayload,
+  TaskResumedPayload,
+  TaskTimeoutPayload,
+  TaskRecoveryStartedPayload,
+  TaskRecoveryCompletedPayload,
+  TaskRecoveryFailedPayload,
 } from '../../shared/types';
 
 /**
@@ -896,6 +902,70 @@ class SSEManager {
           systemStore.addSystemLog(
             `[工具并行] ${(msg.payload as DagToolsParallelDispatchedPayload).tool_calls_count} 个工具并行调用`
           );
+          break;
+        }
+
+        // ============================================================
+        // Phase 10：任务状态机与中断恢复事件处理
+        // ============================================================
+
+        case DAG_WORKFLOW_EVENT_TYPE.TASK_PAUSED: {
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().onTaskPaused(msg.payload as TaskPausedPayload);
+          });
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanStatusChange('paused');
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.TASK_RESUMED: {
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().onTaskResumed(msg.payload as TaskResumedPayload);
+          });
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanStatusChange('executing');
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.TASK_TIMEOUT: {
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().onTaskTimeout(msg.payload as TaskTimeoutPayload);
+          });
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanStatusChange('timed_out');
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.TASK_RECOVERY_STARTED: {
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().onRecoveryStarted(msg.payload as TaskRecoveryStartedPayload);
+          });
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanStatusChange('recovering');
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.TASK_RECOVERY_COMPLETED: {
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().onRecoveryCompleted(msg.payload as TaskRecoveryCompletedPayload);
+          });
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanStatusChange('executing');
+          });
+          break;
+        }
+
+        case DAG_WORKFLOW_EVENT_TYPE.TASK_RECOVERY_FAILED: {
+          import('../stores/taskStateStore').then(({ useTaskStateStore }) => {
+            useTaskStateStore.getState().onRecoveryFailed(msg.payload as TaskRecoveryFailedPayload);
+          });
+          import('../stores/dagWorkflowStore').then(({ useDagWorkflowStore }) => {
+            useDagWorkflowStore.getState().onPlanStatusChange('terminated');
+          });
           break;
         }
 

@@ -8,7 +8,9 @@
  */
 import React, { useState } from 'react';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
+import { useTaskStateStore } from '../../stores/taskStateStore';
 import { DAG_PLAN_STATUS_LABEL } from '../../types/dagWorkflow';
+import { DagIconRefresh } from './DagIcons';
 import { DagIconTarget, DagIconCheckCircle, DagIconBarChart, DagIconWrench, DagIconFileText, DagIconChevronRight, DagIconChevronDown } from './DagIcons';
 import './DagGlobalInfoBar.css';
 
@@ -102,6 +104,23 @@ export const DagGlobalInfoBar: React.FC = () => {
           <span className="dag-progress-text">{budgetUsed}/{budgetMax}</span>
         </div>
       </div>
+
+      {/* Phase 10：恢复信息展示 */}
+      {useTaskStateStore.getState().recoveryInfo && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '4px 12px', fontSize: '11px',
+          color: '#7c4dff',
+          background: 'rgba(124, 77, 255, 0.06)',
+          borderBottom: '1px solid rgba(124, 77, 255, 0.15)',
+        }}>
+          <DagIconRefresh width="12" height="12" />
+          <span>从断点恢复</span>
+          <span style={{ fontFamily: "'Courier New', monospace", opacity: 0.7 }}>
+            快照版本: {useTaskStateStore.getState().recoveryInfo?.snapshotVersion}
+          </span>
+        </div>
+      )}
 
       {/* 约束条件折叠区域 */}
       {globalObjective.constraints && globalObjective.constraints.length > 0 && (

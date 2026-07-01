@@ -117,6 +117,9 @@ interface DagWorkflowStoreState {
   setCanvasOffset: (offset: { x: number; y: number }) => void;
   /** 清除当前 Plan */
   clearPlan: () => void;
+
+  /** ★ Phase 10 新增：直接修改 Plan 的状态（暂停/恢复/超时/恢复中） */
+  onPlanStatusChange: (newStatus: import('../types/dagWorkflow').DagPlanStatus) => void;
 }
 
 // ============================================================
@@ -900,5 +903,17 @@ export const useDagWorkflowStore = create<DagWorkflowStoreState>((set, get) => (
       searchQuery: '',
       canvasZoom: 1,
       canvasOffset: { x: 0, y: 0 },
+    }),
+
+  /** ★ Phase 10 新增：直接修改 Plan 的状态（暂停/恢复/超时/恢复中/终止）。 */
+  onPlanStatusChange: (newStatus) =>
+    set((state) => {
+      if (!state.activePlan) return {};
+      return {
+        activePlan: {
+          ...state.activePlan,
+          status: newStatus,
+        },
+      };
     }),
 }));

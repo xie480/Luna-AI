@@ -11,8 +11,10 @@
  */
 import React, { useState, useCallback } from 'react';
 import { useDagWorkflowStore } from '../../stores/dagWorkflowStore';
+import { useTaskStateStore } from '../../stores/taskStateStore';
 import { DagGlobalInfoBar } from './DagGlobalInfoBar';
 import { DagCanvas } from './DagCanvas';
+import { TaskControlBar } from './TaskControlBar';
 import { DagStateGroup } from './DagStateGroup';
 import { DagConnections } from './DagConnections';
 import { DagSearchBar } from './DagSearchBar';
@@ -69,6 +71,12 @@ export const DagWorkflowPanel: React.FC = () => {
           <DagIconX width="14" height="14" />
         </button>
       </div>
+
+      {/* ═══ Phase 10 任务控制栏 — 固定在顶部工具栏下方 ═══
+       * 做什么：当有活跃任务时展示任务状态指示器和取消/暂停/恢复操作按钮。
+       * 为什么这样做：任务控制栏需要始终可见，与 DAG 画布的滚动无关。
+       */}
+      <TaskControlBar />
 
       {activePlan ? (
         <>

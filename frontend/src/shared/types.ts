@@ -1253,3 +1253,102 @@ export interface DagToolsParallelDispatchedPayload {
   /** 最大并发数 */
   max_concurrency: number;
 }
+
+// ============================================================
+// Phase 10：任务状态机与中断恢复 SSE 事件载荷
+// ============================================================
+
+/**
+ * 任务暂停事件载荷 — 对应后端 EVT_TASK_PAUSED。
+ * 做什么：描述任务因用户手动暂停或情绪冻结而进入 PAUSED 状态的详细信息。
+ * 输入输出：task_id 标识当前任务，reason 说明暂停原因，is_emotion_freeze 标记是否为情绪冻结。
+ * 边界条件：is_emotion_freeze 为 true 时前端展示情感安抚气泡。
+ * 异常行为：无。
+ */
+export interface TaskPausedPayload {
+  task_id: string;
+  reason: string;
+  is_emotion_freeze?: boolean;
+  paused_at_ms: number;
+}
+
+/**
+ * 任务恢复事件载荷 — 对应后端 EVT_TASK_RESUMED。
+ * 做什么：描述任务从 PAUSED 或 RECOVERING 状态恢复到 RUNNING 状态的详细信息。
+ * 输入输出：task_id 标识当前任务，dag_state_snapshot 为恢复时的 DAG 引擎状态快照。
+ * 边界条件：dag_state_snapshot 可能为空对象。
+ * 异常行为：无。
+ */
+export interface TaskResumedPayload {
+  task_id: string;
+  dag_state_snapshot: Record<string, unknown>;
+}
+
+/**
+ * 任务超时事件载荷 — 对应后端 EVT_TASK_TIMEOUT。
+ * 做什么：描述任务因超过超时限制而自动终止的详细信息。
+ * 输入输出：task_id 标识当前任务，timeout_seconds 为超时阈值，terminated_states 为终止时已完成的 State 数量。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface TaskTimeoutPayload {
+  task_id: string;
+  timeout_seconds: number;
+  terminated_states: number;
+}
+
+/**
+ * 任务恢复启动事件载荷 — 对应后端 EVT_TASK_RECOVERY_STARTED。
+ * 做什么：描述系统崩溃重启后检测到未完成任务，开始恢复过程的详细信息。
+ * 输入输出：task_id 标识当前任务，snapshot_version 为快照版本号。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface TaskRecoveryStartedPayload {
+  task_id: string;
+  snapshot_version: number;
+}
+
+/**
+ * 任务恢复完成事件载荷 — 对应后端 EVT_TASK_RECOVERY_COMPLETED。
+ * 做什么：描述任务从断点恢复成功的详细信息。
+ * 输入输出：task_id 标识当前任务，recovered_cursor 为恢复到的 State 游标，recovered_states 为恢复的 State 数量。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface TaskRecoveryCompletedPayload {
+  task_id: string;
+  recovered_cursor: number;
+  recovered_states: number;
+}
+
+/**
+ * 任务恢复失败事件载荷 — 对应后端 EVT_TASK_RECOVERY_FAILED。
+ * 做什么：描述任务恢复失败的详细信息。
+ * 输入输出：task_id 标识当前任务，reason 说明失败原因。
+ * 边界条件：无。
+ * 异常行为：无。
+ */
+export interface TaskRecoveryFailedPayload {
+  task_id: string;
+  reason: string;
+}
+
+/**
+ * 未完成任务信息。
+ * 做什么：描述崩溃恢复时发现的未完成任务，用于 TaskRecoveryPanel 展示。
+ * 输入输出：由后端在启动时检测并通过 SSE 推送。
+ * 边界条件：cursor 可能为 0（任务尚未开始执行任何 State）。
+ * 异常行为：无。
+ */
+export interface UnfinishedTask {
+  taskId: string;
+  taskStatus: string;
+  planId: string;
+  createdAtMs: number;
+  savedAtMs: number;
+  cursor: number;
+  totalStates: number;
+  snapshotVersion: number;
+  triggerEvent: string;
+}

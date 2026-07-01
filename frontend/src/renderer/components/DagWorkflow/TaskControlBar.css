@@ -1,0 +1,252 @@
+/**
+ * Phase 10：任务控制栏样式。
+ * 做什么：定义 TaskControlBar 组件的布局、按钮、确认弹窗等样式。
+ * 为什么这样做：任务控制栏需要在 DAG 面板顶部提供清晰的操作入口，
+ *               按钮状态需要视觉上区分启用/禁用/危险操作。
+ */
+
+/* 任务控制栏容器 */
+.task-control-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  min-height: 44px;
+}
+
+/* 状态指示器 */
+.task-control-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.task-control-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.task-control-status-dot.running {
+  background: #00e5ff;
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+  animation: task-dot-pulse 1.5s ease-in-out infinite;
+}
+
+.task-control-status-dot.paused {
+  background: #ffab00;
+  box-shadow: 0 0 6px rgba(255, 171, 0, 0.5);
+}
+
+.task-control-status-dot.recovering {
+  background: #7c4dff;
+  box-shadow: 0 0 6px rgba(124, 77, 255, 0.5);
+  animation: task-dot-pulse 1s ease-in-out infinite;
+}
+
+.task-control-status-dot.timed-out {
+  background: #ff5252;
+  box-shadow: 0 0 6px rgba(255, 82, 82, 0.5);
+}
+
+.task-control-status-dot.terminated {
+  background: #ff003c;
+}
+
+.task-control-status-dot.succeeded {
+  background: #00e676;
+}
+
+.task-control-status-dot.default {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes task-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.task-control-status-text {
+  font-family: 'Courier New', Courier, monospace;
+  letter-spacing: 0.5px;
+}
+
+/* 控制按钮通用样式 */
+.task-control-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.task-control-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.task-control-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.task-control-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* 取消按钮 — 危险操作样式 */
+.task-control-btn.danger {
+  border-color: rgba(255, 0, 60, 0.3);
+  color: #ff003c;
+}
+
+.task-control-btn.danger:hover:not(:disabled) {
+  background: rgba(255, 0, 60, 0.1);
+  border-color: rgba(255, 0, 60, 0.5);
+}
+
+/* 暂停按钮样式 */
+.task-control-btn.pause {
+  border-color: rgba(255, 171, 0, 0.3);
+  color: #ffab00;
+}
+
+.task-control-btn.pause:hover:not(:disabled) {
+  background: rgba(255, 171, 0, 0.1);
+  border-color: rgba(255, 171, 0, 0.5);
+}
+
+/* 恢复按钮样式 */
+.task-control-btn.resume {
+  border-color: rgba(0, 230, 118, 0.3);
+  color: #00e676;
+}
+
+.task-control-btn.resume:hover:not(:disabled) {
+  background: rgba(0, 230, 118, 0.1);
+  border-color: rgba(0, 230, 118, 0.5);
+}
+
+/* 取消确认弹窗覆盖层 */
+.task-cancel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: task-overlay-fade-in 0.2s ease;
+}
+
+@keyframes task-overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 取消确认弹窗 */
+.task-cancel-dialog {
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 0, 60, 0.3);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: task-dialog-slide-in 0.25s ease;
+}
+
+@keyframes task-dialog-slide-in {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.task-cancel-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ff003c;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-cancel-dialog-body {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.task-cancel-warning {
+  color: #ffab00;
+  font-size: 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 171, 0, 0.08);
+  border-left: 3px solid #ffab00;
+  border-radius: 0 4px 4px 0;
+}
+
+.task-cancel-reason-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  outline: none;
+  margin-bottom: 16px;
+}
+
+.task-cancel-reason-input:focus {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.task-cancel-reason-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.task-cancel-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-cancel-dialog-actions .task-control-btn {
+  padding: 8px 16px;
+}
+
+/* 暂停态提示横幅 */
+.task-paused-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 171, 0, 0.08);
+  border-left: 3px solid #ffab00;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.task-paused-banner-time {
+  font-family: 'Courier New', Courier, monospace;
+  color: rgba(255, 171, 0, 0.8);
+}

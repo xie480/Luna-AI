@@ -247,6 +247,73 @@ export function getDagNodeIcon(nodeType: string): React.FC<IconProps> {
  * 做什么：统一节点类型到主题色的映射。
  * 为什么这样做：节点卡片边框、图标颜色都需要一致的视觉标识。
  */
+/**
+ * Phase 10：stop-circle 取消/停止图标。
+ */
+export const DagIconStopCircle: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <rect x="9" y="9" width="6" height="6" rx="1" />
+  </svg>
+);
+
+/**
+ * Phase 10：pause-circle 暂停图标。
+ */
+export const DagIconPauseCircle: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="10" y1="9" x2="10" y2="15" />
+    <line x1="14" y1="9" x2="14" y2="15" />
+  </svg>
+);
+
+/**
+ * Phase 10：play-circle 恢复/开始图标。
+ */
+export const DagIconPlayCircle: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <polygon points="10 8 16 12 10 16 10 8" />
+  </svg>
+);
+
+/**
+ * Phase 10：refresh-cw 恢复/刷新图标（用于恢复点标记）。
+ */
+export const DagIconRefresh: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+    <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+  </svg>
+);
+
+/**
+ * Phase 10：alert-octagon 警告/危险图标（用于取消确认弹窗）。
+ */
+export const DagIconAlertOctagon: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
+
+/**
+ * Phase 10：clock 超时图标。
+ */
+export const DagIconClock: React.FC<IconProps> = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+
+/**
+ * 根据节点类型返回对应的图标组件。
+ */
 export function getDagNodeColor(nodeType: string): string {
   switch (nodeType) {
     case 'resource_loading':

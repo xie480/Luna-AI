@@ -29,6 +29,10 @@ import './DagStepNode.css';
 interface DagStepNodeProps {
   /** Step 投影数据 */
   step: DagStepProjection;
+  /** ★ Phase 10 新增：是否从此 Step 恢复执行 */
+  isRecoveryPoint?: boolean;
+  /** ★ Phase 10 新增：恢复标记文案 */
+  recoveryLabel?: string;
 }
 
 /**
@@ -61,7 +65,13 @@ function getStatusIcon(status: string): React.FC<React.SVGProps<SVGSVGElement>> 
 /**
  * Step 可视化节点组件。
  */
-export const DagStepNode: React.FC<DagStepNodeProps> = ({ step }) => {
+import { DagIconRefresh } from './DagIcons';
+
+export const DagStepNode: React.FC<DagStepNodeProps> = ({
+  step,
+  isRecoveryPoint = false,
+  recoveryLabel = '从断点恢复',
+}) => {
   const expandedSteps = useDagWorkflowStore((s) => s.expandedSteps);
   const toggleStepExpanded = useDagWorkflowStore((s) => s.toggleStepExpanded);
   const searchQuery = useDagWorkflowStore((s) => s.searchQuery);
@@ -94,7 +104,20 @@ export const DagStepNode: React.FC<DagStepNodeProps> = ({ step }) => {
   );
 
   return (
-    <div className={`dag-step-node status-${step.status.toLowerCase()} ${isSearchMatch ? 'search-match' : ''}`}>
+    <div className={`dag-step-node status-${step.status.toLowerCase()} ${isSearchMatch ? 'search-match' : ''} ${isRecoveryPoint ? 'recovery-point' : ''}`}>
+      {/* Phase 10 恢复点标记 */}
+      {isRecoveryPoint && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '3px 8px', fontSize: '10px',
+          color: '#7c4dff', fontFamily: "'Courier New', monospace",
+          background: 'rgba(124, 77, 255, 0.08)',
+          borderBottom: '1px solid rgba(124, 77, 255, 0.15)',
+        }}>
+          <DagIconRefresh width="10" height="10" />
+          {recoveryLabel}
+        </div>
+      )}
       {/* Step 头部 */}
       <div
         className="dag-step-header"
