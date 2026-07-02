@@ -510,6 +510,71 @@ class SnapshotManager:
         except Exception:
             return 1
 
+    async def set_task_status(
+        self,
+        task_id: str,
+        status: str,
+        trace_id: str = "",
+    ) -> bool:
+        """轻量级更新 Redis 中任务状态。
+
+        做什么：更新 Redis task_state:{task_id} 中的 task_status 字段。
+                不修改 DagEngineState 全量数据，仅更新状态标记。
+                用于外部命令（暂停/取消/恢复）的轻量级状态更新。
+
+        参数:
+            task_id: 任务 ID。
+            status: 目标状态字符串（如 PAUSED / TERMINATED / RUNNING）。
+            trace_id: 追踪 ID（可选）。
+
+        返回:
+            True 表示更新成功，False 表示 Redis 不可用或更新失败。
+        """
+        if self._redis is None:
+            logger.warning(
+                f"SnapshotManager.set_task_status: Redis 不可用，"
+                f"跳过状态更新 task={task_id} status={status}"
+            )
+            return False
+
+        try:
+            client = self._get_redis_client()
+            redis_key = f"task_state:{task_id}"
+            raw = await client.get(redis_key)
+            if raw:
+                data = json.loads(raw) if isinstance(raw, str) else raw
+                data["task_status"] = status
+                if trace_id:
+                    data["trace_id"] = trace_id
+                await client.setex(
+                    redis_key,
+                    self._checkpoint_ttl,
+                    json.dumps(data, ensure_ascii=False, default=str),
+                )
+            else:
+                # 无已有快照，写入最小状态记录
+                await client.setex(
+                    redis_key,
+                    self._checkpoint_ttl,
+                    json.dumps({
+                        "task_status": status,
+                        "trace_id": trace_id,
+                        "saved_at_ms": int(time.time() * 1000),
+                    }, ensure_ascii=False, default=str),
+                )
+
+            logger.info(
+                f"SnapshotManager: 更新任务状态 task={task_id} "
+                f"status={status} trace_id={trace_id}"
+            )
+            return True
+        except Exception as exc:
+            logger.warning(
+                f"SnapshotManager: 更新任务状态失败 "
+                f"task={task_id} status={status} error={exc}"
+            )
+            return False
+
     def _get_redis_client(self) -> Any:
         """获取原始 Redis 客户端。
 

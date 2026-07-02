@@ -210,7 +210,8 @@ class ChatWorkflowService:
         await self.publish_plan_event(state, ChatWorkflowEventType.EVT_CHAT_PLAN_STARTED)
         # 创建并启动异步任务执行图
         task = asyncio.create_task(self.run_graph(state))
-        self.register_task(task)
+        # 注册 interaction_id 到 asyncio.Task 的映射，支持外部取消/暂停
+        self.register_task_with_id(interaction_id, task)
         # 返回状态信息
         return {"status": "streaming", "msgId": assistant_message_id, "interaction_id": interaction_id}
 
@@ -379,6 +380,72 @@ class ChatWorkflowService:
             return
         self.tasks.add(task)
         task.add_done_callback(self.tasks.discard)
+
+    # ============================================================
+    # task_id -> asyncio.Task 映射（用于外部取消/暂停时查找并中断对应协程）
+    # ============================================================
+
+    _task_id_to_asyncio_task: dict[str, asyncio.Task[Any]] = {}
+
+    def register_task_with_id(
+        self,
+        task_id: str,
+        task: asyncio.Task[Any],
+    ) -> None:
+        """注册 task_id 到 asyncio.Task 的映射。
+
+        做什么：将 graph run 的 task_id 与 asyncio.Task 关联，
+                供 workflow_command 通过 task_id 查找并取消/暂停对应协程。
+
+        参数:
+            task_id: 任务 ID（由上层调用方生成）。
+            task: asyncio.Task 实例。
+        """
+        self._task_id_to_asyncio_task[task_id] = task
+        self.tasks.add(task)
+        task.add_done_callback(lambda t: self._unregister_task_id(task_id, t))
+
+    def _unregister_task_id(self, task_id: str, _task: object) -> None:
+        """task 完成后自动清理 mapping 中的条目。"""
+        self._task_id_to_asyncio_task.pop(task_id, None)
+        self.tasks.discard(_task)  # type: ignore[arg-type]
+
+    async def cancel_task_run(self, task_id: str) -> bool:
+        """通过 task_id 查找并取消正在运行的 LangGraph 协程。
+
+        做什么：
+        1. 从 _task_id_to_asyncio_task 查找 task_id 对应的 asyncio.Task。
+        2. 如果找到，调用 task.cancel() 取消执行中的 ainvoke。
+        3. 如果找不到，返回 False（可能 task 已执行完毕）。
+
+        参数:
+            task_id: 任务 ID。
+
+        返回:
+            True 表示取消成功，False 表示未找到对应 task。
+        """
+        task = self._task_id_to_asyncio_task.get(task_id)
+        if task is None:
+            logger.warning(
+                f"[ChatWorkflow] 未找到 task_id={task_id} 对应的运行中协程，"
+                f"可能已执行完毕或 task_id 不存在"
+            )
+            return False
+
+        cancelled = task.cancel()
+        if cancelled:
+            logger.info(
+                f"[ChatWorkflow] 已取消协程 task_id={task_id}"
+            )
+        else:
+            logger.warning(
+                f"[ChatWorkflow] 协程取消失败（可能已完成）task_id={task_id}"
+            )
+        return cancelled
+
+    def get_running_task_id_set(self) -> set[str]:
+        """返回当前所有正在运行的 task_id 集合。"""
+        return set(self._task_id_to_asyncio_task.keys())
 
 
 def current_time_ms() -> int:
