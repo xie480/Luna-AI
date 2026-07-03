@@ -12,6 +12,36 @@ import {
 } from './enum';
 
 /**
+ * 引用来源数据结构
+ */
+export interface LongAnswerCitation {
+  citation_id?: number | string;
+  document_id?: string;
+  document_name?: string;
+  chunk_id?: string;
+  content?: string;
+  score?: number;
+  source_type?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * 长回答单项数据结构
+ */
+export interface LongAnswerItem {
+  id: string;
+  sessionId: string;
+  interactionMessageId: string;
+  status: 'PENDING' | 'GENERATING' | 'SUMMARY_GENERATING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  title: string;
+  markdown: string;
+  shortSummary: string;
+  errorMessage?: string;
+  citations?: LongAnswerCitation[];
+  updatedAt: number;
+}
+
+/**
  * WebSocket 消息类型枚举值类型。
  * 做什么：从 [`WS_MSG_TYPE`](frontend/src/shared/enum.ts) 常量对象中提取类型。
  * 为什么这样做：确保类型定义与共享常量保持一致，避免手写联合类型漂移。
@@ -135,6 +165,11 @@ export interface ErrorPayload {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  metadata?: Record<string, unknown> & {
+    hasLongAnswer?: boolean;
+    longAnswerId?: string;
+    longAnswerStatus?: string;
+  };
 }
 
 /**
@@ -242,6 +277,55 @@ export interface ChatUnifiedResponsePayload {
    * 不加入聊天历史记录和近期记忆。
    */
   skip_persistence: boolean;
+}
+
+/**
+ * 长回答创建事件 Payload
+ */
+export interface LongAnswerCreatedPayload {
+  long_answer_id: string;
+  session_id: string;
+  interaction_message_id: string;
+}
+
+/**
+ * 长回答流式数据事件 Payload
+ */
+export interface LongAnswerChunkPayload {
+  long_answer_id: string;
+  seq: number;
+  chunk: string;
+}
+
+/**
+ * 长回答状态更新事件 Payload
+ */
+export interface LongAnswerStatusPayload {
+  long_answer_id: string;
+  status: 'PENDING' | 'GENERATING' | 'SUMMARY_GENERATING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  title?: string;
+  short_summary?: string;
+  error_message?: string;
+  citations?: LongAnswerCitation[];
+}
+
+/**
+ * 长回答完成事件 Payload
+ */
+export interface LongAnswerCompletedPayload {
+  long_answer_id: string;
+  markdown: string;
+  title: string;
+  short_summary: string;
+  citations?: LongAnswerCitation[];
+}
+
+/**
+ * 长回答失败事件 Payload
+ */
+export interface LongAnswerFailedPayload {
+  long_answer_id: string;
+  error_message: string;
 }
 
 /**

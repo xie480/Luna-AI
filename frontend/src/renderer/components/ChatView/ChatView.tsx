@@ -24,6 +24,7 @@ import { createErrorToast } from '../../stores/errorToastStore';
 import { reportError } from '../../services/errorLogService';
 import { useSystemStore } from '../../stores/systemStore';
 import './ChatView.css';
+import { LongAnswerPanel } from '../LongAnswerPanel/LongAnswerPanel';
 
 /**
  * 聊天视图组件
@@ -93,6 +94,9 @@ export const ChatView: React.FC = () => {
 
   return (
     <div className="chat-view">
+      {/* 长回答面板 z-index: 9990 */}
+      <LongAnswerPanel />
+
       {/* 背景层 z-index: 0 */}
       <BackgroundLayer />
 
@@ -121,6 +125,11 @@ export const ChatView: React.FC = () => {
           <InputArea />
         </ErrorBoundary>
       </div>
+
+      {/* 长回答面板 (最高层级) */}
+      <ErrorBoundary source="long_answer_panel">
+        <LongAnswerPanel />
+      </ErrorBoundary>
     </div>
   );
 };

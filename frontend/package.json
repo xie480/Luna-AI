@@ -17,10 +17,15 @@
     "@monaco-editor/react": "^4.7.0",
     "framer-motion": "^12.40.0",
     "gsap": "^3.15.0",
+    "mermaid": "^11.16.0",
     "pixi-live2d-display": "^0.4.0",
     "pixi.js": "^6.5.10",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
     "zustand": "^4.5.2"
   },
   "devDependencies": {

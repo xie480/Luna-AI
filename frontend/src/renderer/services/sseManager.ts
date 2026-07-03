@@ -332,6 +332,14 @@ class SSEManager {
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_PLAN_COMPLETED);
     // EVT_CHAT_STATUS — Chat 状态通知（来自 ChatStatusPublisher）
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_CHAT_STATUS);
+
+    // === 长回答 (Long Answer) 事件 ===
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_LONG_ANSWER_CREATED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_LONG_ANSWER_CHUNK);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_LONG_ANSWER_STATUS);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_LONG_ANSWER_COMPLETED);
+    this.registerStructuredEventListener(WS_MSG_TYPE.EVT_LONG_ANSWER_FAILED);
+
     // === Phase 13：Gating 鉴权事件（Python AI Service -> Electron） ===
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_TOOL_AUTH_REQUIRED);
     this.registerStructuredEventListener(WS_MSG_TYPE.EVT_PENDING_AUTHS_SYNC);
@@ -663,6 +671,68 @@ class SSEManager {
           break;
         }
   
+        // ============================================================
+        // 长回答 (Long Answer) 事件处理
+        // ============================================================
+        case WS_MSG_TYPE.EVT_LONG_ANSWER_CREATED: {
+          import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
+            const payload = msg.payload as any;
+            const longAnswerId = payload.long_answer_id;
+            // Provide a bare item so the panel can open immediately
+            useLongAnswerStore.getState().appendChunk(longAnswerId, 0, '');
+            useLongAnswerStore.getState().bindMessage(payload.interaction_message_id, longAnswerId);
+            useLongAnswerStore.getState().openPanel(longAnswerId);
+          });
+          break;
+        }
+
+        case WS_MSG_TYPE.EVT_LONG_ANSWER_CHUNK: {
+          import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
+            const payload = msg.payload as any;
+            useLongAnswerStore.getState().appendChunk(payload.long_answer_id, payload.seq, payload.chunk);
+          });
+          break;
+        }
+
+        case WS_MSG_TYPE.EVT_LONG_ANSWER_STATUS: {
+          import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
+            const payload = msg.payload as any;
+            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, {
+              status: payload.status,
+              title: payload.title,
+              shortSummary: payload.short_summary,
+              errorMessage: payload.error_message,
+              citations: payload.citations,
+            });
+          });
+          break;
+        }
+
+        case WS_MSG_TYPE.EVT_LONG_ANSWER_COMPLETED: {
+          import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
+            const payload = msg.payload as any;
+            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, {
+              status: 'COMPLETED',
+              markdown: payload.markdown,
+              title: payload.title,
+              shortSummary: payload.short_summary,
+              citations: payload.citations,
+            });
+          });
+          break;
+        }
+
+        case WS_MSG_TYPE.EVT_LONG_ANSWER_FAILED: {
+          import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
+            const payload = msg.payload as any;
+            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, {
+              status: 'FAILED',
+              errorMessage: payload.error_message,
+            });
+          });
+          break;
+        }
+
         // ============================================================
         // Phase 13：权限治理与前端 Gating 事件处理
         // ============================================================
