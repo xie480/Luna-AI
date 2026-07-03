@@ -319,10 +319,26 @@ class MainChatLlmNode(ChatWorkflowNode):
                                 chunk_count=md_chunk_seq,
                                 token_count=len(md_content_accumulated) // 2 # 简易估算
                             )
+                            from app.llm.client import compression_llm_client
+                            from app.types.constants import Role
+                            
+                            generated_title = "Luna 的回答"
+                            if summary_accumulated:
+                                title_prompt = f"请为以下内容提取一个不超过 15 个字的简短标题，不要包含任何标点符号：\n\n{summary_accumulated}"
+                                try:
+                                    generated_title = await compression_llm_client.summarize(
+                                        messages=[{"role": Role.USER.value, "content": title_prompt}],
+                                        response_format={"type": "text"},
+                                        timeout=10.0
+                                    )
+                                    generated_title = generated_title.strip()
+                                except Exception as e:
+                                    logger.warning(f"生成长回答标题失败: {e}")
+
                             await long_answer_repo.update_summary(
                                 long_answer_model.id,
                                 summary_accumulated,
-                                title="整理完毕"
+                                title=generated_title
                             )
                             await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.COMPLETED.value)
                             
@@ -332,7 +348,7 @@ class MainChatLlmNode(ChatWorkflowNode):
                                 state.generation_state.assistant_message_id,
                                 long_answer_model.id,
                                 summary_accumulated,
-                                title="整理完毕",
+                                title=generated_title,
                                 status=LongAnswerStatus.COMPLETED.value
                             )
                             

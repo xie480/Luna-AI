@@ -97,6 +97,13 @@ class LongAnswerStatus(str, Enum):
     RECOVERABLE_FAILED = "RECOVERABLE_FAILED"
 
 
+class AnswerMode(str, Enum):
+    """回答模式枚举。"""
+
+    SHORT = "short"
+    LONG = "long"
+
+
 class UserProfileCategory(str, Enum):
     """用户画像类别枚举。"""
 
