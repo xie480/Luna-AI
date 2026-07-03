@@ -65,6 +65,10 @@ class ChatInputPayload(BaseModel):
         default="streaming",
         description="LLM 回复模式：'streaming' 为流式逐句返回，'unified' 为非流式统一响应。",
     )
+    answer_mode: str = Field(
+        default="short",
+        description="前端用户选择的回答模式开关，short 为短回答，long 为长回答。",
+    )
 
 
 class ChatSessionState(BaseModel):

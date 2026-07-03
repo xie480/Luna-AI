@@ -229,10 +229,20 @@ class Manager:
             h_assistant_content = h.get("assistantContent", "") if isinstance(h, dict) else getattr(h, "assistantContent", "")
             h_thought = h.get("thought", "") if isinstance(h, dict) else getattr(h, "thought", "")
             h_emotion = h.get("emotion", "") if isinstance(h, dict) else getattr(h, "emotion", "")
+            # 处理关联长回答摘要
+            msg_id = h.get("msgId", "") if isinstance(h, dict) else getattr(h, "msgId", "")
+            long_answer_summary = ""
+            if msg_id:
+                from app.repository.long_answer_cache import LongAnswerSummaryCache
+                summary_data = await LongAnswerSummaryCache.get_summary(session_id, msg_id)
+                if summary_data and "summary" in summary_data:
+                    long_answer_summary = summary_data["summary"]
             
             context_parts.append(f"[对话 {i+1}]\n")
             context_parts.append(f"用户: {h_user_content}\n")
             context_parts.append(f"Luna: {h_assistant_content}\n")
+            if long_answer_summary:
+                context_parts.append(f"(关联长回答小总结: {long_answer_summary})\n")
             if h_thought:
                 context_parts.append(f"(内心独白: {h_thought})\n")
             if h_emotion:

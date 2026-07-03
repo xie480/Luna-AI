@@ -136,6 +136,7 @@ class ChatWorkflowService:
         timezone: str = CHAT_WORKFLOW_DEFAULT_TIMEZONE,
         llm_response_mode: str = "unified",
         chat_mode: ChatMode = ChatMode.DAILY_CHAT,
+        answer_mode: str = "short",
     ) -> dict[str, str]:
         """
         启动聊天工作流（支持普通模式与闲聊模式）。
@@ -203,6 +204,7 @@ class ChatWorkflowService:
                 tts_enabled=tts_enabled,
                 tts_language=tts_language,
                 llm_response_mode=llm_response_mode,
+                answer_mode=answer_mode,
             ),
             generation_state=ChatGenerationState(assistant_message_id=assistant_message_id),
         )

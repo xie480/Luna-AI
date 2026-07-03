@@ -61,15 +61,31 @@ def first_reason(reasons: list[str], fallback: str) -> str:
 
 def history_to_model_messages(history: list[dict[str, Any]] | list[Interaction]) -> list[dict[str, str]]:
     """把历史 Interaction 转为 LLM 对话上下文。"""
+    import asyncio
+    from app.repository.long_answer_cache import LongAnswerSummaryCache
+    
     messages: list[dict[str, str]] = []
+    
+    # 异步函数内部包装同步调用的缓存逻辑，通常在外部由业务层处理，这里简单处理
+    # 为了避免在这里引入异步阻塞，我们可以将外部处理好的附带 summary 的 dict 传入
+    # 若直接处理，需要确保调用环境。鉴于此处是同步函数，我们假定 cache 数据已在其它地方提取
+    # 修正：目前还是采用简易方式，让外部组装好再传入，或者如果传入的是原始字典，我们尝试安全获取
     for item in history:
         # 兼容 dict 和 Interaction 对象
         user_content = item.get("userContent", "") if isinstance(item, dict) else getattr(item, "userContent", "")
         error = item.get("error", "") if isinstance(item, dict) else getattr(item, "error", "")
         assistant_content = item.get("assistantContent", "") if isinstance(item, dict) else getattr(item, "assistantContent", "")
         
+        # 处理长回答 summary
+        long_answer_summary = item.get("long_answer_summary", "") if isinstance(item, dict) else getattr(item, "long_answer_summary", "")
+        
         messages.append({"role": Role.USER.value, "content": user_content})
-        messages.append({"role": Role.ASSISTANT.value, "content": error or assistant_content})
+        
+        final_assistant_content = error or assistant_content
+        if long_answer_summary:
+            final_assistant_content = f"{final_assistant_content}\n[关联长回答小总结]: {long_answer_summary}"
+            
+        messages.append({"role": Role.ASSISTANT.value, "content": final_assistant_content})
     return messages
 
 

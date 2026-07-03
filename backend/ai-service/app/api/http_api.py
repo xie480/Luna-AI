@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.logger import logger
 from app.repository.chat_history_pg import ChatHistoryPGRepo
 from app.repository.chat_history_redis import ChatHistoryRedisRepo, Interaction
+from app.repository.long_answer_cache import LongAnswerSummaryCache
 from app.repository.models import InteractionModel
 from app.types.constants import (
     Role,
@@ -55,6 +56,7 @@ class ChatRequestPayload(BaseModel):
     # LLM 响应模式：streaming（流式） / unified（统一非流式），默认可由前端传入
     llmResponseMode: str = "unified"
     chatMode: str = "daily_chat"
+    answer_mode: str = "short"  # short / long
 
 
 async def get_trace_id(x_trace_id: Optional[str] = Header(None)) -> str:
@@ -149,6 +151,16 @@ async def sync_init_state(
     if redis_repo:
         try:
             _, recent_history = await redis_repo.get_context(session_id)
+            # 为最近的历史记录注入 summary
+            for item in recent_history:
+                msg_id = item.get("msgId", "") if isinstance(item, dict) else getattr(item, "msgId", "")
+                if msg_id:
+                    summary_data = await LongAnswerSummaryCache.get_summary(session_id, msg_id)
+                    if summary_data and "summary" in summary_data:
+                        if isinstance(item, dict):
+                            item["long_answer_summary"] = summary_data["summary"]
+                        else:
+                            setattr(item, "long_answer_summary", summary_data["summary"])
         except Exception as exc:
             logger.error(f"从 Redis 获取上下文失败 trace_id={trace_id} error={exc}")
     last_3_history = recent_history[-3:]
@@ -205,6 +217,7 @@ async def chat_request(
         tts_language=payload.ttsLanguage,
         llm_response_mode=payload.llmResponseMode,
         chat_mode=chat_mode_enum,
+        answer_mode=payload.answer_mode,
     )
     return APIResponse(
         type=WS_MSG_TYPE_CHAT_STREAM,

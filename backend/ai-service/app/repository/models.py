@@ -80,9 +80,44 @@ class InteractionModel(Base):
     thought: Mapped[str] = mapped_column(Text, nullable=False, default="")
     emotion: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    long_answer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    long_answer_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True # index:idx_interactions_session_id_created_at
     )
+
+
+class LongAnswerModel(Base):
+    """
+    对应 PostgreSQL 中的 long_answers 表
+    存储长回答场景的 Markdown 正文和摘要信息
+    """
+    __tablename__ = "long_answers"
+    __table_args__ = (
+        Index("idx_long_answers_interaction_message_id", "interaction_message_id", unique=True),
+        Index("idx_long_answers_session_id_created_at", "session_id", "created_at"),
+        Index("idx_long_answers_status", "status"),
+        Index("idx_long_answers_interaction_id", "interaction_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    interaction_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    interaction_message_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_message_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    short_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    answer_type: Mapped[str] = mapped_column(String(50), nullable=False, default="long_answer")
+    source_mode: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    meta_payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PromptTemplate(Base):

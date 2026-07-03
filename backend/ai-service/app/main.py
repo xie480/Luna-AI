@@ -1236,6 +1236,7 @@ async def global_exception_handler(request: StarletteRequest, exc: Exception):
 # 注册路由
 app.include_router(config_preset_router)
 app.include_router(error_log_router)
+app.include_router(long_answer_router)
 app.include_router(prompt_router)
 app.include_router(rag_router)
 app.include_router(telemetry_router)

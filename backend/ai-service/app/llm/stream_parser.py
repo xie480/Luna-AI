@@ -38,6 +38,14 @@ _THOUGHT_END_RE = re.compile(r'"\s*,\s*"(?:emotion|thought|reply)"')
 # 在 reply 内容后出现 ","<字段名>":" 模式时，表示 reply 字段已结束，后续文本不应再混入 reply_buffer
 # 覆盖 replay_translation 等 reply 之后可能的字段名
 _REPLY_END_RE = re.compile(r'"\s*,\s*"\w+"\s*:\s*"')
+
+# md_content 字段起始标记
+_MD_CONTENT_START_RE = re.compile(r'"md_content"\s*:\s*"')
+# md_content 字段结束标记（如果存在下一个字段如 summary）
+_MD_CONTENT_END_RE = re.compile(r'"\s*,\s*"(?:summary)"\s*:\s*"')
+
+# summary 字段起始标记
+_SUMMARY_START_RE = re.compile(r'"summary"\s*:\s*"')
 # 备用 reply 结束标记：处理 _pop_sentence 已消耗 reply 值末尾引号的情况。
 # 当 _SENTENCE_BOUNDARY_RE 的 [”’"\'）\]】》]? 吞掉了 reply 值末尾的 " 后，
 # 结束标记从 ","replay_translation":" 变为 ,"replay_translation":"（缺少前导 "），
@@ -72,10 +80,10 @@ class _ParseState(Enum):
 class StreamParser:
     """LLM 流式输出的状态机解析器。
 
-    解析顺序：check（跳过）→ thought（捕获并输出）→ emotion（提取）→ reply（切分）→ replay_translation（捕获）。
+    解析顺序：check（跳过）→ thought（捕获并输出）→ emotion（提取）→ reply（切分）→ replay_translation / md_content / summary（捕获）。
 
     当 disable_sentence_split=True 时，reply 字段不做断句切分，作为完整文本返回。
-    此模式用于非流式统一响应场景，后端拿到完整 LLM 回复后只需提取 thought/emotion/reply/replay_translation，
+    此模式用于非流式统一响应场景，后端拿到完整 LLM 回复后只需提取 thought/emotion/reply/replay_translation/md_content/summary，
     reply 的语义切分交由前端执行。
     """
 
@@ -98,6 +106,14 @@ class StreamParser:
         self._replay_translation_buffer: str = ""  # 累积 replay_translation 内容
         self._replay_translation_started: bool = False  # 是否已检测到 replay_translation 起始标记
         self._replay_translation_finished: bool = False  # 是否已完成 replay_translation 提取
+        
+        # --- md_content 和 summary 字段提取（长回答模式用） ---
+        self._md_content_buffer: str = ""
+        self._md_content_started: bool = False
+        self._md_content_finished: bool = False
+        self._summary_buffer: str = ""
+        self._summary_started: bool = False
+        self._summary_finished: bool = False
 
     def _emit_thought(self) -> list[tuple[str, str]]:
         """返回 thought 内容的输出消息（如果尚未发送且有内容）。"""
@@ -174,31 +190,90 @@ class StreamParser:
         # 否则 feed() 返回后 _search_buffer 被清空，replay_translation 文本将丢失。
         remaining_after_reply_end: str = ""
 
-        # ---- replay_translation 提取阶段（reply 结束后） ----
-        if self._reply_finished and not self._replay_translation_finished:
-            # 尚未检测到 replay_translation 起始，尝试在当前文本中定位
-            if not self._replay_translation_started:
-                m = _REPLAY_TRANSLATION_START_RE.search(text)
-                if m:
-                    self._replay_translation_started = True
-                    # 将起始标记后的内容累积
-                    trans_tail = text[m.end():]
-                    # 检查是否包含下一个字段的结束标记
-                    end_m = _REPLY_END_RE.search(trans_tail)
+        # ---- replay_translation, md_content, summary 提取阶段（reply 结束后） ----
+        if self._reply_finished:
+            # 1. 提取 md_content
+            if not self._md_content_finished:
+                if not self._md_content_started:
+                    m = _MD_CONTENT_START_RE.search(text)
+                    if m:
+                        self._md_content_started = True
+                        trans_tail = text[m.end():]
+                        end_m = _MD_CONTENT_END_RE.search(trans_tail)
+                        if end_m:
+                            self._md_content_buffer += trans_tail[:end_m.start()]
+                            self._md_content_finished = True
+                            msgs.append(("long_answer_chunk", trans_tail[:end_m.start()]))
+                        else:
+                            self._md_content_buffer += trans_tail
+                            msgs.append(("long_answer_chunk", trans_tail))
+                else:
+                    end_m = _MD_CONTENT_END_RE.search(text)
                     if end_m:
-                        self._replay_translation_buffer += trans_tail[:end_m.start()]
+                        self._md_content_buffer += text[:end_m.start()]
+                        self._md_content_finished = True
+                        msgs.append(("long_answer_chunk", text[:end_m.start()]))
+                    else:
+                        # 检查替代结束符以防万一
+                        end_m_alt = _REPLY_END_ALT_RE.search(text)
+                        if end_m_alt:
+                            self._md_content_buffer += text[:end_m_alt.start()]
+                            self._md_content_finished = True
+                            msgs.append(("long_answer_chunk", text[:end_m_alt.start()]))
+                        else:
+                            self._md_content_buffer += text
+                            msgs.append(("long_answer_chunk", text))
+
+            # 2. 提取 summary
+            if not self._summary_finished:
+                if not self._summary_started:
+                    m = _SUMMARY_START_RE.search(text)
+                    if m:
+                        self._summary_started = True
+                        trans_tail = text[m.end():]
+                        end_m = _REPLY_END_RE.search(trans_tail)
+                        if end_m:
+                            self._summary_buffer += trans_tail[:end_m.start()]
+                            self._summary_finished = True
+                        else:
+                            self._summary_buffer += trans_tail
+                else:
+                    end_m = _REPLY_END_RE.search(text)
+                    if end_m:
+                        self._summary_buffer += text[:end_m.start()]
+                        self._summary_finished = True
+                    else:
+                        end_m_alt = _REPLY_END_ALT_RE.search(text)
+                        if end_m_alt:
+                            self._summary_buffer += text[:end_m_alt.start()]
+                            self._summary_finished = True
+                        else:
+                            self._summary_buffer += text
+
+            # 3. 提取 replay_translation (原有逻辑)
+            if not self._replay_translation_finished:
+                if not self._replay_translation_started:
+                    m = _REPLAY_TRANSLATION_START_RE.search(text)
+                    if m:
+                        self._replay_translation_started = True
+                        trans_tail = text[m.end():]
+                        end_m = _REPLY_END_RE.search(trans_tail)
+                        if end_m:
+                            self._replay_translation_buffer += trans_tail[:end_m.start()]
+                            self._replay_translation_finished = True
+                        else:
+                            self._replay_translation_buffer += trans_tail
+                else:
+                    end_m = _REPLY_END_RE.search(text)
+                    if end_m:
+                        self._replay_translation_buffer += text[:end_m.start()]
                         self._replay_translation_finished = True
                     else:
-                        self._replay_translation_buffer += trans_tail
-            else:
-                # 已进入 replay_translation 内容读取阶段
-                end_m = _REPLY_END_RE.search(text)
-                if end_m:
-                    self._replay_translation_buffer += text[:end_m.start()]
-                    self._replay_translation_finished = True
-                else:
-                    self._replay_translation_buffer += text
-            return msgs
+                        self._replay_translation_buffer += text
+                        
+            # 如果处于任一后续字段提取状态，说明文本已被消耗，直接返回
+            if self._md_content_started or self._summary_started or self._replay_translation_started:
+                return msgs
 
         # ---- reply 提取阶段 ----
         if not self._reply_started:
@@ -287,12 +362,11 @@ class StreamParser:
                     if not self._disable_sentence_split:
                         msgs.extend(self._pop_sentence())
         
-        # 当 reply 刚结束且存在剩余文本时，递归调用自身以提取 replay_translation。
+        # 当 reply 刚结束且存在剩余文本时，递归调用自身以提取后续字段 (replay_translation, md_content, summary)。
         # 为什么这样做：reply 结束边界（_REPLY_END_RE 匹配的 ","replay_translation":" ）
-        # 已将 replay_translation 的字段名标记消耗在匹配中，但字段值尚未提取。
-        # 将剩余文本（包含 replay_translation 字段名 + 值）递归传入，使其进入
-        # 方法顶部的 replay_translation 提取分支，确保内容被正确累积到 _replay_translation_buffer。
-        if remaining_after_reply_end and self._reply_finished and not self._replay_translation_finished:
+        # 已将字段名标记消耗在匹配中，但字段值尚未提取。
+        # 将剩余文本递归传入，使其进入方法顶部的分支，确保内容被正确累积。
+        if remaining_after_reply_end and self._reply_finished:
             msgs.extend(self._process_emotion_reply(remaining_after_reply_end))
             
         return msgs
@@ -350,6 +424,13 @@ class StreamParser:
             trans = trans.replace('"}', '').replace('"', '').replace('}', '').strip()
             if trans:
                 msgs.append(("replay_translation", trans))
+                
+        # ---- 提取 summary ----
+        if self._summary_buffer:
+            summary = self._summary_buffer.strip()
+            summary = summary.replace('"}', '').replace('"', '').replace('}', '').strip()
+            if summary:
+                msgs.append(("summary", summary))
         
         # ---- 提取剩余 reply 内容 ----
         remaining = self._pending_prefix + self._reply_buffer
@@ -409,3 +490,9 @@ class StreamParser:
         self._replay_translation_buffer = ""
         self._replay_translation_started = False
         self._replay_translation_finished = False
+        self._md_content_buffer = ""
+        self._md_content_started = False
+        self._md_content_finished = False
+        self._summary_buffer = ""
+        self._summary_started = False
+        self._summary_finished = False

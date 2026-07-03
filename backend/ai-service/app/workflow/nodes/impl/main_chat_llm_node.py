@@ -79,6 +79,20 @@ class MainChatLlmNode(ChatWorkflowNode):
         from app.llm.client import llm_client
         from app.llm.stream_parser import StreamParser
         from app.tts import tts_client, map_emotion
+        from app.types.constants import (
+            WS_MSG_TYPE_EVT_LONG_ANSWER_CREATED,
+            WS_MSG_TYPE_EVT_LONG_ANSWER_CHUNK,
+            LongAnswerStatus,
+        )
+        from app.repository.long_answer_pg import LongAnswerPGRepo
+        from app.api.sse import sse_manager
+        
+        answer_mode = state.input_payload.answer_mode
+        long_answer_repo = None
+        if answer_mode == "long":
+            from app.infrastructure.postgres import postgres_client
+            session = postgres_client.session_factory()
+            long_answer_repo = LongAnswerPGRepo(session)
 
         started = time.time()
         history_dicts = history_to_model_messages(state.session_state.recent_messages)
@@ -90,10 +104,37 @@ class MainChatLlmNode(ChatWorkflowNode):
         retry_delay = 2.0
         attempt = 0
 
+        # 如果是长回答模式，先创建长回答记录，并推送面板开启事件
+        long_answer_model = None
+        if answer_mode == "long" and long_answer_repo is not None:
+            long_answer_model = await long_answer_repo.create_long_answer(
+                interaction_message_id=state.generation_state.assistant_message_id,
+                session_id=state.runtime.session_id,
+                title="Luna正在整理中……",
+                status=LongAnswerStatus.GENERATING.value,
+            )
+            await sse_manager.publish({
+                "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CREATED,
+                "trace_id": state.runtime.trace_id,
+                "payload": {
+                    "schema_version": "1.0",
+                    "long_answer_id": long_answer_model.id,
+                    "interaction_message_id": state.generation_state.assistant_message_id,
+                    "session_id": state.runtime.session_id,
+                    "status": "GENERATING",
+                    "title": "Luna正在整理中……"
+                }
+            })
+
         while attempt < max_retries:
             first_chunk = True
             parser = StreamParser(state.runtime.trace_id)
             sentence_queue: asyncio.Queue[str | None] = asyncio.Queue()
+            
+            # 长回答模式特有状态
+            md_content_accumulated = ""
+            summary_accumulated = ""
+            md_chunk_seq = 0
 
             # 启动 TTS 消费者任务
             async def tts_consumer():
@@ -193,6 +234,23 @@ class MainChatLlmNode(ChatWorkflowNode):
                         if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
                             state.generation_state.full_text += content
                             await sentence_queue.put(content)
+                        elif msg_type == "long_answer_chunk" and answer_mode == "long":
+                            md_content_accumulated += content
+                            md_chunk_seq += 1
+                            await sse_manager.publish({
+                                "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CHUNK,
+                                "trace_id": state.runtime.trace_id,
+                                "payload": {
+                                    "schema_version": "1.0",
+                                    "long_answer_id": long_answer_model.id if long_answer_model else "",
+                                    "interaction_message_id": state.generation_state.assistant_message_id,
+                                    "seq": md_chunk_seq,
+                                    "chunk": content,
+                                    "is_finished": False
+                                }
+                            })
+                        elif msg_type == "summary" and answer_mode == "long":
+                            summary_accumulated += content
                         else:
                             await handle_stream_piece(state, msg_type, content, False, self.dependencies.event_publisher)
                             
@@ -211,6 +269,23 @@ class MainChatLlmNode(ChatWorkflowNode):
                                     False,
                                     self.dependencies.event_publisher,
                                 )
+                            elif msg_type == "long_answer_chunk" and answer_mode == "long":
+                                md_content_accumulated += content
+                                md_chunk_seq += 1
+                                await sse_manager.publish({
+                                    "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CHUNK,
+                                    "trace_id": state.runtime.trace_id,
+                                    "payload": {
+                                        "schema_version": "1.0",
+                                        "long_answer_id": long_answer_model.id if long_answer_model else "",
+                                        "interaction_message_id": state.generation_state.assistant_message_id,
+                                        "seq": md_chunk_seq,
+                                        "chunk": content,
+                                        "is_finished": True
+                                    }
+                                })
+                            elif msg_type == "summary" and answer_mode == "long":
+                                summary_accumulated += content
                             else:
                                 await handle_stream_piece(
                                     state,
@@ -233,6 +308,46 @@ class MainChatLlmNode(ChatWorkflowNode):
                             error=chunk_data.get("error") or "",
                         )
                         state.generation_state.finish_reason = chunk_data.get("finish_reason") or "stop"
+                        
+                        if answer_mode == "long" and long_answer_repo is not None and long_answer_model is not None:
+                            from app.repository.long_answer_cache import LongAnswerSummaryCache
+                            from app.types.constants import WS_MSG_TYPE_EVT_LONG_ANSWER_COMPLETED
+                            
+                            await long_answer_repo.update_content(
+                                long_answer_model.id,
+                                md_content_accumulated,
+                                chunk_count=md_chunk_seq,
+                                token_count=len(md_content_accumulated) // 2 # 简易估算
+                            )
+                            await long_answer_repo.update_summary(
+                                long_answer_model.id,
+                                summary_accumulated,
+                                title="整理完毕"
+                            )
+                            await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.COMPLETED.value)
+                            
+                            # 写入 Redis 缓存
+                            await LongAnswerSummaryCache.set_summary(
+                                state.runtime.session_id,
+                                state.generation_state.assistant_message_id,
+                                long_answer_model.id,
+                                summary_accumulated,
+                                title="整理完毕",
+                                status=LongAnswerStatus.COMPLETED.value
+                            )
+                            
+                            # 发送完成事件
+                            await sse_manager.publish({
+                                "type": WS_MSG_TYPE_EVT_LONG_ANSWER_COMPLETED,
+                                "trace_id": state.runtime.trace_id,
+                                "payload": {
+                                    "schema_version": "1.0",
+                                    "long_answer_id": long_answer_model.id,
+                                    "interaction_message_id": state.generation_state.assistant_message_id,
+                                    "status": "COMPLETED"
+                                }
+                            })
+
                         break
                         
                 # 如果退出循环时消费者任务还在跑，尝试中止
@@ -277,7 +392,26 @@ class MainChatLlmNode(ChatWorkflowNode):
                         self.dependencies.event_publisher,
                         error=str(exc),
                     )
+                    
+                    if answer_mode == "long" and long_answer_repo is not None and long_answer_model is not None:
+                        from app.types.constants import WS_MSG_TYPE_EVT_LONG_ANSWER_FAILED
+                        await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.FAILED.value, error_message=str(exc))
+                        await sse_manager.publish({
+                            "type": WS_MSG_TYPE_EVT_LONG_ANSWER_FAILED,
+                            "trace_id": state.runtime.trace_id,
+                            "payload": {
+                                "schema_version": "1.0",
+                                "long_answer_id": long_answer_model.id,
+                                "interaction_message_id": state.generation_state.assistant_message_id,
+                                "status": "FAILED",
+                                "error": str(exc)
+                            }
+                        })
+                        
                     raise RuntimeError(f"主模型生成失败(已重试 {attempt} 次): {exc}") from exc
+        
+        if long_answer_repo is not None and 'session' in locals() and hasattr(session, 'close'):
+            await session.close()
 
     # ================================================================
     # 非流式统一响应模式

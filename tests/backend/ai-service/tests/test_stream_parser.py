@@ -12,9 +12,10 @@ StreamParser 单元测试
 import pytest
 from app.llm.stream_parser import StreamParser
 
-# 新 JSON 格式：check -> thought -> emotion -> reply
+# 新 JSON 格式：check -> thought -> emotion -> reply -> (md_content -> summary)
 # 用于测试的标准 JSON 片段
 JSON_CHECK_THOUGHT_EMOTION_REPLY = '{"check":"test","thought":"inner monologue","emotion":"Happy","reply":"你好。"}'
+JSON_LONG_ANSWER = '{"check":"test","thought":"inner","emotion":"Happy","reply":"给你整理好了。","md_content":"# 标题\\n\\n正文内容","summary":"摘要内容"}'
 
 
 class TestStreamParser:
@@ -423,6 +424,50 @@ class TestStreamParserReplayTranslation:
             f"无 emotion 字段时也应提取到 replay_translation，实际 msgs={flush_msgs}"
         )
         assert "こんにちは" in replay_trans[0]
+
+
+class TestStreamParserLongAnswer:
+    """长回答字段解析测试"""
+
+    def test_long_answer_feed(self):
+        """测试 feed 过程中正确提取 md_content 碎片"""
+        parser = StreamParser(trace_id="test-long-001")
+        msgs = parser.feed('{"check":"c","thought":"t","emotion":"Smile","reply":"好了。","md_content":"# Title')
+        
+        reply_chunks = [c for t, c in msgs if t == "reply_chunk"]
+        md_chunks = [c for t, c in msgs if t == "long_answer_chunk"]
+        
+        assert len(reply_chunks) >= 1
+        assert "好了" in reply_chunks[0]
+        assert len(md_chunks) == 1
+        assert md_chunks[0] == "# Title"
+
+    def test_long_answer_flush(self):
+        """测试 flush 时正确提取 md_content 剩余部分和 summary"""
+        parser = StreamParser(trace_id="test-long-002")
+        parser.feed(JSON_LONG_ANSWER)
+        flush_msgs = parser.flush()
+        
+        md_chunks = [c for t, c in flush_msgs if t == "long_answer_chunk"]
+        summary = [c for t, c in flush_msgs if t == "summary"]
+        
+        assert len(summary) == 1
+        assert summary[0] == "摘要内容"
+        
+    def test_long_answer_disable_split(self):
+        """测试非流式模式下长回答的提取"""
+        parser = StreamParser(trace_id="test-long-003", disable_sentence_split=True)
+        parser.feed(JSON_LONG_ANSWER)
+        flush_msgs = parser.flush()
+        
+        reply_chunks = [c for t, c in flush_msgs if t == "reply_chunk"]
+        md_chunks = [c for t, c in flush_msgs if t == "long_answer_chunk"]
+        summary = [c for t, c in flush_msgs if t == "summary"]
+        
+        assert len(reply_chunks) == 1
+        assert reply_chunks[0] == "给你整理好了。"
+        assert len(summary) == 1
+        assert summary[0] == "摘要内容"
 
 
 if __name__ == "__main__":

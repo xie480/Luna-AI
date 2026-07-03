@@ -152,6 +152,7 @@ class ContextGovernanceNode(ChatWorkflowNode):
             PROMPT_VARIABLE_TTS_LANGUAGE: state.input_payload.tts_language,
             # JSON 格式重试错误信息：首次调用为空，重试时由 MainChatLlmNode 设置
             PROMPT_VARIABLE_RETRY_ERROR_INFO: state.prompt_state.retry_error_info,
+            "ANSWER_MODE": state.input_payload.answer_mode,
         }
 
         try:
