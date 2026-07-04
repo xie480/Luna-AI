@@ -387,6 +387,8 @@ async def lifespan(app: FastAPI):
     redis_client = None
     try:
         redis_client = RedisClient(settings.redis_addr, settings.redis_password, settings.redis_db)
+        from app.repository.long_answer_cache import LongAnswerSummaryCache
+        LongAnswerSummaryCache.set_client(redis_client)
     except Exception as e:
         logger.warning(f"Redis 连接失败，将使用降级模式运行 error={e}")
 
