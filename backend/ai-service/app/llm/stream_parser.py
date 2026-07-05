@@ -41,11 +41,14 @@ _REPLY_END_RE = re.compile(r'"\s*,\s*"\w+"\s*:\s*"')
 
 # md_content 字段起始标记
 _MD_CONTENT_START_RE = re.compile(r'"md_content"\s*:\s*"')
-# md_content 字段结束标记（如果存在下一个字段如 summary）
-_MD_CONTENT_END_RE = re.compile(r'"\s*,\s*"(?:summary)"\s*:\s*"')
+# md_content 字段结束标记（如果存在下一个字段如 summary 或 title）
+_MD_CONTENT_END_RE = re.compile(r'"\s*,\s*"(?:summary|title)"\s*:\s*"')
 
 # summary 字段起始标记
 _SUMMARY_START_RE = re.compile(r'"summary"\s*:\s*"')
+
+# title 字段起始标记
+_TITLE_START_RE = re.compile(r'"title"\s*:\s*"')
 # 备用 reply 结束标记：处理 _pop_sentence 已消耗 reply 值末尾引号的情况。
 # 当 _SENTENCE_BOUNDARY_RE 的 [”’"\'）\]】》]? 吞掉了 reply 值末尾的 " 后，
 # 结束标记从 ","replay_translation":" 变为 ,"replay_translation":"（缺少前导 "），
@@ -250,7 +253,33 @@ class StreamParser:
                         else:
                             self._summary_buffer += text
 
-            # 3. 提取 replay_translation (原有逻辑)
+            # 3. 提取 title
+            if not self._title_finished:
+                if not self._title_started:
+                    m = _TITLE_START_RE.search(text)
+                    if m:
+                        self._title_started = True
+                        trans_tail = text[m.end():]
+                        end_m = _REPLY_END_RE.search(trans_tail)
+                        if end_m:
+                            self._title_buffer += trans_tail[:end_m.start()]
+                            self._title_finished = True
+                        else:
+                            self._title_buffer += trans_tail
+                else:
+                    end_m = _REPLY_END_RE.search(text)
+                    if end_m:
+                        self._title_buffer += text[:end_m.start()]
+                        self._title_finished = True
+                    else:
+                        end_m_alt = _REPLY_END_ALT_RE.search(text)
+                        if end_m_alt:
+                            self._title_buffer += text[:end_m_alt.start()]
+                            self._title_finished = True
+                        else:
+                            self._title_buffer += text
+
+            # 4. 提取 replay_translation (原有逻辑)
             if not self._replay_translation_finished:
                 if not self._replay_translation_started:
                     m = _REPLAY_TRANSLATION_START_RE.search(text)
@@ -272,7 +301,7 @@ class StreamParser:
                         self._replay_translation_buffer += text
                         
             # 如果处于任一后续字段提取状态，说明文本已被消耗，直接返回
-            if self._md_content_started or self._summary_started or self._replay_translation_started:
+            if self._md_content_started or self._summary_started or self._title_started or self._replay_translation_started:
                 return msgs
 
         # ---- reply 提取阶段 ----
@@ -431,6 +460,13 @@ class StreamParser:
             summary = summary.replace('"}', '').replace('"', '').replace('}', '').strip()
             if summary:
                 msgs.append(("summary", summary))
+
+        # ---- 提取 title ----
+        if self._title_buffer:
+            title = self._title_buffer.strip()
+            title = title.replace('"}', '').replace('"', '').replace('}', '').strip()
+            if title:
+                msgs.append(("title", title))
         
         # ---- 提取剩余 reply 内容 ----
         remaining = self._pending_prefix + self._reply_buffer
@@ -496,3 +532,6 @@ class StreamParser:
         self._summary_buffer = ""
         self._summary_started = False
         self._summary_finished = False
+        self._title_buffer = ""
+        self._title_started = False
+        self._title_finished = False
