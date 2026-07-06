@@ -56,6 +56,9 @@ class PromptCategory(str, Enum):
     # --- Phase 12 新增：多轮策略与评价 ---
     MCP_SKILL_MEMORY = "mcp_skill_memory"
     MCP_EVALUATION = "mcp_evaluation"
+    
+    # --- JSON 重试 Prompt 分类 ---
+    CHAT_JSON_RETRY = "chat_json_retry"
 
     # --- Phase 9 新增：DAG 引擎 Prompt 分类 ---
     INPUT_RECONSTRUCTION_SIMPLIFIED = "input_reconstruction_simplified"

@@ -596,15 +596,12 @@ class MainChatLlmNode(ChatWorkflowNode):
                     else:
                         error_detail += " 输出的 JSON 格式有误（如字符串未正确引号包围、字段名拼写错误等）。"
                     error_detail += " 原始输出片段：" + raw_response.strip()[:500]
-
-                state.prompt_state.retry_error_info = (
-                    "## 上一轮输出的格式错误\n"
-                    f"{error_detail}\n\n"
-                    "## 修正要求\n"
-                    "请严格遵循第三章输出格式宪法，仅输出一个合法的单行 JSON 对象。"
-                    " 字段必须精确拼写为：check、thought、emotion、reply。"
+    
+                state.prompt_state.retry_error_info = await self.dependencies.prompt_manager.assemble_prompt(
+                    PromptCategory.CHAT_JSON_RETRY,
+                    {"retry_error_info": error_detail},
                 )
-
+    
                 if attempt < max_retries - 1:
                     logger.warning(
                         "[TraceID:{}] 第 {} 次尝试解析失败，将重试注入修正指令。错误：{}",
