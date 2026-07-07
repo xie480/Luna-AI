@@ -599,7 +599,10 @@ class MainChatLlmNode(ChatWorkflowNode):
     
                 state.prompt_state.retry_error_info = await self.dependencies.prompt_manager.assemble_prompt(
                     PromptCategory.CHAT_JSON_RETRY,
-                    {"retry_error_info": error_detail},
+                    {
+                        "retry_error_info": error_detail,
+                        "raw_response": raw_response
+                    },
                 )
     
                 if attempt < max_retries - 1:
