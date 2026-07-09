@@ -146,6 +146,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routers.api_config_preset import router as config_preset_router
 from app.api.routers.error_log import router as error_log_router
+from app.api.routers.long_answer_api import router as long_answer_router
 from app.api.routers.gating import router as gating_router
 from app.api.routers.prompt import router as prompt_router
 from app.api.routers.rag import router as rag_router
