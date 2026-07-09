@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useLongAnswerStore } from '../../../src/renderer/stores/longAnswerStore';
+import { useLongAnswerStore } from '../../../../frontend/src/renderer/stores/longAnswerStore';
 
 describe('LongAnswerStore', () => {
   beforeEach(() => {

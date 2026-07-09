@@ -90,7 +90,9 @@ interface SystemState {
    * 边界条件：默认 DAILY_CHAT（深度日常助理），切换后持久化到 localStorage。
    */
   chatMode: ChatMode;
-
+  
+  // 回答模式
+  answerMode: 'short' | 'long';
 
   // === 可观测性相关增强 ===
   // 前端异常缓冲区（环形缓冲，最多保留 100 条）
@@ -142,6 +144,8 @@ interface SystemState {
    * 做什么：切换日常助理/极速闲聊模式，并持久化到 localStorage。
    */
   setChatMode: (mode: ChatMode) => void;
+  // 设置回答模式（短/长）
+  setAnswerMode: (mode: 'short' | 'long') => void;
 
   // 可观测性 Actions
   addFrontendError: (entry: FrontendErrorEntry) => void;
@@ -320,6 +324,8 @@ export const useSystemStore = create<SystemState>((set) => ({
   theme: loadTheme(),
   // 聊天模式，从 localStorage 恢复用户偏好，默认深度日常助理
   chatMode: loadChatMode(),
+  // 回答模式：默认短回答
+  answerMode: (localStorage.getItem('luna:answerMode') as 'short' | 'long') || 'short',
   // 可观测性初始状态
   frontendErrors: [],
   isDiagnosticOpen: false,
@@ -501,6 +507,16 @@ export const useSystemStore = create<SystemState>((set) => ({
         // 忽略存储错误（如 localStorage 满）
       }
       return { chatMode: mode };
+    }),
+
+  setAnswerMode: (mode) =>
+    set(() => {
+      try {
+        localStorage.setItem('luna:answerMode', mode);
+      } catch (e) {
+        // 忽略存储错误
+      }
+      return { answerMode: mode };
     }),
 
   // 添加前端异常（环形缓冲，最多 100 条）

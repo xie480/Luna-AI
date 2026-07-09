@@ -3,6 +3,7 @@ import { useSystemStore } from '../../stores/systemStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { sseManager } from '../../services/sseManager';
 import { ChatModeToggle } from './ChatModeToggle';
+import { AnswerModeToggle } from './AnswerModeToggle';
 import './InputArea.css';
 import './ChatModeToggle.css';
 
@@ -285,7 +286,10 @@ export const InputArea: React.FC = () => {
               </svg>
             </button>
           )}
-          
+
+          {/* 回答模式切换胶囊 */}
+          <AnswerModeToggle />
+
         </div>
       </div>
 

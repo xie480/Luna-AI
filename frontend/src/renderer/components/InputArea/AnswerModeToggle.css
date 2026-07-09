@@ -1,0 +1,127 @@
+/* =========================================
+   AnswerModeToggle 长短回答切换胶囊样式
+   位置：.input-area 的 flex 子项右侧
+   ========================================= */
+
+.answer-mode-toggle-container {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 2;
+  margin-right: 10px;
+}
+
+.answer-mode-capsule {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 7px 4px 5px;
+  border: 1px solid;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+  height: 26px;
+  min-width: 44px;
+  justify-content: center;
+}
+
+.answer-mode-capsule::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.answer-mode-capsule:hover::before {
+  opacity: 1;
+}
+
+/* 输入框失焦时样式降级 */
+.input-area:not(:focus-within) .answer-mode-capsule {
+  opacity: 0.55;
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.input-area:not(:focus-within) .answer-mode-capsule:hover {
+  opacity: 0.85;
+}
+
+/* 短回答模式 (低调) */
+.answer-mode-capsule.mode-short {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.answer-mode-capsule.mode-short:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.input-area:not(:focus-within) .answer-mode-capsule.mode-short {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 长回答模式 (高亮 - 青色) */
+.answer-mode-capsule.mode-long {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.35);
+  color: rgba(0, 240, 255, 0.9);
+  text-shadow: 0 0 6px rgba(0, 240, 255, 0.3);
+}
+
+.answer-mode-capsule.mode-long:hover {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2), inset 0 0 10px rgba(0, 240, 255, 0.05);
+}
+
+.answer-mode-capsule.mode-long::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 240, 255, 0.12) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: scanlineMove 2s infinite linear;
+}
+
+.input-area:not(:focus-within) .answer-mode-capsule.mode-long {
+  border-color: rgba(0, 240, 255, 0.12);
+}
+
+/* 内部元素 */
+.answer-mode-capsule .capsule-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.answer-mode-capsule:hover .capsule-icon {
+  transform: scale(1.1);
+}
+
+.answer-mode-capsule .capsule-label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.5px;
+}

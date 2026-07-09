@@ -1480,6 +1480,8 @@ class SSEManager {
         llmResponseMode: systemStore.llmResponseMode ?? 'unified',
         // 聊天模式：daily_chat（深度日常助理）/ casual_chat（极速闲聊）
         chatMode: systemStore.chatMode,
+        // 回答模式：short（短回答）/ long（长回答）
+        answer_mode: systemStore.answerMode,
       }),
     }).then((resp) => {
       if (!resp.ok) {
