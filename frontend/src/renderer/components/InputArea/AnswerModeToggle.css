@@ -35,15 +35,23 @@
   width: 24px;
   height: 20px;
   border-radius: 12px;
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease, border-color 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* 覆盖全局样式可能产生的伪元素干扰 */
+.answer-mode-segmented-control .slider::before,
+.answer-mode-segmented-control .slider::after {
+  content: none !important;
+  display: none !important;
 }
 
 /* 短回答状态 (默认/幽灵) */
 .answer-mode-segmented-control.short .slider {
   transform: translateX(0);
-  background: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
@@ -54,7 +62,7 @@
 
 .answer-mode-segmented-control.long .slider {
   transform: translateX(26px);
-  background: rgba(0, 240, 255, 0.15);
+  background-color: rgba(0, 240, 255, 0.15);
   border: 1px solid rgba(0, 240, 255, 0.4);
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 }
