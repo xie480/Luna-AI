@@ -546,6 +546,13 @@ class MainChatLlmNode(ChatWorkflowNode):
 
             # --- 使用 StreamParser 解析结构化 JSON 字段 ---
             parser = StreamParser(trace_id, disable_sentence_split=True)
+            
+            # 记录长回答模式下解析到的数据
+            answer_mode = state.input_payload.answer_mode
+            md_content_accumulated = ""
+            summary_accumulated = ""
+            title_accumulated = ""
+            md_chunk_seq = 0
 
             for msg_type, content in parser.feed(raw_response):
                 if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
@@ -554,6 +561,13 @@ class MainChatLlmNode(ChatWorkflowNode):
                     state.generation_state.thought_text += content
                 elif msg_type == "emotion_update":
                     state.generation_state.emotion = content
+                elif msg_type == "long_answer_chunk" and answer_mode == "long":
+                    md_content_accumulated += content
+                    md_chunk_seq += 1
+                elif msg_type == "summary" and answer_mode == "long":
+                    summary_accumulated += content
+                elif msg_type == "title" and answer_mode == "long":
+                    title_accumulated += content
 
             for msg_type, content in parser.flush():
                 if msg_type == CHAT_STREAM_TYPE_REPLY_CHUNK:
@@ -564,6 +578,13 @@ class MainChatLlmNode(ChatWorkflowNode):
                     state.generation_state.emotion = content
                 elif msg_type == "replay_translation":
                     state.generation_state.replay_translation_text += content
+                elif msg_type == "long_answer_chunk" and answer_mode == "long":
+                    md_content_accumulated += content
+                    md_chunk_seq += 1
+                elif msg_type == "summary" and answer_mode == "long":
+                    summary_accumulated += content
+                elif msg_type == "title" and answer_mode == "long":
+                    title_accumulated += content
 
             # --- 判断本次解析是否成功 ---
             # 成功条件：StreamParser 至少提取到了 reply 文本
@@ -630,6 +651,97 @@ class MainChatLlmNode(ChatWorkflowNode):
 
         # 设置 finish_reason
         state.generation_state.finish_reason = "stop"
+
+        # 如果是长回答模式，这里进行统一入库并下发事件
+        if answer_mode == "long":
+            from app.infrastructure.postgres import postgres_client
+            from app.repository.long_answer_pg import LongAnswerPGRepo
+            from app.repository.long_answer_cache import LongAnswerSummaryCache
+            from app.types.constants import (
+                WS_MSG_TYPE_EVT_LONG_ANSWER_CREATED,
+                WS_MSG_TYPE_EVT_LONG_ANSWER_COMPLETED,
+                WS_MSG_TYPE_EVT_LONG_ANSWER_CHUNK,
+                LongAnswerStatus,
+            )
+            from app.api.sse import sse_manager
+            
+            # 由于 unified 模式是整体下发，所以这里可以一口气创建并更新
+            with postgres_client.session_factory() as session:
+                long_answer_repo = LongAnswerPGRepo(session)
+                
+                # 创建记录
+                long_answer_model = await long_answer_repo.create_long_answer(
+                    interaction_message_id=state.generation_state.assistant_message_id,
+                    session_id=state.runtime.session_id,
+                    title="Luna正在整理中……",
+                    status=LongAnswerStatus.GENERATING.value,
+                )
+                
+                # 发送创建事件（让面板弹出来）
+                await sse_manager.publish({
+                    "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CREATED,
+                    "trace_id": state.runtime.trace_id,
+                    "payload": {
+                        "schema_version": "1.0",
+                        "long_answer_id": long_answer_model.id,
+                        "interaction_message_id": state.generation_state.assistant_message_id,
+                        "session_id": state.runtime.session_id,
+                        "status": "GENERATING",
+                        "title": "Luna正在整理中……"
+                    }
+                })
+                
+                # 如果有 md_content，下发 chunk
+                if md_content_accumulated:
+                    await sse_manager.publish({
+                        "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CHUNK,
+                        "trace_id": state.runtime.trace_id,
+                        "payload": {
+                            "schema_version": "1.0",
+                            "long_answer_id": long_answer_model.id,
+                            "interaction_message_id": state.generation_state.assistant_message_id,
+                            "seq": md_chunk_seq,
+                            "chunk": md_content_accumulated,
+                            "is_finished": True
+                        }
+                    })
+                
+                # 更新长回答内容和 summary 等
+                generated_title = title_accumulated.strip() if title_accumulated else "Luna 的回答"
+                await long_answer_repo.update_content(
+                    long_answer_model.id,
+                    md_content_accumulated,
+                    chunk_count=md_chunk_seq,
+                    token_count=len(md_content_accumulated) // 2
+                )
+                await long_answer_repo.update_summary(
+                    long_answer_model.id,
+                    summary_accumulated,
+                    title=generated_title
+                )
+                await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.COMPLETED.value)
+                
+                # 写入 Redis 缓存
+                await LongAnswerSummaryCache.set_summary(
+                    state.runtime.session_id,
+                    state.generation_state.assistant_message_id,
+                    long_answer_model.id,
+                    summary_accumulated,
+                    title=generated_title,
+                    status=LongAnswerStatus.COMPLETED.value
+                )
+                
+                # 发送完成事件
+                await sse_manager.publish({
+                    "type": WS_MSG_TYPE_EVT_LONG_ANSWER_COMPLETED,
+                    "trace_id": state.runtime.trace_id,
+                    "payload": {
+                        "schema_version": "1.0",
+                        "long_answer_id": long_answer_model.id,
+                        "interaction_message_id": state.generation_state.assistant_message_id,
+                        "status": "COMPLETED"
+                    }
+                })
 
         # ============================================================
         # 阶段 3：TTS 合成完整音频
