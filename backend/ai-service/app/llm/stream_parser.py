@@ -117,6 +117,9 @@ class StreamParser:
         self._summary_buffer: str = ""
         self._summary_started: bool = False
         self._summary_finished: bool = False
+        self._title_buffer: str = ""
+        self._title_started: bool = False
+        self._title_finished: bool = False
 
     def _emit_thought(self) -> list[tuple[str, str]]:
         """返回 thought 内容的输出消息（如果尚未发送且有内容）。"""
