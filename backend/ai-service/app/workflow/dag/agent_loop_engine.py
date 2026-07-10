@@ -1567,11 +1567,23 @@ class AgentToolExecuteNode:
                                 registry = MCPToolRegistry()
                                 registered = registry.get_tool(tool_name)
                                 if registered:
+                                    import inspect
+                                    sig = inspect.signature(registered.handler)
+                                    kwargs = {"parameters": tool_params, "trace_id": trace_id}
+                                    if "state_context" in sig.parameters:
+                                        kwargs["state_context"] = {
+                                            "session_id": session_id,
+                                            "trace_id": trace_id,
+                                            "gating_service": gating_svc,
+                                            "snapshot_manager": snap_mgr,
+                                            "skill_registry": self.mcp_tool_registry,
+                                            "resource_context": "",
+                                            "memory_manager": self._memory_manager,
+                                            "rag_orchestrator": self._rag_orchestrator,
+                                        }
+
                                     output_text = await asyncio.wait_for(
-                                        registered.handler(
-                                            parameters=tool_params,
-                                            trace_id=trace_id,
-                                        ),
+                                        registered.handler(**kwargs),
                                         timeout=30.0,
                                     )
                                     # 修复问题 1：判断工具实际返回是否为错误文本

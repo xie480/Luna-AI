@@ -356,8 +356,33 @@ class GatingService:
 
             # 检查风险等级，如果是 L2/L3 但审批已通过，直接放行
             import asyncio
+            import inspect
+            sig = inspect.signature(registered.handler)
+            kwargs = {"parameters": tool_parameters, "trace_id": trace_id}
+            if "state_context" in sig.parameters:
+                # 获取 context
+                from app.main import app as _fastapi_app
+                gating_svc = getattr(_fastapi_app.state, "gating_service", None)
+                snap_mgr = None
+                if gating_svc:
+                    redis_client = getattr(_fastapi_app.state, "redis_client", None)
+                    if redis_client:
+                        from app.gating.snapshot import GatingSnapshotManager
+                        snap_mgr = GatingSnapshotManager(redis_client)
+                from app.mcp.registry import MCPToolRegistry
+                
+                kwargs["state_context"] = {
+                    "session_id": "",
+                    "trace_id": trace_id,
+                    "gating_service": gating_svc,
+                    "snapshot_manager": snap_mgr,
+                    "skill_registry": MCPToolRegistry(),
+                    "resource_context": "",
+                    "memory_manager": None,
+                    "rag_orchestrator": None,
+                }
             output_text = await asyncio.wait_for(
-                registered.handler(parameters=tool_parameters, trace_id=trace_id),
+                registered.handler(**kwargs),
                 timeout=30.0,
             )
             return output_text

@@ -174,6 +174,13 @@ async def execute_tool(
             # 为什么这样做：确保审批结束后不会丢失工具调用的上下文信息。
             # 边界条件：快照保存失败不影响审批，仅记录警告。
             if snapshot_manager is not None:
+                # 去除 state_context 中不可序列化的内部组件以确保 json.dumps 成功
+                clean_state_context = {}
+                if state_context:
+                    clean_state_context = {
+                        k: v for k, v in state_context.items()
+                        if k not in ["skill_registry", "gating_service", "snapshot_manager", "memory_manager", "rag_orchestrator"]
+                    }
                 await snapshot_manager.save_tool_snapshot(
                     audit_log_id=auth_request.audit_log_id,
                     tool_name=tool_name,
