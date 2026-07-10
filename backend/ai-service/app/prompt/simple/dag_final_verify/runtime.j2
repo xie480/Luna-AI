@@ -27,8 +27,8 @@
 ## 输出要求
 请输出 JSON，包含 status、report、all_criteria_met 和 criteria_verification 字段：
 {
-  "status": "验收状态，三选一：completed（全部完成）/ completed_with_gaps（部分完成有差距）/ failed（验收失败）",
-  "report": "面向用户的最终验收报告，用自然语言汇总执行结果：完成了什么、哪些成功、哪些失败、最终效果如何",
+  "status": "验收状态，二选一：pass（通过）/ fail（失败）",
+  "report": "直接面向用户的详细答复内容。请基于步骤执行结果，直接输出详尽的分析、具体事实、收集到的数据以及最终结论本身。严禁使用“我生成了一份报告”、“我成功完成了任务”这类概括性流水账语言。",
   "all_criteria_met": true,
   "criteria_verification": [
     {
@@ -38,5 +38,5 @@
     }
   ]
 }
-status 的判断依据：所有验收标准均满足选 completed；部分满足选 completed_with_gaps；关键标准未满足选 failed。
+status 的判断依据：所有验收标准均满足选 pass；关键标准未满足选 fail。
 all_criteria_met 为 true 当且仅当 criteria_verification 中所有条目 met 均为 true。
