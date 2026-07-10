@@ -68,6 +68,7 @@ async def execute_tool(
     all_round_data: list[dict[str, Any]] | None = None,
     dag_state_snapshot: dict[str, Any] | None = None,
     prompt_snapshot: str = "",
+    state_context: dict[str, Any] | None = None,
 ) -> MCPToolResult:
     """
     执行 MCP 工具（四阶段路由）。
@@ -257,8 +258,14 @@ async def execute_tool(
 
     for attempt in range(max_retries + 1):
         try:
+            import inspect
+            sig = inspect.signature(registered.handler)
+            kwargs = {"parameters": parameters, "trace_id": trace_id}
+            if "state_context" in sig.parameters:
+                kwargs["state_context"] = state_context
+                
             output_text = await asyncio.wait_for(
-                registered.handler(parameters=parameters, trace_id=trace_id),
+                registered.handler(**kwargs),
                 timeout=timeout,
             )
             last_output_text = output_text

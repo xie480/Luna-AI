@@ -1220,6 +1220,8 @@ class AgentToolExecuteNode:
         event_publisher: ChatWorkflowEventPublisher | None = None,
         gating_service: Any = None,
         snapshot_manager: Any = None,
+        memory_manager: Any = None,
+        rag_orchestrator: Any = None,
     ):
         self.prompt_manager = prompt_manager
         self.llm_client = llm_client
@@ -1228,6 +1230,8 @@ class AgentToolExecuteNode:
         self.event_publisher = event_publisher
         self._gating_service = gating_service
         self._snapshot_manager = snapshot_manager
+        self._memory_manager = memory_manager
+        self._rag_orchestrator = rag_orchestrator
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         """LangGraph 节点入口 — 执行工具调用。
@@ -1394,6 +1398,8 @@ class AgentToolExecuteNode:
                         "snapshot_manager": snap_mgr,
                         "skill_registry": self.mcp_tool_registry,
                         "resource_context": resource_context,
+                        "memory_manager": self._memory_manager,
+                        "rag_orchestrator": self._rag_orchestrator,
                     },
                 )
                 # 计算单个工具调用耗时（毫秒）
@@ -3528,6 +3534,8 @@ def build_agent_loop_subgraph(
     final_verify: AgentFinalVerifyNode,
     chat_status_publisher: ChatStatusPublisher,
     event_publisher: ChatWorkflowEventPublisher | None = None,
+    memory_manager: Any = None,
+    rag_orchestrator: Any = None,
 ) -> Any:
     """构建 Agent Loop 子图。
 

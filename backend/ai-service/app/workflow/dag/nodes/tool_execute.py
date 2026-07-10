@@ -838,6 +838,7 @@ class ToolExecuteNode:
                 snapshot_manager=snapshot_manager,
                 task_id=(state_context or {}).get("task_id", ""),
                 goal=node_def.parameter_hint or "",
+                state_context=state_context,
             )
 
             return {
