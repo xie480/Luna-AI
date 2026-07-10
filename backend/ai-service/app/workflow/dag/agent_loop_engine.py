@@ -768,29 +768,12 @@ def      route_by_step(state: dict[str, Any]) -> str:
         chat_state.dag_state.dag_engine_state = agent_loop.model_dump(mode="json")
         return AgentStepRoute.FINAL_VERIFY.value
 
-    # === 并行路由逻辑 ===
-    from app.workflow.dag.ready_queue import ReadyQueue
-
-    ready_queue = ReadyQueue()
-    ready_steps = ready_queue.compute_ready_steps(
-        steps=agent_loop.plan.steps,
-        completed_ids=agent_loop.plan.completed_step_ids,
-        running_ids=agent_loop.plan.running_step_ids,
-    )
-
-    if ready_steps:
-        # 有就绪步骤，进入并行调度
+    # 单步顺序执行逻辑：基于 current_step_index 路由
+    if agent_loop.plan.current_step_index < len(agent_loop.plan.steps):
         logger.info(
-            f"[TraceID:{trace_id}] StepRouter: 发现 {len(ready_steps)} 个就绪步骤，进入并行调度"
+            f"[TraceID:{trace_id}] StepRouter: 按照 current_step_index ({agent_loop.plan.current_step_index}) 顺序调度下一步"
         )
-        return AgentStepRoute.STEP_PARALLEL_DISPATCH.value
-
-    if agent_loop.plan.running_step_ids:
-        # 有正在运行的步骤，等待完成
-        logger.info(
-            f"[TraceID:{trace_id}] StepRouter: 有 {len(agent_loop.plan.running_step_ids)} 个步骤正在运行，等待完成"
-        )
-        return AgentStepRoute.WAIT_FOR_COMPLETION.value
+        return AgentStepRoute.STEP_THINK.value
 
     # 全部完成
     return AgentStepRoute.FINAL_VERIFY.value
