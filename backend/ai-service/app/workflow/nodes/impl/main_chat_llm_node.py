@@ -90,8 +90,8 @@ class MainChatLlmNode(ChatWorkflowNode):
         answer_mode = state.input_payload.answer_mode
         long_answer_repo = None
         if answer_mode == "long":
-            from app.infrastructure.postgres import postgres_client
-            session = postgres_client.session_factory()
+            from app.api.http_api import get_pg_client
+            session = get_pg_client().session_factory()
             long_answer_repo = LongAnswerPGRepo(session)
 
         started = time.time()
@@ -654,7 +654,7 @@ class MainChatLlmNode(ChatWorkflowNode):
 
         # 如果是长回答模式，这里进行统一入库并下发事件
         if answer_mode == "long":
-            from app.infrastructure.postgres import postgres_client
+            from app.api.http_api import get_pg_client
             from app.repository.long_answer_pg import LongAnswerPGRepo
             from app.repository.long_answer_cache import LongAnswerSummaryCache
             from app.types.constants import (
@@ -666,7 +666,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             from app.api.sse import sse_manager
             
             # 由于 unified 模式是整体下发，所以这里可以一口气创建并更新
-            with postgres_client.session_factory() as session:
+            with get_pg_client().session_factory() as session:
                 long_answer_repo = LongAnswerPGRepo(session)
                 
                 # 创建记录

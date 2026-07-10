@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.infrastructure.postgres import postgres_client
+from app.infrastructure.postgres import PostgresClient
 from app.logger import logger
 from app.memory.manager import Manager as MemoryManager
 from app.prompt.manager import Manager as PromptManager
@@ -50,7 +50,7 @@ class ChatWorkflowService:
         *,
         redis_repo: ChatHistoryRedisRepo | None,
         pg_repo: ChatHistoryPGRepo | None,
-        pg_client: Any | None = None,
+        pg_client: PostgresClient | None = None,
         prompt_manager: PromptManager | None,
         memory_manager: MemoryManager | None,
         rag_orchestrator: RagRetrievalOrchestrator | None,
@@ -63,7 +63,11 @@ class ChatWorkflowService:
         # --- Phase 13 新增：Gating 快照管理器 ---
         snapshot_manager: Any = None,
     ):
-        self.pg_client = pg_client or postgres_client
+        if pg_client is None:
+            from app.api.http_api import get_pg_client
+            self.pg_client = get_pg_client()
+        else:
+            self.pg_client = pg_client
         self.event_publisher = event_publisher or ChatWorkflowEventPublisher()
         from app.api.chat_status import ChatStatusPublisher
 

@@ -33,8 +33,8 @@ class LongAnswerListResponse(BaseModel):
 
 async def get_long_answer_repo(request: Request) -> LongAnswerPGRepo:
     # 获取 db session
-    from app.infrastructure.postgres import postgres_client
-    session = postgres_client.session_factory()
+    pg_client = request.app.state.pg_client
+    session = pg_client.session_factory()
     return LongAnswerPGRepo(session)
 
 

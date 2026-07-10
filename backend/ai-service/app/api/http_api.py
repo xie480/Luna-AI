@@ -59,6 +59,10 @@ class ChatRequestPayload(BaseModel):
     answer_mode: str = "short"  # short / long
 
 
+def get_pg_client():
+    from app.main import app
+    return app.state.pg_client
+
 async def get_trace_id(x_trace_id: Optional[str] = Header(None)) -> str:
     return x_trace_id or generate_string_id()
 
