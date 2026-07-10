@@ -320,19 +320,19 @@ class ChatWorkflowService:
             node_type_val = state.runtime.current_node_type.value if hasattr(state.runtime.current_node_type, "value") else state.runtime.current_node_type
 
         async with self.pg_client.session_factory() as session:
-            await session.execute(
-                text(checkpoint_sql),
-                {
-                    "checkpoint_id": generate_string_id(),
-                    "thread_id": state.runtime.session_id,
-                    "checkpoint_ns": checkpoint_ns,
-                    "trace_id": state.runtime.trace_id,
-                    "interaction_id": state.runtime.interaction_id,
-                    "node_type": node_type_val,
-                    "payload": json.dumps(state.model_dump(mode="json"), ensure_ascii=False),
-                },
-            )
-            await session.commit()
+            async with session.begin():
+                await session.execute(
+                    text(checkpoint_sql),
+                    {
+                        "checkpoint_id": generate_string_id(),
+                        "thread_id": state.runtime.session_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "trace_id": state.runtime.trace_id,
+                        "interaction_id": state.runtime.interaction_id,
+                        "node_type": node_type_val,
+                        "payload": json.dumps(state.model_dump(mode="json"), ensure_ascii=False),
+                    },
+                )
 
     async def publish_plan_event(
         self,
