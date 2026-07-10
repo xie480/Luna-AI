@@ -136,7 +136,7 @@ async def register_skill(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             # Step 1: 检查 name 是否已存在
             existing_result = await session.execute(
@@ -223,7 +223,7 @@ async def batch_register_skills(
     failures: list[dict[str, str]] = []
 
     for skill_config in body.skills:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             try:
                 skill_name = skill_config.get("name")
                 if not skill_name:
@@ -453,7 +453,7 @@ async def list_skills(request: Request):
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(Skill)
                 .order_by(Skill.created_at.desc())
@@ -511,7 +511,7 @@ async def get_skill_detail(
     from app.repository.models import MCPToolRegistration, Prompt, Resource
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             # 查 Skill
             result = await session.execute(
                 select(Skill).where(Skill.id == skill_id).limit(1)
@@ -614,7 +614,7 @@ async def update_skill(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             # Step 1: 查找现有记录
             result = await session.execute(
@@ -708,7 +708,7 @@ async def delete_skill(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             # Step 1: 查找记录
             result = await session.execute(

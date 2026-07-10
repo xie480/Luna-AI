@@ -106,7 +106,7 @@ class Worker:
         """异步更新审计日志状态"""
         # 为了简单起见，这里直接异步执行更新，不走 batch
         try:
-            async for session in self.pg_client.get_session():
+            async with self.pg_client.session() as session:
                 from sqlalchemy import update
                 stmt = (
                     update(AuditLog)
@@ -210,7 +210,7 @@ class Worker:
             return
             
         try:
-            async for session in self.pg_client.get_session():
+            async with self.pg_client.session() as session:
                 # 转换为 ORM 模型
                 models = []
                 for s in batch:
@@ -239,7 +239,7 @@ class Worker:
             return
             
         try:
-            async for session in self.pg_client.get_session():
+            async with self.pg_client.session() as session:
                 # 转换为 ORM 模型
                 models = []
                 for a in batch:

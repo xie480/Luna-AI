@@ -150,7 +150,7 @@ async def register_local_server(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             # Step 1: 检查 name 是否已存在
             existing_result = await session.execute(
@@ -234,7 +234,7 @@ async def batch_register_local_servers(
     failures: list[dict[str, str]] = []
 
     for server_config in body.servers:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             try:
                 # 检查重复
                 existing_result = await session.execute(
@@ -320,7 +320,7 @@ async def list_local_servers(request: Request):
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPServerRegistration)
                 .order_by(MCPServerRegistration.created_at.desc())
@@ -380,7 +380,7 @@ async def update_local_server(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             # Step 1: 查找现有记录
             result = await session.execute(
@@ -474,7 +474,7 @@ async def delete_local_server(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             # Step 1: 查找记录
             result = await session.execute(

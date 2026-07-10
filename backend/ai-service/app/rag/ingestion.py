@@ -315,7 +315,7 @@ class RagIngestionService:
             await self.qdrant_repo.upsert_chunks(chunks, vectors)
 
         # 3. 原子切换 (Commit) 并处理废弃文档
-        async with self.pg_repo.pg_client.session_factory() as session:
+        async with self.pg_repo.pg_client.session() as session:
             from sqlalchemy import update
             from app.repository.models import RagDocument
             

@@ -91,8 +91,7 @@ class MainChatLlmNode(ChatWorkflowNode):
         long_answer_repo = None
         if answer_mode == "long":
             from app.api.http_api import get_pg_client
-            session = get_pg_client().session_factory()
-            long_answer_repo = LongAnswerPGRepo(session)
+            # LongAnswerPGRepo 需要在上下文中管理生命周期，此处延后获取，不再使用单个直接实例
 
         started = time.time()
         history_dicts = history_to_model_messages(state.session_state.recent_messages)
@@ -106,25 +105,28 @@ class MainChatLlmNode(ChatWorkflowNode):
 
         # 如果是长回答模式，先创建长回答记录，并推送面板开启事件
         long_answer_model = None
-        if answer_mode == "long" and long_answer_repo is not None:
-            long_answer_model = await long_answer_repo.create_long_answer(
-                interaction_message_id=state.generation_state.assistant_message_id,
-                session_id=state.runtime.session_id,
-                title="Luna正在整理中……",
-                status=LongAnswerStatus.GENERATING.value,
-            )
-            await sse_manager.publish({
-                "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CREATED,
-                "trace_id": state.runtime.trace_id,
-                "payload": {
-                    "schema_version": "1.0",
-                    "long_answer_id": long_answer_model.id,
-                    "interaction_message_id": state.generation_state.assistant_message_id,
-                    "session_id": state.runtime.session_id,
-                    "status": "GENERATING",
-                    "title": "Luna正在整理中……"
-                }
-            })
+        if answer_mode == "long":
+            from app.api.http_api import get_pg_client
+            async for session in get_pg_client().get_session():
+                long_answer_repo = LongAnswerPGRepo(session)
+                long_answer_model = await long_answer_repo.create_long_answer(
+                    interaction_message_id=state.generation_state.assistant_message_id,
+                    session_id=state.runtime.session_id,
+                    title="Luna正在整理中……",
+                    status=LongAnswerStatus.GENERATING.value,
+                )
+                await sse_manager.publish({
+                    "type": WS_MSG_TYPE_EVT_LONG_ANSWER_CREATED,
+                    "trace_id": state.runtime.trace_id,
+                    "payload": {
+                        "schema_version": "1.0",
+                        "long_answer_id": long_answer_model.id,
+                        "interaction_message_id": state.generation_state.assistant_message_id,
+                        "session_id": state.runtime.session_id,
+                        "status": "GENERATING",
+                        "title": "Luna正在整理中……"
+                    }
+                })
 
         while attempt < max_retries:
             first_chunk = True
@@ -314,25 +316,29 @@ class MainChatLlmNode(ChatWorkflowNode):
                         )
                         state.generation_state.finish_reason = chunk_data.get("finish_reason") or "stop"
                         
-                        if answer_mode == "long" and long_answer_repo is not None and long_answer_model is not None:
+                        if answer_mode == "long" and long_answer_model is not None:
                             from app.repository.long_answer_cache import LongAnswerSummaryCache
                             from app.types.constants import WS_MSG_TYPE_EVT_LONG_ANSWER_COMPLETED
-                            
-                            await long_answer_repo.update_content(
-                                long_answer_model.id,
-                                md_content_accumulated,
-                                chunk_count=md_chunk_seq,
-                                token_count=len(md_content_accumulated) // 2 # 简易估算
-                            )
+                            from app.api.http_api import get_pg_client
+                            from app.repository.long_answer_pg import LongAnswerPGRepo
                             
                             generated_title = title_accumulated.strip() if title_accumulated else "Luna 的回答"
 
-                            await long_answer_repo.update_summary(
-                                long_answer_model.id,
-                                summary_accumulated,
-                                title=generated_title
-                            )
-                            await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.COMPLETED.value)
+                            async for session in get_pg_client().get_session():
+                                long_answer_repo = LongAnswerPGRepo(session)
+                                await long_answer_repo.update_content(
+                                    long_answer_model.id,
+                                    md_content_accumulated,
+                                    chunk_count=md_chunk_seq,
+                                    token_count=len(md_content_accumulated) // 2 # 简易估算
+                                )
+                                
+                                await long_answer_repo.update_summary(
+                                    long_answer_model.id,
+                                    summary_accumulated,
+                                    title=generated_title
+                                )
+                                await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.COMPLETED.value)
                             
                             # 写入 Redis 缓存
                             await LongAnswerSummaryCache.set_summary(
@@ -401,9 +407,13 @@ class MainChatLlmNode(ChatWorkflowNode):
                         error=str(exc),
                     )
                     
-                    if answer_mode == "long" and long_answer_repo is not None and long_answer_model is not None:
+                    if answer_mode == "long" and long_answer_model is not None:
                         from app.types.constants import WS_MSG_TYPE_EVT_LONG_ANSWER_FAILED
-                        await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.FAILED.value, error_message=str(exc))
+                        from app.api.http_api import get_pg_client
+                        from app.repository.long_answer_pg import LongAnswerPGRepo
+                        async for session in get_pg_client().get_session():
+                            long_answer_repo = LongAnswerPGRepo(session)
+                            await long_answer_repo.update_status(long_answer_model.id, LongAnswerStatus.FAILED.value, error_message=str(exc))
                         await sse_manager.publish({
                             "type": WS_MSG_TYPE_EVT_LONG_ANSWER_FAILED,
                             "trace_id": state.runtime.trace_id,
@@ -417,9 +427,6 @@ class MainChatLlmNode(ChatWorkflowNode):
                         })
                         
                     raise RuntimeError(f"主模型生成失败(已重试 {attempt} 次): {exc}") from exc
-        
-        if long_answer_repo is not None and 'session' in locals() and hasattr(session, 'close'):
-            await session.close()
 
     # ================================================================
     # 非流式统一响应模式
@@ -666,7 +673,7 @@ class MainChatLlmNode(ChatWorkflowNode):
             from app.api.sse import sse_manager
             
             # 由于 unified 模式是整体下发，所以这里可以一口气创建并更新
-            with get_pg_client().session_factory() as session:
+            async for session in get_pg_client().get_session():
                 long_answer_repo = LongAnswerPGRepo(session)
                 
                 # 创建记录

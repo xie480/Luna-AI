@@ -890,7 +890,7 @@ async def lifespan(app: FastAPI):
         # 从 PG 加载已注册的工具（如果在 PG 中有额外的动态注册工具）
         if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:
             from sqlalchemy.ext.asyncio import AsyncSession
-            async with pg_client.session_factory() as session:
+            async with pg_client.session() as session:
                 mcp_pg_repo = MCPToolPGRepo(session)
                 pg_tools = await mcp_pg_repo.load_all()
             await mcp_registry.load_from_pg(pg_tools)
@@ -905,7 +905,7 @@ async def lifespan(app: FastAPI):
             from app.mcp.skill_registry import SkillRegistry
 
             if pg_client and hasattr(pg_client, 'session_factory') and pg_client.session_factory:
-                async with pg_client.session_factory() as session:
+                async with pg_client.session() as session:
                     skill_registry = SkillRegistry()
                     await skill_registry.load_from_pg(session)
                     logger.info("MCP Skill 注册中心初始化完成")
@@ -920,7 +920,7 @@ async def lifespan(app: FastAPI):
             from app.config.tool_config_manager import ToolConfigManager
             from app.repository.tool_config_pg import ToolConfigPGRepo
 
-            async with pg_client.session_factory() as session:
+            async with pg_client.session() as session:
                 tool_cfg_repo = ToolConfigPGRepo(session)
                 all_configs = await tool_cfg_repo.load_all()
 

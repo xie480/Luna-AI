@@ -38,7 +38,7 @@ class LongTermMemoryPGRepo:
         if not memory.status:
             memory.status = MemoryStatus.ACTIVE.value
 
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session() as session:
             session.add(memory)
             await session.commit()
             logger.info(f"长期记忆记录已保存 session_id={memory.session_id} id={memory.id}")
@@ -48,7 +48,7 @@ class LongTermMemoryPGRepo:
         """
         根据会话 ID 获取长期记忆记录
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(LongTermMemory)
                 .where(LongTermMemory.session_id == session_id)
@@ -65,7 +65,7 @@ class LongTermMemoryPGRepo:
         if not ids:
             return []
 
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(LongTermMemory)
                 .where(LongTermMemory.id.in_(ids))
@@ -104,7 +104,7 @@ class LongTermMemoryPGRepo:
         except ValueError as e:
             raise ValueError(f"解析月份时间失败: {e}")
 
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(LongTermMemory)
                 .where(LongTermMemory.created_at >= start_time)
@@ -120,7 +120,7 @@ class LongTermMemoryPGRepo:
         获取所有活跃的长期记忆会话 ID 列表
         用途：启动时兜底检测用，判断哪些历史会话已有长期记忆记录
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(LongTermMemory.session_id)
                 .where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
@@ -133,7 +133,7 @@ class LongTermMemoryPGRepo:
         删除指定会话的所有长期记忆记录
         用途：记忆撤销或重置时清理指定会话的记忆
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = select(LongTermMemory).where(LongTermMemory.session_id == session_id)
             result = await session.execute(stmt)
             memories = result.scalars().all()
@@ -149,7 +149,7 @@ class LongTermMemoryPGRepo:
         """
         from sqlalchemy import func
         
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             # 获取总条数
             count_stmt = select(func.count()).select_from(LongTermMemory).where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
             total_count = await session.scalar(count_stmt)
@@ -172,7 +172,7 @@ class LongTermMemoryPGRepo:
         """
         更新指定 ID 的记忆摘要
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 update(LongTermMemory)
                 .where(LongTermMemory.id == id)
@@ -215,7 +215,7 @@ class LongTermMemoryPGRepo:
             LIMIT :limit
         """)
 
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             try:
                 result = await session.execute(sql, {
                     "query": query_text,
@@ -259,7 +259,7 @@ class LongTermMemoryPGRepo:
             ON long_term_memories
             USING GIN (to_tsvector('simple', summary))
         """)
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             try:
                 await session.execute(sql)
                 await session.commit()
@@ -273,7 +273,7 @@ class LongTermMemoryPGRepo:
         用途：为旧版内存 BM25 提供全量语料库（保留向后兼容）。
         边界条件：仅返回 status=MemoryStatus.ACTIVE.value 的记录。
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(LongTermMemory.id, LongTermMemory.summary, LongTermMemory.created_at)
                 .where(LongTermMemory.status == MemoryStatus.ACTIVE.value)
@@ -287,7 +287,7 @@ class LongTermMemoryPGRepo:
         """
         硬删除指定的长期记忆记录
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = select(LongTermMemory).where(LongTermMemory.id == id)
             result = await session.execute(stmt)
             memory = result.scalars().first()

@@ -34,8 +34,8 @@ class LongAnswerListResponse(BaseModel):
 async def get_long_answer_repo(request: Request) -> LongAnswerPGRepo:
     # 获取 db session
     pg_client = request.app.state.pg_client
-    session = pg_client.session_factory()
-    return LongAnswerPGRepo(session)
+    async with pg_client.session() as session:
+        yield LongAnswerPGRepo(session)
 
 
 @router.get("/{long_answer_id}", response_model=LongAnswerResponse)

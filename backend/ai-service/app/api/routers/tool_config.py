@@ -159,7 +159,7 @@ async def list_tool_configs(request: Request):
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             repo = ToolConfigPGRepo(session)
             configs = await repo.load_all()
 
@@ -197,7 +197,7 @@ async def get_tool_config(tool_name: str, request: Request):
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             repo = ToolConfigPGRepo(session)
             config = await repo.get_by_tool_name(tool_name)
 
@@ -269,7 +269,7 @@ async def save_tool_config(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             repo = ToolConfigPGRepo(session)
             success = await repo.upsert(
@@ -328,7 +328,7 @@ async def delete_tool_config(tool_name: str, request: Request):
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         try:
             repo = ToolConfigPGRepo(session)
             success = await repo.delete(tool_name)

@@ -32,7 +32,7 @@ class ChatHistoryPGRepo:
         """
         保存单次问答交互记录（一问一答绑定为完整存储单元）到 PostgreSQL
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session() as session:
             session.add(interaction)
             await session.commit()
             return
@@ -41,7 +41,7 @@ class ChatHistoryPGRepo:
         """
         分页查询历史交互记录
         """
-        async for session in self.pg_client.get_session():
+        async with self.pg_client.session() as session:
             stmt = (
                 select(InteractionModel)
                 .where(InteractionModel.session_id == session_id)
@@ -51,7 +51,6 @@ class ChatHistoryPGRepo:
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
-        return []
 
     async def get_interactions_by_date(self, date_str: str) -> List[InteractionModel]:
         """
@@ -73,7 +72,7 @@ class ChatHistoryPGRepo:
         except ValueError as e:
             raise ValueError(f"解析日期失败: {e}")
 
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(InteractionModel)
                 .where(InteractionModel.created_at >= start_time)
@@ -99,7 +98,7 @@ class ChatHistoryPGRepo:
         except ValueError as e:
             raise ValueError(f"解析月份时间失败: {e}")
 
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(InteractionModel.created_at)
                 .where(InteractionModel.created_at >= start_time)

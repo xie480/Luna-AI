@@ -69,7 +69,7 @@ class RagPGRepository:
             error_log=None,
             description=description,
         )
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             session.add(document)
             await session.commit()
         logger.info(f"RAG 文档已注册 document_id={document_id} filename={filename} status={status.value}")
@@ -101,7 +101,7 @@ class RagPGRepository:
         """获取文档的全部切片 Hash 与 chunk_id 映射关系，用于增量切片比对"""
         if not document_id:
             return {}
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = select(RagChunk.chunk_hash, RagChunk.chunk_id).where(RagChunk.doc_id == document_id)
             result = await session.execute(stmt)
             return {row[0]: row[1] for row in result.all()}
@@ -120,7 +120,7 @@ class RagPGRepository:
         values: dict[str, Any] = {"status": to_status.value, "error_log": error_log}
         if estimated_tokens is not None:
             values["estimated_tokens"] = estimated_tokens
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = update(RagDocument).where(RagDocument.id == document_id).values(**values)
             await session.execute(stmt)
             await session.commit()
@@ -155,14 +155,14 @@ class RagPGRepository:
             )
             for chunk in chunks
         ]
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             session.add_all(models)
             await session.commit()
         logger.info(f"RAG 知识切片已保存 chunks_count={len(chunks)} document_id={chunks[0].document_id}")
 
     async def get_document(self, document_id: str) -> RagDocument | None:
         """根据 document_id 获取文档。"""
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             result = await session.execute(select(RagDocument).where(RagDocument.id == document_id))
             return result.scalars().first()
 
@@ -195,7 +195,7 @@ class RagPGRepository:
         """按 parent_id 回查父块正文，实现 Small-to-Big 检索扩展。"""
         if not parent_ids:
             return {}
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = select(RagChunk).where(RagChunk.chunk_id.in_(parent_ids))
             result = await session.execute(stmt)
             chunks = list(result.scalars().all())

@@ -14,6 +14,7 @@ Luna AI PostgreSQL 客户端模块
 
 import asyncio
 from typing import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import AsyncAdaptedQueuePool
@@ -81,8 +82,20 @@ class PostgresClient:
 
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         """获取异步会话，用于依赖注入"""
-        async with self.session_factory() as session:
+        session = self.session_factory()
+        try:
             yield session
+        finally:
+            await session.close()
+            
+    @asynccontextmanager
+    async def session(self) -> AsyncGenerator[AsyncSession, None]:
+        """获取异步会话，用于上下文管理器"""
+        session = self.session_factory()
+        try:
+            yield session
+        finally:
+            await session.close()
 
     def _mask_password(self, conn_str: str) -> str:
         """隐藏连接字符串中的密码"""

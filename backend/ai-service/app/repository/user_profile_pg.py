@@ -70,7 +70,7 @@ class UserProfilePGRepository:
         user_id: str = USER_PROFILE_DEFAULT_USER_ID,
     ) -> list[UserProfileItem]:
         """全量读取指定用户所有 active 用户画像。"""
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(UserProfileItem)
                 .where(UserProfileItem.user_id == user_id)
@@ -88,7 +88,7 @@ class UserProfilePGRepository:
     ) -> list[UserProfileItem]:
         """按类别读取指定用户画像。"""
         category_value = category.value if isinstance(category, UserProfileCategory) else category
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = (
                 select(UserProfileItem)
                 .where(UserProfileItem.user_id == user_id)
@@ -107,7 +107,7 @@ class UserProfilePGRepository:
         include_inactive: bool = False,
     ) -> list[UserProfileItem]:
         """读取用户画像列表，可按类别过滤。"""
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             stmt = select(UserProfileItem).where(UserProfileItem.user_id == user_id)
             if category:
                 category_value = category.value if isinstance(category, UserProfileCategory) else category
@@ -120,7 +120,7 @@ class UserProfilePGRepository:
 
     async def get_by_id(self, user_id: str, item_id: str) -> UserProfileItem | None:
         """按 ID 读取指定用户画像，确保用户隔离。"""
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             result = await session.execute(
                 select(UserProfileItem)
                 .where(UserProfileItem.id == item_id)
@@ -160,7 +160,7 @@ class UserProfilePGRepository:
             created_at=now,
             updated_at=now,
         )
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             async with session.begin():
                 session.add(item)
                 await session.flush()
@@ -187,7 +187,7 @@ class UserProfilePGRepository:
     ) -> UserProfileItem | None:
         """手动编辑用户画像并写入版本。"""
         now = datetime.now(timezone.utc)
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             async with session.begin():
                 item = await self._get_for_update(session, user_id, item_id)
                 if item is None:
@@ -226,7 +226,7 @@ class UserProfilePGRepository:
     ) -> tuple[UserProfileItem | None, bool]:
         """软删除指定画像，重复删除保持幂等。"""
         now = datetime.now(timezone.utc)
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             async with session.begin():
                 item = await self._get_for_update(session, user_id, item_id)
                 if item is None:
@@ -259,7 +259,7 @@ class UserProfilePGRepository:
         """在单个事务中应用模型提取后的用户画像变更计划。"""
         mutation_count = 0
         now = datetime.now(timezone.utc)
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             async with session.begin():
                 for mutation in plan.mutations:
                     candidate = mutation.candidate
@@ -352,7 +352,7 @@ class UserProfilePGRepository:
 
     async def create_indexes(self) -> None:
         """创建用户画像生产索引，幂等执行。"""
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             for statement in USER_PROFILE_INDEX_STATEMENTS:
                 await session.execute(text(statement))
             await session.commit()

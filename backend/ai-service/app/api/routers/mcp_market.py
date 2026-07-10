@@ -85,7 +85,7 @@ async def _get_pg_client(request: Request) -> PostgresClient:
 async def _get_mcp_pg_repo(request: Request) -> MCPToolPGRepo:
     """从 app.state 构建 MCPToolPGRepo 实例。"""
     pg_client = await _get_pg_client(request)
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         return MCPToolPGRepo(session)
 
 
@@ -352,7 +352,7 @@ async def list_marketplace(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             # 构建计数查询和列表查询的公共 WHERE 条件
             conditions = []
             
@@ -426,7 +426,7 @@ async def marketplace_detail(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPMarketplace).where(MCPMarketplace.id == marketplace_id)
             )
@@ -565,7 +565,7 @@ async def install_remote_mcp(
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         # Step 1: 查询市场条目
         result = await session.execute(
             select(MCPMarketplace).where(MCPMarketplace.id == marketplace_id)
@@ -681,7 +681,7 @@ async def list_installed_mcp(request: Request):
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPRemoteInstance)
                 .where(MCPRemoteInstance.user_id == "local_default_user")
@@ -707,7 +707,7 @@ async def uninstall_remote_mcp(instance_id: str, request: Request):
     trace_id = request.headers.get("X-Trace-ID", generate_string_id())
     pg_client = await _get_pg_client(request)
 
-    async with pg_client.session_factory() as session:
+    async with pg_client.session() as session:
         # Step 1: 查询实例
         result = await session.execute(
             select(MCPRemoteInstance).where(
@@ -791,7 +791,7 @@ async def search_marketplace(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             # 使用 PostgreSQL FTS 全文检索
             offset = (page - 1) * page_size
 
@@ -856,7 +856,7 @@ async def list_categories(request: Request):
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPMarketplace.category, func.count(MCPMarketplace.id).label("count"))
                 .group_by(MCPMarketplace.category)
@@ -883,7 +883,7 @@ async def trending_marketplace(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPMarketplace)
                 .where(MCPMarketplace.health_status == HealthStatus.ONLINE.value)
@@ -923,7 +923,7 @@ async def toggle_instance_active(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPRemoteInstance).where(
                     MCPRemoteInstance.id == instance_id,
@@ -972,7 +972,7 @@ async def health_check_instance(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPRemoteInstance).where(
                     MCPRemoteInstance.id == instance_id,
@@ -1043,7 +1043,7 @@ async def update_instance(
     pg_client = await _get_pg_client(request)
 
     try:
-        async with pg_client.session_factory() as session:
+        async with pg_client.session() as session:
             result = await session.execute(
                 select(MCPRemoteInstance).where(
                     MCPRemoteInstance.id == instance_id,

@@ -34,7 +34,7 @@ class PromptPGRepo:
         if self._session:
             yield self._session
         else:
-            async with self.pg_client.session_factory() as session:
+            async with self.pg_client.session() as session:
                 yield session
 
     async def list_templates(self) -> List[PromptTemplate]:
@@ -115,7 +115,7 @@ class PromptPGRepo:
         边界条件：模板已存在时不覆盖，避免破坏用户在 Prompt 管理面板中的自定义版本。
         异常行为：数据库异常向上抛出，由启动流程记录。
         """
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             result = await session.execute(select(PromptTemplate).where(PromptTemplate.name == name))
             existing = result.scalars().first()
             if existing:
@@ -169,7 +169,7 @@ class PromptPGRepo:
 
     async def run_in_transaction(self, fn: Callable[['PromptPGRepo'], Coroutine]) -> None:
         """在事务中执行操作"""
-        async with self.pg_client.session_factory() as session:
+        async with self.pg_client.session() as session:
             async with session.begin():
                 tx_repo = PromptPGRepo(self.pg_client, session=session)
                 await fn(tx_repo)
