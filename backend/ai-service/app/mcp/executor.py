@@ -128,13 +128,14 @@ async def execute_tool(
                     server_id = det.name # 或者通过特定前缀提取 server_id
                     
                     # 为了统一风控，从数据库中提取完整的工具信息
-                    from app.repository.postgres import get_db_session
+                    from app.infrastructure.postgres import PostgresClient
                     from app.repository.models import MCPToolRegistration
                     from sqlalchemy import select
                     
                     import asyncio
                     async def fetch_tool_meta():
-                        async for session in get_db_session():
+                        pg_client = PostgresClient.get_instance()
+                        async with pg_client.session() as session:
                             stmt = select(MCPToolRegistration).where(MCPToolRegistration.name == tool_name)
                             res = await session.execute(stmt)
                             return res.scalar_one_or_none()

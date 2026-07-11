@@ -6,7 +6,7 @@ import httpx
 from app.logger import get_logger
 from app.mcp.server_manager import MCPServerManager, MCPServerConfigModel
 from app.mcp.skill_registry import SkillRegistry
-from app.repository.postgres import get_db_session
+from app.infrastructure.postgres import PostgresClient
 from app.repository.models import MCPToolRegistration
 from app.utils.snowflake import generate_string_id
 
@@ -108,7 +108,8 @@ class DiscoverySyncEngine:
 
         tool_names_synced = []
         
-        async for session in get_db_session():
+        pg_client = PostgresClient.get_instance()
+        async with pg_client.session() as session:
             from sqlalchemy import select, update, delete
             
             for tool_def in tools:
@@ -153,11 +154,22 @@ class DiscoverySyncEngine:
             await session.commit()
             
         logger.info(f"Synced {len(tool_names_synced)} tools from {server.server_id}.")
-        # 同步后更新内存中的 SkillRegistry （假设上层会处理或触发重新加载）
-        # self._skill_registry.reload_from_db()  # 根据现有的 registry 方法调用
+        
+        # 触发本地缓存重新加载，确保 ToolExecuteNode 等后续节点能立即获取到新同步的工具
+        try:
+            await self._skill_registry.load_from_db()
+        except Exception as e:
+            logger.warning(f"Failed to reload SkillRegistry after sync: {e}")
 
-    async def start_background_sync(self):
-        """启动后台定时同步任务。"""
-        # 注意：这里的实现应该交给更上层的 scheduler/worker 去管理生命周期。
-        # 这是一个示例逻辑。
-        pass
+    async def start_background_sync(self, interval_seconds: int = 3600):
+        """
+        启动后台定时同步任务。
+        应由外部调度器（如 asyncio.create_task）调用。
+        """
+        logger.info(f"Starting background discovery sync with interval {interval_seconds}s")
+        while True:
+            try:
+                await self.sync_all_servers()
+            except Exception as e:
+                logger.error(f"Error in background sync loop: {e}", exc_info=True)
+            await asyncio.sleep(interval_seconds)

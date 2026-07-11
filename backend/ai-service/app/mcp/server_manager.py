@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, Any
 from pydantic import BaseModel, Field
 
 from app.logger import get_logger
-from app.repository.postgres import get_db_session
+from app.infrastructure.postgres import PostgresClient
 from app.repository.models import MCPServerConfig
 from app.utils.snowflake import generate_string_id
 from app.config.settings import settings
@@ -102,7 +102,8 @@ class MCPServerManager:
                 auth_data = server_data.get("auth", {})
                 
                 # 写入到数据库中（UPSERT）
-                async for session in get_db_session():
+                pg_client = PostgresClient.get_instance()
+                async with pg_client.session() as session:
                     from sqlalchemy import select
                     stmt = select(MCPServerConfig).where(MCPServerConfig.server_id == server_id)
                     result = await session.execute(stmt)
@@ -137,7 +138,8 @@ class MCPServerManager:
     async def _load_from_pg(self):
         """从 PG 数据库加载配置到内存。"""
         try:
-            async for session in get_db_session():
+            pg_client = PostgresClient.get_instance()
+            async with pg_client.session() as session:
                 from sqlalchemy import select
                 stmt = select(MCPServerConfig)
                 result = await session.execute(stmt)
