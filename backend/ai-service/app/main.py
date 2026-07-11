@@ -850,10 +850,10 @@ async def lifespan(app: FastAPI):
         # 4.1 加载 Toolbox 配置到内存并执行全量发现 (阻塞式，确保 DB 最新)
         logger.info("开始加载外部 MCP Toolbox 配置并执行全量同步...")
         mcp_manager = MCPServerManager.get_instance()
-        await mcp_manager.initialize()
+        await mcp_manager.initialize(pg_client)
         
         discovery_engine = DiscoverySyncEngine.get_instance()
-        await discovery_engine.sync_everything()
+        await discovery_engine.sync_everything(pg_client)
 
         # 4.2 注册内置工具
         from app.mcp.registry import MCPToolRegistry
@@ -913,7 +913,7 @@ async def lifespan(app: FastAPI):
 
         # 4.3 启动后台异步任务，定期拉取更新
         mcp_sync_task = asyncio.create_task(
-            discovery_engine.start_background_sync(interval_seconds=3600)
+            discovery_engine.start_background_sync(pg_client, interval_seconds=3600)
         )
         app.state.mcp_sync_task = mcp_sync_task
         logger.info("MCP Toolbox 后台同步任务已启动")

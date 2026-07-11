@@ -75,13 +75,13 @@ class MCPServerManager:
             cls._instance = MCPServerManager()
         return cls._instance
 
-    async def initialize(self):
+    async def initialize(self, pg_client: PostgresClient):
         """
         初始化 Server Manager，加载 Toolbox 配置，然后加载 PG 中的 Server。
         """
         logger.info("Initializing MCPServerManager...")
         self._load_toolboxes_from_yaml()
-        await self._load_from_pg()
+        await self._load_from_pg(pg_client)
         logger.info(f"MCPServerManager initialized with {len(self._toolboxes)} toolboxes and {len(self._configs)} servers.")
 
     def _resolve_env_vars_in_dict(self, data: Any) -> Any:
@@ -169,10 +169,9 @@ class MCPServerManager:
         except Exception as e:
             logger.error(f"Failed to load MCP toolboxes from YAML: {e}", exc_info=True)
 
-    async def _load_from_pg(self):
+    async def _load_from_pg(self, pg_client: PostgresClient):
         """从 PG 数据库加载配置到内存。"""
         try:
-            pg_client = PostgresClient.get_instance()
             async with pg_client.session() as session:
                 from sqlalchemy import select
                 stmt = select(MCPServerConfig)

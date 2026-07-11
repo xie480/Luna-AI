@@ -32,7 +32,7 @@ class DiscoverySyncEngine:
             cls._instance = DiscoverySyncEngine()
         return cls._instance
 
-    async def sync_everything(self):
+    async def sync_everything(self, pg_client: PostgresClient):
         """执行全量级联发现，供启动和定时任务调用"""
         logger.info("开始执行 MCP 全量发现 (Toolbox -> Servers -> Tools)")
         toolboxes = self._manager.get_all_toolboxes()
@@ -41,16 +41,15 @@ class DiscoverySyncEngine:
             try:
                 # 级别一：发现 Server，并落盘到 mcp_server_configs 表
                 servers = await self._fetch_servers_from_toolbox(toolbox)
-                await self._upsert_servers_to_pg(toolbox, servers)
+                await self._upsert_servers_to_pg(pg_client, toolbox, servers)
                 
                 # 级别二：发现 Tool，并落盘到 mcp_tool_registrations 表
                 for server in servers:
-                    await self.sync_server_tools(server)
+                    await self.sync_server_tools(pg_client, server)
             except Exception as e:
                 logger.error(f"同步 Toolbox {toolbox.id} 异常: {e}", exc_info=True)
                 
         # 刷新本地缓存供 Agent 路由使用
-        pg_client = PostgresClient.get_instance()
         async with pg_client.session() as session:
             try:
                 await self._skill_registry.load_from_pg(session)
@@ -98,12 +97,11 @@ class DiscoverySyncEngine:
                 logger.error(f"从 Toolbox {toolbox.id} 获取 Server 失败: {e}", exc_info=True)
                 return []
 
-    async def _upsert_servers_to_pg(self, toolbox: MCPToolboxConfigModel, servers: List[MCPServerConfigModel]):
+    async def _upsert_servers_to_pg(self, pg_client: PostgresClient, toolbox: MCPToolboxConfigModel, servers: List[MCPServerConfigModel]):
         """将发现的 Server 列表 UPSERT 到 PostgreSQL"""
         if not servers:
             return
 
-        pg_client = PostgresClient.get_instance()
         async with pg_client.session() as session:
             from sqlalchemy import select
             
@@ -147,7 +145,7 @@ class DiscoverySyncEngine:
             await session.commit()
             
         # 同步更新 Manager 内存中的配置
-        await self._manager._load_from_pg()
+        await self._manager._load_from_pg(pg_client)
 
     async def _fetch_tools_from_server(self, server: MCPServerConfigModel) -> List[Dict[str, Any]]:
         """级别二发现：向外部 Server 发起 tools/list 请求获取工具列表。"""
@@ -193,7 +191,7 @@ class DiscoverySyncEngine:
             
         return risk_level
 
-    async def sync_server_tools(self, server: MCPServerConfigModel):
+    async def sync_server_tools(self, pg_client: PostgresClient, server: MCPServerConfigModel):
         """同步指定 Server 的工具。"""
         logger.info(f"Syncing tools for server: {server.server_id} at {server.endpoint_url}")
         if not server.endpoint_url:
@@ -205,7 +203,6 @@ class DiscoverySyncEngine:
             return
 
         tool_names_synced = []
-        pg_client = PostgresClient.get_instance()
         async with pg_client.session() as session:
             from sqlalchemy import select
             
@@ -257,7 +254,7 @@ class DiscoverySyncEngine:
             
         logger.info(f"Synced {len(tool_names_synced)} tools from {server.server_id}.")
 
-    async def start_background_sync(self, interval_seconds: int = 3600):
+    async def start_background_sync(self, pg_client: PostgresClient, interval_seconds: int = 3600):
         """
         启动后台定时同步任务。
         """
@@ -265,6 +262,6 @@ class DiscoverySyncEngine:
         while True:
             await asyncio.sleep(interval_seconds)
             try:
-                await self.sync_everything()
+                await self.sync_everything(pg_client)
             except Exception as e:
                 logger.error(f"Error in background sync loop: {e}", exc_info=True)
