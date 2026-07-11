@@ -132,7 +132,6 @@ async def execute_tool(
                     from app.repository.models import MCPToolRegistration
                     from sqlalchemy import select
                     
-                    import asyncio
                     async def fetch_tool_meta():
                         pg_client = PostgresClient.get_instance()
                         async with pg_client.session() as session:
