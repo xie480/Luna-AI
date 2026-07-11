@@ -172,21 +172,31 @@ class DiscoverySyncEngine:
     async def _sync_tools_for_skill(self, session: AsyncSession, skill_id: str, toolbox_id: str, tools: list[dict]):
         """拉取 Tool 并挂载到生成的 Skill"""
         from app.repository.models import MCPToolRegistration
+        from app.repository.models import Skill
+        
+        # 为了生成 prefix，需要获取 skill name
+        stmt = select(Skill.name).where(Skill.id == skill_id)
+        result = await session.execute(stmt)
+        skill_name = result.scalar_one_or_none()
+        
+        # 移除空格并将名称规范化，用于前缀
+        normalized_skill_name = skill_name.replace(" ", "_").lower() if skill_name else ""
+        prefix = f"{normalized_skill_name}." if normalized_skill_name else ""
         
         tool_names_synced = []
         for raw_tool in tools:
-            tool_name = raw_tool.get("name")
-            if not tool_name:
+            base_tool_name = raw_tool.get("name")
+            if not base_tool_name:
                 continue
+                
+            # MCP 外部工具注册命名规范: mcp_name.toolname
+            tool_name = f"{prefix}{base_tool_name}"
                 
             tool_schema = raw_tool.get("inputSchema") or raw_tool.get("input_schema") or {}
             description = raw_tool.get("description") or ""
             
             stmt = select(MCPToolRegistration).where(
-                and_(
-                    MCPToolRegistration.skill_id == skill_id,
-                    MCPToolRegistration.name == tool_name
-                )
+                MCPToolRegistration.name == tool_name
             )
             result = await session.execute(stmt)
             existing_tool = result.scalar_one_or_none()
@@ -198,7 +208,6 @@ class DiscoverySyncEngine:
                     name=tool_name,
                     description=description,
                     parameters_schema=tool_schema,
-                    execution_type="mcp_remote",
                     enabled=True,
                     server_id=toolbox_id, # 仍保留该字段方便执行器路由
                     is_external=True
@@ -206,8 +215,13 @@ class DiscoverySyncEngine:
                 session.add(new_tool)
                 logger.info(f"Mounted Tool '{tool_name}' under Skill ID '{skill_id}'.")
             else:
-                existing_tool.parameters_schema = tool_schema
-                existing_tool.description = description
+                # 只有当它是外部工具或者我们确认要覆盖它时才更新
+                # 这避免了将已有的本地工具覆盖为外部工具
+                if existing_tool.is_external:
+                    existing_tool.skill_id = skill_id
+                    existing_tool.parameters_schema = tool_schema
+                    existing_tool.description = description
+                    existing_tool.server_id = toolbox_id
             
             tool_names_synced.append(tool_name)
             
