@@ -70,8 +70,40 @@ class MCPServerManager:
         await self._load_from_pg()
         logger.info(f"MCPServerManager initialized with {len(self._configs)} servers.")
 
+    def _resolve_env_vars_in_dict(self, data: Any) -> Any:
+        """递归解析字典/列表中的环境变量占位符，例如 ${MY_VAR:-default}"""
+        import re
+        env_pattern = re.compile(r'\$\{([^}]+)\}')
+        
+        def replace_match(match):
+            inner = match.group(1)
+            parts = inner.split(":-", 1)
+            var_name = parts[0]
+            default_val = parts[1] if len(parts) > 1 else ""
+            val = os.environ.get(var_name, default_val)
+            return val
+            
+        if isinstance(data, dict):
+            return {k: self._resolve_env_vars_in_dict(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [self._resolve_env_vars_in_dict(v) for v in data]
+        elif isinstance(data, str):
+            # 将类似 "true"/"false" 解析回 boolean 或者数字
+            resolved = env_pattern.sub(replace_match, data)
+            if resolved.lower() == "true":
+                return True
+            if resolved.lower() == "false":
+                return False
+            try:
+                if "." in resolved:
+                    return float(resolved)
+                return int(resolved)
+            except ValueError:
+                return resolved
+        return data
+
     async def _load_from_yaml(self):
-        """从 YAML 配置文件中加载预设。"""
+        """从 YAML 配置文件中加载预设，并支持 ${ENV_VAR} 环境变量挂载。"""
         if not self._config_path.exists():
             logger.warning(f"MCP server config file {self._config_path} not found.")
             return
@@ -79,6 +111,9 @@ class MCPServerManager:
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 yaml_data = yaml.safe_load(f)
+            
+            # 解析顶层的环境变量
+            yaml_data = self._resolve_env_vars_in_dict(yaml_data)
                 
             if not yaml_data or "mcp_servers" not in yaml_data:
                 return
