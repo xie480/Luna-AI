@@ -841,10 +841,21 @@ async def lifespan(app: FastAPI):
 
         rollover_task = asyncio.create_task(_rollover_loop())
 
-    # 4. Phase 12: 注册内置 MCP 工具并加载 PG 持久化注册
-    # 做什么：注册内置 L0 级低危 MCP 工具，然后从 PG 加载已有工具注册记录。
-    #         PG 作为工具注册的 SSOT，确保重启后注册信息不丢失。
+    # 4. Phase 12/13: 注册 MCP 工具并初始化配置管理器
+    # 做什么：初始化 ServerManager 加载外部 toolbox 配置 -> 注册内置工具 -> 从 PG 加载已有工具 -> 启动后台发现任务
     try:
+        from app.mcp.server_manager import MCPServerManager
+        from app.mcp.discovery_sync import DiscoverySyncEngine
+        
+        # 4.1 加载 Toolbox 配置到内存并执行全量发现 (阻塞式，确保 DB 最新)
+        logger.info("开始加载外部 MCP Toolbox 配置并执行全量同步...")
+        mcp_manager = MCPServerManager.get_instance()
+        await mcp_manager.initialize()
+        
+        discovery_engine = DiscoverySyncEngine.get_instance()
+        await discovery_engine.sync_everything()
+
+        # 4.2 注册内置工具
         from app.mcp.registry import MCPToolRegistry
         from app.mcp.types import MCPToolSchema, ToolRiskLevel
         from app.repository.mcp_tool_pg import MCPToolPGRepo
@@ -899,6 +910,13 @@ async def lifespan(app: FastAPI):
             # 注意：persist_to_pg 需要在同一个 session 中执行
             await mcp_registry.persist_to_pg(mcp_pg_repo)
             logger.info("MCP 工具 PG 持久化同步完成")
+
+        # 4.3 启动后台异步任务，定期拉取更新
+        mcp_sync_task = asyncio.create_task(
+            discovery_engine.start_background_sync(interval_seconds=3600)
+        )
+        app.state.mcp_sync_task = mcp_sync_task
+        logger.info("MCP Toolbox 后台同步任务已启动")
 
         # 初始化 SkillRegistry：从 PG 加载所有 Skill 到内存缓存
         try:
@@ -1098,6 +1116,12 @@ async def lifespan(app: FastAPI):
     # Shutdown: 优雅关闭
     app.state.is_ready = False
     logger.info("正在关闭服务器...")
+    
+    # 停止 MCP 后台同步任务
+    mcp_sync_task = getattr(app.state, "mcp_sync_task", None)
+    if mcp_sync_task:
+        mcp_sync_task.cancel()
+        logger.info("MCP Toolbox 后台同步任务已停止")
 
     # Phase 13：停止 Gating 超时检测调度器
     gating_svc = getattr(app.state, "gating_service", None)

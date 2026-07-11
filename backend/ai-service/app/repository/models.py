@@ -634,6 +634,7 @@ class MCPServerConfig(Base):
     auth_config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default='{}')
     sync_strategies: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default='{}')
     status: Mapped[str] = mapped_column(String(32), nullable=False, default='ACTIVE')
+    toolbox_id: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

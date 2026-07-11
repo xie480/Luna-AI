@@ -3,27 +3,22 @@ from typing import Dict, Any, List
 
 import httpx
 
-from app.logger import get_logger
-from app.mcp.server_manager import MCPServerManager, MCPServerConfigModel
+from app.logger import logger
+from app.mcp.server_manager import MCPServerManager, MCPServerConfigModel, MCPToolboxConfigModel
 from app.mcp.skill_registry import SkillRegistry
 from app.infrastructure.postgres import PostgresClient
-from app.repository.models import MCPToolRegistration
+from app.repository.models import MCPToolRegistration, MCPServerConfig
 from app.utils.snowflake import generate_string_id
-
-logger = get_logger("mcp.discovery_sync")
 
 
 class DiscoverySyncEngine:
     """
-    外部 MCP Server 工具发现与同步引擎。
+    外部 MCP 两级发现与同步引擎。
     
-    做什么：实现对远端 Tool 注册列表的动态发现、缓存更新和过期管理。
-    为什么这样做：外部工具是动态变化的。系统需要定时或在初始化时，通过 JSON-RPC
-                向远端发起 tools/list 请求，获取可用工具并更新本地缓存及数据库。
-    边界条件：
-        - 从 Server Manager 获取 active 的 servers。
-        - 仅当工具为外部工具时，设置 is_external=True 及关联 server_id。
-        - 根据 destructiveHint 动态映射风险等级。
+    做什么：实现 Toolbox -> Server -> Tool 的级联拉取与持久化。
+    为什么这样做：外部工具是通过注册在 Toolbox 上的多个 Server 提供的。系统需要通过
+                HTTP 请求从 Toolbox 发现可用的 Server 列表，然后再通过 JSON-RPC
+                向每个 Server 发起 tools/list 请求，获取可用工具并更新数据库。
     """
     _instance = None
 
@@ -37,17 +32,130 @@ class DiscoverySyncEngine:
             cls._instance = DiscoverySyncEngine()
         return cls._instance
 
-    async def _fetch_tools_from_server(self, server: MCPServerConfigModel) -> List[Dict[str, Any]]:
-        """向外部 Server 发起 tools/list 请求获取工具列表。"""
-        headers = {"Content-Type": "application/json"}
-        token = self._manager.resolve_auth_token(server.server_id)
+    async def sync_everything(self):
+        """执行全量级联发现，供启动和定时任务调用"""
+        logger.info("开始执行 MCP 全量发现 (Toolbox -> Servers -> Tools)")
+        toolboxes = self._manager.get_all_toolboxes()
         
+        for toolbox in toolboxes:
+            try:
+                # 级别一：发现 Server，并落盘到 mcp_server_configs 表
+                servers = await self._fetch_servers_from_toolbox(toolbox)
+                await self._upsert_servers_to_pg(toolbox, servers)
+                
+                # 级别二：发现 Tool，并落盘到 mcp_tool_registrations 表
+                for server in servers:
+                    await self.sync_server_tools(server)
+            except Exception as e:
+                logger.error(f"同步 Toolbox {toolbox.id} 异常: {e}", exc_info=True)
+                
+        # 刷新本地缓存供 Agent 路由使用
+        pg_client = PostgresClient.get_instance()
+        async with pg_client.session() as session:
+            try:
+                await self._skill_registry.load_from_pg(session)
+            except Exception as e:
+                logger.warning(f"全量同步后刷新 SkillRegistry 缓存失败: {e}", exc_info=True)
+
+    async def _fetch_servers_from_toolbox(self, toolbox: MCPToolboxConfigModel) -> List[MCPServerConfigModel]:
+        """级别一发现：调用 Toolbox API 获取 Server 列表"""
+        headers = {}
+        token = self._manager.resolve_toolbox_auth_token(toolbox.id)
         if token:
-            if server.auth.type == "bearer" or server.auth.type == "service_token":
-                headers["Authorization"] = f"Bearer {token}"
-            elif server.auth.type == "api_key":
-                # Fallback API key env parsing logic can go here. Assuming typical bearer/service token pattern
-                headers["Authorization"] = f"Bearer {token}"
+            headers["Authorization"] = f"Bearer {token}"
+
+        logger.info(f"正在从 Toolbox {toolbox.id} ({toolbox.endpoint_url}) 获取 Server 列表...")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                response = await client.get(toolbox.endpoint_url, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                
+                servers = []
+                # 假设 Toolbox 返回 { "servers": [ { "id": "srv_1", "endpoint": "https://..." } ] }
+                # 这里根据实际的 Smithery / 其他 Toolbox 的数据结构来解析
+                logger.info(f"从 Toolbox {toolbox.id} 获取到 {data.get('servers', [])}")
+                for s_data in data.get("servers", []):
+                    server = MCPServerConfigModel(
+                        server_id=s_data.get("id"),
+                        name=s_data.get("name", s_data.get("id")),
+                        endpoint_url=s_data.get("endpoint", s_data.get("url", "")),
+                        transport_type=s_data.get("transport", "http"),
+                        toolbox_id=toolbox.id,
+                        # 继承 toolbox 的部分配置
+                        namespace=toolbox.namespace,
+                        defer_loading=toolbox.defer_loading,
+                        sync_interval_seconds=toolbox.sync_interval_seconds,
+                        timeout_seconds=toolbox.timeout_seconds,
+                        circuit_breaker=toolbox.circuit_breaker,
+                        allow_tools=toolbox.allow_tools,
+                        deny_tools=toolbox.deny_tools
+                    )
+                    servers.append(server)
+                logger.info(f"从 Toolbox {toolbox.id} 发现了 {len(servers)} 个 Server。")
+                return servers
+            except Exception as e:
+                logger.error(f"从 Toolbox {toolbox.id} 获取 Server 失败: {e}", exc_info=True)
+                return []
+
+    async def _upsert_servers_to_pg(self, toolbox: MCPToolboxConfigModel, servers: List[MCPServerConfigModel]):
+        """将发现的 Server 列表 UPSERT 到 PostgreSQL"""
+        if not servers:
+            return
+
+        pg_client = PostgresClient.get_instance()
+        async with pg_client.session() as session:
+            from sqlalchemy import select
+            
+            # 首先将这个 toolbox 下现有的 server 状态都置为 OFFLINE
+            # (暂时用这种方式标记未在最新拉取中出现的 Server，如果需要可以先查询再 update)
+            
+            for server_data in servers:
+                stmt = select(MCPServerConfig).where(MCPServerConfig.server_id == server_data.server_id)
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
+
+                sync_strategies = {
+                    "defer_loading": server_data.defer_loading,
+                    "sync_interval_seconds": server_data.sync_interval_seconds,
+                    "timeout_seconds": server_data.timeout_seconds,
+                    "allow_tools": server_data.allow_tools,
+                    "deny_tools": server_data.deny_tools,
+                    "namespace": server_data.namespace,
+                    "circuit_breaker": server_data.circuit_breaker.dict()
+                }
+
+                if existing:
+                    existing.name = server_data.name
+                    existing.endpoint_url = server_data.endpoint_url
+                    existing.transport_type = server_data.transport_type
+                    existing.toolbox_id = toolbox.id
+                    existing.sync_strategies = sync_strategies
+                    existing.status = "ACTIVE"
+                else:
+                    new_config = MCPServerConfig(
+                        id=generate_string_id(),
+                        server_id=server_data.server_id,
+                        name=server_data.name,
+                        endpoint_url=server_data.endpoint_url,
+                        transport_type=server_data.transport_type,
+                        toolbox_id=toolbox.id,
+                        sync_strategies=sync_strategies,
+                        status="ACTIVE"
+                    )
+                    session.add(new_config)
+            await session.commit()
+            
+        # 同步更新 Manager 内存中的配置
+        await self._manager._load_from_pg()
+
+    async def _fetch_tools_from_server(self, server: MCPServerConfigModel) -> List[Dict[str, Any]]:
+        """级别二发现：向外部 Server 发起 tools/list 请求获取工具列表。"""
+        headers = {"Content-Type": "application/json"}
+        # 复用所属 toolbox 的 token
+        token = self._manager.resolve_auth_token(server.server_id)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
 
         payload = {
             "jsonrpc": "2.0",
@@ -62,23 +170,19 @@ class DiscoverySyncEngine:
                 data = response.json()
                 
                 if "error" in data:
-                    logger.error(f"Failed to fetch tools from {server.server_id}: {data['error']}")
+                    logger.error(f"Failed to fetch tools from server {server.server_id}: {data['error']}")
                     return []
                     
                 result = data.get("result", {})
                 return result.get("tools", [])
         except Exception as e:
-            logger.error(f"Error fetching tools from {server.server_id}: {e}", exc_info=True)
+            logger.error(f"Error fetching tools from server {server.server_id}: {e}")
             return []
 
     def _map_risk_level(self, tool_def: Dict[str, Any]) -> str:
         """动态映射风险等级。"""
-        # 默认级别
         risk_level = "L1"
-        
-        # MCP 协议标准注解判断
         annotations = tool_def.get("annotations", {})
-        # 一些变体可能直接在顶层
         read_only_hint = tool_def.get("readOnlyHint") or annotations.get("readOnlyHint", False)
         destructive_hint = tool_def.get("destructiveHint") or annotations.get("destructiveHint", False)
         
@@ -89,41 +193,39 @@ class DiscoverySyncEngine:
             
         return risk_level
 
-    async def sync_all_servers(self):
-        """同步所有已激活 Server 的工具。"""
-        active_servers = self._manager.get_all_active_servers()
-        logger.info(f"Starting discovery sync for {len(active_servers)} active servers.")
-        
-        for server in active_servers:
-            await self.sync_server(server)
-
-    async def sync_server(self, server: MCPServerConfigModel):
+    async def sync_server_tools(self, server: MCPServerConfigModel):
         """同步指定 Server 的工具。"""
-        logger.info(f"Syncing tools for server: {server.server_id}")
+        logger.info(f"Syncing tools for server: {server.server_id} at {server.endpoint_url}")
+        if not server.endpoint_url:
+            return
+            
         tools = await self._fetch_tools_from_server(server)
-        
         if not tools:
             logger.warning(f"No tools found or error occurred for server {server.server_id}.")
             return
 
         tool_names_synced = []
-        
         pg_client = PostgresClient.get_instance()
         async with pg_client.session() as session:
-            from sqlalchemy import select, update, delete
+            from sqlalchemy import select
             
             for tool_def in tools:
-                # 外部工具统一加前缀，避免与本地冲突
                 raw_name = tool_def.get("name")
                 if not raw_name:
                     continue
                     
                 tool_name = f"{server.namespace}.{raw_name}"
+                
+                # 黑白名单过滤
+                if raw_name in server.deny_tools:
+                    continue
+                if "*" not in server.allow_tools and raw_name not in server.allow_tools:
+                    continue
+
                 description = tool_def.get("description", "")
                 input_schema = tool_def.get("inputSchema", {})
                 risk_level = self._map_risk_level(tool_def)
                 
-                # Check DB Upsert
                 stmt = select(MCPToolRegistration).where(MCPToolRegistration.name == tool_name)
                 result = await session.execute(stmt)
                 existing = result.scalar_one_or_none()
@@ -154,22 +256,15 @@ class DiscoverySyncEngine:
             await session.commit()
             
         logger.info(f"Synced {len(tool_names_synced)} tools from {server.server_id}.")
-        
-        # 触发本地缓存重新加载，确保 ToolExecuteNode 等后续节点能立即获取到新同步的工具
-        try:
-            await self._skill_registry.load_from_db()
-        except Exception as e:
-            logger.warning(f"Failed to reload SkillRegistry after sync: {e}")
 
     async def start_background_sync(self, interval_seconds: int = 3600):
         """
         启动后台定时同步任务。
-        应由外部调度器（如 asyncio.create_task）调用。
         """
         logger.info(f"Starting background discovery sync with interval {interval_seconds}s")
         while True:
+            await asyncio.sleep(interval_seconds)
             try:
-                await self.sync_all_servers()
+                await self.sync_everything()
             except Exception as e:
                 logger.error(f"Error in background sync loop: {e}", exc_info=True)
-            await asyncio.sleep(interval_seconds)
