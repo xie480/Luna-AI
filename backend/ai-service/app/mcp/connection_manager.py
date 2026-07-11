@@ -78,9 +78,12 @@ class McpConnectionManager:
                     http_client = httpx.AsyncClient(timeout=timeout_cfg, headers=headers)
                     await exit_stack.enter_async_context(http_client)
                     
-                    transport = streamable_http_client(endpoint_url, http_client=http_client)
-                    # streamable_http_client yields (read_stream, write_stream)
-                    read_stream, write_stream = await exit_stack.enter_async_context(transport)
+                    # streamable_http_client returns an async context manager that yields 3 items:
+                    # (read_stream, write_stream, session_id_getter)
+                    transport_ctx = await exit_stack.enter_async_context(
+                        streamable_http_client(endpoint_url, http_client=http_client)
+                    )
+                    read_stream, write_stream, _ = transport_ctx
                 else:
                     # 默认标准 sse_client
                     read_stream, write_stream = await exit_stack.enter_async_context(

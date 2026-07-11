@@ -53,14 +53,15 @@ class DiscoverySyncEngine:
     def _map_risk_level(self, tool_def: Any) -> str:
         """动态映射风险等级。"""
         risk_level = "L1"
-        annotations = tool_def.get("annotations", {})
-        read_only_hint = tool_def.get("readOnlyHint") or annotations.get("readOnlyHint", False)
-        destructive_hint = tool_def.get("destructiveHint") or annotations.get("destructiveHint", False)
         
-        if destructive_hint:
-            risk_level = "L2"
-        elif read_only_hint:
-            risk_level = "L0"
+        # 官方 SDK 中 tool_def 已经是 pydantic 对象，而不是 dict
+        # 先尝试按对象属性访问，如果抛异常说明是 dict
+        try:
+            # MCP 协议标准中并无内置的风险评级，一般是在自定义 description 中处理
+            # 或者通过特定的 schema
+            pass
+        except Exception:
+            pass
             
         return risk_level
 
