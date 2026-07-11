@@ -73,6 +73,8 @@ interface PendingRecentMemoryEntry {
   streamFinished: boolean;
   committed: boolean;
   createdAt: number;
+  hasLongAnswer?: boolean;
+  longAnswerId?: string;
 }
 
 interface BubbleBatchSettledEventDetail {
@@ -131,6 +133,12 @@ class SSEManager {
       assistantContent: entry.assistantContent,
       timestamp: Math.floor(Date.now() / 1000),
     };
+    
+    if (entry.hasLongAnswer) {
+      newQA.hasLongAnswer = true;
+      newQA.longAnswerId = entry.longAnswerId;
+    }
+    
     useSessionStore.getState().addRecentQA(newQA);
 
     entry.committed = true;
@@ -1271,6 +1279,10 @@ class SSEManager {
         if (payload.e2e_latency_ms !== undefined) {
           streamMetadata.e2eLatencyMs = payload.e2e_latency_ms;
         }
+        if (payload.long_answer_id) {
+          streamMetadata.hasLongAnswer = true;
+          streamMetadata.longAnswerId = payload.long_answer_id;
+        }
         if (Object.keys(streamMetadata).length > 0) {
           sessionStore.updateMessageMetadata(currentSessionId, assistantMessageId, streamMetadata);
         }
@@ -1281,6 +1293,12 @@ class SSEManager {
         recentMemoryEntry.assistantContent += payload.reply_text;
         recentMemoryEntry.hasBubbleContent =
           recentMemoryEntry.hasBubbleContent || payload.reply_text.trim().length > 0;
+        
+        // update pending QA memory with long answer metadata immediately
+        if (payload.long_answer_id) {
+          recentMemoryEntry.hasLongAnswer = true;
+          recentMemoryEntry.longAnswerId = payload.long_answer_id;
+        }
       }
 
       // ---- 标记消息完成 ----

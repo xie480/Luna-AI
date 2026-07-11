@@ -241,6 +241,18 @@
   padding: 16px 0;
 }
 
+/*
+ * Document Icon Btn
+ */
+.document-icon-btn {
+  transition: all 0.2s ease;
+}
+
+.document-icon-btn:hover {
+  color: var(--accent-color) !important;
+  transform: translateY(-1px);
+}
+
 /* 淡入滑动动画 */
 @keyframes fadeInSlide {
   from {

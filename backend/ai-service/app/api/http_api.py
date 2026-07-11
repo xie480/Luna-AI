@@ -39,6 +39,8 @@ class InteractionQA(BaseModel):
     userContent: str
     assistantContent: str
     timestamp: int
+    hasLongAnswer: bool = False
+    longAnswerId: str = ""
 
 
 class InitStateRequestPayload(BaseModel):
@@ -127,6 +129,17 @@ async def get_chat_history(
             }
         )
         assistant_content = interaction.error or interaction.assistant_content
+        
+        has_long_answer = False
+        long_answer_id = ""
+        
+        metadata = {}
+        if interaction.long_answer_id:
+            has_long_answer = True
+            long_answer_id = interaction.long_answer_id
+            metadata["hasLongAnswer"] = True
+            metadata["longAnswerId"] = long_answer_id
+            
         messages.append(
             {
                 "id": interaction.id,
@@ -135,6 +148,7 @@ async def get_chat_history(
                 "thought": interaction.thought,
                 "emotion": interaction.emotion,
                 "created_at": interaction.created_at.isoformat(),
+                "metadata": metadata
             }
         )
     return APIResponse(
@@ -174,6 +188,8 @@ async def sync_init_state(
             userContent=item.get("userContent", "") if isinstance(item, dict) else getattr(item, "userContent", ""),
             assistantContent=item.get("assistantContent", "") if isinstance(item, dict) else getattr(item, "assistantContent", ""),
             timestamp=item.get("timestamp", 0) if isinstance(item, dict) else getattr(item, "timestamp", 0),
+            hasLongAnswer=item.get("hasLongAnswer", False) if isinstance(item, dict) else getattr(item, "hasLongAnswer", False),
+            longAnswerId=item.get("longAnswerId", "") if isinstance(item, dict) else getattr(item, "longAnswerId", ""),
         )
         for item in last_3_history
     ]

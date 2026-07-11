@@ -322,6 +322,11 @@ class MainChatLlmNode(ChatWorkflowNode):
                             from app.api.http_api import get_pg_client
                             from app.repository.long_answer_pg import LongAnswerPGRepo
                             
+                            # 将生成的长回答ID保存到 metadata 中，以便 response_persistence_node 获取
+                            if not state.generation_state.metadata:
+                                state.generation_state.metadata = {}
+                            state.generation_state.metadata["long_answer_id"] = long_answer_model.id
+                            
                             generated_title = title_accumulated.strip() if title_accumulated else "Luna 的回答"
 
                             async for session in get_pg_client().get_session():
@@ -683,6 +688,11 @@ class MainChatLlmNode(ChatWorkflowNode):
                     title="Luna正在整理中……",
                     status=LongAnswerStatus.GENERATING.value,
                 )
+                
+                # 将生成的长回答ID保存到 metadata 中，以便 response_persistence_node 获取
+                if not state.generation_state.metadata:
+                    state.generation_state.metadata = {}
+                state.generation_state.metadata["long_answer_id"] = long_answer_model.id
                 
                 # 发送创建事件（让面板弹出来）
                 await sse_manager.publish({

@@ -36,6 +36,8 @@ class Interaction(BaseModel):
     emotion: str = ""
     error: str = ""
     timestamp: int
+    hasLongAnswer: bool = False
+    longAnswerId: str = ""
 
 
 class ChatSummary(BaseModel):

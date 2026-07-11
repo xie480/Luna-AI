@@ -10,6 +10,7 @@ export interface HistoryChatMessage {
   created_at: string;
   thought?: string;  // 内心独白字段
   emotion?: string;  // 情绪字段
+  metadata?: Record<string, unknown>; // 增加 metadata
 }
 
 interface HistoryState {

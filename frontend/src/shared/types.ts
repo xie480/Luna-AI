@@ -366,6 +366,8 @@ export interface InteractionQA {
   userContent: string;
   assistantContent: string;
   timestamp: number;
+  hasLongAnswer?: boolean;
+  longAnswerId?: string;
 }
 
 /**

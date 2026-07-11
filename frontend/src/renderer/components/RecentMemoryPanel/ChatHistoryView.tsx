@@ -83,12 +83,13 @@ const ChatMessageItem: React.FC<{
       <div className="message-time-row">
         <div className="message-time">{formatTime(msg.created_at)}</div>
         {/* 文档图标按钮（如存在长回答） */}
+        {/* 文档图标按钮（如存在长回答） */}
         {msg.metadata?.hasLongAnswer && msg.metadata?.longAnswerId && (
           <button
             className="action-icon-btn document-icon-btn"
             onClick={() => {
               import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
-                useLongAnswerStore.getState().openPanel(msg.metadata!.longAnswerId!);
+                useLongAnswerStore.getState().openPanel(msg.metadata!.longAnswerId as string);
               });
             }}
             title="查看文档内容"

@@ -67,6 +67,8 @@ class ResponsePersistenceNode(ChatWorkflowNode):
             )
             assistant_content = error_json
 
+        long_answer_id = state.generation_state.metadata.get("long_answer_id") if state.generation_state.metadata else None
+
         interaction = Interaction(
             msgId=state.generation_state.assistant_message_id,
             userContent=state.input_payload.raw_user_message,
@@ -75,6 +77,8 @@ class ResponsePersistenceNode(ChatWorkflowNode):
             emotion=state.generation_state.emotion,
             error=error_json,
             timestamp=int(time.time()),
+            hasLongAnswer=bool(long_answer_id),
+            longAnswerId=long_answer_id or "",
         )
 
         pg_status = CHAT_WORKFLOW_PG_WRITE_SKIPPED
@@ -92,6 +96,7 @@ class ResponsePersistenceNode(ChatWorkflowNode):
                         thought=state.generation_state.thought_text,
                         emotion=state.generation_state.emotion,
                         error=error_json,
+                        long_answer_id=long_answer_id,
                     )
                 )
                 pg_status = CHAT_WORKFLOW_PG_WRITE_OK
