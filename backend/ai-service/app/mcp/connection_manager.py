@@ -8,7 +8,7 @@ from mcp.client.streamable_http import streamable_http_client
 from contextlib import AsyncExitStack
 
 from app.logger import logger
-from app.mcp.server_manager import MCPServerManager
+from app.mcp.toolbox_manager import ToolboxConfigManager
 
 class McpConnectionManager:
     """
@@ -33,21 +33,21 @@ class McpConnectionManager:
 
     async def get_or_create_session(self, server_id: str) -> Optional[ClientSession]:
         """
-        获取或创建指定 server 的 MCP Session。
+        获取或创建指定 server(在这里是 Toolbox ID) 的 MCP Session。
         """
         async with self._lock:
             if server_id in self._connections:
                 return self._connections[server_id]["session"]
 
             # 需要创建新连接
-            manager = MCPServerManager.get_instance()
-            config = manager.get_server_config(server_id)
+            manager = ToolboxConfigManager.get_instance()
+            config = manager.get_toolbox_config(server_id)
             if not config:
-                logger.error(f"Cannot create connection: config not found for server {server_id}")
+                logger.error(f"Cannot create connection: config not found for toolbox {server_id}")
                 return None
 
             if config.transport_type != "sse":
-                logger.error(f"Unsupported transport type '{config.transport_type}' for server {server_id}. Only 'sse' is supported.")
+                logger.error(f"Unsupported transport type '{config.transport_type}' for toolbox {server_id}. Only 'sse' is supported.")
                 return None
 
             endpoint_url = config.endpoint_url

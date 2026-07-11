@@ -36,12 +36,14 @@ class SkillMetadata:
         description: str,
         enabled: bool = True,
         version: str = "1.0.0",
+        source: str = "local",
     ) -> None:
         self.skill_id = skill_id
         self.name = name
         self.description = description
         self.enabled = enabled
         self.version = version
+        self.source = source
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典，供 Agent 1 Prompt 注入。"""
@@ -76,6 +78,7 @@ class SkillDetail:
         resources: list[dict[str, Any]],
         prompts: dict[str, Any],
         version: str = "1.0.0",
+        source: str = "local",
     ) -> None:
         self.skill_id = skill_id
         self.name = name
@@ -87,6 +90,7 @@ class SkillDetail:
         # prompts 字典包含三个阶段的提示词模板
         self.prompts = prompts
         self.version = version
+        self.source = source
 
 
 class SkillRegistry:
@@ -208,6 +212,7 @@ class SkillRegistry:
                     resources=resources,
                     prompts=prompts_by_phase,
                     version=skill_row.version,
+                    source=getattr(skill_row, "source", "local"),
                 )
                 self._skills[skill_row.id] = detail
 
@@ -347,6 +352,7 @@ class SkillRegistry:
             metadata_=metadata or {},
             version=version,
             enabled=True,
+            source="local", # 手动创建通常是 local
         )
         pg_session.add(new_skill)
         await pg_session.flush()

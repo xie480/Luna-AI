@@ -1,30 +1,30 @@
 import asyncio
-from typing import Dict, Any, List
+from typing import Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
 
 from app.logger import logger
-from app.mcp.server_manager import MCPServerManager, MCPServerConfigModel
+from app.mcp.toolbox_manager import ToolboxConfigManager, ToolboxConfigModel
 from app.mcp.connection_manager import McpConnectionManager
 from app.mcp.skill_registry import SkillRegistry
 from app.infrastructure.postgres import PostgresClient
-from app.repository.models import MCPToolRegistration
 from app.utils.snowflake import generate_string_id
+
+# 需要通过延迟导入避免循环依赖
+# from app.models.layer3_repository.skills import SkillModel
+# from app.models.layer3_repository.tools import MCPToolRegistration
 
 
 class DiscoverySyncEngine:
     """
-    外部 MCP 发现与同步引擎。
-    
-    做什么：实现 Server -> Tool 的拉取与持久化。
-    为什么这样做：外部工具是通过注册的 Server 提供的。系统需要通过
-                MCPConnectionManager 建立连接，然后调用 session.list_tools() 
-                获取可用工具并更新数据库。
+    负责驱动服务发现循环，拉取 Toolbox 数据并重塑为系统标准 Skill 架构。
     """
     _instance = None
 
     def __init__(self):
-        self._manager = MCPServerManager.get_instance()
-        self._connection_manager = McpConnectionManager.get_instance()
-        self._skill_registry = SkillRegistry()
+        self.config_manager = ToolboxConfigManager.get_instance()
+        self.connection_manager = McpConnectionManager.get_instance()
+        self.skill_registry = SkillRegistry()
 
     @classmethod
     def get_instance(cls) -> "DiscoverySyncEngine":
@@ -33,113 +33,156 @@ class DiscoverySyncEngine:
         return cls._instance
 
     async def sync_everything(self, pg_client: PostgresClient):
-        """执行全量同步发现，供启动和定时任务调用"""
-        logger.info("开始执行 MCP 全量发现 (Servers -> Tools)")
-        servers = self._manager.get_all_active_servers()
+        """执行一次完整的发现与注册生命周期"""
+        logger.info("Starting external MCP discovery sync cycle...")
+        toolboxes = self.config_manager.get_all_toolboxes()
         
-        for server in servers:
-            try:
-                await self.sync_server_tools(pg_client, server)
-            except Exception as e:
-                logger.error(f"同步 Server {server.server_id} 异常: {e}", exc_info=True)
-                
-        # 刷新本地缓存供 Agent 路由使用
+        for toolbox in toolboxes:
+            await self._process_toolbox(pg_client, toolbox)
+            
+        # 所有同步结束后，通知 SkillRegistry 重新从 PG 拉取最新形态以供 DAG 引擎使用
         async with pg_client.session() as session:
-            try:
-                await self._skill_registry.load_from_pg(session)
-            except Exception as e:
-                logger.warning(f"全量同步后刷新 SkillRegistry 缓存失败: {e}", exc_info=True)
+            await self.skill_registry.load_from_pg(session)
+            
+        logger.info("Sync cycle completed. Skill registry cache refreshed.")
 
-    def _map_risk_level(self, tool_def: Any) -> str:
-        """动态映射风险等级。"""
-        risk_level = "L1"
+    async def _process_toolbox(self, pg_client: PostgresClient, toolbox: ToolboxConfigModel):
+        logger.info(f"Connecting to Toolbox [{toolbox.name}] at {toolbox.endpoint_url}")
         
-        # 官方 SDK 中 tool_def 已经是 pydantic 对象，而不是 dict
-        # 先尝试按对象属性访问，如果抛异常说明是 dict
         try:
-            # MCP 协议标准中并无内置的风险评级，一般是在自定义 description 中处理
-            # 或者通过特定的 schema
-            pass
-        except Exception:
-            pass
+            import httpx
+            import urllib.parse
             
-        return risk_level
+            # 从 endpoint_url 提取 namespace
+            path_parts = urllib.parse.urlparse(toolbox.endpoint_url).path.strip("/").split("/")
+            namespace = path_parts[-1] if path_parts else ""
+            
+            if not namespace:
+                logger.warning(f"Cannot extract namespace from endpoint_url {toolbox.endpoint_url}")
+                return
 
-    async def sync_server_tools(self, pg_client: PostgresClient, server: MCPServerConfigModel):
-        """同步指定 Server 的工具。"""
-        logger.info(f"Syncing tools for server: {server.server_id} at {server.endpoint_url}")
-        if not server.endpoint_url:
-            return
+            token = self.config_manager.resolve_auth_token(toolbox.toolbox_id)
+            base_url = "https://api.smithery.ai"
+            headers = {"Accept": "application/json"}
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
             
-        session = await self._connection_manager.get_or_create_session(server.server_id)
-        if not session:
-            logger.warning(f"无法建立与 Server {server.server_id} 的连接。")
-            return
-            
-        try:
-            tools_response = await session.list_tools()
+            async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+                # 1. 获取 Server 列表
+                servers_url = f"{base_url}/connect/{namespace}"
+                resp = await client.get(servers_url)
+                resp.raise_for_status()
+                data = resp.json()
+                
+                connections = data.get("connections", [])
+                logger.info(f"Found {len(connections)} servers in toolbox {toolbox.toolbox_id}")
+                
+                for connection in connections:
+                    server_id = connection["connectionId"]
+                    server_name = connection.get("name") or connection.get("displayName") or server_id
+                    
+                    # 2. 为每个 Server 注册一个 Skill
+                    async with pg_client.session() as db_session:
+                        skill_id = await self._register_server_as_skill(db_session, toolbox, server_id, server_name)
+                        await db_session.commit()
+                    
+                    # 3. 获取该 Server 的 Tools
+                    tools_url = f"{base_url}/connect/{namespace}/{server_id}/.tools"
+                    tools_resp = await client.get(tools_url)
+                    tools_resp.raise_for_status()
+                    tools_data = tools_resp.json()
+                    
+                    raw_tools = tools_data.get("tools", []) if isinstance(tools_data, dict) else tools_data
+                    
+                    # 4. 注册 Tools
+                    async with pg_client.session() as db_session:
+                        await self._sync_tools_for_skill(db_session, skill_id, toolbox.toolbox_id, raw_tools)
+                        await db_session.commit()
+
         except Exception as e:
-            logger.error(f"Failed to list tools from server {server.server_id}: {e}", exc_info=True)
-            return
-            
-        if not tools_response or not tools_response.tools:
-            logger.warning(f"No tools found for server {server.server_id}.")
-            return
-            
-        tools = tools_response.tools
+            logger.error(f"Failed to process toolbox {toolbox.toolbox_id}: {e}", exc_info=True)
 
+
+    async def _register_server_as_skill(self, session: AsyncSession, toolbox: ToolboxConfigModel, server_id: str, server_name: str) -> str:
+        """
+        将 Toolbox 发现的子 Server 封装为系统的 Skill。
+        """
+        from app.repository.models import Skill
+
+        stmt = select(Skill).where(
+            and_(
+                Skill.source == "mcp_proxy",
+                Skill.toolbox_id == toolbox.toolbox_id,
+                Skill.proxy_meta['original_server_id'].astext == server_id
+            )
+        )
+        result = await session.execute(stmt)
+        existing_skill = result.scalar_one_or_none()
+        
+        if not existing_skill:
+            skill_id = generate_string_id()
+            new_skill = Skill(
+                id=skill_id,
+                name=server_name,
+                description=f"External MCP Server ({server_name}) provided via {toolbox.name}",
+                source="mcp_proxy",
+                toolbox_id=toolbox.toolbox_id,
+                proxy_meta={"original_server_id": server_id},
+                enabled=True,
+            )
+            session.add(new_skill)
+            logger.info(f"Registered new MCP Server as Skill. Skill ID: {skill_id}, Name: {server_name}")
+            return skill_id
+        else:
+            if existing_skill.name != server_name:
+                existing_skill.name = server_name
+            logger.debug(f"MCP Server -> Skill mapping already exists. Skill ID: {existing_skill.id}")
+            return existing_skill.id
+
+
+    async def _sync_tools_for_skill(self, session: AsyncSession, skill_id: str, toolbox_id: str, tools: list[dict]):
+        """拉取 Tool 并挂载到生成的 Skill"""
+        from app.repository.models import MCPToolRegistration
+        
         tool_names_synced = []
-        async with pg_client.session() as db_session:
-            from sqlalchemy import select
+        for raw_tool in tools:
+            tool_name = raw_tool.get("name")
+            if not tool_name:
+                continue
+                
+            tool_schema = raw_tool.get("inputSchema") or raw_tool.get("input_schema") or {}
+            description = raw_tool.get("description") or ""
             
-            for tool_def in tools:
-                raw_name = tool_def.name
-                if not raw_name:
-                    continue
-                    
-                tool_name = f"{server.namespace}.{raw_name}"
-                
-                # 黑白名单过滤
-                if raw_name in server.deny_tools:
-                    continue
-                if "*" not in server.allow_tools and raw_name not in server.allow_tools:
-                    continue
-
-                description = tool_def.description or ""
-                # inputSchema in sdk is a dict
-                input_schema = tool_def.inputSchema or {}
-                risk_level = self._map_risk_level(tool_def)
-                
-                stmt = select(MCPToolRegistration).where(MCPToolRegistration.name == tool_name)
-                result = await db_session.execute(stmt)
-                existing = result.scalar_one_or_none()
-                
-                if existing:
-                    existing.description = description
-                    existing.parameters_schema = input_schema
-                    existing.risk_level = risk_level
-                    existing.enabled = True
-                    existing.is_external = True
-                    existing.server_id = server.server_id
-                else:
-                    new_tool = MCPToolRegistration(
-                        id=generate_string_id(),
-                        name=tool_name,
-                        description=description,
-                        parameters_schema=input_schema,
-                        risk_level=risk_level,
-                        enabled=True,
-                        is_external=True,
-                        server_id=server.server_id,
-                        source="remote_discovery"
-                    )
-                    db_session.add(new_tool)
-                    
-                tool_names_synced.append(tool_name)
-                
-            await db_session.commit()
+            stmt = select(MCPToolRegistration).where(
+                and_(
+                    MCPToolRegistration.skill_id == skill_id,
+                    MCPToolRegistration.name == tool_name
+                )
+            )
+            result = await session.execute(stmt)
+            existing_tool = result.scalar_one_or_none()
             
-        logger.info(f"Synced {len(tool_names_synced)} tools from {server.server_id}.")
+            if not existing_tool:
+                new_tool = MCPToolRegistration(
+                    id=generate_string_id(),
+                    skill_id=skill_id,
+                    name=tool_name,
+                    description=description,
+                    parameters_schema=tool_schema,
+                    execution_type="mcp_remote",
+                    enabled=True,
+                    server_id=toolbox_id, # 仍保留该字段方便执行器路由
+                    is_external=True
+                )
+                session.add(new_tool)
+                logger.info(f"Mounted Tool '{tool_name}' under Skill ID '{skill_id}'.")
+            else:
+                existing_tool.parameters_schema = tool_schema
+                existing_tool.description = description
+            
+            tool_names_synced.append(tool_name)
+            
+        logger.info(f"Synced {len(tool_names_synced)} tools under skill {skill_id}.")
 
     async def start_background_sync(self, pg_client: PostgresClient, interval_seconds: int = 3600):
         """

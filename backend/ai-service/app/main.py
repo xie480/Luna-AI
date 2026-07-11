@@ -844,13 +844,13 @@ async def lifespan(app: FastAPI):
     # 4. Phase 12/13: 注册 MCP 工具并初始化配置管理器
     # 做什么：初始化 ServerManager 加载外部 toolbox 配置 -> 注册内置工具 -> 从 PG 加载已有工具 -> 启动后台发现任务
     try:
-        from app.mcp.server_manager import MCPServerManager
+        from app.mcp.toolbox_manager import ToolboxConfigManager
         from app.mcp.discovery_sync import DiscoverySyncEngine
         
         # 4.1 加载 Toolbox 配置到内存并执行全量发现 (阻塞式，确保 DB 最新)
         logger.info("开始加载外部 MCP Toolbox 配置并执行全量同步...")
-        mcp_manager = MCPServerManager.get_instance()
-        await mcp_manager.initialize(pg_client)
+        mcp_manager = ToolboxConfigManager.get_instance()
+        mcp_manager.initialize() # 同步初始化，无数据库依赖
         
         discovery_engine = DiscoverySyncEngine.get_instance()
         await discovery_engine.sync_everything(pg_client)

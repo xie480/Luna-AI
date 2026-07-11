@@ -471,6 +471,9 @@ class Skill(Base):
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
     version: Mapped[str] = mapped_column(String(32), nullable=False, default="1.0.0")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False, default="local")
+    toolbox_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    proxy_meta: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

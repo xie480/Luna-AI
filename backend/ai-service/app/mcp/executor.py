@@ -302,16 +302,16 @@ async def execute_tool(
     
     if is_external:
         # === 外部工具执行链路 ===
-        from app.mcp.server_manager import MCPServerManager
+        from app.mcp.toolbox_manager import ToolboxConfigManager
         from app.mcp.connection_manager import McpConnectionManager
         
-        manager = MCPServerManager.get_instance()
-        server_config = manager.get_server_config(server_id)
+        manager = ToolboxConfigManager.get_instance()
+        server_config = manager.get_toolbox_config(server_id)
         if not server_config:
             return MCPToolResult(
                 success=False,
                 output_text="",
-                error_message=f"外部工具 Server 配置缺失: {server_id}",
+                error_message=f"外部工具 Toolbox 配置缺失: {server_id}",
                 execution_id=execution_id,
                 latency_ms=0,
                 risk_level=risk_level_val,
@@ -330,10 +330,11 @@ async def execute_tool(
             )
 
         # 剥离 namespace（本地为了防止同名冲突，可能存的是 namespace.tool_name，远端只认原名）
+        # 这里重构后直接传递原生 tool_name 给远端 Toolbox 路由
         remote_tool_name = tool_name
-        if "." in tool_name and server_config.namespace:
-            if tool_name.startswith(f"{server_config.namespace}."):
-                remote_tool_name = tool_name[len(server_config.namespace) + 1:]
+        # 如果内部确实存了 namespace 前缀（比如 toolbox_id.tool_name），可以按需剥离
+        # if "." in tool_name and tool_name.startswith(f"{server_id}."):
+        #     remote_tool_name = tool_name[len(server_id) + 1:]
 
         last_error = ""
         last_output_text = ""
