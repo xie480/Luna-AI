@@ -571,22 +571,32 @@ class ToolExecuteNode:
     async def _get_tool_schema(self, tool_name: str | None) -> dict[str, Any]:
         """获取 MCP 工具的 parameters_schema。
 
-        做什么：从 MCPToolRegistry 中查找已注册工具，返回其 parameters_schema。
-                该 Schema 用于 LLM 参数提取的上下文引导和机械层校验。
-        为什么这样做：RegisteredTool 的参数 Schema 存储在 schema.parameters_schema 中，
-                     而非 input_schema 属性。之前的实现错误地查找了不存在的 input_schema，
-                     导致返回空字典，LLM 无法获取正确的参数约束，机械层校验也被跳过，
-                     最终在 execute_tool 的 jsonschema.validate 阶段才报错。
+        做什么：支持双轨查找：优先从本地 MCPToolRegistry 查找，如果找不到，
+                则去 SkillRegistry（外部工具缓存）查找 Schema。
+        为什么这样做：实现统一调度与分发，让 LLM 提取参数时不关心工具的物理来源，
+                只依赖于统一的 JSON Schema。
         边界条件：
             - tool_name 为空时返回空字典。
             - 工具不存在或未注册时返回空字典。
-            - 工具存在但 parameters_schema 为空时返回空字典。
         """
         if not tool_name:
             return {}
+            
+        # 优先去本地注册表查找
         tool = self.mcp_tool_registry.get_tool(tool_name)
         if tool and hasattr(tool, 'schema') and tool.schema.parameters_schema:
             return tool.schema.parameters_schema
+
+        # 如果本地没有，去 SkillRegistry 查找外部工具的 Schema
+        from app.mcp.skill_registry import SkillRegistry
+        registry = SkillRegistry()
+        for sid, det in registry._skills.items():
+            for t in det.tools:
+                # 外部工具名通常带前缀，如 server_id.tool_name
+                if t.get("name") == tool_name:
+                    # 返回保存在 detail 中的 parameters_schema (在 sync 时写入该字段)
+                    return t.get("parameters_schema", {})
+                    
         return {}
 
     def _build_param_schema(

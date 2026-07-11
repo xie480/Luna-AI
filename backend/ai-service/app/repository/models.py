@@ -338,6 +338,8 @@ class MCPToolRegistration(Base):
     __tablename__ = "mcp_tool_registrations"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, comment="是否为外部 Server 的工具")
+    server_id: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None, index=True, comment="外部 MCP Server 的 ID")
     name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     parameters_schema: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
@@ -608,6 +610,30 @@ class MCPServerRegistration(Base):
     """健康状态：unknown / online / offline / error。"""
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default="{}")
     """扩展元数据（版本号、作者信息等）。"""
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MCPServerConfig(Base):
+    """
+    对应 PostgreSQL 中的 mcp_server_configs 表。
+
+    做什么：用于支持外部 MCP Server 的动态热加载配置。
+    为什么这样做：为了避免硬编码，需要将动态配置存入数据库。
+    边界条件：
+        - server_id 是逻辑标识，必须唯一。
+        - 不存储明文密码，auth_config 中的 token_env 指向环境变量。
+    """
+    __tablename__ = "mcp_server_configs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    server_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    endpoint_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    transport_type: Mapped[str] = mapped_column(String(32), nullable=False, default='http')
+    auth_config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default='{}')
+    sync_strategies: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default='{}')
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default='ACTIVE')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

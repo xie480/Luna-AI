@@ -71,26 +71,48 @@ class MCPRemoteGateway:
             return {}
             
         auth_type = auth_config.get("type", "none")
-        if auth_type == "bearer":
-            return {"Authorization": f"Bearer {auth_config.get('token', '')}"}
+        # 支持 Service Token 或者传统的 Bearer
+        if auth_type in ("bearer", "service_token"):
+            # 在实际业务中，由于凭证已经由 Server Manager 安全解析，
+            # 传进来的应该是真实的 token，而不是字典。为了兼容旧代码，这里做个判断
+            token_val = auth_config.get("token", "")
+            return {"Authorization": f"Bearer {token_val}"}
         elif auth_type == "api_key":
             key_name = auth_config.get("key_name", "X-API-Key")
             return {key_name: auth_config.get("api_key", "")}
         return {}
 
     def _parse_response(self, response: httpx.Response) -> MCPToolResult:
+        """解析 JSON-RPC 响应为标准的 MCPToolResult。"""
         try:
             data = response.json()
             if "error" in data:
+                # 统一错误转换：将外部的 error 包装为 MCPToolResult，
+                # 从而允许上层触发重规划。
+                error_info = data["error"]
+                error_msg = error_info.get("message", str(error_info)) if isinstance(error_info, dict) else str(error_info)
                 return MCPToolResult(
                     success=False,
                     output_text="",
-                    error_message=str(data["error"]),
+                    error_message=f"JSON-RPC 错误: {error_msg}",
                     execution_id=generate_string_id()
                 )
             
+            # 标准协议下的 tools/call 响应格式解析
+            # 外部 Server 返回的内容通常在 result 对象中
             result_data = data.get("result", {})
-            output = str(result_data.get("output", ""))
+            
+            # 部分 MCP 协议返回 content 数组，而非 output 字符串
+            content_list = result_data.get("content", [])
+            output = ""
+            if content_list and isinstance(content_list, list):
+                # 将 content 数组拼接为纯文本
+                texts = [item.get("text", "") for item in content_list if item.get("type") == "text"]
+                output = "\n".join(texts)
+            else:
+                # 兼容简易实现
+                output = str(result_data.get("output", ""))
+                
             is_error = result_data.get("isError", False)
             
             return MCPToolResult(
@@ -103,7 +125,7 @@ class MCPRemoteGateway:
             return MCPToolResult(
                 success=False,
                 output_text="",
-                error_message=f"解析响应失败: {e}",
+                error_message=f"解析外部 Server 响应失败: {e}",
                 execution_id=generate_string_id()
             )
 
