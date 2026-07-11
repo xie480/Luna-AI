@@ -1,18 +1,12 @@
-mcp_toolboxes:
-  - id: "${MCP_TOOLBOX_ID:-smithery_main}"
-    name: "${MCP_TOOLBOX_NAME:-Smithery Toolbox}"
-    endpoint_url: "${MCP_TOOLBOX_ENDPOINT_URL:-https://api.smithery.run/v1/servers}" # 注意：这是 REST API，而非 JSON-RPC 端点
-    transport_type: "${MCP_TOOLBOX_TRANSPORT_TYPE:-http}"
+mcp_servers:
+  - id: "${MCP_SERVER_ID:-smithery_main}"
+    name: "${MCP_SERVER_NAME:-Smithery Toolbox}"
+    endpoint_url: "${MCP_SERVER_ENDPOINT_URL:-https://mcp.smithery.run/yilena05050}"
+    transport_type: "${MCP_SERVER_TRANSPORT_TYPE:-sse}"
     auth:
-      type: "${MCP_TOOLBOX_AUTH_TYPE:-service_token}"
-      token_env: "${MCP_TOOLBOX_AUTH_TOKEN_ENV:-SMITHERY_SERVICE_TOKEN}" # 指向 .env 中的变量
-    namespace: "${MCP_TOOLBOX_NAMESPACE:-luna-agent}"
-    defer_loading: ${MCP_TOOLBOX_DEFER_LOADING:-true} # 是否开启延迟加载
-    sync_interval_seconds: ${MCP_TOOLBOX_SYNC_INTERVAL:-3600} # 自动同步发现的时间间隔
-    timeout_seconds: ${MCP_TOOLBOX_TIMEOUT_SECONDS:-30}
-    circuit_breaker:
-      failure_threshold: ${MCP_TOOLBOX_CB_FAILURE_THRESHOLD:-0.5}
-      recovery_timeout: ${MCP_TOOLBOX_CB_RECOVERY_TIMEOUT:-60}
-      min_request_count: ${MCP_TOOLBOX_CB_MIN_REQUEST_COUNT:-5}
-    allow_tools: ["*"] # 白名单模式，* 代表全部允许
-    deny_tools: [] # 黑名单机制
+      type: "${MCP_SERVER_AUTH_TYPE:-service_token}"
+      token_env: "${MCP_SERVER_AUTH_TOKEN_ENV:-SMITHERY_SERVICE_TOKEN}" # 指向 .env 中的变量
+    sync_interval_seconds: ${MCP_SERVER_SYNC_INTERVAL:-3600}
+    timeout_seconds: ${MCP_SERVER_TIMEOUT_SECONDS:-30}
+    allow_tools: ["*"]
+    deny_tools: []

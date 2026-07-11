@@ -303,7 +303,7 @@ async def execute_tool(
     if is_external:
         # === 外部工具执行链路 ===
         from app.mcp.server_manager import MCPServerManager
-        from app.mcp.gateway import get_gateway
+        from app.mcp.connection_manager import McpConnectionManager
         
         manager = MCPServerManager.get_instance()
         server_config = manager.get_server_config(server_id)
@@ -317,16 +317,99 @@ async def execute_tool(
                 risk_level=risk_level_val,
             )
             
-        gateway = get_gateway()
-        # gateway 内部已内聚了 Http 请求、错误处理、熔断器和延迟记录
-        return await gateway.execute_remote_tool(
-            endpoint_url=server_config.endpoint_url,
-            tool_name=tool_name,
-            parameters=parameters,
-            auth_config=server_config.auth.model_dump() if hasattr(server_config.auth, 'model_dump') else server_config.auth.dict(),
-            trace_id=trace_id,
-            timeout=server_config.timeout_seconds
+        conn_manager = McpConnectionManager.get_instance()
+        session = await conn_manager.get_or_create_session(server_id)
+        if not session:
+            return MCPToolResult(
+                success=False,
+                output_text="",
+                error_message=f"无法建立与外部工具 Server {server_id} 的连接",
+                execution_id=execution_id,
+                latency_ms=0,
+                risk_level=risk_level_val,
+            )
+
+        # 剥离 namespace（本地为了防止同名冲突，可能存的是 namespace.tool_name，远端只认原名）
+        remote_tool_name = tool_name
+        if "." in tool_name and server_config.namespace:
+            if tool_name.startswith(f"{server_config.namespace}."):
+                remote_tool_name = tool_name[len(server_config.namespace) + 1:]
+
+        last_error = ""
+        last_output_text = ""
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # 使用 session.call_tool 执行
+                result = await asyncio.wait_for(
+                    session.call_tool(remote_tool_name, arguments=parameters),
+                    timeout=server_config.timeout_seconds
+                )
+                
+                # MCP 标准：result.content 是个列表
+                content_texts = []
+                if hasattr(result, 'content') and result.content:
+                    for item in result.content:
+                        if hasattr(item, 'text'):
+                            content_texts.append(item.text)
+                
+                last_output_text = "\n".join(content_texts)
+                
+                # 如果 result 有 isError 标志
+                if hasattr(result, 'isError') and result.isError:
+                    last_error = last_output_text or "远端工具执行返回了错误状态"
+                    last_output_text = "" # 清空，走错误逻辑
+                else:
+                    break # 成功
+                    
+            except asyncio.TimeoutError:
+                last_error = f"工具执行超时（{server_config.timeout_seconds}s）"
+                logger.warning(
+                    f"MCP 远端工具执行超时 trace_id={trace_id} "
+                    f"tool_name={tool_name} attempt={attempt}"
+                )
+            except Exception as exc:
+                last_error = f"远端工具执行异常: {exc!s}"
+                logger.warning(
+                    f"MCP 远端工具执行异常 trace_id={trace_id} "
+                    f"tool_name={tool_name} attempt={attempt} error={exc!s}"
+                )
+
+            if attempt == max_retries:
+                break
+            await asyncio.sleep(2 ** attempt)
+
+        elapsed_ms = max(0, int((time.monotonic() - started_at) * 1000))
+
+        if last_error and not last_output_text:
+            logger.warning(
+                f"MCP 远端工具执行失败 trace_id={trace_id} "
+                f"tool_name={tool_name} retries={max_retries} error={last_error}"
+            )
+            return MCPToolResult(
+                success=False,
+                output_text="",
+                error_message=last_error,
+                execution_id=execution_id,
+                latency_ms=elapsed_ms,
+                risk_level=risk_level_val,
+            )
+
+        logger.info(
+            f"MCP 远端工具执行成功 trace_id={trace_id} "
+            f"tool_name={tool_name} latency_ms={elapsed_ms} "
+            f"output_length={len(last_output_text)}"
         )
+
+        return MCPToolResult(
+            success=True,
+            output_text=last_output_text,
+            error_message="",
+            execution_id=execution_id,
+            latency_ms=elapsed_ms,
+            risk_level=risk_level_val,
+        )
+
     else:
         # === 本地工具执行链路 ===
         last_error = ""
