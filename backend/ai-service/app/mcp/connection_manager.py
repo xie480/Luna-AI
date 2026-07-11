@@ -72,33 +72,28 @@ class McpConnectionManager:
             try:
                 exit_stack = AsyncExitStack()
                 
-                if "mcp.smithery.run" in endpoint_url:
-                    # 使用 Smithery 特定的 streamable_http_client
-                    timeout_cfg = httpx.Timeout(config.timeout_seconds)
-                    http_client = httpx.AsyncClient(timeout=timeout_cfg, headers=headers)
-                    await exit_stack.enter_async_context(http_client)
-                    
-                    # streamable_http_client returns an async context manager that yields 3 items:
-                    # (read_stream, write_stream, session_id_getter)
-                    transport_ctx = await exit_stack.enter_async_context(
-                        streamable_http_client(endpoint_url, http_client=http_client)
+                # We always use the standard sse_client instead of streamable_http_client
+                # streamable_http_client has issues with certain servers where it hangs during initialize()
+                # standard sse_client works fine with both standard and smithery servers
+                read_stream, write_stream = await exit_stack.enter_async_context(
+                    sse_client(
+                        url=endpoint_url,
+                        headers=headers,
+                        timeout=config.timeout_seconds
                     )
-                    read_stream, write_stream, _ = transport_ctx
-                else:
-                    # 默认标准 sse_client
-                    read_stream, write_stream = await exit_stack.enter_async_context(
-                        sse_client(
-                            url=endpoint_url,
-                            headers=headers,
-                            timeout=config.timeout_seconds
-                        )
-                    )
+                )
                 
+                # IMPORTANT: Initialize session using specific initialization timeout to prevent hanging forever
+                # Some servers might accept connection but never respond to initialize()
                 session = ClientSession(read_stream, write_stream)
                 await exit_stack.enter_async_context(session)
 
-                # Initialize MCP protocol
-                await session.initialize()
+                # Initialize MCP protocol with explicit timeout
+                init_timeout = max(config.timeout_seconds, 15.0)  # Use config timeout or min 15s
+                try:
+                    await asyncio.wait_for(session.initialize(), timeout=init_timeout)
+                except asyncio.TimeoutError:
+                    raise Exception(f"MCP Session initialize() timed out after {init_timeout} seconds")
 
                 self._connections[server_id] = {
                     "session": session,

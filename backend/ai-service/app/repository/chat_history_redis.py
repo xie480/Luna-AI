@@ -38,6 +38,7 @@ class Interaction(BaseModel):
     timestamp: int
     hasLongAnswer: bool = False
     longAnswerId: str = ""
+    long_answer_summary: str = ""
 
 
 class ChatSummary(BaseModel):
