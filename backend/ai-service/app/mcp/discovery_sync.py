@@ -81,9 +81,30 @@ class DiscoverySyncEngine:
                     server_id = connection["connectionId"]
                     server_name = connection.get("name") or connection.get("displayName") or server_id
                     
+                    # 尝试从 connection 的 serverInfo 中获取更好的描述信息
+                    server_desc = ""
+                    server_info = connection.get("serverInfo", {})
+                    if isinstance(server_info, dict):
+                        server_desc = server_info.get("description", "")
+                    
+                    if not server_desc:
+                        server_desc = connection.get("description") or f"External MCP Server ({server_name}) provided via {toolbox.name}"
+                    
+                    # 尝试从 connection 提取额外的元数据
+                    tags = ["mcp", "external"]
+                    # 尝试从 connection 的原始信息中提取 tag
+                    if server_name:
+                        tags.append(server_name.lower())
+                    
+                    author = "MCP Remote"
+                    if isinstance(server_info, dict) and "author" in server_info:
+                        author = server_info["author"]
+                        
+                    metadata = {"tags": tags, "author": author}
+
                     # 2. 为每个 Server 注册一个 Skill
                     async with pg_client.session() as db_session:
-                        skill_id = await self._register_server_as_skill(db_session, toolbox, server_id, server_name)
+                        skill_id = await self._register_server_as_skill(db_session, toolbox, server_id, server_name, server_desc, metadata)
                         await db_session.commit()
                     
                     # 3. 获取该 Server 的 Tools
@@ -103,7 +124,7 @@ class DiscoverySyncEngine:
             logger.error(f"Failed to process toolbox {toolbox.toolbox_id}: {e}", exc_info=True)
 
 
-    async def _register_server_as_skill(self, session: AsyncSession, toolbox: ToolboxConfigModel, server_id: str, server_name: str) -> str:
+    async def _register_server_as_skill(self, session: AsyncSession, toolbox: ToolboxConfigModel, server_id: str, server_name: str, server_desc: str, metadata: dict) -> str:
         """
         将 Toolbox 发现的子 Server 封装为系统的 Skill。
         """
@@ -124,11 +145,12 @@ class DiscoverySyncEngine:
             new_skill = Skill(
                 id=skill_id,
                 name=server_name,
-                description=f"External MCP Server ({server_name}) provided via {toolbox.name}",
+                description=server_desc,
                 source="mcp_proxy",
                 toolbox_id=toolbox.toolbox_id,
                 proxy_meta={"original_server_id": server_id},
                 enabled=True,
+                metadata_=metadata,
             )
             session.add(new_skill)
             logger.info(f"Registered new MCP Server as Skill. Skill ID: {skill_id}, Name: {server_name}")
@@ -136,6 +158,13 @@ class DiscoverySyncEngine:
         else:
             if existing_skill.name != server_name:
                 existing_skill.name = server_name
+            if existing_skill.description != server_desc:
+                existing_skill.description = server_desc
+            
+            # 更新 metadata
+            if existing_skill.metadata_ != metadata:
+                existing_skill.metadata_ = metadata
+                
             logger.debug(f"MCP Server -> Skill mapping already exists. Skill ID: {existing_skill.id}")
             return existing_skill.id
 
