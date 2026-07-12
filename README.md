@@ -2,6 +2,22 @@
 
 Luna 是一款本地优先、隐私安全的“陪伴式人格 + 长期记忆 + 主动行为”全栈 AI 桌面助理。其核心不仅是对话，而是建立**自然语言理解 → 锁定全局目标 → 生成分步计划 (Plan) → 分步执行与工具调用 (Tool Execution) → 局部偏差评估与重规划 (Replan) → 目标收束与最终验收 → 长期记忆更新与主动交互**的完整可恢复闭环。系统采用 **Goal-Stable / Plan-Mutable (全局目标不可变，局部步骤可重规划)** 的重型状态机架构，旨在处理复杂多步任务。
 
+<div align="center">
+  <img src="asset/9.jpg" width="100%">
+  <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+    <img src="asset/2.jpg" width="49%">
+    <img src="asset/1.jpg" width="49%">
+  </div>
+  <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+    <img src="asset/3.jpg" width="49%">
+    <img src="asset/4.jpg" width="49%">
+  </div>
+  <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+    <img src="asset/5.jpg" width="49%">
+    <img src="asset/6.jpg" width="49%">
+  </div>
+</div>
+
 ### 核心能力与功能特性
 
 - **四种原生交互模式**：支持根据不同场景在前端的模式胶囊中手动选择，覆盖日常到深度的多重需求：
