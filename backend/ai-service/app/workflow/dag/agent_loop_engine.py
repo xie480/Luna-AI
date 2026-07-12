@@ -1639,7 +1639,7 @@ class AgentToolExecuteNode:
 
                                 registry = MCPToolRegistry()
                                 registered = registry.get_tool(tool_name)
-                                if registered:
+                                if registered and callable(registered.handler):
                                     import inspect
                                     sig = inspect.signature(registered.handler)
                                     kwargs = {"parameters": tool_params, "trace_id": trace_id}
@@ -1659,6 +1659,29 @@ class AgentToolExecuteNode:
                                         registered.handler(**kwargs),
                                         timeout=30.0,
                                     )
+                                elif not registered or not callable(registered.handler):
+                                    from app.mcp.executor import execute_tool
+                                    # 构建 execute_tool 需要的 state_context
+                                    exec_state_context = {
+                                        "session_id": session_id,
+                                        "trace_id": trace_id,
+                                        "gating_service": gating_svc,
+                                        "snapshot_manager": snap_mgr,
+                                        "skill_registry": self.mcp_tool_registry,
+                                        "resource_context": "",
+                                        "memory_manager": self._memory_manager,
+                                        "rag_orchestrator": self._rag_orchestrator,
+                                    }
+                                    exec_result = await execute_tool(
+                                        tool_name=tool_name,
+                                        parameters=tool_params,
+                                        trace_id=trace_id,
+                                        state_context=exec_state_context,
+                                    )
+                                    if exec_result.success:
+                                        output_text = exec_result.output_text
+                                    else:
+                                        output_text = f"【操作错误】{exec_result.error_message}"
                                     # 修复问题 1：判断工具实际返回是否为错误文本
                                     # 工具 handler 遵循"返回错误文本而非抛异常"模式，
                                     # 需要检测返回值中的错误标识前缀
