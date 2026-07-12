@@ -151,6 +151,49 @@
 
 .long-answer-markdown-container p {
   margin-bottom: 1em;
+  white-space: pre-wrap; /* This helps preserve \n rendering from strings */
+}
+
+/* Base text sizing matching the overall app */
+.long-answer-markdown-container {
+  flex-grow: 1;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #d1d5db;
+}
+
+.long-answer-markdown-container h1 {
+  font-size: 1.5em;
+}
+
+.long-answer-markdown-container h2 {
+  font-size: 1.3em;
+}
+
+.long-answer-markdown-container h3 {
+  font-size: 1.1em;
+}
+
+.long-answer-markdown-container table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 1em;
+}
+
+.long-answer-markdown-container th,
+.long-answer-markdown-container td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+}
+
+.long-answer-markdown-container th {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.long-answer-markdown-container hr {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1.5em 0;
 }
 
 .long-answer-code-block {

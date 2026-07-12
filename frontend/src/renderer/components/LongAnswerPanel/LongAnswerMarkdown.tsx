@@ -25,24 +25,21 @@ export const LongAnswerMarkdown: React.FC<LongAnswerMarkdownProps> = ({ markdown
   };
 
   useEffect(() => {
+    // Fix: the text is coming as literal "\n" characters because of JSON serialization.
+    // We need to unescape them so ReactMarkdown processes actual newlines.
+    const unescapedMarkdown = markdown ? markdown.replace(/\\n/g, '\n') : '';
+
     // Throttle rendering for performance if generating
     let timeoutId: number;
     if (status === 'GENERATING' || status === 'SUMMARY_GENERATING') {
       timeoutId = window.setTimeout(() => {
-        setRenderedMarkdown(markdown);
+        setRenderedMarkdown(unescapedMarkdown);
       }, 100);
     } else {
-      setRenderedMarkdown(markdown);
+      setRenderedMarkdown(unescapedMarkdown);
     }
     return () => clearTimeout(timeoutId);
   }, [markdown, status]);
-  
-  // ensure we render at least once if it changes outside of throttle window
-  useEffect(() => {
-    if (markdown && !renderedMarkdown) {
-      setRenderedMarkdown(markdown);
-    }
-  }, [markdown]);
 
   useEffect(() => {
     if (isScrolledToBottom.current && containerRef.current) {
