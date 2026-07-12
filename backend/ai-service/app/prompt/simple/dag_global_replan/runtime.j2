@@ -1,0 +1,91 @@
+{# Phase 10：全局 Plan 重构 Prompt — 运行时槽位 #}
+## 1. 当前执行进度
+
+### 1.1 已锁定的全局目标
+- **目标**: {{ global_goal }}
+{% if goal_definition %}
+- **详细定义**: {{ goal_definition }}
+{% endif %}
+- **验收标准**: {{ acceptance_criteria }}
+- **非目标声明**: {{ non_goals }}
+- **约束条件**: {{ constraints }}
+
+### 1.2 已完成的阶段 (Summaries)
+{% if completed_states %}
+{% for s in completed_states %}
+- State [{{ s.responsibility }}]: {{ s.goal }} (产出: {{ s.summary }})
+{% endfor %}
+{% else %}
+（无）
+{% endif %}
+
+### 1.3 正在处理/失败的阶段
+- **State**: {{ failed_state_responsibility }}
+- **意图**: {{ failed_state_intent }}
+- **原定目标**: {{ failed_state_goal }}
+- **失败原因/反馈**: {{ evaluation_reason }}
+{% if gap_analysis %}
+- **差距分析**: {{ gap_analysis }}
+{% endif %}
+{% if suggestion %}
+- **执行建议**: {{ suggestion }}
+{% endif %}
+
+## 2. 待修改的后续计划
+{% if remaining_states %}
+{% for s in remaining_states %}
+- State {{ loop.index }} [{{ s.responsibility }}]: {{ s.goal }}
+{% endfor %}
+{% else %}
+（无后续阶段）
+{% endif %}
+
+-当前系统时间开始-
+{{ CURRENT_TIME }}
+-当前系统时间结束-
+
+## 3. 生成前推演流程
+你必须在生成最终输出前，按顺序完成以下系统校验。将校验结果写入 `check` 字段。
+
+### 3.1 意图与反馈校验
+1. **反馈吸收**：是否充分吸收了失败原因和差距分析？调整后的计划是否能弥补这些差距？
+2. **目标锁定**：调整后的计划是否仍然指向最初锁定的全局目标？
+
+### 3.2 职责拆分校验
+1. **单一职责原则**：每个新生成的 State 是否只承担一种职责类型？有没有将"搜索"和"分析"混在同一个 State 中？
+2. **禁止过度拆分**：是否存在将同一职责的子操作拆成多个 State 的情况？（如"搜索A数据"和"搜索B数据"应合并为一个"信息收集" State）
+3. **禁止职责重叠**：是否存在两个 State 承担相同类型职责的情况？
+
+### 3.3 技能选择校验
+1. **必要性**：`pre_allocated_skills` 中的每个技能是否确实被该 State 需要？
+2. **最小化**：是否只选择了必要的技能，而非"可能有用"的技能？
+
+## 4. 输出要求
+请输出 JSON，包含 states、planning_reason 和 check 字段：
+{
+  "check": "[需求理解] 意图完整性：... 复杂度判断：... [职责拆分] 单一职责：... 禁止过度拆分：... 禁止职责重叠：... [依赖与数据流] 依赖正确性：... 无循环依赖：... [技能选择] 必要性：... 最小化：... [全局覆盖] 完整性：... 边界清晰：...",
+  "states": [
+    {
+      "responsibility": "职责类型（如：信息收集、数据分析、内容生成、验证校对等）",
+      "intent": "[职责类型]: 具体意图描述",
+      "goal": "该阶段期望达成的具体目标（详细描述，明确输入来源和输出产物）",
+      "expected_output": "预期产出物描述",
+      "completion_criteria": [
+        {"field": "字段名", "operator": ">=", "value": 1}
+      ],
+      "dependencies": [],
+      "risk_notes": "风险点：该阶段可能遇到的困难或失败场景",
+      "rollback_hint": "回退提示：如果该阶段失败，应该如何回退或降级处理",
+      "pre_allocated_skills": []
+    }
+  ],
+  "planning_reason": "整体规划理由，说明为什么按此方式拆分职责、各 State 之间的逻辑关系"
+}
+
+### 字段说明
+- **responsibility**（必填）：该 State 承担的**唯一职责类型**。必须是单一职责，禁止将多种职责混在一个 State 中。常见值：信息收集、数据分析、内容生成、知识检索、格式转换、验证校对、总结归纳、方案设计、代码实现、测试验证。
+- **intent**（必填）：格式为 `[职责类型]: 具体意图描述`，与 responsibility 保持一致。
+- **goal**（必填）：详细描述该 State 的目标，必须说明输入来源（依赖哪些上游 State 的产出）和期望的输出产物。
+- **expected_output**（必填）：预期产出物描述，用于后续评估该 State 是否完成。
+- **dependencies**：填写依赖的 State 的索引（整数数组）。反映数据流向。
+- **pre_allocated_skills**（可选）：只有当该 State 明确需要调用外部工具或加载技能资源时才填写；纯推理/对话/写作类任务应留空数组 `[]`。

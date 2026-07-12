@@ -69,6 +69,7 @@ class PromptCategory(str, Enum):
     DAG_DATA_TRANSFORM = "dag_data_transform"
     DAG_STATE_EVALUATION = "dag_state_evaluation"
     DAG_PLAN_REPLAN = "dag_plan_replan"
+    DAG_GLOBAL_REPLAN = "dag_global_replan"
     DAG_RESULT_COMPRESSION = "dag_result_compression"
     DAG_PLAN_SUMMARY = "dag_plan_summary"
     DAG_TOOL_MEMORY = "dag_tool_memory"
