@@ -22,7 +22,7 @@
 ## 输出要求
 请输出 JSON，包含 verdict、evaluation_reason、gap_analysis、suggestion 和 criteria_checklist 字段：
 {
-  "verdict": "评估结论，四选一：pass（完全通过）/ fail（失败可修复）/ partial（部分完成）/ needs_replan（路径错误需重规划）",
+  "verdict": "评估结论，四选一：pass（核心目标通过）/ fail（核心失败可修复）/ partial（部分完成）/ needs_replan（路径错误需重规划）",
   "evaluation_reason": "评估理由，具体说明哪些完成标准已满足、哪些未满足，以及判断依据",
   "gap_analysis": "差距分析（可选），描述实际输出与预期输出之间的具体差距",
   "suggestion": "改进建议（可选），针对未满足的标准给出具体的改进方向",
@@ -30,4 +30,4 @@
     {"criterion": "完成标准条目描述", "met": true, "evidence": "满足/未满足的依据说明"}
   ]
 }
-verdict 的选择依据：标准全部满足选 pass；可修复的问题选 fail；部分满足且可继续选 partial；执行路径本身不对选 needs_replan。
+verdict 的选择依据：核心目标和关键信息已获取选 pass（允许非关键标准未满足）；核心结果完全偏离或失败选 fail；部分关键信息拿到但需补充选 partial；执行路径本身不对选 needs_replan。
