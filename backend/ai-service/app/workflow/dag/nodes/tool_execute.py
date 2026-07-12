@@ -72,6 +72,24 @@ class ToolExecuteNode:
 
         try:
             # ============================================================
+            # Step 0: 工具存在性预检 (Phase 9 增强)
+            # ============================================================
+            tool_exists = await self._check_tool_exists(node_def.tool_name)
+            if not tool_exists:
+                elapsed_ms = int(time.time() * 1000) - started_at_ms
+                logger.warning(
+                    f"[TraceID:{trace_id}] 工具执行预检失败: "
+                    f"tool={node_def.tool_name} 原因: 工具不存在或已禁用"
+                )
+                return {
+                    "success": False,
+                    "error_message": f"工具 '{node_def.tool_name}' 不存在或已禁用",
+                    "tool_output": "",
+                    "tool_parameters": {},
+                    "latency_ms": elapsed_ms,
+                }
+
+            # ============================================================
             # Step 1: 检查 memory_schema 并提取记忆变量
             # ============================================================
             skill_memory_context = None
@@ -200,6 +218,32 @@ class ToolExecuteNode:
                 "tool_parameters": {},
                 "latency_ms": elapsed_ms,
             }
+
+    async def _check_tool_exists(self, tool_name: str | None) -> bool:
+        """检查 MCP 工具是否存在（包含本地和外部工具）。
+
+        做什么：支持双轨查找：优先从本地 MCPToolRegistry 查找，如果找不到，
+                则去 SkillRegistry（外部工具缓存）查找。
+        """
+        if not tool_name:
+            return False
+
+        # 1. 优先检查本地注册表
+        if self.mcp_tool_registry.get_tool(tool_name):
+            return True
+
+        # 2. 检查外部工具缓存 (SkillRegistry)
+        try:
+            from app.mcp.skill_registry import SkillRegistry
+            registry = SkillRegistry()
+            for sid, det in registry._skills.items():
+                for t in det.tools:
+                    if t.get("name") == tool_name:
+                        return True
+        except Exception as e:
+            logger.warning(f"检查外部工具存在性失败: tool={tool_name}, error={e}")
+
+        return False
 
     async def _get_tool_memory_schema(
         self, tool_name: str | None
