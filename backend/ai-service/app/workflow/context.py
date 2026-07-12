@@ -203,6 +203,10 @@ class ChatGenerationState(BaseModel):
         ge=0,
         description="LLM 调用开始时间戳（毫秒），用于计算 e2e_latency_ms。",
     )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="附加元数据信息，如长回答记录的ID等。",
+    )
 
 
 class ChatObservabilityState(BaseModel):
