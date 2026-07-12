@@ -112,8 +112,8 @@ async def execute_tool(
     risk_level_val = "L0"
     schema = None
     
-    if registered:
-        # 本地工具
+    if registered and registered.handler is not None:
+        # 本地工具（含带 handler 的内置工具或从 PG 加载且成功绑定 handler 的本地工具）
         schema = registered.schema
         risk_level_val = schema.risk_level.value
     else:
@@ -131,13 +131,17 @@ async def execute_tool(
                     from app.infrastructure.postgres import PostgresClient
                     from app.repository.models import MCPToolRegistration
                     from sqlalchemy import select
+                    from app.config.settings import settings
                     
                     async def fetch_tool_meta():
-                        pg_client = PostgresClient.get_instance()
-                        async with pg_client.session() as session:
-                            stmt = select(MCPToolRegistration).where(MCPToolRegistration.name == tool_name)
-                            res = await session.execute(stmt)
-                            return res.scalar_one_or_none()
+                        pg_client = PostgresClient(settings.postgres_conn_str)
+                        try:
+                            async with pg_client.session() as session:
+                                stmt = select(MCPToolRegistration).where(MCPToolRegistration.name == tool_name)
+                                res = await session.execute(stmt)
+                                return res.scalar_one_or_none()
+                        finally:
+                            await pg_client.close()
                             
                     # 由于当前在一个 async 函数内，直接 await
                     db_tool = await fetch_tool_meta()
@@ -413,6 +417,20 @@ async def execute_tool(
 
     else:
         # === 本地工具执行链路 ===
+        if not registered or not registered.handler:
+            logger.error(
+                f"本地工具执行异常 trace_id={trace_id} tool_name={tool_name} "
+                f"原因: registered 或 handler 为空 (is_external={is_external})"
+            )
+            return MCPToolResult(
+                success=False,
+                output_text="",
+                error_message=f"工具 '{tool_name}' 未就绪或 Handler 丢失",
+                execution_id=execution_id,
+                latency_ms=0,
+                risk_level=risk_level_val,
+            )
+
         last_error = ""
         last_output_text = ""
 
