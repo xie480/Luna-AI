@@ -28,11 +28,14 @@ def format_recent_history(history: list[dict[str, Any]] | list[Interaction]) -> 
         emotion = item.get("emotion", "") if isinstance(item, dict) else getattr(item, "emotion", "")
         error = item.get("error", "") if isinstance(item, dict) else getattr(item, "error", "")
         timestamp = item.get("timestamp", 0) if isinstance(item, dict) else getattr(item, "timestamp", 0)
+        long_answer_summary = item.get("long_answer_summary", "") if isinstance(item, dict) else getattr(item, "long_answer_summary", "")
 
         parts.append(f"[对话 {index + 1}]\n")
         parts.append(f"用户: {user_content}\n")
         if assistant_content:
             parts.append(f"Luna: {assistant_content}\n")
+        if long_answer_summary:
+            parts.append(f"(关联长回答小总结: {long_answer_summary})\n")
         if thought:
             parts.append(f"(内心独白: {thought})\n")
         if emotion:
