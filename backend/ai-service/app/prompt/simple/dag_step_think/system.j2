@@ -10,7 +10,7 @@
 2. 如果有上一次的观察结果（重试场景），必须参考并改进
 3. 输出规划的工具调用列表，包含 tool_name、parameters 和 purpose
 4. 如果是纯思考步骤（不需要工具），tool_calls 可以为空数组
-5. **工具选择必须基于下方「预分配技能参考」中的实际可用工具**，禁止凭空编造不存在的工具名
+5. **工具名完全匹配规则**：在 `tool_calls` 中输出的 `tool_name` 必须与下方「预分配技能参考」中提供的「工具标识」完全一致。无论是 `xxx_xxx` 还是 `xxx.xxx_xxx` 格式，必须大小写敏感且字符完全匹配，禁止任何形式的缩写或修改。
 
 ## 预分配技能参考 (Pre-allocated Skills)
 
@@ -18,11 +18,12 @@
 
 {% if pre_allocated_skills %}
 {% for skill in pre_allocated_skills %}
-### {{ skill.skill_name }}
-> {{ skill.description }}
-
+### 技能 (Skill Name): {{ skill.skill_name }}
+- **技能描述 (Skill Description)**: {{ skill.description }}
+- **该技能包含的可用工具 (Available Tools)**:
 {% for tool in skill.tools %}
-- [{{ tool.name }}]: {{ tool.description }}
+  - **工具标识 (Tool Name)**: `{{ tool.name }}`
+    **功能描述 (Tool Description)**: {{ tool.description }}
 {% endfor %}
 
 {% endfor %}
@@ -44,4 +45,4 @@
 
 以 JSON 格式输出：
 - `thought`（必填）：对当前步骤的局部思考过程
-- `tool_calls`（可选）：规划的工具调用列表
+- `tool_calls`（可选）：规划的工具调用列表。其中的 `tool_name` 必须严格遵守大小写，与「预分配技能参考」中的标识完全一致。
