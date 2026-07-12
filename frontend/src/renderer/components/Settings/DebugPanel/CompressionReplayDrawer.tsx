@@ -253,11 +253,11 @@ const CompressionReplayDrawer: React.FC = () => {
                   <div className="compression-preview-grid">
                     <div>
                       <div className="compression-preview-title">处理前脱敏预览</div>
-                      <pre>{activeEvent.preview_before || '无预览内容'}</pre>
+                      <pre className="selectable-text" onMouseDown={(e) => e.stopPropagation()}>{activeEvent.preview_before || '无预览内容'}</pre>
                     </div>
                     <div>
                       <div className="compression-preview-title">处理后脱敏预览</div>
-                      <pre>{activeEvent.preview_after || '无预览内容'}</pre>
+                      <pre className="selectable-text" onMouseDown={(e) => e.stopPropagation()}>{activeEvent.preview_after || '无预览内容'}</pre>
                     </div>
                   </div>
                 </div>

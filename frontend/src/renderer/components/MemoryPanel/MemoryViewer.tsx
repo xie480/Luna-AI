@@ -134,11 +134,11 @@ export const MemoryViewer: React.FC = () => {
             {memories.length > 0 ? (
               memories.map((memory) => (
                 <tr key={memory.id}>
-                  <td title={memory.id}>{memory.id.substring(0, 8)}...</td>
-                  <td>{memory.session_id}</td>
-                  <td className="summary-cell">{memory.summary}</td>
-                  <td>{memory.status}</td>
-                  <td>{memory.created_at ? new Date(memory.created_at).toLocaleDateString() : '-'}</td>
+                  <td title={memory.id} className="selectable-text" onMouseDown={(e) => e.stopPropagation()}>{memory.id.substring(0, 8)}...</td>
+                  <td className="selectable-text" onMouseDown={(e) => e.stopPropagation()}>{memory.session_id}</td>
+                  <td className="summary-cell selectable-text" onMouseDown={(e) => e.stopPropagation()}>{memory.summary}</td>
+                  <td className="selectable-text" onMouseDown={(e) => e.stopPropagation()}>{memory.status}</td>
+                  <td className="selectable-text" onMouseDown={(e) => e.stopPropagation()}>{memory.created_at ? new Date(memory.created_at).toLocaleDateString() : '-'}</td>
                   <td>
                     <div className="action-buttons">
                       <button className="action-btn" onClick={() => openEditForm(memory)} title="编辑">

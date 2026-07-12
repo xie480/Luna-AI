@@ -46,8 +46,10 @@
   color: rgba(255, 255, 255, 0.85);
   text-transform: uppercase;
   pointer-events: none;
-  user-select: none;
-  
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+
   /* 科技感发光阴影 */
   text-shadow: 0 0 10px rgba(0, 240, 255, 0.5), 
                0 0 20px rgba(0, 240, 255, 0.3),

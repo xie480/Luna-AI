@@ -36,7 +36,9 @@
   font-size: 13px;
   color: #94a3b8;
   transition: all 0.18s ease;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .mcp-nav-item:hover {
@@ -946,7 +948,9 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .edit-server-modal__toggle input[type="checkbox"] {

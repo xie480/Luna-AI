@@ -26,9 +26,10 @@ export const BubbleStack: React.FC = () => {
         <div
           key={bubble.id}
           ref={(el) => registerBubble(el, bubble.id)}
-          className={`css-chat-bubble ${bubble.leaving ? 'leaving' : ''}`}
+          className={`css-chat-bubble selectable-text ${bubble.leaving ? 'leaving' : ''}`}
           data-batch-id={bubble.batchId}
           data-bubble-stage={bubble.stage}
+          onMouseDown={(e) => e.stopPropagation()} /* 防止因为拖动背景被拦截 */
         >
           {bubble.text}
         </div>

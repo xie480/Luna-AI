@@ -64,7 +64,7 @@ export function useLongAnswerDragResize(options: UseLongAnswerDragResizeOptions 
         // Don't drag if clicking buttons
         if (target.closest('button')) return;
 
-        e.preventDefault();
+        // Note: Removing e.preventDefault() here allows text selection to work properly
         target.setPointerCapture(e.pointerId);
 
         dragState.current = {

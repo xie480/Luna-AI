@@ -118,6 +118,11 @@ export const DagCanvas: React.FC<{ children: React.ReactNode }> = ({ children })
           transform: `scale(${canvasZoom}) translate(${canvasOffset.x / canvasZoom}px, ${canvasOffset.y / canvasZoom}px)`,
           transformOrigin: 'top left',
         }}
+        onMouseDown={(e) => {
+          // Allow text selection inside the canvas, stop propagation if it's not a drag action on the background
+          if ((e.target as HTMLElement).classList.contains('dag-canvas-inner')) return;
+          e.stopPropagation();
+        }}
       >
         {children}
       </div>

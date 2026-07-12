@@ -31,6 +31,10 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   letter-spacing: 0.5px;
+  user-select: text;
+  -webkit-user-select: text;
+  pointer-events: auto; /* Re-enable pointer events for the bubble text itself */
+  cursor: text;
 }
 
 @keyframes bubbleIn {

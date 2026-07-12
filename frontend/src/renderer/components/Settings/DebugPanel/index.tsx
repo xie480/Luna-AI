@@ -215,7 +215,10 @@ const DebugPanelInner: React.FC<{ isOpen: boolean }> = ({ isOpen }) => {
         </div>
 
         {/* 标签页内容 */}
-        <div className="debug-panel-content">
+        <div className="debug-panel-content" onMouseDown={(e) => {
+          // Allow text selection inside the content, stop propagation to prevent dragging
+          e.stopPropagation();
+        }}>
           {activeTab === 'metrics' && <MetricsChart />}
           {activeTab === 'errors' && <FrontendErrorViewer />}
           {activeTab === 'compressionAudit' && <CompressionAuditViewer />}
@@ -333,9 +336,9 @@ const FrontendErrorViewer: React.FC = () => {
                 <span className="error-level">{err.level}</span>
                 <span className="error-source">{err.source}</span>
               </div>
-              <div className="error-message">{err.message}</div>
-              {err.trace_id && <div className="error-trace">TraceID: {err.trace_id}</div>}
-              {err.detail && <pre className="error-stack">{err.detail}</pre>}
+              <div className="error-message selectable-text" onMouseDown={(e) => e.stopPropagation()}>{err.message}</div>
+              {err.trace_id && <div className="error-trace selectable-text" onMouseDown={(e) => e.stopPropagation()}>TraceID: {err.trace_id}</div>}
+              {err.detail && <pre className="error-stack selectable-text" onMouseDown={(e) => e.stopPropagation()}>{err.detail}</pre>}
             </div>
           ))
         )}

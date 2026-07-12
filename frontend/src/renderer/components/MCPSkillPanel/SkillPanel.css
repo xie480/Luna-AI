@@ -388,7 +388,9 @@
 
 [data-theme="cyberpunk"] .edit-server-modal__toggle {
   cursor: pointer;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 [data-theme="cyberpunk"] .edit-server-modal__toggle input[type="checkbox"] {

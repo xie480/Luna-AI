@@ -43,18 +43,18 @@ export const AgentThoughtProcess: React.FC<AgentThoughtProcessProps> = ({ though
         {displayThoughts.map((t, idx) => (
           <div key={idx} className={`thought-item ${t.stage}`}>
             <span className="thought-icon">
-              {t.stage === 'generating' ? '💬' : 
-               t.stage === 'searching' ? '🔍' : 
-               t.stage === 'evaluating' ? '⚖️' : 
+              {t.stage === 'generating' ? '💬' :
+               t.stage === 'searching' ? '🔍' :
+               t.stage === 'evaluating' ? '⚖️' :
                t.stage === 'rewriting' ? '🔄' : '✓'}
             </span>
-            <span className="thought-text">{t.description}</span>
+            <span className="thought-text" onMouseDown={(e) => e.stopPropagation()}>{t.description}</span>
           </div>
         ))}
         {!isGenerating && !isExpanded && thoughts.length > 0 && (
           <div className="thought-item active-pulse">
             <span className="thought-icon">⏳</span>
-            <span className="thought-text">意图分析中...</span>
+            <span className="thought-text" onMouseDown={(e) => e.stopPropagation()}>意图分析中...</span>
           </div>
         )}
       </div>

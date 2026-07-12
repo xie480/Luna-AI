@@ -118,7 +118,7 @@ export const ChatWorkflowStepBar: React.FC = () => {
       <div className="chat-workflow-stepbar__header">
         <div className="chat-workflow-stepbar__title-group">
           <div className="chat-workflow-stepbar__eyebrow">Daily Chat Workflow</div>
-          <div className="chat-workflow-stepbar__title">{currentStep.title}</div>
+          <div className="chat-workflow-stepbar__title selectable-text" onMouseDown={(e) => e.stopPropagation()}>{currentStep.title}</div>
           <div className="chat-workflow-stepbar__status">
             <span className="chat-workflow-node-badge chat-workflow-node-badge--running">
               <span className="chat-workflow-node-badge__dot" />
@@ -148,7 +148,7 @@ export const ChatWorkflowStepBar: React.FC = () => {
 
       <div className="chat-workflow-stepbar__summary">
         {nodes.length === 0 ? (
-          <div className="chat-workflow-stepbar__empty">等待后端推送节点事件…</div>
+          <div className="chat-workflow-stepbar__empty selectable-text" onMouseDown={(e) => e.stopPropagation()}>等待后端推送节点事件…</div>
         ) : (
           nodes.slice(-4).map((node) => <ChatWorkflowNodeBadge key={node.nodeType} node={node} />)
         )}

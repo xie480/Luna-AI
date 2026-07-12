@@ -72,6 +72,9 @@
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 14px;
   background: rgba(15, 15, 35, 0.76);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .profile-cache-main {
@@ -79,6 +82,9 @@
   align-items: flex-start;
   gap: 12px;
   min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .profile-cache-dot {
@@ -122,11 +128,17 @@
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .profile-cache-text strong {
   color: #f8fafc;
   font-size: 13px;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .profile-cache-text span,
@@ -448,6 +460,9 @@
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .profile-card-meta {

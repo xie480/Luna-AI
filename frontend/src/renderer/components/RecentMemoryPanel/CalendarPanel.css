@@ -157,7 +157,9 @@
   scroll-snap-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
   position: relative;
   z-index: 2;
 }
@@ -214,7 +216,9 @@
   font-size: 13px;
   position: relative;
   transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .day-cell.empty {

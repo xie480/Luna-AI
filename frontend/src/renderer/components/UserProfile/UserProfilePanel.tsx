@@ -155,7 +155,7 @@ export const UserProfilePanel: React.FC = () => {
   };
 
   return (
-    <div className="user-profile-panel">
+    <div className="user-profile-panel" onMouseDown={(e) => e.stopPropagation()}>
       <header className="user-profile-hero">
         <div>
           <p className="user-profile-eyebrow">Personal Profile</p>

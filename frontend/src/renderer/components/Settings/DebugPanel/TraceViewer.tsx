@@ -177,7 +177,7 @@ const SpanNode: React.FC<{
         style={{ backgroundColor: bgColor }}
       >
         {/* Span 名称 */}
-        <span className="span-name">{span.name}</span>
+        <span className="span-name selectable-text" onMouseDown={(e) => e.stopPropagation()}>{span.name}</span>
 
         {/* 耗时进度条 */}
         <div className="span-duration-bar-bg">

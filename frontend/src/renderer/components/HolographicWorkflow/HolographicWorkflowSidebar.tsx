@@ -35,7 +35,7 @@ import './HolographicWorkflowSidebar.css';
  * AgentLoopPanelEmbedded — 将 AgentLoopPanel 嵌入侧边栏的包装组件。
  * 做什么：在侧边栏内部渲染 AgentLoopPanel，使其占据整个可滚动区域。
  */
-const AgentLoopPanelEmbedded: React.FC = () => <AgentLoopPanel />;
+const AgentLoopPanelEmbedded: React.FC = () => <div onMouseDown={(e) => e.stopPropagation()} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}><AgentLoopPanel /></div>;
 
 const MIN_WIDTH = 260;
 const DEFAULT_WIDTH = 320;

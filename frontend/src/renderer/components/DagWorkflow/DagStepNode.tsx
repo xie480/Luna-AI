@@ -131,7 +131,7 @@ export const DagStepNode: React.FC<DagStepNodeProps> = ({
         </span>
 
         <span className="dag-step-index">Step {step.stepIndex}</span>
-        <span className="dag-step-desc" title={step.description}>{step.description}</span>
+        <span className="dag-step-desc" title={step.description} onMouseDown={(e) => e.stopPropagation()}>{step.description}</span>
 
         {/* 执行模式标签 */}
         <span className={`dag-step-mode-badge ${isParallel ? 'mode-parallel' : 'mode-serial'}`}>

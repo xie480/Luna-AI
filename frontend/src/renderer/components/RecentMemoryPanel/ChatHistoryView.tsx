@@ -34,7 +34,7 @@ const ChatMessageItem: React.FC<{
   if (isError) {
     return (
       <div className="message-wrapper error-block">
-        <div className="message-bubble">
+        <div className="message-bubble selectable-text" onMouseDown={(e) => e.stopPropagation()}>
           <div className="error-header">响应异常</div>
           <div className="message-content">{errorContent}</div>
         </div>
@@ -48,7 +48,7 @@ const ChatMessageItem: React.FC<{
   if (isUser) {
     return (
       <div className="message-wrapper user">
-        <div className="message-bubble">
+        <div className="message-bubble selectable-text" onMouseDown={(e) => e.stopPropagation()}>
           <div className="message-content">{msg.content}</div>
         </div>
         <div className="message-time-row">
@@ -68,7 +68,7 @@ const ChatMessageItem: React.FC<{
         {/* 正面：常规回复 */}
         <div className={`bubble-face front ${!isFlipped ? 'active' : ''}`}>
           <div className="bubble-content-wrapper">
-            <div className="message-bubble">
+            <div className="message-bubble selectable-text" onMouseDown={(e) => e.stopPropagation()}>
               <div className="message-content">{msg.content}</div>
             </div>
           </div>
@@ -76,7 +76,7 @@ const ChatMessageItem: React.FC<{
         {/* 背面：内心独白 */}
         <div className={`bubble-face back ${isFlipped ? 'active' : ''}`}>
           <div className="bubble-content-wrapper">
-            <div className="message-bubble">
+            <div className="message-bubble selectable-text" onMouseDown={(e) => e.stopPropagation()}>
               <div className="message-content">{msg.thought || '（没有记录内心活动）'}</div>
             </div>
           </div>

@@ -124,7 +124,7 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
         <NodeIcon width="14" height="14" className="dag-node-type-icon" />
         <span className="dag-node-type-label">{typeLabel}</span>
 
-        <span className="dag-node-name" title={nodeDisplayName}>{nodeDisplayName}</span>
+        <span className="dag-node-name" title={nodeDisplayName} onMouseDown={(e) => e.stopPropagation()}>{nodeDisplayName}</span>
 
         <span className="dag-node-status">
           <StatusIcon width="11" height="11" className={`dag-node-status-icon status-icon-${node.status.toLowerCase()}`} />
@@ -154,7 +154,7 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
             return checkText ? (
               <div className="dag-node-cot-section">
                 <span className="dag-node-cot-label">🧠 Agent CoT 推演</span>
-                <div className="dag-node-cot-content">
+                <div className="dag-node-cot-content" onMouseDown={(e) => e.stopPropagation()}>
                   {checkText.split(/\[(.*?)\]/g).map((part, i) => {
                     if (i % 2 === 1) {
                       // 方括号内的维度标签
@@ -176,7 +176,7 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
                 {Object.entries(node.inputs).map(([key, value]) => (
                   <div key={key} className="dag-node-param-item">
                     <span className="dag-node-param-key">{key}:</span>
-                    <span className="dag-node-param-value">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                    <span className="dag-node-param-value" onMouseDown={(e) => e.stopPropagation()}>{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
                   </div>
                 ))}
               </div>
@@ -194,7 +194,7 @@ export const DagAtomicNode: React.FC<DagAtomicNodeProps> = ({ node }) => {
                   {filteredOutputs.map(([key, value]) => (
                     <div key={key} className="dag-node-param-item">
                       <span className="dag-node-param-key">{key}:</span>
-                      <span className="dag-node-param-value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}>
+                      <span className="dag-node-param-value" title={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)} onMouseDown={(e) => e.stopPropagation()}>
                         {typeof value === 'object' ? JSON.stringify(value).slice(0, 200) : String(value).slice(0, 200)}
                       </span>
                     </div>

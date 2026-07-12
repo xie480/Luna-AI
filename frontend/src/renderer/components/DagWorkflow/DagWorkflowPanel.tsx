@@ -95,7 +95,7 @@ export const DagWorkflowPanel: React.FC = () => {
             <div className="dag-objective-fixed-header">
               <div className="dag-objective-fixed-summary">
                 <span className="dag-objective-fixed-label">全局目标</span>
-                <span className="dag-objective-fixed-goal">
+                <span className="dag-objective-fixed-goal" onMouseDown={(e) => e.stopPropagation()}>
                   {activePlan.globalObjective.overallGoal || activePlan.planningReason || '（目标待生成）'}
                 </span>
               </div>

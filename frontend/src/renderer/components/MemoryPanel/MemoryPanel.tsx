@@ -42,6 +42,7 @@ export const MemoryPanel: React.FC = () => {
         <div
           className={`memory-nav-item ${activeTab === 'manual' ? 'active' : ''}`}
           onClick={() => setActiveTab('manual')}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <ManualMemoryIcon />
           <span className="nav-text">手动记忆</span>
@@ -49,6 +50,7 @@ export const MemoryPanel: React.FC = () => {
         <div
           className={`memory-nav-item ${activeTab === 'viewer' ? 'active' : ''}`}
           onClick={() => setActiveTab('viewer')}
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <MemoryViewerIcon />
           <span className="nav-text">记忆查看</span>

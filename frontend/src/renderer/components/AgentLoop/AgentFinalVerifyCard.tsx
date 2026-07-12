@@ -84,7 +84,7 @@ export const AgentFinalVerifyCard: React.FC<AgentFinalVerifyCardProps> = ({
             <IconReport width="14" height="14" />
             <span>报告</span>
           </div>
-          <div className="al-final-report-text">{verification.report}</div>
+          <div className="al-final-report-text" onMouseDown={(e) => e.stopPropagation()}>{verification.report}</div>
         </div>
       )}
 

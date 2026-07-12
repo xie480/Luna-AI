@@ -137,6 +137,9 @@
     opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .bubble-face:not(.active) {
@@ -161,6 +164,9 @@
   position: relative;
   transform: rotateY(0deg);
   pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .bubble-face.front .message-bubble {

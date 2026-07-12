@@ -297,7 +297,8 @@ export const InputArea: React.FC = () => {
       {isFullscreenMode && (
         <div className="fullscreen-modal-overlay" onClick={closeFullscreenMode}>
           <div 
-            className="fullscreen-modal" 
+            className="fullscreen-modal"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             {/* 模态框头部 */}

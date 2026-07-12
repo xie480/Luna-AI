@@ -124,6 +124,8 @@
   flex-direction: column;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .long-answer-body::-webkit-scrollbar {
@@ -139,6 +141,9 @@
   font-size: 14px;
   line-height: 1.6;
   color: #d1d5db;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .long-answer-markdown-container h1,
@@ -147,11 +152,16 @@
   color: #fff;
   margin-top: 1.5em;
   margin-bottom: 0.5em;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .long-answer-markdown-container p {
   margin-bottom: 1em;
   white-space: pre-wrap; /* This helps preserve \n rendering from strings */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* Base text sizing matching the overall app */
@@ -204,6 +214,9 @@
   font-family: monospace;
   margin-bottom: 1em;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .long-answer-inline-code {
@@ -212,6 +225,9 @@
   border-radius: 4px;
   font-family: monospace;
   color: #a082ff;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .long-answer-loading-cursor {

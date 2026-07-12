@@ -123,7 +123,7 @@
 .rh-e { right: -3px; top: 12px; bottom: 12px; width: 6px; cursor: e-resize; }
 
 /* 拖拽手柄 */
-.modal-drag-handle { cursor: grab; user-select: none; }
+.modal-drag-handle { cursor: grab; user-select: text; -webkit-user-select: text; cursor: text; }
 .modal-drag-handle:active { cursor: grabbing; }
 
 /* 模态头部 */
@@ -262,6 +262,9 @@
   background-color: #0f0f23;
   border-radius: 8px;
   padding: 12px;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .log-item {
@@ -270,6 +273,8 @@
   font-family: monospace;
   line-height: 1.5;
   padding: 2px 0;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* ========== 设置面板 Phase 3 ========== */
@@ -559,6 +564,9 @@
   word-wrap: break-word;
   min-height: 200px;
   margin: 0;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .settings-placeholder { display: none; }

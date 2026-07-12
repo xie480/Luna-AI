@@ -73,7 +73,8 @@
   gap: 6px;
   padding: 8px 10px;
   cursor: pointer;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
   transition: background 0.2s ease;
 }
 

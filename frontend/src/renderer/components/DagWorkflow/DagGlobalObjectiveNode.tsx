@@ -65,7 +65,7 @@ export const DagGlobalObjectiveNode: React.FC<DagGlobalObjectiveNodeProps> = ({ 
           </div>
 
           {/* 目标内容 — 当 overallGoal 为空时回退到 planningReason */}
-          <div className="dag-objective-goal">
+          <div className="dag-objective-goal" onMouseDown={(e) => e.stopPropagation()}>
             {globalObjective.overallGoal || plan.planningReason || '（目标待生成）'}
           </div>
 
@@ -74,7 +74,7 @@ export const DagGlobalObjectiveNode: React.FC<DagGlobalObjectiveNodeProps> = ({ 
             <div className="dag-objective-criteria">
               <DagIconCheckCircle width="10" height="10" />
               <span className="dag-objective-criteria-label">标准</span>
-              <span className="dag-objective-criteria-text">{globalObjective.successCriteria}</span>
+              <span className="dag-objective-criteria-text" onMouseDown={(e) => e.stopPropagation()}>{globalObjective.successCriteria}</span>
             </div>
           )}
 
@@ -83,7 +83,7 @@ export const DagGlobalObjectiveNode: React.FC<DagGlobalObjectiveNodeProps> = ({ 
             <div className="dag-objective-format">
               <DagIconFileText width="10" height="10" />
               <span className="dag-objective-format-label">格式</span>
-              <span className="dag-objective-format-text">{globalObjective.outputFormat}</span>
+              <span className="dag-objective-format-text" onMouseDown={(e) => e.stopPropagation()}>{globalObjective.outputFormat}</span>
             </div>
           )}
 

@@ -96,7 +96,9 @@
   border-radius: 8px;
   transition: all 0.2s ease;
   cursor: pointer;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .clothing-item:hover {

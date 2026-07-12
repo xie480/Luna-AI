@@ -66,7 +66,7 @@ export const CitationPopover: React.FC<CitationPopoverProps> = ({ index, citatio
             <span className="citation-doc-name" title={evidence.document_name}>📄 {evidence.document_name}</span>
             <span className="citation-score">{(evidence.score * 100).toFixed(1)}%</span>
           </div>
-          <div className="citation-content-preview">
+          <div className="citation-content-preview selectable-text" onMouseDown={(e) => e.stopPropagation()}>
             {evidence.content}
           </div>
           <div className="citation-footer">

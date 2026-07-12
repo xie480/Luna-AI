@@ -57,7 +57,7 @@ export const ChatWorkflowConditionItem: React.FC<{
           </button>
         )}
       </div>
-      {reason && expanded && <div className="chat-workflow-condition-item__reason">{reason}</div>}
+      {reason && expanded && <div className="chat-workflow-condition-item__reason selectable-text" onMouseDown={(e) => e.stopPropagation()}>{reason}</div>}
     </div>
   );
 };

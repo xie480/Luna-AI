@@ -332,7 +332,10 @@ export const Modal: React.FC = () => {
         </div>
 
         {/* 模态窗口内容区 */}
-        <div className="modal-content">
+        <div className="modal-content" onMouseDown={(e) => {
+          // Allow text selection inside the content, stop propagation to prevent dragging
+          e.stopPropagation();
+        }}>
           <div className={`panel ${activeModalPanel === 'dag' ? 'dag-panel' : ''}`}>
             {renderPanelContent(activeModalPanel, activePlan, systemLogs)}
           </div>

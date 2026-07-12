@@ -47,7 +47,7 @@ export const LongAnswerPanel: React.FC = () => {
     >
       <LongAnswerHeader item={item} onPointerDown={handlePointerDown} />
       
-      <div className="long-answer-body">
+      <div className="long-answer-body" onPointerDown={(e) => e.stopPropagation()}>
         <LongAnswerMarkdown markdown={item.markdown} status={item.status} />
         {item.citations && item.citations.length > 0 && (
           <div className="long-answer-sources">

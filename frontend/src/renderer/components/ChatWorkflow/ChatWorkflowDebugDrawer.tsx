@@ -26,15 +26,15 @@ export const ChatWorkflowDebugDrawer: React.FC = () => {
       <div className="chat-workflow-debug-drawer__summary">
         <div className="chat-workflow-debug-drawer__summary-card">
           <div className="chat-workflow-debug-drawer__summary-label">Trace ID</div>
-          <div className="chat-workflow-debug-drawer__summary-value">{activePlan.traceId}</div>
+          <div className="chat-workflow-debug-drawer__summary-value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{activePlan.traceId}</div>
         </div>
         <div className="chat-workflow-debug-drawer__summary-card">
           <div className="chat-workflow-debug-drawer__summary-label">Interaction ID</div>
-          <div className="chat-workflow-debug-drawer__summary-value">{activePlan.interactionId}</div>
+          <div className="chat-workflow-debug-drawer__summary-value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{activePlan.interactionId}</div>
         </div>
         <div className="chat-workflow-debug-drawer__summary-card">
           <div className="chat-workflow-debug-drawer__summary-label">节点数量</div>
-          <div className="chat-workflow-debug-drawer__summary-value">{nodes.length}</div>
+          <div className="chat-workflow-debug-drawer__summary-value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{nodes.length}</div>
         </div>
       </div>
 

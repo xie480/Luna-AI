@@ -59,12 +59,12 @@ export const ChatWorkflowTimeline: React.FC<{ traceId?: string }> = ({ traceId }
             <div className="chat-workflow-timeline__time">{formatTime(event.timestampMs)}</div>
           </div>
           {event.nodeType && (
-            <div className="chat-workflow-timeline__node">
+            <div className="chat-workflow-timeline__node selectable-text" onMouseDown={(e) => e.stopPropagation()}>
               节点：{CHAT_WORKFLOW_NODE_LABEL[event.nodeType]}
             </div>
           )}
-          <div className="chat-workflow-timeline__detail">{event.detail}</div>
-          {event.payloadSummary && <div className="chat-workflow-timeline__payload">{event.payloadSummary}</div>}
+          <div className="chat-workflow-timeline__detail selectable-text" onMouseDown={(e) => e.stopPropagation()}>{event.detail}</div>
+          {event.payloadSummary && <div className="chat-workflow-timeline__payload selectable-text" onMouseDown={(e) => e.stopPropagation()}>{event.payloadSummary}</div>}
         </div>
       ))}
     </div>

@@ -50,7 +50,7 @@ export const DagGlobalInfoBar: React.FC = () => {
       <div className="dag-info-row">
         <DagIconTarget className="dag-info-row-icon" />
         <span className="dag-info-row-label">目标</span>
-        <span className="dag-info-row-content">{globalObjective.overallGoal}</span>
+        <span className="dag-info-row-content" onMouseDown={(e) => e.stopPropagation()}>{globalObjective.overallGoal}</span>
         <span className={`dag-plan-status-badge status-${status.replace(/_/g, '-')}`}>
           {statusLabel}
         </span>
@@ -60,7 +60,7 @@ export const DagGlobalInfoBar: React.FC = () => {
       <div className="dag-info-row">
         <DagIconCheckCircle className="dag-info-row-icon" />
         <span className="dag-info-row-label">标准</span>
-        <span className="dag-info-row-content">{globalObjective.successCriteria}</span>
+        <span className="dag-info-row-content" onMouseDown={(e) => e.stopPropagation()}>{globalObjective.successCriteria}</span>
       </div>
 
       {/* 输出格式行（仅在有值时渲染） */}
@@ -68,7 +68,7 @@ export const DagGlobalInfoBar: React.FC = () => {
         <div className="dag-info-row">
           <DagIconFileText className="dag-info-row-icon" />
           <span className="dag-info-row-label">格式</span>
-          <span className="dag-info-row-content">{globalObjective.outputFormat}</span>
+          <span className="dag-info-row-content" onMouseDown={(e) => e.stopPropagation()}>{globalObjective.outputFormat}</span>
         </div>
       )}
 
@@ -134,7 +134,7 @@ export const DagGlobalInfoBar: React.FC = () => {
             约束条件 ({globalObjective.constraints.length})
           </button>
           {constraintsExpanded && (
-            <ul className="dag-constraints-list">
+            <ul className="dag-constraints-list" onMouseDown={(e) => e.stopPropagation()}>
               {globalObjective.constraints.map((constraint, index) => (
                 <li key={index}>{constraint}</li>
               ))}

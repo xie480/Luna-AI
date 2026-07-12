@@ -65,21 +65,21 @@ export const ChatWorkflowMetadataPanel: React.FC<{
           <div className="chat-workflow-metadata-panel__grid">
             <div className="chat-workflow-metadata-panel__item">
               <div className="chat-workflow-metadata-panel__label">Trace ID</div>
-              <div className="chat-workflow-metadata-panel__value">{metadata.traceId || '等待同步'}</div>
+              <div className="chat-workflow-metadata-panel__value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{metadata.traceId || '等待同步'}</div>
             </div>
             <div className="chat-workflow-metadata-panel__item">
               <div className="chat-workflow-metadata-panel__label">Interaction ID</div>
-              <div className="chat-workflow-metadata-panel__value">{metadata.interactionId}</div>
+              <div className="chat-workflow-metadata-panel__value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{metadata.interactionId}</div>
             </div>
             <div className="chat-workflow-metadata-panel__item">
               <div className="chat-workflow-metadata-panel__label">当前节点</div>
-              <div className="chat-workflow-metadata-panel__value">
+              <div className="chat-workflow-metadata-panel__value selectable-text" onMouseDown={(e) => e.stopPropagation()}>
                 {metadata.activeNodeType ? CHAT_WORKFLOW_NODE_LABEL[metadata.activeNodeType] : '等待节点开始'}
               </div>
             </div>
             <div className="chat-workflow-metadata-panel__item">
               <div className="chat-workflow-metadata-panel__label">引用数量</div>
-              <div className="chat-workflow-metadata-panel__value">{metadata.citations.length}</div>
+              <div className="chat-workflow-metadata-panel__value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{metadata.citations.length}</div>
             </div>
           </div>
 
@@ -110,7 +110,7 @@ export const ChatWorkflowMetadataPanel: React.FC<{
           {metadata.postprocessSummary && (
             <div className="chat-workflow-metadata-panel__item">
               <div className="chat-workflow-metadata-panel__label">后处理备注</div>
-              <div className="chat-workflow-metadata-panel__value">{metadata.postprocessSummary}</div>
+              <div className="chat-workflow-metadata-panel__value selectable-text" onMouseDown={(e) => e.stopPropagation()}>{metadata.postprocessSummary}</div>
             </div>
           )}
         </div>

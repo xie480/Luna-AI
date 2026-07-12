@@ -38,7 +38,7 @@ export const ChatWorkflowNodeBadge: React.FC<{ node: ChatNodeProjection }> = ({ 
   })();
 
   return (
-    <span className={`chat-workflow-node-badge chat-workflow-node-badge--${variant}`}>
+    <span className={`chat-workflow-node-badge chat-workflow-node-badge--${variant} selectable-text`} onMouseDown={(e) => e.stopPropagation()}>
       <span className="chat-workflow-node-badge__dot" />
       <span>{CHAT_WORKFLOW_NODE_LABEL[node.nodeType]}</span>
       <span>·</span>

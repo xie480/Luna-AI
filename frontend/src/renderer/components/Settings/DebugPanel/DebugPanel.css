@@ -83,7 +83,8 @@
   border-bottom: 1px solid #2d2d44;
   background-color: #16213e;
   cursor: move;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .debug-panel-title {

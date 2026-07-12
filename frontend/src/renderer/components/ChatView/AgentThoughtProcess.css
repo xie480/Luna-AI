@@ -53,6 +53,9 @@
 
 .thought-text {
   line-height: 1.4;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .active-pulse .thought-text {

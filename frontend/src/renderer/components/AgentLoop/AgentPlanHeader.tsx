@@ -62,7 +62,7 @@ export const AgentPlanHeader: React.FC<AgentPlanHeaderProps> = ({ plan, complete
                   <span className="al-replan-version">
                     v{record.fromVersion} → v{record.toVersion}
                   </span>
-                  <span className="al-replan-reason">{record.reason}</span>
+                  <span className="al-replan-reason" onMouseDown={(e) => e.stopPropagation()}>{record.reason}</span>
                 </div>
               ))}
             </div>

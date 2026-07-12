@@ -52,7 +52,7 @@ export const AgentGoalCard: React.FC<AgentGoalCardProps> = ({ goal, expanded, on
           {goal.goalDefinition && (
             <div className="al-goal-field">
               <span className="al-goal-label">详细描述</span>
-              <span className="al-goal-value">{goal.goalDefinition}</span>
+              <span className="al-goal-value" onMouseDown={(e) => e.stopPropagation()}>{goal.goalDefinition}</span>
             </div>
           )}
 
@@ -60,7 +60,7 @@ export const AgentGoalCard: React.FC<AgentGoalCardProps> = ({ goal, expanded, on
           {goal.acceptanceCriteria.length > 0 && (
             <div className="al-goal-field">
               <span className="al-goal-label">验收标准</span>
-              <ul className="al-goal-list">
+              <ul className="al-goal-list" onMouseDown={(e) => e.stopPropagation()}>
                 {goal.acceptanceCriteria.map((c, i) => (
                   <li key={i}>{c}</li>
                 ))}
@@ -72,7 +72,7 @@ export const AgentGoalCard: React.FC<AgentGoalCardProps> = ({ goal, expanded, on
           {goal.nonGoals.length > 0 && (
             <div className="al-goal-field">
               <span className="al-goal-label">非目标</span>
-              <ul className="al-goal-list al-goal-list--neg">
+              <ul className="al-goal-list al-goal-list--neg" onMouseDown={(e) => e.stopPropagation()}>
                 {goal.nonGoals.map((ng, i) => (
                   <li key={i}>{ng}</li>
                 ))}
@@ -84,7 +84,7 @@ export const AgentGoalCard: React.FC<AgentGoalCardProps> = ({ goal, expanded, on
           {goal.constraints.length > 0 && (
             <div className="al-goal-field">
               <span className="al-goal-label">约束条件</span>
-              <div className="al-goal-tags">
+              <div className="al-goal-tags" onMouseDown={(e) => e.stopPropagation()}>
                 {goal.constraints.map((c, i) => (
                   <span key={i} className="al-goal-tag">{c}</span>
                 ))}

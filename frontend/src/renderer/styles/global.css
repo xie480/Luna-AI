@@ -85,6 +85,13 @@ body {
   -webkit-user-select: none;
 }
 
+/* 确保可选择的文本容器显式地覆盖 body 的 none 属性 */
+.selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
 /* 输入框允许选择 */
 input, textarea {
   user-select: text;

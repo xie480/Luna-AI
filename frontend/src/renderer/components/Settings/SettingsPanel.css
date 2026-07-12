@@ -24,7 +24,9 @@
   padding: 12px 24px;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .settings-nav-item:hover {

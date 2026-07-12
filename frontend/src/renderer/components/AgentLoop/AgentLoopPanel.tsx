@@ -64,7 +64,7 @@ export const AgentLoopPanel: React.FC = () => {
   const isRunning = activeLoop.status === 'executing' || activeLoop.status === 'replanning' || activeLoop.status === 'verifying';
 
   return (
-    <div className={`al-panel al-panel--embedded${isRunning ? ' al-panel--running' : ''}`}>
+    <div className={`al-panel al-panel--embedded${isRunning ? ' al-panel--running' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
       {/* ═══ Phase 10: 任务控制栏 ═══ */}
       <TaskControlBar />
 

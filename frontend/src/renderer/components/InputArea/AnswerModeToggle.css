@@ -22,7 +22,9 @@
   cursor: pointer;
   width: 58px;
   height: 26px;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
   box-sizing: border-box;
   transition: opacity 0.3s ease, border-color 0.3s ease;
 }

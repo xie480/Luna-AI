@@ -109,7 +109,7 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
           {/* 头部：State 编号 + 意图 + 状态 */}
           <div className="dag-state-node-header">
             <span className="dag-state-node-index">State {state.orderIndex}</span>
-            <span className="dag-state-node-intent" title={state.intent}>{state.intent}</span>
+            <span className="dag-state-node-intent" title={state.intent} onMouseDown={(e) => e.stopPropagation()}>{state.intent}</span>
             <span className="dag-state-node-status">
               <StatusIcon width="11" height="11" />
               <span>{statusLabel}</span>
@@ -121,7 +121,7 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
           <div className="dag-state-node-goal">
             <DagIconTarget width="10" height="10" />
             <span className="dag-state-node-goal-label">目标</span>
-            <span className="dag-state-node-goal-text">{state.goal}</span>
+            <span className="dag-state-node-goal-text" onMouseDown={(e) => e.stopPropagation()}>{state.goal}</span>
           </div>
 
           {/* 完成条件 */}
@@ -235,7 +235,7 @@ export const DagStateNode: React.FC<DagStateNodeProps> = ({ state }) => {
               {state.evaluationResult.check && (
                 <div className="dag-node-cot-section">
                   <span className="dag-node-cot-label">🧠 评估 Agent CoT</span>
-                  <div className="dag-node-cot-content">
+                  <div className="dag-node-cot-content" onMouseDown={(e) => e.stopPropagation()}>
                     {state.evaluationResult.check.split(/\[(.*?)\]/g).map((part, i) => {
                       if (i % 2 === 1) {
                         return <span key={i} className="dag-node-cot-dimension">[{part}]</span>;

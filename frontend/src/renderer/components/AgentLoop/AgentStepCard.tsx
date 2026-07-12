@@ -206,7 +206,7 @@ const ToolCallList: React.FC<ToolCallListProps> = ({ toolCalls, toolResults }) =
               {/* 调用参数（折叠展示） */}
               {tc.parameters && Object.keys(tc.parameters).length > 0 && (
                 <div className="al-tool-params-row">
-                  <pre className="al-tool-params">{JSON.stringify(tc.parameters, null, 2).slice(0, 300)}</pre>
+                  <pre className="al-tool-params" onMouseDown={(e) => e.stopPropagation()}>{JSON.stringify(tc.parameters, null, 2).slice(0, 300)}</pre>
                 </div>
               )}
 
@@ -214,7 +214,7 @@ const ToolCallList: React.FC<ToolCallListProps> = ({ toolCalls, toolResults }) =
               {result && (
                 <div className="al-tool-result">
                   {result.toolOutput && result.toolOutput !== '{}' && (
-                    <pre className="al-tool-output">{formatToolOutput(result.toolOutput)}</pre>
+                    <pre className="al-tool-output" onMouseDown={(e) => e.stopPropagation()}>{formatToolOutput(result.toolOutput)}</pre>
                   )}
                   {result.errorMessage && (
                     <div className="al-tool-error">{result.errorMessage}</div>
@@ -379,7 +379,7 @@ const IterationCard: React.FC<IterationCardProps> = ({
               <IconThink width="12" height="12" />
               <span>思考结果</span>
             </div>
-            <pre className="al-section-content al-thought al-thought--compact">{iteration.thought}</pre>
+            <pre className="al-section-content al-thought al-thought--compact" onMouseDown={(e) => e.stopPropagation()}>{iteration.thought}</pre>
           </div>
         )}
 
@@ -393,7 +393,7 @@ const IterationCard: React.FC<IterationCardProps> = ({
               <IconObserve width="12" height="12" />
               <span>观察结果</span>
             </div>
-            <pre className="al-section-content al-observation al-observation--compact">{iteration.observation}</pre>
+            <pre className="al-section-content al-observation al-observation--compact" onMouseDown={(e) => e.stopPropagation()}>{iteration.observation}</pre>
           </div>
         )}
 
@@ -530,14 +530,14 @@ export const AgentStepCard: React.FC<AgentStepCardProps> = ({
           {step.intent && (
             <div className="al-step-field">
               <span className="al-step-label">意图</span>
-              <span className="al-step-value">{step.intent}</span>
+              <span className="al-step-value" onMouseDown={(e) => e.stopPropagation()}>{step.intent}</span>
             </div>
           )}
           {/* 预期输出 */}
           {step.expectedOutput && (
             <div className="al-step-field">
               <span className="al-step-label">预期输出</span>
-              <span className="al-step-value">{step.expectedOutput}</span>
+              <span className="al-step-value" onMouseDown={(e) => e.stopPropagation()}>{step.expectedOutput}</span>
             </div>
           )}
           {/* 风险提示 */}
@@ -546,7 +546,7 @@ export const AgentStepCard: React.FC<AgentStepCardProps> = ({
               <span className="al-step-label">
                 <IconWarning width="10" height="10" /> 风险
               </span>
-              <span className="al-step-value">{step.riskNotes}</span>
+              <span className="al-step-value" onMouseDown={(e) => e.stopPropagation()}>{step.riskNotes}</span>
             </div>
           )}
 
@@ -594,7 +594,7 @@ export const AgentStepCard: React.FC<AgentStepCardProps> = ({
                     <span>思考结果</span>
                   </button>
                   {isThoughtExpanded && (
-                    <pre className="al-section-content al-thought">{step.lastThought}</pre>
+                    <pre className="al-section-content al-thought" onMouseDown={(e) => e.stopPropagation()}>{step.lastThought}</pre>
                   )}
                 </div>
               )}
@@ -611,7 +611,7 @@ export const AgentStepCard: React.FC<AgentStepCardProps> = ({
                     <span>观察结果</span>
                   </button>
                   {isObservationExpanded && (
-                    <pre className="al-section-content al-observation">{step.lastObservation}</pre>
+                    <pre className="al-section-content al-observation" onMouseDown={(e) => e.stopPropagation()}>{step.lastObservation}</pre>
                   )}
                 </div>
               )}

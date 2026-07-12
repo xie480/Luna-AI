@@ -30,6 +30,9 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 255, 255, 0.2) transparent;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* 内嵌模式：作为侧边栏特殊节点，背景融入全息网格 */
@@ -695,6 +698,9 @@
   word-break: break-all;
   max-height: 300px;
   overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .al-thought {
@@ -866,6 +872,9 @@
   word-break: break-all;
   max-height: 100px;
   overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .al-tool-error {
@@ -939,6 +948,9 @@
   word-break: break-all;
   max-height: 60px;
   overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* 工具执行结果元信息（耗时 + 重试） */
@@ -1149,6 +1161,9 @@
   background: rgba(0, 0, 0, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.03);
   border-radius: 4px;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 .al-final-criteria {

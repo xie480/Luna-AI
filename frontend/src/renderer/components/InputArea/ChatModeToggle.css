@@ -31,7 +31,9 @@
   letter-spacing: 0.3px;
   white-space: nowrap;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
   outline: none;
   position: relative;
   overflow: hidden;
