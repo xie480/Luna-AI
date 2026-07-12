@@ -248,10 +248,6 @@ class PlanReplanNode:
                                     },
                                 },
                             },
-                            "required_skill_names": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
                             "selected_skills": {
                                 "type": "array",
                                 "description": (
@@ -340,7 +336,6 @@ class PlanReplanNode:
                 intent=state_data.get("intent", ""),
                 goal=state_data.get("goal", ""),
                 completion_criteria=criteria,
-                required_skill_names=state_data.get("required_skill_names", []),
                 pre_allocated_skills=pre_allocated_skills,
                 budget=StateBudget(),
             )

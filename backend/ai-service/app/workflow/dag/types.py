@@ -182,11 +182,6 @@ class OverallState(BaseModel):
     goal: str
     completion_criteria: list[CompletionCriterion] = Field(default_factory=list)
     depends_on: list[str] = Field(default_factory=list)
-    required_skill_names: list[str] = Field(
-        default_factory=list,
-        description="该 State 需要使用的 Skill 名称列表。"
-                    "由 Plan 生成 Agent 根据 SkillBrief 填写。",
-    )
     pre_allocated_skills: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Plan 阶段预分配的 Skill 筛选结果列表。"

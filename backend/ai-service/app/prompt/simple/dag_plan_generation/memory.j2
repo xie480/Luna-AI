@@ -21,7 +21,6 @@
 {% for skill in skill_briefs %}
 ### {{ skill.skill_name }}
 - 描述：{{ skill.description }}
-- 可用工具：{{ skill.tool_names | join(', ') }}
 - 能力标签：{{ skill.capability_tags | join(', ') }}
 {% endfor %}
 {% endif %}

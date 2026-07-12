@@ -914,17 +914,38 @@ class StepThinkNode:
             # 优先使用 plan 步骤预分配的 skill 信息；若无则回退到全局 skill_briefs
             available_skills_for_step = agent_loop.skill_briefs
             if hasattr(current_step, "pre_allocated_skills") and current_step.pre_allocated_skills:
-                # 从全局 skill_briefs 中筛选出预分配的 skill
+                # 从全局 skill_briefs 中筛选出预分配的 skill，并注入工具详情
                 # pre_allocated_skills 是 list[dict]（含 skill_name），需提取 skill_name 构建集合
                 allocated_names = {
                     s.get("skill_name", "") if isinstance(s, dict) else str(s)
                     for s in current_step.pre_allocated_skills
                     if s
                 }
-                filtered = [
-                    s for s in agent_loop.skill_briefs
-                    if s.get("skill_name") in allocated_names
-                ]
+                
+                # 获取 mcp tool registry，用于补充工具详情
+                tool_registry = self._get_tool_registry()
+                
+                filtered = []
+                for s in agent_loop.skill_briefs:
+                    skill_name = s.get("skill_name")
+                    if skill_name in allocated_names:
+                        skill_copy = s.copy()
+                        tools_info = []
+                        if tool_registry:
+                            # 尝试获取这个 skill 对应的具体工具
+                            try:
+                                skill_tools = tool_registry.get_skill_tools(skill_name)
+                                for tool in skill_tools:
+                                    tools_info.append({
+                                        "name": tool.name,
+                                        "description": tool.description
+                                    })
+                            except Exception as e:
+                                logger.warning(f"获取 skill {skill_name} 的 tools 失败: {e}")
+                                
+                        skill_copy["tools"] = tools_info
+                        filtered.append(skill_copy)
+                        
                 if filtered:
                     available_skills_for_step = filtered
 

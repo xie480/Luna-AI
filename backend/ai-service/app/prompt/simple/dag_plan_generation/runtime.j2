@@ -31,7 +31,7 @@
 2. **无循环依赖**：是否存在循环依赖或无效依赖？
 
 ### 2.4 技能选择校验
-1. **必要性**：`required_skill_names` 中的每个技能是否确实被该 State 需要？纯推理/写作任务是否错误地选择了外部技能？
+1. **必要性**：`selected_skills` 中的每个技能是否确实被该 State 需要？纯推理/写作任务是否错误地选择了外部技能？
 2. **最小化**：是否只选择了必要的技能，而非"可能有用"的技能？
 
 ### 2.5 全局覆盖校验
@@ -53,7 +53,6 @@
         {"field": "字段名", "operator": ">=", "value": 1}
       ],
       "depends_on": [],
-      "required_skill_names": [],
       "selected_skills": [
         {"skill_name": "技能名称", "relevance_reason": "选择原因"}
       ]
@@ -68,7 +67,6 @@
 - **intent**（必填）：格式为 `[职责类型]: 具体意图描述`，与 responsibility 保持一致。
 - **goal**（必填）：详细描述该 State 的目标，必须说明输入来源（依赖哪些上游 State 的产出）和期望的输出产物。
 - **depends_on**：填写依赖的 State 的 `order_index`（整数）。反映数据流向，而非先后顺序。
-- **required_skill_names**（可选）：只有当该 State 明确需要调用外部工具或加载技能资源时才填写；纯推理/对话/写作类任务应留空数组 `[]`。
 - **selected_skills**（必填）：预分配的技能筛选结果。对于需要外部工具的 State，列出筛选出的技能及选择理由；对于纯推理/写作类 State，留空数组 `[]`。每个元素包含 `skill_name`（必须与可用能力列表中的名称完全一致）和 `relevance_reason`。
 
 ### 拆分自检清单

@@ -263,10 +263,6 @@ class PlanGenerationNode:
                                 "type": "array",
                                 "items": {"type": "integer"},
                             },
-                            "required_skill_names": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                            },
                             "selected_skills": {
                                 "type": "array",
                                 "description": (
@@ -377,7 +373,6 @@ class PlanGenerationNode:
                 goal=state_data.get("goal", ""),
                 completion_criteria=criteria,
                 depends_on=depends_on,
-                required_skill_names=state_data.get("required_skill_names", []),
                 pre_allocated_skills=pre_allocated_skills,
                 budget=StateBudget(),
             )

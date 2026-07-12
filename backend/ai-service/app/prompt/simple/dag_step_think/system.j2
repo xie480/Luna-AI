@@ -14,9 +14,15 @@
 
 ## 可用能力参考
 
+你只能使用当前 State 在规划时预分配的以下技能：
+
 {% if skill_briefs %}
 {% for skill in skill_briefs %}
-- **{{ skill.skill_name }}**: {{ skill.description }} [工具: {{ skill.tool_names | join(', ') }}]
+{{ skill.skill_name }}: {{ skill.description }}
+{% for tool in skill.tools %}
+[{{ loop.index }}: {{ tool.name }}: {{ tool.description }}]
+{% endfor %}
+
 {% endfor %}
 {% else %}
 （当前无可用外部技能，优先使用纯推理完成步骤）
