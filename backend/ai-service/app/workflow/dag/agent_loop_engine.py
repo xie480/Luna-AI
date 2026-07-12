@@ -911,43 +911,73 @@ class StepThinkNode:
                 completed_steps_text = "\n".join(summaries)
 
             # 将已筛选的 skill 信息注入 prompt，使 LLM 能选择实际存在的工具
-            # 优先使用 plan 步骤预分配的 skill 信息；若无则回退到全局 skill_briefs
-            available_skills_for_step = agent_loop.skill_briefs
+            # 优先使用 plan 步骤预分配的 skill 信息。
+            # 核心逻辑：从 SkillRegistry (SSOT) 中根据 pre_allocated_skills 查询完整信息注入。
+            # 注意：不再默认回退到全局 skill_briefs，以严格遵循全局规划阶段的"预分配"约束。
+            available_skills_for_step = []
+            
+            # 获取 SkillRegistry 实例
+            skill_registry = self._get_tool_registry()
+            
+            # 如果 current_step 有预分配技能，优先使用
             if hasattr(current_step, "pre_allocated_skills") and current_step.pre_allocated_skills:
-                # 从全局 skill_briefs 中筛选出预分配的 skill，并注入工具详情
-                # pre_allocated_skills 是 list[dict]（含 skill_name），需提取 skill_name 构建集合
-                allocated_names = {
-                    s.get("skill_name", "") if isinstance(s, dict) else str(s)
-                    for s in current_step.pre_allocated_skills
-                    if s
-                }
+                # pre_allocated_skills 是 list[str] 或 list[dict]（含 skill_name）
+                allocated_names = []
+                for s in current_step.pre_allocated_skills:
+                    if isinstance(s, dict):
+                        name = s.get("skill_name")
+                    elif isinstance(s, str):
+                        name = s
+                    else:
+                        name = str(s)
+                    if name:
+                        allocated_names.append(name)
                 
-                # 获取 mcp tool registry，用于补充工具详情
-                tool_registry = self._get_tool_registry()
-                
-                filtered = []
-                for s in agent_loop.skill_briefs:
-                    skill_name = s.get("skill_name")
-                    if skill_name in allocated_names:
-                        skill_copy = s.copy()
-                        tools_info = []
-                        if tool_registry:
-                            # 尝试获取这个 skill 对应的具体工具
-                            try:
-                                skill_tools = tool_registry.get_skill_tools(skill_name)
-                                for tool in skill_tools:
-                                    tools_info.append({
-                                        "name": tool.name,
-                                        "description": tool.description
-                                    })
-                            except Exception as e:
-                                logger.warning(f"获取 skill {skill_name} 的 tools 失败: {e}")
-                                
-                        skill_copy["tools"] = tools_info
-                        filtered.append(skill_copy)
+                logger.info(f"[DAG_STEP_THINK] 当前步骤 {current_step.step_id} 预分配技能列表: {allocated_names}")
+
+                if skill_registry:
+                    filtered = []
+                    for skill_name in allocated_names:
+                        # 直接通过 SkillRegistry 查询详情，确保数据来自最新的 PG 缓存
+                        skill_id = skill_registry.get_skill_id_by_name(skill_name)
+                        if not skill_id:
+                            logger.warning(f"[DAG_STEP_THINK] 预分配的技能 '{skill_name}' 在注册中心不存在，跳过注入。")
+                            continue
                         
-                if filtered:
-                    available_skills_for_step = filtered
+                        detail = skill_registry.get_skill_detail(skill_id)
+                        if not detail:
+                            continue
+                        
+                        # 构造符合 system.j2 预期的结构
+                        # system.j2 循环使用：{{ skill.skill_name }}: {{ skill.description }}
+                        # 内部循环工具：{% for tool in skill.tools %} [{{ loop.index }}: {{ tool.name }}: {{ tool.description }}]
+                        tools_info = []
+                        for t in detail.tools:
+                            # detail.tools 中是 dict 或对象，根据 SkillRegistry.load_from_pg，tools 是 list[dict]
+                            # 包含 name, description, risk_level 等
+                            tools_info.append({
+                                "name": t.get("name") if isinstance(t, dict) else getattr(t, "name", ""),
+                                "description": t.get("description") if isinstance(t, dict) else getattr(t, "description", "")
+                            })
+                        
+                        filtered.append({
+                            "skill_name": detail.name,
+                            "description": detail.description,
+                            "tools": tools_info
+                        })
+                    
+                    if filtered:
+                        available_skills_for_step = filtered
+                        logger.info(f"[DAG_STEP_THINK] 已注入预分配技能详情: {[s['skill_name'] for s in filtered]}")
+                else:
+                    # 降级：如果 registry 不可用，从 agent_loop.skill_briefs 中筛选
+                    logger.warning("[DAG_STEP_THINK] SkillRegistry 不可用，尝试从全局简报中筛选。")
+                    filtered = [
+                        s for s in agent_loop.skill_briefs
+                        if s.get("skill_name") in allocated_names
+                    ]
+                    if filtered:
+                        available_skills_for_step = filtered
 
             # 构建可用资源列表文本（与 skill_briefs 放在一起，供 LLM 了解可加载的资源）
             available_resources_text = self._build_available_resources_text(
@@ -977,7 +1007,7 @@ class StepThinkNode:
                     "completed_steps": completed_steps_text,
                     "disambiguated_text": agent_loop.disambiguated_text,
                     "memory_context": agent_loop.memory_context,
-                    "skill_briefs": available_skills_for_step,
+                    "pre_allocated_skills": available_skills_for_step,
                     "available_resources": available_resources_text,
                 },
             )

@@ -106,6 +106,10 @@ class SkillBrief(BaseModel):
     skill_name: str
     description: str
     tool_names: list[str] = Field(default_factory=list)
+    tools: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="关联工具的简要信息列表，每个 dict 包含 name 和 description。",
+    )
     risk_levels: dict[str, str] = Field(
         default_factory=dict,
         description="工具名到风险等级的映射，如 {'web_search': 'L0'}。",

@@ -10,22 +10,24 @@
 2. 如果有上一次的观察结果（重试场景），必须参考并改进
 3. 输出规划的工具调用列表，包含 tool_name、parameters 和 purpose
 4. 如果是纯思考步骤（不需要工具），tool_calls 可以为空数组
-5. **工具选择必须基于下方「可用能力参考」中的实际可用工具**，禁止凭空编造不存在的工具名
+5. **工具选择必须基于下方「预分配技能参考」中的实际可用工具**，禁止凭空编造不存在的工具名
 
-## 可用能力参考
+## 预分配技能参考 (Pre-allocated Skills)
 
-你只能使用当前 State 在规划时预分配的以下技能：
+你**只能**使用全局规划阶段为当前 State 预分配的以下技能。禁止使用下表之外的任何工具：
 
-{% if skill_briefs %}
-{% for skill in skill_briefs %}
-{{ skill.skill_name }}: {{ skill.description }}
+{% if pre_allocated_skills %}
+{% for skill in pre_allocated_skills %}
+### {{ skill.skill_name }}
+> {{ skill.description }}
+
 {% for tool in skill.tools %}
-[{{ loop.index }}: {{ tool.name }}: {{ tool.description }}]
+- [{{ tool.name }}]: {{ tool.description }}
 {% endfor %}
 
 {% endfor %}
 {% else %}
-（当前无可用外部技能，优先使用纯推理完成步骤）
+> （当前步骤未分配任何外部技能，请基于纯推理和上下文信息完成任务）
 {% endif %}
 
 {% if available_resources %}

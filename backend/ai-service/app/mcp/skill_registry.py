@@ -282,6 +282,13 @@ class SkillRegistry:
                 "skill_name": detail.name,
                 "description": detail.description,
                 "tool_names": tool_names,
+                "tools": [
+                    {
+                        "name": t.get("name") if isinstance(t, dict) else getattr(t, "name", ""),
+                        "description": t.get("description") if isinstance(t, dict) else getattr(t, "description", "")
+                    }
+                    for t in detail.tools
+                ],
                 "risk_levels": risk_levels,
                 "capability_tags": all_tags,
             })
