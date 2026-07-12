@@ -478,10 +478,20 @@ class ToolExecuteNode:
 
                 full_prompt += schema_prompt
 
+                logger.info(
+                    f"[TraceID:{trace_id}] MCP 工具专属参数提取 Prompt (tool={node_def.tool_name}):\n"
+                    f"{full_prompt}"
+                )
+
                 # 调用 LLM
                 response_text = await self.llm_client.invoke(
                     trace_id=trace_id,
                     prompt=full_prompt,
+                )
+
+                logger.info(
+                    f"[TraceID:{trace_id}] MCP 工具专属参数提取结果 (tool={node_def.tool_name}):\n"
+                    f"{response_text}"
                 )
             else:
                 # 使用通用 Prompt
@@ -512,10 +522,20 @@ class ToolExecuteNode:
                     },
                 )
 
+                logger.info(
+                    f"[TraceID:{trace_id}] MCP 工具通用参数提取 Prompt (tool={node_def.tool_name}):\n"
+                    f"{prompt_text}"
+                )
+
                 response_text = await self.llm_client.invoke_structured(
                     trace_id=trace_id,
                     prompt=prompt_text,
                     schema=self._build_param_schema(tool_schema),
+                )
+
+                logger.info(
+                    f"[TraceID:{trace_id}] MCP 工具通用参数提取结果 (tool={node_def.tool_name}):\n"
+                    f"{response_text}"
                 )
 
             # 解析参数

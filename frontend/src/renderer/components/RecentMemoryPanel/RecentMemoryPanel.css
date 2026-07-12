@@ -224,6 +224,8 @@
   font-weight: 600;
   color: var(--primary-color, rgba(180, 220, 255, 0.6));
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
 }
 
 .recent-memory-panel-content .luna-text {

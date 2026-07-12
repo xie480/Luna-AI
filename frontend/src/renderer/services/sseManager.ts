@@ -705,13 +705,15 @@ class SSEManager {
         case WS_MSG_TYPE.EVT_LONG_ANSWER_STATUS: {
           import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
             const payload = msg.payload as any;
-            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, {
-              status: payload.status,
-              title: payload.title,
-              shortSummary: payload.short_summary,
-              errorMessage: payload.error_message,
-              citations: payload.citations,
-            });
+            const patch: any = {};
+            if (payload.status !== undefined) patch.status = payload.status;
+            if (payload.title !== undefined) patch.title = payload.title;
+            if (payload.short_summary !== undefined) patch.shortSummary = payload.short_summary;
+            if (payload.error_message !== undefined) patch.errorMessage = payload.error_message;
+            if (payload.citations !== undefined) patch.citations = payload.citations;
+            if (payload.markdown !== undefined) patch.markdown = payload.markdown;
+
+            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, patch);
           });
           break;
         }
@@ -719,13 +721,13 @@ class SSEManager {
         case WS_MSG_TYPE.EVT_LONG_ANSWER_COMPLETED: {
           import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
             const payload = msg.payload as any;
-            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, {
-              status: 'COMPLETED',
-              markdown: payload.markdown,
-              title: payload.title,
-              shortSummary: payload.short_summary,
-              citations: payload.citations,
-            });
+            const patch: any = { status: 'COMPLETED' };
+            if (payload.markdown !== undefined) patch.markdown = payload.markdown;
+            if (payload.title !== undefined) patch.title = payload.title;
+            if (payload.short_summary !== undefined) patch.shortSummary = payload.short_summary;
+            if (payload.citations !== undefined) patch.citations = payload.citations;
+
+            useLongAnswerStore.getState().updateStatus(payload.long_answer_id, patch);
           });
           break;
         }
