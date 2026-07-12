@@ -930,7 +930,7 @@ class StepThinkNode:
             available_skills_for_step = []
             
             # 获取 SkillRegistry 实例
-            skill_registry = self._get_tool_registry()
+            skill_registry = self._get_skill_registry()
             
             # 如果 current_step 有预分配技能，优先使用
             if hasattr(current_step, "pre_allocated_skills") and current_step.pre_allocated_skills:
@@ -1202,6 +1202,14 @@ class StepThinkNode:
         try:
             from app.main import app as _fastapi_app
             return getattr(_fastapi_app.state, "mcp_tool_registry", None)
+        except Exception:
+            return None
+
+    def _get_skill_registry(self) -> Any | None:
+        """获取 MCP Skill 注册中心实例。"""
+        try:
+            from app.main import app as _fastapi_app
+            return getattr(_fastapi_app.state, "skill_registry", None)
         except Exception:
             return None
 

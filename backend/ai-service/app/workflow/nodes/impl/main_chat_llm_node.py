@@ -363,7 +363,10 @@ class MainChatLlmNode(ChatWorkflowNode):
                                     "schema_version": "1.0",
                                     "long_answer_id": long_answer_model.id,
                                     "interaction_message_id": state.generation_state.assistant_message_id,
-                                    "status": "COMPLETED"
+                                    "status": "COMPLETED",
+                                    "title": generated_title,
+                                    "markdown": md_content_accumulated,
+                                    "short_summary": summary_accumulated
                                 }
                             })
 
@@ -756,7 +759,10 @@ class MainChatLlmNode(ChatWorkflowNode):
                         "schema_version": "1.0",
                         "long_answer_id": long_answer_model.id,
                         "interaction_message_id": state.generation_state.assistant_message_id,
-                        "status": "COMPLETED"
+                        "status": "COMPLETED",
+                        "title": generated_title,
+                        "markdown": md_content_accumulated,
+                        "short_summary": summary_accumulated
                     }
                 })
 

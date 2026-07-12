@@ -926,6 +926,7 @@ async def lifespan(app: FastAPI):
                 async with pg_client.session() as session:
                     skill_registry = SkillRegistry()
                     await skill_registry.load_from_pg(session)
+                    app.state.skill_registry = skill_registry
                     logger.info("MCP Skill 注册中心初始化完成")
         except Exception as exc:
             logger.warning(f"MCP Skill 注册中心初始化失败: {exc}")

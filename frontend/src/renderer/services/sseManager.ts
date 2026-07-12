@@ -683,14 +683,34 @@ class SSEManager {
         // 长回答 (Long Answer) 事件处理
         // ============================================================
         case WS_MSG_TYPE.EVT_LONG_ANSWER_CREATED: {
+          const payload = msg.payload as any;
+          const longAnswerId = payload.long_answer_id;
+          const assistantMsgId = payload.interaction_message_id;
+
+          // 1. 更新 longAnswerStore
           import('../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
-            const payload = msg.payload as any;
-            const longAnswerId = payload.long_answer_id;
             // Provide a bare item so the panel can open immediately
             useLongAnswerStore.getState().appendChunk(longAnswerId, 0, '');
-            useLongAnswerStore.getState().bindMessage(payload.interaction_message_id, longAnswerId);
+            useLongAnswerStore.getState().bindMessage(assistantMsgId, longAnswerId);
             useLongAnswerStore.getState().openPanel(longAnswerId);
           });
+
+          // 2. 更新 sessionStore 消息元数据，确保气泡或历史记录能感知到长回答关联
+          const sessionStore = useSessionStore.getState();
+          const currentSessionId = sessionStore.currentSessionId;
+          if (currentSessionId && assistantMsgId) {
+            sessionStore.updateMessageMetadata(currentSessionId, assistantMsgId, {
+              hasLongAnswer: true,
+              longAnswerId: longAnswerId
+            });
+          }
+
+          // 3. 更新待提交的近期记忆条目，确保 flush 时包含长回答信息
+          const recentMemoryEntry = this.pendingRecentMemoryMap.get(assistantMsgId);
+          if (recentMemoryEntry) {
+            recentMemoryEntry.hasLongAnswer = true;
+            recentMemoryEntry.longAnswerId = longAnswerId;
+          }
           break;
         }
 
