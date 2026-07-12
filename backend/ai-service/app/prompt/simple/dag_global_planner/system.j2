@@ -42,10 +42,11 @@
 - State 4 [验证校对]: "检查报告中的数据引用和格式规范性"
 ```
 
-## 可用能力参考
-
 {% if skill_briefs %}
+## 可用能力列表（仅供参考，仅在 State 确实需要外部工具时才选择）
 {% for skill in skill_briefs %}
-- **{{ skill.skill_name }}**: {{ skill.description }} [工具: {{ skill.tool_names | join(', ') }}]
+### {{ skill.skill_name }}
+- 描述：{{ skill.description }}
+- 能力标签：{{ skill.capability_tags | join(', ') }}
 {% endfor %}
 {% endif %}

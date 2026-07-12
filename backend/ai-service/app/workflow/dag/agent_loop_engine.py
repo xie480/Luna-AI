@@ -2536,35 +2536,56 @@ class AgentReplanNode:
         original_criteria = list(agent_loop.goal.acceptance_criteria)
 
         try:
-            # 构建已完成和待规划步骤信息
-            completed_steps = []
+            # 构建已完成步骤信息（含摘要）
+            completed_states_info = []
             for s in agent_loop.plan.steps[:agent_loop.plan.current_step_index]:
-                completed_steps.append({
-                    "step_id": s.step_id,
-                    "title": s.title,
-                    "intent": s.intent,
-                    "status": s.status.value,
+                # 从记忆中寻找该步骤的摘要
+                summary = ""
+                for ss in agent_loop.memory.step_summaries:
+                    if ss.get("step_id") == s.step_id:
+                        summary = ss.get("summary", "")
+                        break
+                completed_states_info.append({
+                    "state_id": s.step_id,
+                    "responsibility": s.title,
+                    "goal": s.expected_output,
+                    "summary": summary,
                 })
 
-            remaining_steps = []
+            # 构建待规划步骤信息
+            remaining_states_info = []
             for s in agent_loop.plan.steps[agent_loop.plan.current_step_index + 1:]:
-                remaining_steps.append({
-                    "step_id": s.step_id,
-                    "title": s.title,
+                remaining_states_info.append({
+                    "state_id": s.step_id,
+                    "responsibility": s.title,
                     "intent": s.intent,
-                    "expected_output": s.expected_output,
+                    "goal": s.expected_output,
                 })
 
             eval_result = agent_loop.execution.evaluation_result
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
 
+            # 渲染全局重规划 Prompt（与 GlobalPlanner 风格一致）
             prompt_text = await self.prompt_manager.render(
-                category=PromptCategory.DAG_PLAN_REPLAN,
+                category=PromptCategory.DAG_GLOBAL_REPLAN,
                 variables={
-                    "failed_state_id": agent_loop.execution.current_step_id,
+                    "global_goal": agent_loop.goal.global_goal,
+                    "goal_definition": agent_loop.goal.goal_definition,
+                    "acceptance_criteria": json.dumps(
+                        agent_loop.goal.acceptance_criteria, ensure_ascii=False
+                    ),
+                    "non_goals": json.dumps(
+                        agent_loop.goal.non_goals, ensure_ascii=False
+                    ),
+                    "constraints": json.dumps(
+                        agent_loop.goal.constraints, ensure_ascii=False
+                    ),
+                    "completed_states": completed_states_info,
                     "failed_state_responsibility": (
                         agent_loop.plan.steps[agent_loop.plan.current_step_index].title
                         if agent_loop.plan.current_step_index < len(agent_loop.plan.steps)
-                        else ""
+                        else "未知"
                     ),
                     "failed_state_intent": (
                         agent_loop.plan.steps[agent_loop.plan.current_step_index].intent
@@ -2576,17 +2597,19 @@ class AgentReplanNode:
                         if agent_loop.plan.current_step_index < len(agent_loop.plan.steps)
                         else ""
                     ),
-                    "failed_state_result": agent_loop.execution.last_observation,
-                    "evaluation_reason": eval_result.evaluation_reason if eval_result else "",
+                    "evaluation_reason": eval_result.evaluation_reason if eval_result else "执行未达预期",
                     "gap_analysis": eval_result.gap_analysis if eval_result else "",
                     "suggestion": eval_result.suggestion if eval_result else "",
-                    "completed_states": json.dumps(completed_steps, ensure_ascii=False),
-                    "remaining_states": json.dumps(remaining_steps, ensure_ascii=False),
-                    "global_objective": json.dumps({
-                        "overall_goal": agent_loop.goal.global_goal,
-                        "success_criteria": "; ".join(agent_loop.goal.acceptance_criteria),
-                    }, ensure_ascii=False),
-                    "non_goals": json.dumps(agent_loop.goal.non_goals, ensure_ascii=False),
+                    "remaining_states": remaining_states_info,
+                    "skill_briefs": agent_loop.skill_briefs,
+                    "CORE_SUMMARY": agent_loop.session_context.get("short_summary", ""),
+                    "KEY_FACTS": json.dumps(
+                        agent_loop.session_context.get("key_facts", []),
+                        ensure_ascii=False,
+                    ),
+                    "MEMORY_SNIPPETS": agent_loop.session_context.get("memory_snippets", ""),
+                    "memory_context": agent_loop.memory_context,
+                    "CURRENT_TIME": current_time,
                 },
             )
 
@@ -2622,8 +2645,10 @@ class AgentReplanNode:
                     replan_data = self._parse_replan_response(llm_response)
 
                     # 构建新的步骤列表
+                    # 兼容 "states" (新) 和 "revised_states" (过渡)
+                    replan_states = replan_data.get("states", replan_data.get("revised_states", []))
                     new_steps = []
-                    for i, step_data in enumerate(replan_data.get("revised_states", [])):
+                    for i, step_data in enumerate(replan_states):
                         criteria = []
                         for c in step_data.get("completion_criteria", []):
                             criteria.append(CompletionCriterion(
@@ -2632,21 +2657,26 @@ class AgentReplanNode:
                                 value=c.get("value", True),
                             ))
                         # 依赖列表：LLM 可能返回整数索引（如 [0]），需强制转为字符串
-                        raw_deps = step_data.get("dependencies", [])
+                        raw_deps = step_data.get("dependencies", step_data.get("depends_on", []))
                         coerced_deps = [str(d) for d in raw_deps]
-                        # title 字段映射：新提示词用 "responsibility"，旧提示词用 "title"
+                        
+                        # 字段映射：优先使用 responsibility 作为 title，与 GlobalPlanner 对齐
                         title = step_data.get("responsibility", step_data.get("title", f"State {i + 1}"))
+                        
+                        # 提取预分配技能
+                        pre_allocated = step_data.get("selected_skills", step_data.get("pre_allocated_skills", []))
+                        
                         new_steps.append(AgentStepState(
                             step_id=generate_string_id(),
                             title=title,
                             intent=step_data.get("intent", ""),
                             dependencies=coerced_deps,
-                            expected_output=step_data.get("expected_output", ""),
+                            expected_output=step_data.get("expected_output", step_data.get("goal", "")),
                             completion_criteria=criteria,
                             status=StepStatusEnum.PENDING,
                             risk_notes=step_data.get("risk_notes", ""),
                             rollback_hint=step_data.get("rollback_hint", ""),
-                            pre_allocated_skills=step_data.get("pre_allocated_skills", []),
+                            pre_allocated_skills=pre_allocated,
                         ))
                     break  # 成功构建，退出重试循环
 
@@ -2770,14 +2800,22 @@ class AgentReplanNode:
         return {
             "type": "object",
             "properties": {
-                "check": {"type": "string"},
-                "revised_states": {
+                "check": {
+                    "type": "string",
+                    "description": "生成前推演校验结果，按 [意图反馈][目标锁定][职责拆分][技能选择] 四个维度记录。",
+                },
+                "states": {
                     "type": "array",
                     "items": {
                         "type": "object",
                         "properties": {
-                            "title": {"type": "string"},
+                            "order_index": {"type": "integer"},
+                            "responsibility": {
+                                "type": "string",
+                                "description": "该 State 承担的唯一职责类型。",
+                            },
                             "intent": {"type": "string"},
+                            "goal": {"type": "string"},
                             "expected_output": {"type": "string"},
                             "completion_criteria": {
                                 "type": "array",
@@ -2788,25 +2826,32 @@ class AgentReplanNode:
                                         "operator": {"type": "string"},
                                         "value": {},
                                     },
+                                    "required": ["field", "operator", "value"],
                                 },
                             },
                             "dependencies": {
                                 "type": "array",
-                                "items": {"type": "string"},
+                                "items": {"type": "integer"},
                             },
                             "risk_notes": {"type": "string"},
-                            "rollback_hint": {"type": "string"},
-                            "pre_allocated_skills": {
+                            "selected_skills": {
                                 "type": "array",
-                                "items": {"type": "object"},
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "skill_name": {"type": "string"},
+                                        "relevance_reason": {"type": "string"},
+                                    },
+                                    "required": ["skill_name"],
+                                },
                             },
                         },
-                        "required": ["title", "intent", "expected_output"],
+                        "required": ["responsibility", "intent", "goal", "expected_output"],
                     },
                 },
                 "replan_reason": {"type": "string"},
             },
-            "required": ["revised_states", "replan_reason"],
+            "required": ["check", "states", "replan_reason"],
         }
 
     def _parse_replan_response(self, response: str) -> dict[str, Any]:
@@ -2821,7 +2866,7 @@ class AgentReplanNode:
             return json.loads(text)
         except (json.JSONDecodeError, ValueError) as exc:
             logger.warning(f"重规划 LLM 输出解析失败: {exc}")
-            return {"revised_states": [], "replan_reason": str(response)}
+            return {"states": [], "replan_reason": str(response)}
 
 
 # ===========================================================================
