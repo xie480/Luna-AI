@@ -195,6 +195,29 @@ class DiscoverySyncEngine:
             tool_schema = raw_tool.get("inputSchema") or raw_tool.get("input_schema") or {}
             description = raw_tool.get("description") or ""
             
+            # 解析 annotations 判断风险等级
+            # 默认假设最保守的风险等级 L2 (高危)
+            risk_level = "L2"
+            annotations = raw_tool.get("annotations", {})
+            if isinstance(annotations, dict):
+                is_destructive = annotations.get("destructiveHint", True)
+                is_open_world = annotations.get("openWorldHint", True)
+                is_read_only = annotations.get("readOnlyHint", False)
+                is_idempotent = annotations.get("idempotentHint", False)
+                
+                if is_destructive or is_open_world:
+                    risk_level = "L2" # 高危
+                elif is_read_only and is_idempotent and not is_destructive:
+                    risk_level = "L0" # 低危
+                else:
+                    risk_level = "L1" # 中危/未知
+            
+            # 启发式回退：如果没有任何 annotation 或依然是 L2，并且名字看起来像只读
+            if not annotations or risk_level == "L2":
+                safe_prefixes = ("get_", "read_", "list_", "search_", "query_", "fetch_", "describe_")
+                if base_tool_name.lower().startswith(safe_prefixes):
+                    risk_level = "L0" # 启发式降级为低危
+            
             stmt = select(MCPToolRegistration).where(
                 MCPToolRegistration.name == tool_name
             )
@@ -208,12 +231,13 @@ class DiscoverySyncEngine:
                     name=tool_name,
                     description=description,
                     parameters_schema=tool_schema,
+                    risk_level=risk_level,
                     enabled=True,
                     server_id=toolbox_id, # 仍保留该字段方便执行器路由
                     is_external=True
                 )
                 session.add(new_tool)
-                logger.info(f"Mounted Tool '{tool_name}' under Skill ID '{skill_id}'.")
+                logger.info(f"Mounted Tool '{tool_name}' under Skill ID '{skill_id}' with Risk '{risk_level}'.")
             else:
                 # 只有当它是外部工具或者我们确认要覆盖它时才更新
                 # 这避免了将已有的本地工具覆盖为外部工具
@@ -222,6 +246,7 @@ class DiscoverySyncEngine:
                     existing_tool.parameters_schema = tool_schema
                     existing_tool.description = description
                     existing_tool.server_id = toolbox_id
+                    existing_tool.risk_level = risk_level
             
             tool_names_synced.append(tool_name)
             
