@@ -32,6 +32,19 @@ async def main():
                 for k, v in conn.items():
                     print(f"{k}: {v}")
                     
+                server_id = conn.get("connectionId")
+                tools_url = f"{base_url}/connect/{namespace}/{server_id}/.tools"
+                print(f"\nFetching tools from {tools_url}...")
+                tools_resp = await client.get(tools_url)
+                if tools_resp.status_code == 200:
+                    tools_data = tools_resp.json()
+                    raw_tools = tools_data.get("tools", []) if isinstance(tools_data, dict) else tools_data
+                    print(f"Found {len(raw_tools)} tools.")
+                    for tool in raw_tools:
+                        print(f"  - {tool.get('name')}")
+                else:
+                    print(f"Failed to fetch tools: {tools_resp.status_code} {tools_resp.text}")
+                    
     except Exception as e:
         print(f"Error: {e}")
 
