@@ -19,7 +19,8 @@ export class LongAnswerService {
     }
 
     const data = await resp.json();
-    return data.payload;
+    // Same as above
+    return data.payload !== undefined ? data.payload : data;
   }
 
   public async fetchLongAnswerByMessageId(messageId: string): Promise<any> {
@@ -36,7 +37,8 @@ export class LongAnswerService {
     }
 
     const data = await resp.json();
-    return data.payload;
+    // In our backend API, get_long_answer returns LongAnswerResponse directly, not wrapped in a payload object.
+    return data.payload !== undefined ? data.payload : data;
   }
 
   public async retryLongAnswer(id: string): Promise<void> {

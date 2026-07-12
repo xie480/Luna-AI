@@ -25,11 +25,17 @@ export const LongAnswerPanel: React.FC = () => {
     transform: `translate3d(${panelState.x}px, ${panelState.y}px, 0)`,
     width: `${panelState.width}px`,
     height: `${panelState.height}px`,
+    // Ensure visibility
+    display: 'flex',
+    visibility: 'visible',
+    opacity: 1,
     // If the window is narrow, switch to full-width drawer mode via CSS media queries,
     // but the inline style will still be applied. Let's make inline style dynamic if needed,
     // though usually CSS overrides inline with !important or we handle it in render logic.
     // We will let CSS handle mobile overrides via media queries by using classes.
   };
+
+  // console.log("LongAnswerPanel Render Debug:", { panelState, item });
 
   return (
     <div

@@ -12,6 +12,8 @@
 import React, { useRef, useEffect } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useHistoryStore } from '../../stores/historyStore';
+import { useLongAnswerStore } from '../../stores/longAnswerStore';
+import { longAnswerService } from '../../services/longAnswerService';
 import { HistoryNavigation } from './HistoryNavigation';
 import { CalendarPanel } from './CalendarPanel';
 import { PhoneMockup } from './PhoneMockup';
@@ -57,29 +59,42 @@ export const RecentMemoryPanel: React.FC = () => {
                     {qa.hasLongAnswer && qa.longAnswerId && (
                       <button
                         className="action-icon-btn document-icon-btn"
-                        style={{ marginLeft: '8px', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}
-                        onClick={() => {
-                          import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
-                            useLongAnswerStore.getState().openPanel(qa.longAnswerId as string);
-                          });
+                        style={{ marginLeft: '8px', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)', zIndex: 100, position: 'relative' }}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const id = qa.longAnswerId as string;
+                          const { openPanel, updateStatus, byId } = useLongAnswerStore.getState();
                           
-                          // Ensure we fetch data if not loaded
-                          import('../../services/longAnswerService').then(({ longAnswerService }) => {
-                            longAnswerService.fetchLongAnswerById(qa.longAnswerId as string).then((data) => {
-                              if (data) {
-                                import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
-                                  useLongAnswerStore.getState().updateStatus(qa.longAnswerId as string, {
-                                    status: data.status,
-                                    markdown: data.content_markdown,
-                                    title: data.title,
-                                    shortSummary: data.short_summary,
-                                  });
-                                });
-                              }
-                            }).catch(err => {
-                              console.error("Failed to load long answer content:", err);
+                          // 如果 store 中没有该数据，先填充一个占位，保证面板立刻渲染
+                          if (!byId[id]) {
+                            updateStatus(id, { status: 'PENDING', title: '加载中...' });
+                          }
+                          openPanel(id);
+                          
+                          try {
+                            const data = await longAnswerService.fetchLongAnswerById(id);
+                            if (data) {
+                              useLongAnswerStore.getState().updateStatus(id, {
+                                status: data.status || 'COMPLETED',
+                                markdown: data.content_markdown || '',
+                                title: data.title || '整理完成',
+                                shortSummary: data.short_summary || '',
+                                citations: data.citations || [],
+                              });
+                            } else {
+                               useLongAnswerStore.getState().updateStatus(id, {
+                                status: 'FAILED',
+                                errorMessage: '未能获取到长回答内容',
+                              });
+                            }
+                          } catch (err) {
+                            console.error("Failed to load long answer content:", err);
+                            useLongAnswerStore.getState().updateStatus(id, {
+                              status: 'FAILED',
+                              errorMessage: String(err),
                             });
-                          });
+                          }
                         }}
                         title="查看文档内容"
                         aria-label="查看文档内容"

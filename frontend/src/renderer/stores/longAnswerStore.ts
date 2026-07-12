@@ -99,8 +99,16 @@ export const useLongAnswerStore = create<LongAnswerStore>()(
 
       updateStatus: (id: string, patch: Partial<LongAnswerItem>) => {
         set((state) => {
-          const item = state.byId[id];
-          if (!item) return state;
+          const item = state.byId[id] || {
+            id,
+            sessionId: '',
+            interactionMessageId: '',
+            status: 'GENERATING',
+            title: 'Luna正在整理中……',
+            markdown: '',
+            shortSummary: '',
+            updatedAt: Date.now(),
+          };
 
           return {
             byId: {

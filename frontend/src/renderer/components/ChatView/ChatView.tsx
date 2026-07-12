@@ -94,11 +94,13 @@ export const ChatView: React.FC = () => {
 
   return (
     <div className="chat-view">
-      {/* 长回答面板 z-index: 9990 */}
-      <LongAnswerPanel />
-
       {/* 背景层 z-index: 0 */}
       <BackgroundLayer />
+
+      {/* 长回答面板 (放交互层上面一点保证可见性) */}
+      <ErrorBoundary source="long_answer_panel">
+        <LongAnswerPanel />
+      </ErrorBoundary>
 
       {/* Live2D 角色层 z-index: 10 — 延迟挂载，避免与加载动画 GPU 上下文冲突 */}
       {live2dReady && isLive2dEnabled && (
@@ -125,11 +127,6 @@ export const ChatView: React.FC = () => {
           <InputArea />
         </ErrorBoundary>
       </div>
-
-      {/* 长回答面板 (最高层级) */}
-      <ErrorBoundary source="long_answer_panel">
-        <LongAnswerPanel />
-      </ErrorBoundary>
     </div>
   );
 };

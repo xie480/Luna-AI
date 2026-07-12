@@ -36,6 +36,13 @@ export const LongAnswerMarkdown: React.FC<LongAnswerMarkdownProps> = ({ markdown
     }
     return () => clearTimeout(timeoutId);
   }, [markdown, status]);
+  
+  // ensure we render at least once if it changes outside of throttle window
+  useEffect(() => {
+    if (markdown && !renderedMarkdown) {
+      setRenderedMarkdown(markdown);
+    }
+  }, [markdown]);
 
   useEffect(() => {
     if (isScrolledToBottom.current && containerRef.current) {

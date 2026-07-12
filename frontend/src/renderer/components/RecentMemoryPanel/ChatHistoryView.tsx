@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useHistoryStore, HistoryChatMessage } from '../../stores/historyStore';
+import { useLongAnswerStore } from '../../stores/longAnswerStore';
+import { longAnswerService } from '../../services/longAnswerService';
 import './ChatHistoryView.css';
 
 /**
@@ -83,32 +85,44 @@ const ChatMessageItem: React.FC<{
       <div className="message-time-row">
         <div className="message-time">{formatTime(msg.created_at)}</div>
         {/* 文档图标按钮（如存在长回答） */}
-        {/* 文档图标按钮（如存在长回答） */}
         {msg.metadata?.hasLongAnswer && msg.metadata?.longAnswerId && (
           <button
             className="action-icon-btn document-icon-btn"
-            onClick={() => {
-              import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
-                useLongAnswerStore.getState().openPanel(msg.metadata!.longAnswerId as string);
-              });
+            style={{ zIndex: 100, position: 'relative' }}
+            onClick={async (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              const id = msg.metadata!.longAnswerId as string;
+              const { openPanel, updateStatus, byId } = useLongAnswerStore.getState();
               
-              // Ensure we fetch data if not loaded
-              import('../../services/longAnswerService').then(({ longAnswerService }) => {
-                longAnswerService.fetchLongAnswerById(msg.metadata!.longAnswerId as string).then((data) => {
-                  if (data) {
-                    import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
-                      useLongAnswerStore.getState().updateStatus(msg.metadata!.longAnswerId as string, {
-                        status: data.status,
-                        markdown: data.content_markdown,
-                        title: data.title,
-                        shortSummary: data.short_summary,
-                      });
-                    });
-                  }
-                }).catch(err => {
-                  console.error("Failed to load long answer content:", err);
+              if (!byId[id]) {
+                updateStatus(id, { status: 'PENDING', title: '加载中...' });
+              }
+              openPanel(id);
+              
+              try {
+                const data = await longAnswerService.fetchLongAnswerById(id);
+                if (data) {
+                  useLongAnswerStore.getState().updateStatus(id, {
+                    status: data.status || 'COMPLETED',
+                    markdown: data.content_markdown || '',
+                    title: data.title || '整理完成',
+                    shortSummary: data.short_summary || '',
+                    citations: data.citations || [],
+                  });
+                } else {
+                   useLongAnswerStore.getState().updateStatus(id, {
+                    status: 'FAILED',
+                    errorMessage: '未能获取到长回答内容',
+                  });
+                }
+              } catch (err) {
+                console.error("Failed to load long answer content:", err);
+                useLongAnswerStore.getState().updateStatus(id, {
+                  status: 'FAILED',
+                  errorMessage: String(err),
                 });
-              });
+              }
             }}
             title="查看文档内容"
             aria-label="查看文档内容"

@@ -1,6 +1,6 @@
 .long-answer-panel {
   position: absolute;
-  z-index: 9990;
+  z-index: 99999;
   display: flex;
   flex-direction: column;
   background: rgba(18, 24, 28, 0.58);
