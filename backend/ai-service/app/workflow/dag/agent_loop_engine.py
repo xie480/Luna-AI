@@ -688,7 +688,20 @@ class GlobalPlannerNode:
                             "rollback_hint": {"type": "string"},
                             "pre_allocated_skills": {
                                 "type": "array",
-                                "items": {"type": "object"},
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "skill_name": {
+                                            "type": "string",
+                                            "description": "技能名称，必须与可用能力列表中的名称完全一致。"
+                                        },
+                                        "relevance_reason": {
+                                            "type": "string",
+                                            "description": "选择该技能的原因。"
+                                        }
+                                    },
+                                    "required": ["skill_name"]
+                                },
                             },
                         },
                         "required": ["title", "intent", "expected_output"],
@@ -925,7 +938,8 @@ class StepThinkNode:
                 allocated_names = []
                 for s in current_step.pre_allocated_skills:
                     if isinstance(s, dict):
-                        name = s.get("skill_name")
+                        # 兼容性处理：优先使用 skill_name，兜底使用 skill
+                        name = s.get("skill_name") or s.get("skill")
                     elif isinstance(s, str):
                         name = s
                     else:

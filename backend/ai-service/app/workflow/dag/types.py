@@ -206,7 +206,15 @@ class OverallState(BaseModel):
         coerced: list[dict[str, Any]] = []
         for item in v:
             if isinstance(item, dict):
-                coerced.append(item)
+                # 兼容性处理：LLM 可能返回 skill 而不是 skill_name
+                skill_name = item.get("skill_name") or item.get("skill")
+                relevance_reason = item.get("relevance_reason") or item.get("reason", "")
+                
+                if skill_name:
+                    coerced.append({
+                        "skill_name": str(skill_name),
+                        "relevance_reason": str(relevance_reason)
+                    })
             elif isinstance(item, str):
                 # LLM 返回了纯字符串，包装为标准格式
                 coerced.append({"skill_name": item, "relevance_reason": ""})
@@ -903,7 +911,15 @@ class AgentStepState(BaseModel):
         coerced: list[dict[str, Any]] = []
         for item in v:
             if isinstance(item, dict):
-                coerced.append(item)
+                # 兼容性处理：LLM 可能返回 skill 而不是 skill_name
+                skill_name = item.get("skill_name") or item.get("skill")
+                relevance_reason = item.get("relevance_reason") or item.get("reason", "")
+                
+                if skill_name:
+                    coerced.append({
+                        "skill_name": str(skill_name),
+                        "relevance_reason": str(relevance_reason)
+                    })
             elif isinstance(item, str):
                 # LLM 返回了纯字符串，包装为标准格式
                 coerced.append({"skill_name": item, "relevance_reason": ""})

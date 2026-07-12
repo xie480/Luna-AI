@@ -55,7 +55,9 @@
       "dependencies": [],
       "risk_notes": "风险点：该阶段可能遇到的困难或失败场景",
       "rollback_hint": "回退提示：如果该阶段失败，应该如何回退或降级处理",
-      "pre_allocated_skills": []
+      "pre_allocated_skills": [
+        {"skill_name": "技能名称", "relevance_reason": "选择理由"}
+      ]
     }
   ],
   "planning_reason": "整体规划理由，说明为什么按此方式拆分职责、各 State 之间的逻辑关系"
@@ -66,8 +68,8 @@
 - **intent**（必填）：格式为 `[职责类型]: 具体意图描述`，与 responsibility 保持一致。
 - **goal**（必填）：详细描述该 State 的目标，必须说明输入来源（依赖哪些上游 State 的产出）和期望的输出产物。
 - **expected_output**（必填）：预期产出物描述，用于后续评估该 State 是否完成。
-- **dependencies**：填写依赖的 State 的索引（整数数组）。反映数据流向。
-- **pre_allocated_skills**（可选）：只有当该 State 明确需要调用外部工具或加载技能资源时才填写；纯推理/对话/写作类任务应留空数组 `[]`。
+- **dependencies**（必填）：填写依赖的前置 State 的索引（整数数组，如 `[0]`）。反映数据流向——只有当前置 State 完成并产出了必要数据，当前 State 才能开始。
+- **pre_allocated_skills**（可选）：预分配技能列表。每个对象必须包含 `skill_name`（必须与“可用能力参考”中的名称一致）和 `relevance_reason`。只有当该 State 明确需要调用外部工具或加载技能资源时才填写；纯推理/对话/写作类任务应留空数组 `[]`。
 
 ### 拆分自检清单
 在输出前，请逐条检查：
