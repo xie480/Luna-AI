@@ -7,7 +7,7 @@ export class LongAnswerService {
 
   public async fetchLongAnswerById(id: string): Promise<any> {
     const traceId = useSystemStore.getState().currentTraceID || `web-${generateId()}`;
-    const resp = await fetch(`${this.backendUrl}/api/long_answer/${encodeURIComponent(id)}`, {
+    const resp = await fetch(`${this.backendUrl}/api/long_answers/${encodeURIComponent(id)}`, {
       method: 'GET',
       headers: {
         'X-Trace-ID': traceId,
@@ -24,7 +24,7 @@ export class LongAnswerService {
 
   public async fetchLongAnswerByMessageId(messageId: string): Promise<any> {
     const traceId = useSystemStore.getState().currentTraceID || `web-${generateId()}`;
-    const resp = await fetch(`${this.backendUrl}/api/long_answer/by_message/${encodeURIComponent(messageId)}`, {
+    const resp = await fetch(`${this.backendUrl}/api/long_answers/by_message/${encodeURIComponent(messageId)}`, {
       method: 'GET',
       headers: {
         'X-Trace-ID': traceId,
@@ -41,7 +41,7 @@ export class LongAnswerService {
 
   public async retryLongAnswer(id: string): Promise<void> {
     const traceId = useSystemStore.getState().currentTraceID || `web-${generateId()}`;
-    const resp = await fetch(`${this.backendUrl}/api/long_answer/${encodeURIComponent(id)}/retry`, {
+    const resp = await fetch(`${this.backendUrl}/api/long_answers/${encodeURIComponent(id)}/retry`, {
       method: 'POST',
       headers: {
         'X-Trace-ID': traceId,
@@ -55,7 +55,7 @@ export class LongAnswerService {
 
   public async cancelLongAnswer(id: string): Promise<void> {
     const traceId = useSystemStore.getState().currentTraceID || `web-${generateId()}`;
-    const resp = await fetch(`${this.backendUrl}/api/long_answer/${encodeURIComponent(id)}/cancel`, {
+    const resp = await fetch(`${this.backendUrl}/api/long_answers/${encodeURIComponent(id)}/cancel`, {
       method: 'POST',
       headers: {
         'X-Trace-ID': traceId,

@@ -62,6 +62,24 @@ export const RecentMemoryPanel: React.FC = () => {
                           import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
                             useLongAnswerStore.getState().openPanel(qa.longAnswerId as string);
                           });
+                          
+                          // Ensure we fetch data if not loaded
+                          import('../../services/longAnswerService').then(({ longAnswerService }) => {
+                            longAnswerService.fetchLongAnswerById(qa.longAnswerId as string).then((data) => {
+                              if (data) {
+                                import('../../stores/longAnswerStore').then(({ useLongAnswerStore }) => {
+                                  useLongAnswerStore.getState().updateStatus(qa.longAnswerId as string, {
+                                    status: data.status,
+                                    markdown: data.content_markdown,
+                                    title: data.title,
+                                    shortSummary: data.short_summary,
+                                  });
+                                });
+                              }
+                            }).catch(err => {
+                              console.error("Failed to load long answer content:", err);
+                            });
+                          });
                         }}
                         title="查看文档内容"
                         aria-label="查看文档内容"
