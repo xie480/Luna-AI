@@ -307,16 +307,22 @@ class SkillRegistry:
         return self._skills.get(skill_id)
 
     def get_skill_id_by_name(self, name: str) -> str | None:
-        """通过名称查询 Skill ID。
+        """通过名称查询 Skill ID（不区分大小写）。
 
         做什么：供 Agent 1 输出 SkillChainPlan 后校验使用。
+        为什么这样做：LLM 输出的技能名称可能存在大小写差异（如 Youtube vs YouTube），
+                    通过不区分大小写的查找提高鲁棒性。
         参数:
             name: 技能名称。
         返回:
             str 或 None（不存在时）。
         """
+        if not name:
+            return None
+            
+        target_name = name.lower()
         for skill_id, detail in self._skills.items():
-            if detail.name == name:
+            if detail.name.lower() == target_name:
                 return skill_id
         return None
 
@@ -347,7 +353,7 @@ class SkillRegistry:
         """
         from app.repository.models import Skill as SkillModel
 
-        # 检查名称是否已存在
+        # 检查名称是否已存在（不区分大小写）
         if self.get_skill_id_by_name(name):
             raise ValueError(f"Skill 名称 '{name}' 已存在")
 
