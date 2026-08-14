@@ -36,16 +36,38 @@ Desktop Operation Skill 提供桌面自动化能力，包含屏幕截图、应�
 | Edge | msedge.exe | C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe |
 | VS Code | code.exe | C:\Users\{user}\AppData\Local\Programs\Microsoft VS Code\Code.exe |
 
-### macOS 系统
-| 应用名称 | 进程名 | 常见安装路径 |
-|---------|--------|-------------|
-| 文本编辑 | TextEdit | /Applications/TextEdit.app |
-| 计算器 | Calculator | /Applications/Calculator.app |
-| 终端 | Terminal | /Applications/Utilities/Terminal.app |
-| 活动监视器 | Activity Monitor | /Applications/Utilities/Activity Monitor.app |
-| 访达 | Finder | /System/Library/CoreServices/Finder.app |
-| Safari | Safari | /Applications/Safari.app |
-| Chrome | Google Chrome | /Applications/Google Chrome.app |
+### 中文应用别名表
+| 中文名 | 英文进程名 | 常见安装路径 |
+|--------|-----------|-------------|
+| 微信 | WeChat.exe | C:\Program Files (x86)\Tencent\WeChat |
+| QQ | QQ.exe | C:\Program Files (x86)\Tencent\QQ\Bin |
+| TIM | TIM.exe | C:\Program Files (x86)\Tencent\TIM\Bin |
+| 钉钉 | DingTalk.exe | C:\Program Files (x86)\DingDing\main |
+| 企业微信 | WXWork.exe | C:\Program Files (x86)\WXWork |
+| 飞书 | Feishu.exe | %LOCALAPPDATA%\Feishu |
+| 网易云音乐 | cloudmusic.exe | C:\Program Files (x86)\Netease\CloudMusic |
+| 百度网盘 | BaiduNetdisk.exe | C:\Program Files (x86)\Baidu\BaiduNetdisk |
+| WPS | wps.exe | C:\Program Files (x86)\Kingsoft\WPS Office |
+
+### 应用路径解析优先级
+1. 绝对路径直接使用
+2. 相对路径转绝对路径
+3. PATH 环境变量搜索
+4. Windows 注册表 App Paths 查询
+5. 中文别名映射表
+6. Program Files 深层目录搜索（最多 4 层）
+
+## 中文/Unicode 输入说明
+
+- 纯 ASCII 文本：通过 `pyautogui.typewrite()` 逐键输入。
+- 含中文/日文/特殊符号的 Unicode 文本：先写入系统剪贴板，再触发 `Ctrl+V` 粘贴。
+- 剪贴板写入优先级：`pyperclip` → Windows `clip.exe` → macOS `pbcopy` → Linux `xclip`/`xsel`。
+
+## 鼠标长按（hold）说明
+
+- 使用场景：微信朋友圈相机图标长按、手机模拟器长按、需要按住才能触发的 GUI 元素。
+- 参数：`action=hold`，`hold_duration` 控制保持时长（默认 1.0 秒）。
+- 实现方式：先 `moveTo` 到目标位置 → `mouseDown` → `sleep(hold_duration)` → `mouseUp`。
 
 ## 安全操作规范
 
@@ -90,6 +112,10 @@ Desktop Operation Skill 提供桌面自动化能力，包含屏幕截图、应�
 - **原因**: 进程不存在、权限不足、进程受保护。
 - **处理**: 返回错误信息，建议使用任务管理器手动处理。
 
+### 中文输入失败
+- **原因**: 剪贴板工具不可用（pyperclip 未安装且系统无降级方案）。
+- **处理**: 返回错误信息，建议安装 pyperclip 或改用纯英文输入。
+
 ## 隐私安全注意事项
 
 1. **截图隐私**: 截图可能包含敏感信息（密码、个人信息、机密文档），返回前应提醒用户。
@@ -109,17 +135,20 @@ save_path: "..."                     # 可选，不传则返回 base64
 
 ### open_application
 ```
-app_name: "notepad"                  # 必填，应用名或路径
+app_name: "notepad" | "微信"          # 必填，应用名/中文别名/路径
 arguments: ["--new-window"]          # 可选，启动参数
 working_directory: "C:\\"            # 可选，工作目录
 wait_for_start: false                # 可选，是否等待启动
+wait_window_title: "微信"             # 可选，等待窗口标题（仅 Windows）
+wait_timeout: 10.0                   # 可选，等待窗口超时秒数
 ```
 
 ### mouse_control
 ```
-action: "move" | "click" | "double_click" | "drag" | "scroll"
-x, y: 坐标                           # move/click/double_click/drag 必填
+action: "move" | "click" | "double_click" | "hold" | "drag" | "scroll"
+x, y: 坐标                           # move/click/double_click/hold/drag 必填
 button: "left" | "right" | "middle"  # 可选，默认 left
+hold_duration: 1.0                   # 可选，长按保持时长（秒）
 end_x, end_y: 拖拽终点               # action=drag 时必填
 scroll_direction: "up" | "down"      # action=scroll 时必填
 scroll_steps: 3                      # 可选，默认 3
@@ -129,10 +158,10 @@ duration: 0.1                        # 可选，移动动画时长
 ### keyboard_control
 ```
 action: "type_text" | "press_key" | "release_key" | "hotkey"
-text: "..."                          # action=type_text 时必填
+text: "..."                          # action=type_text 时必填（支持中文）
 key: "enter"                         # action=press_key/release_key 时必填
 keys: ["ctrl", "c"]                  # action=hotkey 时必填
-interval: 0.01                       # 可选，字符间隔
+interval: 0.01                       # 可选，字符间隔（仅 ASCII 有效）
 press_duration: 0.05                 # 可选，按键按下时长
 ```
 

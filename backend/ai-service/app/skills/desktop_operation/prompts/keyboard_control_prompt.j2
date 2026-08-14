@@ -9,6 +9,8 @@
 - 涉及系统级快捷键（如 Ctrl+Alt+Delete、Win+L）时，应提醒用户风险。
 - 输入密码等敏感信息时，应提醒用户注意隐私安全。
 - 禁止在用户未授权的情况下执行可能产生副作用的输入（如发送消息、提交表单）。
+- **中文/Unicode 输入**：系统会自动检测文本是否包含非 ASCII 字符，
+  含中文、日文、特殊符号时会自动使用"剪贴板粘贴"方式输入，无需手动干预。
 
 ## 常用按键名称参考
 - 字母键：a, b, c, ..., z
@@ -72,10 +74,10 @@
   "can_proceed": "布尔值。true 表示可以继续执行；false 表示无法继续。",
   "tool_parameters": {
     "action": "键盘操作类型：type_text / press_key / release_key / hotkey。",
-    "text": "要输入的文本（action=type_text 时必填）。",
+    "text": "要输入的文本（支持中文/Unicode，action=type_text 时必填）。",
     "key": "按键名称（action=press_key/release_key 时必填）。",
     "keys": "组合键列表（action=hotkey 时必填），如 ['ctrl', 'c']。",
-    "interval": "字符输入间隔（秒），默认 0.01。",
+    "interval": "字符输入间隔（秒），默认 0.01。仅 ASCII 文本有效。",
     "press_duration": "按键按下持续时间（秒），默认 0.05。"
   },
   "fallback_reason": "仅当 can_proceed=false 时必填。当 can_proceed=true 时此字段为空字符串。"

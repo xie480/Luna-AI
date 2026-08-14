@@ -5,10 +5,12 @@
 
 ## 行为约束
 - 如果用户只提供了应用名称（如"记事本"），请使用常见的英文进程名（如 "notepad"）。
+- 如果用户提供了中文应用名（如"微信"、"钉钉"），系统会自动通过别名表解析，直接使用即可。
 - 如果用户提供了完整路径，直接使用该路径。
 - 启动参数必须合法，禁止传入恶意参数（如删除系统文件、格式化磁盘等）。
 - 涉及系统关键进程（如 explorer.exe、svchost.exe）时，应拒绝启动并说明原因。
 - 启动失败后应提供清晰的错误原因和排查建议。
+- 如果需要在应用窗口出现后再操作，请设置 wait_window_title 参数。
 
 ## 常见应用名称映射
 - 记事本 → notepad（Windows）/ TextEdit（macOS）
@@ -18,6 +20,11 @@
 - 资源管理器 → explorer（Windows）/ Finder（macOS）
 - 命令提示符 → cmd（Windows）/ Terminal（macOS）
 - 任务管理器 → taskmgr（Windows）
+- 微信 → WeChat（支持中文"微信"直接传入）
+- 钉钉 → DingTalk（支持中文"钉钉"直接传入）
+- QQ → QQ
+- 企业微信 → WXWork（支持中文"企业微信"直接传入）
+- WPS → wps（支持中文"WPS"直接传入）
 
 ## 参数提取指南
 
@@ -37,6 +44,7 @@
 - 参数值必须来源于上下文数据，**禁止编造**。
 - 参数名使用工具接口定义的字段名。
 - arguments 数组中的每个元素必须是字符串。
+- 如果需要等待窗口出现，设置 wait_window_title 和 wait_timeout。
 
 ### Step 4：无法继续时的处理（can_proceed=false）
 - 在 `fallback_reason` 中详细说明：缺失哪些资源、哪些前序工具失败、数据不充分的具体表现。
@@ -57,10 +65,12 @@
 {
   "can_proceed": "布尔值。true 表示可以继续执行；false 表示无法继续。",
   "tool_parameters": {
-    "app_name": "应用程序名称或可执行文件绝对路径。",
+    "app_name": "应用程序名称、中文别名或可执行文件绝对路径。",
     "arguments": "可选。启动参数列表。",
     "working_directory": "可选。进程工作目录。",
-    "wait_for_start": "可选。是否等待进程启动完成，默认 false。"
+    "wait_for_start": "可选。是否等待进程启动完成，默认 false。",
+    "wait_window_title": "可选。等待指定标题的窗口出现后再返回（仅 Windows）。",
+    "wait_timeout": "可选。等待窗口出现的超时秒数，默认 10.0。"
   },
   "fallback_reason": "仅当 can_proceed=false 时必填。当 can_proceed=true 时此字段为空字符串。"
 }

@@ -1,12 +1,18 @@
 """
 MCP 工具：键盘控制。
 
-做什么：支持输入文本字符串、按下/释放单个按键、组合快捷键（如 Ctrl+C、Alt+Tab）。
+做什么：支持输入文本字符串（含中文/Unicode）、按下/释放单个按键、
+         组合快捷键（如 Ctrl+C、Alt+Tab）。
+为什么这样做：纯 ASCII 文本可用 pyautogui.typewrite 直接输入，
+             但中文、日文、特殊符号等 Unicode 字符无法通过模拟物理按键输入，
+             必须先写入系统剪贴板再触发 Ctrl+V 粘贴。
 风险等级：L1（低危，模拟用户输入有副作用，但通常不涉及数据修改）。
 """
 
 from __future__ import annotations
 
+import platform
+import subprocess
 import time
 from typing import Any
 
@@ -30,7 +36,7 @@ PARAMETER_SCHEMA: dict[str, Any] = {
         },
         "text": {
             "type": "string",
-            "description": "要输入的文本字符串。action=type_text 时必填。",
+            "description": "要输入的文本字符串（支持中文/Unicode）。action=type_text 时必填。",
             "maxLength": 10000,
         },
         "key": {
@@ -47,7 +53,7 @@ PARAMETER_SCHEMA: dict[str, Any] = {
         },
         "interval": {
             "type": "number",
-            "description": "字符输入间隔（秒），默认 0.01。action=type_text 时有效。",
+            "description": "字符输入间隔（秒），默认 0.01。仅 ASCII 文本有效。",
             "default": 0.01,
             "minimum": 0,
             "maximum": 1.0,
@@ -112,12 +118,35 @@ async def handle_keyboard_control(
 
     try:
         if action == "type_text":
-            # 输入文本（支持 Unicode，pyautogui 内部处理）
-            pyautogui.typewrite(text, interval=interval) if all(ord(c) < 128 for c in text) else _type_unicode(text, interval)
+            # 判断是否为纯 ASCII（pyautogui.typewrite 只支持 ASCII）
+            is_pure_ascii = all(ord(c) < 128 for c in text)
+            if is_pure_ascii:
+                # 纯 ASCII：直接逐键输入
+                pyautogui.typewrite(text, interval=interval)
+                input_method = "逐键输入（ASCII）"
+            else:
+                # 含 Unicode（中文等）：写入剪贴板 + Ctrl+V 粘贴
+                ok, err = _set_clipboard_text(text)
+                if not ok:
+                    logger.warning(
+                        f"键盘控制失败 trace_id={trace_id} 原因: 剪贴板写入失败 {err}"
+                    )
+                    return build_error_result(
+                        "系统错误",
+                        f"无法写入剪贴板以输入 Unicode 文本: {err}",
+                        suggestion="请确认 pyperclip 已安装（pip install pyperclip），"
+                                   "或改用纯英文输入",
+                    )
+                # 短暂等待剪贴板就绪
+                time.sleep(0.1)
+                # 触发粘贴
+                pyautogui.hotkey("ctrl", "v")
+                input_method = "剪贴板粘贴（Unicode）"
+
             result_msg = f"已输入文本（{len(text)} 字符）"
             result_extra = {
                 "文本长度": len(text),
-                "输入间隔": f"{interval}s",
+                "输入方式": input_method,
                 "文本预览": text[:100] + ("..." if len(text) > 100 else ""),
             }
 
@@ -152,18 +181,72 @@ async def handle_keyboard_control(
     return build_success_result(result_msg, result_extra)
 
 
-def _type_unicode(text: str, interval: float) -> None:
+def _set_clipboard_text(text: str) -> tuple[bool, str]:
     """
-    输入包含 Unicode 字符的文本。
+    将文本写入系统剪贴板。
 
-    做什么：pyautogui.typewrite 仅支持 ASCII，Unicode 文本需要逐字符处理。
+    做什么：优先使用 pyperclip（跨平台），失败时降级为 Windows 原生 clip.exe。
+    为什么这样做：Unicode 文本无法通过模拟按键输入，必须先放入剪贴板再粘贴。
     参数:
-        text: 要输入的 Unicode 文本。
-        interval: 字符间隔秒数。
+        text: 要写入剪贴板的文本。
+    返回:
+        tuple[bool, str]: (是否成功, 错误信息)。成功时错误信息为空字符串。
     """
-    import pyautogui
+    # 方案一：pyperclip（跨平台首选）
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        return True, ""
+    except ImportError:
+        pass  # pyperclip 未安装，尝试降级方案
+    except Exception as exc:
+        # pyperclip 在某些环境（如无 X11 的 Linux）会运行时失败
+        logger.warning(f"pyperclip 写入剪贴板失败，尝试降级方案: {exc!s}")
 
-    for char in text:
-        pyautogui.press(char)
-        if interval > 0:
-            time.sleep(interval)
+    # 方案二：Windows 原生 clip.exe
+    if platform.system() == "Windows":
+        try:
+            process = subprocess.Popen(
+                ["clip"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            # clip.exe 在 Windows 中文系统默认使用 GBK 编码，
+            # 直接传 UTF-8 字节可能乱码，需按系统代码页编码
+            process.communicate(text.encode("utf-16le", errors="ignore"))
+            return True, ""
+        except Exception as exc:
+            return False, f"Windows clip.exe 写入失败: {exc!s}"
+
+    # 方案三：macOS pbcopy
+    if platform.system() == "Darwin":
+        try:
+            process = subprocess.Popen(
+                ["pbcopy"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            process.communicate(text.encode("utf-8"))
+            return True, ""
+        except Exception as exc:
+            return False, f"macOS pbcopy 写入失败: {exc!s}"
+
+    # 方案四：Linux xclip / xsel
+    for cmd in (["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            process.communicate(text.encode("utf-8"))
+            return True, ""
+        except FileNotFoundError:
+            continue
+        except Exception as exc:
+            return False, f"{' '.join(cmd)} 写入失败: {exc!s}"
+
+    return False, "未找到可用的剪贴板工具（pyperclip/clip/pbcopy/xclip 均不可用）"

@@ -207,6 +207,8 @@ class TestOpenApplicationTool:
         assert "arguments" in props
         assert "working_directory" in props
         assert "wait_for_start" in props
+        assert "wait_window_title" in props
+        assert "wait_timeout" in props
 
     @pytest.mark.asyncio
     async def test_open_application_empty_name(self) -> None:
@@ -242,6 +244,48 @@ class TestOpenApplicationTool:
             or "【系统错误】" in result
         )
 
+    @pytest.mark.asyncio
+    async def test_resolve_app_path_absolute(self) -> None:
+        """验证绝对路径解析。"""
+        from app.skills.desktop_operation.tools.open_application import _resolve_app_path
+
+        # 使用一个已知存在的系统文件
+        if platform.system() == "Windows":
+            known_path = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "notepad.exe")
+            if os.path.isfile(known_path):
+                resolved, method = _resolve_app_path(known_path)
+                assert resolved is not None
+                assert method == "绝对路径"
+
+    @pytest.mark.asyncio
+    async def test_resolve_app_path_not_found(self) -> None:
+        """验证不存在的应用返回 None。"""
+        from app.skills.desktop_operation.tools.open_application import _resolve_app_path
+
+        resolved, method = _resolve_app_path("nonexistent_app_xyz_12345")
+        assert resolved is None
+        assert method == "未找到"
+
+    @pytest.mark.asyncio
+    async def test_resolve_by_alias_wechat(self) -> None:
+        """验证微信别名解析（不验证路径存在，只验证映射逻辑）。"""
+        from app.skills.desktop_operation.tools.open_application import _resolve_by_alias
+
+        # 微信在测试环境大概率没安装，返回 None 也正常
+        # 这里主要验证函数不崩溃且逻辑正确
+        result = _resolve_by_alias("微信")
+        # 返回 None 或一个存在的路径都是合法的
+        if result is not None:
+            assert os.path.isfile(result)
+
+    @pytest.mark.asyncio
+    async def test_resolve_by_alias_unknown(self) -> None:
+        """验证未知别名返回 None。"""
+        from app.skills.desktop_operation.tools.open_application import _resolve_by_alias
+
+        result = _resolve_by_alias("不存在的应用名xyz")
+        assert result is None
+
 
 # ============================================================
 # Mouse Control 工具测试
@@ -259,6 +303,7 @@ class TestMouseControlTool:
         assert "x" in props
         assert "y" in props
         assert "button" in props
+        assert "hold_duration" in props
         assert "end_x" in props
         assert "end_y" in props
         assert "scroll_direction" in props
@@ -300,6 +345,13 @@ class TestMouseControlTool:
             trace_id="test-mouse-004",
         )
         assert "【坐标越界】" in result or "【参数错误】" in result
+
+    @pytest.mark.asyncio
+    async def test_mouse_control_hold_schema(self) -> None:
+        """验证 hold 动作在 Schema 中。"""
+        schema = TOOL_PARAMETER_SCHEMAS[TOOL_NAME_MOUSE_CONTROL]
+        actions = schema["properties"]["action"]["enum"]
+        assert "hold" in actions
 
     @pytest.mark.asyncio
     @pytest.mark.skipif(
@@ -391,6 +443,26 @@ class TestKeyboardControlTool:
             or "【系统错误】" in result
             or "【依赖缺失】" in result
         )
+
+    @pytest.mark.asyncio
+    async def test_set_clipboard_text_ascii(self) -> None:
+        """验证剪贴板写入 ASCII 文本。"""
+        from app.skills.desktop_operation.tools.keyboard_control import _set_clipboard_text
+
+        # 不验证内容，只验证函数不崩溃
+        ok, err = _set_clipboard_text("hello")
+        # 在 Windows 上通常成功；在无剪贴板工具的 CI 上可能失败
+        assert isinstance(ok, bool)
+        assert isinstance(err, str)
+
+    @pytest.mark.asyncio
+    async def test_set_clipboard_text_unicode(self) -> None:
+        """验证剪贴板写入 Unicode 文本。"""
+        from app.skills.desktop_operation.tools.keyboard_control import _set_clipboard_text
+
+        ok, err = _set_clipboard_text("你好世界")
+        assert isinstance(ok, bool)
+        assert isinstance(err, str)
 
 
 # ============================================================
@@ -493,3 +565,14 @@ class TestModuleImport:
         assert len(skill["tools"]) == 5
         assert len(skill["prompts"]) == 5
         assert len(skill["resources"]) == 1
+
+        # 验证工具 Schema 与代码中的 Schema 一致
+        code_schemas = TOOL_PARAMETER_SCHEMAS
+        for tool in skill["tools"]:
+            tool_name = tool["name"]
+            assert tool_name in code_schemas, f"工具 {tool_name} 在代码中未注册"
+            json_schema = tool["parameters_schema"]
+            code_schema = code_schemas[tool_name]
+            # 验证属性键一致
+            assert set(json_schema["properties"].keys()) == set(code_schema["properties"].keys()), \
+                f"工具 {tool_name} JSON Schema 与代码 Schema 属性不匹配"

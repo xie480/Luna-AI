@@ -2,12 +2,12 @@
   "skills": [
     {
       "name": "desktop_operation",
-      "description": "提供桌面自动化能力，包含屏幕截图、应用启动/关闭、鼠标控制、键盘控制等工具。覆盖 L0 ~ L2 风险等级，用于验证 Phase 12/13 工具链路与权限治理机制。",
-      "version": "1.0.0",
+      "description": "提供桌面自动化能力，包含屏幕截图、应用启动/关闭、鼠标控制（含长按）、键盘控制（含中文输入）等工具。支持中文应用别名解析、注册表路径查询、等待窗口出现。覆盖 L0 ~ L2 风险等级，用于验证 Phase 12/13 工具链路与权限治理机制。",
+      "version": "1.1.0",
       "enabled": true,
       "metadata": {
         "author": "Luna-AI",
-        "tags": ["desktop-automation", "screenshot", "mouse", "keyboard", "process-management", "gui"]
+        "tags": ["desktop-automation", "screenshot", "mouse", "keyboard", "process-management", "gui", "unicode-input"]
       },
       "prompts": [
         {
@@ -56,7 +56,7 @@
           "name": "desktop_operation_policy",
           "resource_type": "file",
           "uri": "app/skills/desktop_operation/resource/desktop_operation_policy.md",
-          "description": "桌面操作策略：包含屏幕坐标系说明、DPI 缩放处理、多屏支持、常见应用路径映射、安全操作规范、风险等级映射和工具参数快速参考",
+          "description": "桌面操作策略：包含屏幕坐标系说明、DPI 缩放处理、多屏支持、常见应用路径映射、中文别名表、安全操作规范、风险等级映射、错误处理降级策略和工具参数快速参考",
           "mime_type": "text/markdown",
           "auto_load": true
         }
@@ -116,13 +116,13 @@
         },
         {
           "name": "open_application",
-          "description": "通过应用名称或可执行文件路径启动指定软件，支持传入启动参数，返回进程信息。",
+          "description": "通过应用名称或可执行文件路径启动指定软件，支持传入启动参数，支持等待窗口出现。支持中文应用别名（如'微信'、'钉钉'）。",
           "parameters_schema": {
             "type": "object",
             "properties": {
               "app_name": {
                 "type": "string",
-                "description": "应用程序名称（如 'notepad'、'chrome'）或可执行文件的绝对路径。",
+                "description": "应用程序名称（如 'notepad'、'chrome'、'微信'）或可执行文件的绝对路径。",
                 "minLength": 1,
                 "maxLength": 1024
               },
@@ -141,49 +141,68 @@
                 "type": "boolean",
                 "description": "是否等待进程启动完成后再返回。默认 false（异步启动）。",
                 "default": false
+              },
+              "wait_window_title": {
+                "type": "string",
+                "description": "可选。等待指定标题的窗口出现后再返回（仅 Windows）。例如 '微信'、'WeChat'。",
+                "maxLength": 256
+              },
+              "wait_timeout": {
+                "type": "number",
+                "description": "等待窗口出现的超时秒数，默认 10.0。仅在 wait_window_title 非空时有效。",
+                "default": 10.0,
+                "minimum": 0.5,
+                "maximum": 120.0
               }
             },
             "required": ["app_name"]
           },
           "risk_level": "L1",
           "enabled": true,
-          "tags": ["desktop", "process", "launch", "application"],
+          "tags": ["desktop", "process", "launch", "application", "window-wait"],
           "category": "utility",
           "use_case_examples": [
             "打开记事本",
-            "启动 Chrome 并打开百度首页",
-            "以管理员权限运行某个程序"
+            "打开微信并等待主窗口出现",
+            "启动 Chrome 并打开百度首页"
           ],
-          "core_purpose": "提供应用程序启动能力，帮助 AI 打开用户需要的软件，是桌面自动化流程的基础步骤。",
-          "final_deliverable": "启动结果，包含进程 PID、启动路径和启动参数信息",
+          "core_purpose": "提供应用程序启动能力，支持多级路径解析和窗口等待，帮助 AI 打开用户需要的软件。",
+          "final_deliverable": "启动结果，包含进程 PID、启动路径、路径解析方式和窗口等待结果",
           "source": "local",
           "module_path": "app.skills.desktop_operation.tools.open_application",
           "tool_config": {}
         },
         {
           "name": "mouse_control",
-          "description": "控制鼠标行为，支持移动、单击、双击、拖拽、滚轮滚动等操作。",
+          "description": "控制鼠标行为，支持移动、单击、双击、长按（hold）、拖拽、滚轮滚动等操作。",
           "parameters_schema": {
             "type": "object",
             "properties": {
               "action": {
                 "type": "string",
-                "enum": ["move", "click", "double_click", "drag", "scroll"],
-                "description": "鼠标操作类型。"
+                "enum": ["move", "click", "double_click", "hold", "drag", "scroll"],
+                "description": "鼠标操作类型。hold 表示长按（按下并保持指定时长后释放）。"
               },
               "x": {
                 "type": "integer",
-                "description": "目标 X 坐标（像素）。move/click/double_click 必填，drag 为起点 X。"
+                "description": "目标 X 坐标（像素）。move/click/double_click/hold 必填，drag 为起点 X。"
               },
               "y": {
                 "type": "integer",
-                "description": "目标 Y 坐标（像素）。move/click/double_click 必填，drag 为起点 Y。"
+                "description": "目标 Y 坐标（像素）。move/click/double_click/hold 必填，drag 为起点 Y。"
               },
               "button": {
                 "type": "string",
                 "enum": ["left", "right", "middle"],
-                "description": "鼠标按键，默认 left。click/double_click 有效。",
+                "description": "鼠标按键，默认 left。click/double_click/hold 有效。",
                 "default": "left"
+              },
+              "hold_duration": {
+                "type": "number",
+                "description": "长按保持时长（秒），默认 1.0。action=hold 时有效。",
+                "default": 1.0,
+                "minimum": 0.1,
+                "maximum": 30.0
               },
               "end_x": {
                 "type": "integer",
@@ -217,22 +236,23 @@
           },
           "risk_level": "L1",
           "enabled": true,
-          "tags": ["desktop", "mouse", "click", "drag", "scroll", "input"],
+          "tags": ["desktop", "mouse", "click", "double-click", "hold", "drag", "scroll", "input"],
           "category": "utility",
           "use_case_examples": [
             "点击屏幕上的确定按钮",
+            "长按微信右上角的相机图标打开朋友圈",
             "将文件从桌面拖拽到文件夹",
             "向下滚动页面查看内容"
           ],
-          "core_purpose": "提供鼠标模拟控制能力，帮助 AI 与桌面 GUI 进行交互，是桌面自动化流程的核心操作。",
-          "final_deliverable": "鼠标操作结果，包含操作类型、坐标、按键等信息",
+          "core_purpose": "提供鼠标模拟控制能力（含长按），帮助 AI 与桌面 GUI 进行交互。",
+          "final_deliverable": "鼠标操作结果，包含操作类型、坐标、按键、时长等信息",
           "source": "local",
           "module_path": "app.skills.desktop_operation.tools.mouse_control",
           "tool_config": {}
         },
         {
           "name": "keyboard_control",
-          "description": "控制键盘输入，支持文本输入、按键按下/释放、组合快捷键（如 Ctrl+C、Alt+Tab）。",
+          "description": "控制键盘输入，支持文本输入（含中文/Unicode）、按键按下/释放、组合快捷键（如 Ctrl+C、Alt+Tab）。中文输入通过剪贴板粘贴实现。",
           "parameters_schema": {
             "type": "object",
             "properties": {
@@ -243,7 +263,7 @@
               },
               "text": {
                 "type": "string",
-                "description": "要输入的文本字符串。action=type_text 时必填。",
+                "description": "要输入的文本字符串（支持中文/Unicode）。action=type_text 时必填。",
                 "maxLength": 10000
               },
               "key": {
@@ -260,7 +280,7 @@
               },
               "interval": {
                 "type": "number",
-                "description": "字符输入间隔（秒），默认 0.01。action=type_text 时有效。",
+                "description": "字符输入间隔（秒），默认 0.01。仅 ASCII 文本有效。",
                 "default": 0.01,
                 "minimum": 0,
                 "maximum": 1.0
@@ -277,15 +297,15 @@
           },
           "risk_level": "L1",
           "enabled": true,
-          "tags": ["desktop", "keyboard", "type", "hotkey", "input"],
+          "tags": ["desktop", "keyboard", "type", "unicode", "chinese", "hotkey", "input"],
           "category": "utility",
           "use_case_examples": [
-            "在输入框中输入一段文字",
+            "在输入框中输入一段中文文字",
             "按下回车键确认",
             "触发 Ctrl+C 复制和 Ctrl+V 粘贴"
           ],
-          "core_purpose": "提供键盘模拟输入能力，帮助 AI 与桌面应用进行文本交互和快捷键操作。",
-          "final_deliverable": "键盘操作结果，包含操作类型、按键、文本长度等信息",
+          "core_purpose": "提供键盘模拟输入能力，支持中文/Unicode 文本输入和快捷键操作。",
+          "final_deliverable": "键盘操作结果，包含操作类型、按键、文本长度、输入方式等信息",
           "source": "local",
           "module_path": "app.skills.desktop_operation.tools.keyboard_control",
           "tool_config": {}

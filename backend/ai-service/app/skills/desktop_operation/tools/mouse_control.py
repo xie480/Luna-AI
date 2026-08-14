@@ -2,7 +2,8 @@
 MCP 工具：鼠标控制。
 
 做什么：支持移动鼠标到指定坐标、单击/双击（左键、右键、中键）、
-         拖拽（从起点到终点）、滚轮滚动（指定方向与步数）。
+         长按（从按下到保持指定时长后释放）、拖拽（从起点到终点）、
+         滚轮滚动（指定方向与步数）。
 风险等级：L1（低危，模拟用户输入有副作用，但通常不涉及数据修改）。
 """
 
@@ -30,22 +31,29 @@ PARAMETER_SCHEMA: dict[str, Any] = {
     "properties": {
         "action": {
             "type": "string",
-            "enum": ["move", "click", "double_click", "drag", "scroll"],
-            "description": "鼠标操作类型。",
+            "enum": ["move", "click", "double_click", "hold", "drag", "scroll"],
+            "description": "鼠标操作类型。hold 表示长按（按下并保持指定时长后释放）。",
         },
         "x": {
             "type": "integer",
-            "description": "目标 X 坐标（像素）。move/click/double_click 必填，drag 为起点 X。",
+            "description": "目标 X 坐标（像素）。move/click/double_click/hold 必填，drag 为起点 X。",
         },
         "y": {
             "type": "integer",
-            "description": "目标 Y 坐标（像素）。move/click/double_click 必填，drag 为起点 Y。",
+            "description": "目标 Y 坐标（像素）。move/click/double_click/hold 必填，drag 为起点 Y。",
         },
         "button": {
             "type": "string",
             "enum": ["left", "right", "middle"],
-            "description": "鼠标按键，默认 left。click/double_click 有效。",
+            "description": "鼠标按键，默认 left。click/double_click/hold 有效。",
             "default": "left",
+        },
+        "hold_duration": {
+            "type": "number",
+            "description": "长按保持时长（秒），默认 1.0。action=hold 时有效。",
+            "default": 1.0,
+            "minimum": 0.1,
+            "maximum": 30.0,
         },
         "end_x": {
             "type": "integer",
@@ -98,6 +106,7 @@ async def handle_mouse_control(
     x: int = parameters.get("x", 0)
     y: int = parameters.get("y", 0)
     button: str = parameters.get("button", "left")
+    hold_duration: float = parameters.get("hold_duration", 1.0)
     end_x: int = parameters.get("end_x", 0)
     end_y: int = parameters.get("end_y", 0)
     scroll_direction: str = parameters.get("scroll_direction", "up")
@@ -105,7 +114,7 @@ async def handle_mouse_control(
     duration: float = parameters.get("duration", DEFAULT_MOUSE_MOVE_DURATION)
 
     # 校验 action
-    valid_actions = ("move", "click", "double_click", "drag", "scroll")
+    valid_actions = ("move", "click", "double_click", "hold", "drag", "scroll")
     if action not in valid_actions:
         return build_error_result(
             "参数错误",
@@ -127,7 +136,7 @@ async def handle_mouse_control(
         )
 
     # 校验坐标
-    if action in ("move", "click", "double_click"):
+    if action in ("move", "click", "double_click", "hold"):
         valid, msg = validate_coordinates(x, y)
         if not valid:
             logger.warning(f"鼠标控制失败 trace_id={trace_id} 原因: 坐标越界 {msg}")
@@ -166,6 +175,19 @@ async def handle_mouse_control(
             pyautogui.doubleClick(x, y, button=button)
             result_msg = f"鼠标{button}键双击 ({x}, {y})"
             result_extra = {"坐标": f"({x}, {y})", "按键": button}
+
+        elif action == "hold":
+            # 长按：先移动到目标位置，按下，保持，再释放
+            pyautogui.moveTo(x, y, duration=duration)
+            pyautogui.mouseDown(button=button)
+            time.sleep(hold_duration)
+            pyautogui.mouseUp(button=button)
+            result_msg = f"鼠标{button}键长按 ({x}, {y})，保持 {hold_duration}s"
+            result_extra = {
+                "坐标": f"({x}, {y})",
+                "按键": button,
+                "保持时长": f"{hold_duration}s",
+            }
 
         elif action == "drag":
             # 先移动到起点
