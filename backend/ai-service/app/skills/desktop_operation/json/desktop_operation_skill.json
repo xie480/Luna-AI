@@ -1,0 +1,343 @@
+{
+  "skills": [
+    {
+      "name": "desktop_operation",
+      "description": "提供桌面自动化能力，包含屏幕截图、应用启动/关闭、鼠标控制、键盘控制等工具。覆盖 L0 ~ L2 风险等级，用于验证 Phase 12/13 工具链路与权限治理机制。",
+      "version": "1.0.0",
+      "enabled": true,
+      "metadata": {
+        "author": "Luna-AI",
+        "tags": ["desktop-automation", "screenshot", "mouse", "keyboard", "process-management", "gui"]
+      },
+      "prompts": [
+        {
+          "phase": "execution",
+          "content_path": "app/skills/desktop_operation/prompts/screenshot_prompt.j2",
+          "constraint": "tool=screenshot",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/desktop_operation/prompts/open_application_prompt.j2",
+          "constraint": "tool=open_application",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/desktop_operation/prompts/mouse_control_prompt.j2",
+          "constraint": "tool=mouse_control",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/desktop_operation/prompts/keyboard_control_prompt.j2",
+          "constraint": "tool=keyboard_control",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        },
+        {
+          "phase": "execution",
+          "content_path": "app/skills/desktop_operation/prompts/close_application_prompt.j2",
+          "constraint": "tool=close_application",
+          "variables": [
+            {"name": "system_context", "description": "系统上下文", "required": false}
+          ]
+        }
+      ],
+      "resources": [
+        {
+          "name": "desktop_operation_policy",
+          "resource_type": "file",
+          "uri": "app/skills/desktop_operation/resource/desktop_operation_policy.md",
+          "description": "桌面操作策略：包含屏幕坐标系说明、DPI 缩放处理、多屏支持、常见应用路径映射、安全操作规范、风险等级映射和工具参数快速参考",
+          "mime_type": "text/markdown",
+          "auto_load": true
+        }
+      ],
+      "tools": [
+        {
+          "name": "screenshot",
+          "description": "捕获当前屏幕画面，支持全屏截图与指定区域截图，支持多显示器选择。返回 base64 编码图片或保存为本地文件。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "region": {
+                "type": "object",
+                "description": "可选。指定截图区域，不传则截取全屏。",
+                "properties": {
+                  "left": {"type": "integer", "description": "区域左上角 X 坐标"},
+                  "top": {"type": "integer", "description": "区域左上角 Y 坐标"},
+                  "width": {"type": "integer", "description": "区域宽度（像素）", "minimum": 1},
+                  "height": {"type": "integer", "description": "区域高度（像素）", "minimum": 1}
+                },
+                "required": ["left", "top", "width", "height"]
+              },
+              "screen_index": {
+                "type": "integer",
+                "description": "目标显示器索引，0 为主显示器。多屏场景下可指定其他屏幕。默认 0。",
+                "default": 0,
+                "minimum": 0
+              },
+              "output_format": {
+                "type": "string",
+                "enum": ["png", "jpeg"],
+                "description": "输出图片格式，默认 png。",
+                "default": "png"
+              },
+              "save_path": {
+                "type": "string",
+                "description": "可选。截图保存的绝对文件路径。若不传则返回 base64 编码字符串。",
+                "maxLength": 1024
+              }
+            },
+            "required": []
+          },
+          "risk_level": "L0",
+          "enabled": true,
+          "tags": ["desktop", "screenshot", "capture", "image"],
+          "category": "utility",
+          "use_case_examples": [
+            "截取当前屏幕画面",
+            "截取主显示器的左上角 800x600 区域",
+            "截取副屏并保存为文件"
+          ],
+          "core_purpose": "提供屏幕内容捕获能力，帮助 AI 获取当前桌面视觉状态，用于视觉感知和后续决策。",
+          "final_deliverable": "截图结果，包含 base64 编码图片数据或本地文件路径，以及截图范围和显示器信息",
+          "source": "local",
+          "module_path": "app.skills.desktop_operation.tools.screenshot",
+          "tool_config": {}
+        },
+        {
+          "name": "open_application",
+          "description": "通过应用名称或可执行文件路径启动指定软件，支持传入启动参数，返回进程信息。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "app_name": {
+                "type": "string",
+                "description": "应用程序名称（如 'notepad'、'chrome'）或可执行文件的绝对路径。",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "arguments": {
+                "type": "array",
+                "items": {"type": "string", "maxLength": 1024},
+                "description": "可选。启动参数列表，如 ['--new-window', 'https://example.com']。",
+                "maxItems": 50
+              },
+              "working_directory": {
+                "type": "string",
+                "description": "可选。进程的工作目录。",
+                "maxLength": 1024
+              },
+              "wait_for_start": {
+                "type": "boolean",
+                "description": "是否等待进程启动完成后再返回。默认 false（异步启动）。",
+                "default": false
+              }
+            },
+            "required": ["app_name"]
+          },
+          "risk_level": "L1",
+          "enabled": true,
+          "tags": ["desktop", "process", "launch", "application"],
+          "category": "utility",
+          "use_case_examples": [
+            "打开记事本",
+            "启动 Chrome 并打开百度首页",
+            "以管理员权限运行某个程序"
+          ],
+          "core_purpose": "提供应用程序启动能力，帮助 AI 打开用户需要的软件，是桌面自动化流程的基础步骤。",
+          "final_deliverable": "启动结果，包含进程 PID、启动路径和启动参数信息",
+          "source": "local",
+          "module_path": "app.skills.desktop_operation.tools.open_application",
+          "tool_config": {}
+        },
+        {
+          "name": "mouse_control",
+          "description": "控制鼠标行为，支持移动、单击、双击、拖拽、滚轮滚动等操作。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["move", "click", "double_click", "drag", "scroll"],
+                "description": "鼠标操作类型。"
+              },
+              "x": {
+                "type": "integer",
+                "description": "目标 X 坐标（像素）。move/click/double_click 必填，drag 为起点 X。"
+              },
+              "y": {
+                "type": "integer",
+                "description": "目标 Y 坐标（像素）。move/click/double_click 必填，drag 为起点 Y。"
+              },
+              "button": {
+                "type": "string",
+                "enum": ["left", "right", "middle"],
+                "description": "鼠标按键，默认 left。click/double_click 有效。",
+                "default": "left"
+              },
+              "end_x": {
+                "type": "integer",
+                "description": "拖拽终点 X 坐标。action=drag 时必填。"
+              },
+              "end_y": {
+                "type": "integer",
+                "description": "拖拽终点 Y 坐标。action=drag 时必填。"
+              },
+              "scroll_direction": {
+                "type": "string",
+                "enum": ["up", "down"],
+                "description": "滚轮滚动方向。action=scroll 时必填。"
+              },
+              "scroll_steps": {
+                "type": "integer",
+                "description": "滚轮滚动步数，默认 3。action=scroll 时有效。",
+                "default": 3,
+                "minimum": 1,
+                "maximum": 100
+              },
+              "duration": {
+                "type": "number",
+                "description": "鼠标移动动画时长（秒），默认 0.1。move/drag 时有效。",
+                "default": 0.1,
+                "minimum": 0,
+                "maximum": 5.0
+              }
+            },
+            "required": ["action"]
+          },
+          "risk_level": "L1",
+          "enabled": true,
+          "tags": ["desktop", "mouse", "click", "drag", "scroll", "input"],
+          "category": "utility",
+          "use_case_examples": [
+            "点击屏幕上的确定按钮",
+            "将文件从桌面拖拽到文件夹",
+            "向下滚动页面查看内容"
+          ],
+          "core_purpose": "提供鼠标模拟控制能力，帮助 AI 与桌面 GUI 进行交互，是桌面自动化流程的核心操作。",
+          "final_deliverable": "鼠标操作结果，包含操作类型、坐标、按键等信息",
+          "source": "local",
+          "module_path": "app.skills.desktop_operation.tools.mouse_control",
+          "tool_config": {}
+        },
+        {
+          "name": "keyboard_control",
+          "description": "控制键盘输入，支持文本输入、按键按下/释放、组合快捷键（如 Ctrl+C、Alt+Tab）。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["type_text", "press_key", "release_key", "hotkey"],
+                "description": "键盘操作类型。"
+              },
+              "text": {
+                "type": "string",
+                "description": "要输入的文本字符串。action=type_text 时必填。",
+                "maxLength": 10000
+              },
+              "key": {
+                "type": "string",
+                "description": "按键名称（如 'enter'、'esc'、'a'、'f5'）。action=press_key/release_key 时必填。",
+                "maxLength": 50
+              },
+              "keys": {
+                "type": "array",
+                "items": {"type": "string", "maxLength": 50},
+                "description": "组合键列表，如 ['ctrl', 'c'] 表示 Ctrl+C。action=hotkey 时必填。",
+                "minItems": 2,
+                "maxItems": 5
+              },
+              "interval": {
+                "type": "number",
+                "description": "字符输入间隔（秒），默认 0.01。action=type_text 时有效。",
+                "default": 0.01,
+                "minimum": 0,
+                "maximum": 1.0
+              },
+              "press_duration": {
+                "type": "number",
+                "description": "按键按下持续时间（秒），默认 0.05。action=press_key 时有效。",
+                "default": 0.05,
+                "minimum": 0,
+                "maximum": 5.0
+              }
+            },
+            "required": ["action"]
+          },
+          "risk_level": "L1",
+          "enabled": true,
+          "tags": ["desktop", "keyboard", "type", "hotkey", "input"],
+          "category": "utility",
+          "use_case_examples": [
+            "在输入框中输入一段文字",
+            "按下回车键确认",
+            "触发 Ctrl+C 复制和 Ctrl+V 粘贴"
+          ],
+          "core_purpose": "提供键盘模拟输入能力，帮助 AI 与桌面应用进行文本交互和快捷键操作。",
+          "final_deliverable": "键盘操作结果，包含操作类型、按键、文本长度等信息",
+          "source": "local",
+          "module_path": "app.skills.desktop_operation.tools.keyboard_control",
+          "tool_config": {}
+        },
+        {
+          "name": "close_application",
+          "description": "【中危】通过进程名或 PID 关闭指定软件，优先尝试优雅退出，超时后可强制终止。关闭进程可能导致未保存数据丢失，操作前需要用户确认。",
+          "parameters_schema": {
+            "type": "object",
+            "properties": {
+              "pid": {
+                "type": "integer",
+                "description": "目标进程 ID。与 process_name 二选一，优先使用 PID 精确匹配。"
+              },
+              "process_name": {
+                "type": "string",
+                "description": "目标进程名称（如 'notepad.exe'、'chrome'）。与 pid 二选一。",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "force": {
+                "type": "boolean",
+                "description": "是否跳过优雅退出直接强制终止。默认 false（先尝试优雅退出，超时后强制）。",
+                "default": false
+              },
+              "timeout": {
+                "type": "number",
+                "description": "优雅退出等待超时秒数，默认 5.0。仅在 force=false 时有效。",
+                "default": 5.0,
+                "minimum": 0.5,
+                "maximum": 60.0
+              }
+            },
+            "required": []
+          },
+          "risk_level": "L2",
+          "enabled": true,
+          "tags": ["desktop", "process", "kill", "terminate", "close"],
+          "category": "utility",
+          "use_case_examples": [
+            "关闭记事本",
+            "结束无响应的 Chrome 进程",
+            "强制终止卡死的应用程序"
+          ],
+          "core_purpose": "提供进程关闭能力，帮助 AI 管理桌面应用生命周期。L2 中危等级，强制终止可能导致数据丢失，需用户确认。",
+          "final_deliverable": "关闭结果，包含进程 PID、关闭方式（优雅退出/强制终止）和结果信息",
+          "source": "local",
+          "module_path": "app.skills.desktop_operation.tools.close_application",
+          "tool_config": {}
+        }
+      ],
+      "servers": []
+    }
+  ]
+}
